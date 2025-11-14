@@ -202,6 +202,18 @@ const RegisterScreen = () => {
               <Text className="text-pink-500 font-medium">Terms of Use</Text>
             </Text>
           </TouchableOpacity>
+
+          {/* register as vendor */}
+
+
+          <TouchableOpacity className="flex-row items-start" onPress={() => setAgreeToTerms(!agreeToTerms)} disabled={loading}>
+            <View className={`w-5 h-5 rounded border-2 my-2 ${agreeToTerms ? 'border-pink-500 bg-pink-500' : 'border-pink-500 bg-white'} items-center justify-center mr-2`}>
+              {agreeToTerms && <Ionicons name="checkmark" size={14} color="#FFFFFF" />}
+            </View>
+            <Text className="text-[13px] my-2 text-gray-700 flex-1">
+              Register as Vendor
+            </Text>
+          </TouchableOpacity>
           {errors.terms ? <Text className="text-pink-500 text-xs mt-1 ml-1">{errors.terms}</Text> : null}
         </View>
 

@@ -3,6 +3,8 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import type { VendorTabParamList } from '@/types/navigation.types';
 import VendorDashboardScreen from '@/screens/vendor/VendorDashboardScreen';
+import ClientDashboardScreen from '@/screens/client/ClientDashboardScreen';
+import ClientProfileScreen from '@/screens/client/ClientProfileScreen';
 const Tab = createBottomTabNavigator<VendorTabParamList>();
 const VendorTabNavigator = () => {
   return <Tab.Navigator screenOptions={{
@@ -51,7 +53,7 @@ const VendorTabNavigator = () => {
       }) => <Ionicons name="briefcase" size={size} color={color} />
     }} />
       
-      <Tab.Screen name="Profile" component={VendorDashboardScreen} options={{
+      <Tab.Screen name="Profile" component={ClientProfileScreen} options={{
       tabBarIcon: ({
         color,
         size
