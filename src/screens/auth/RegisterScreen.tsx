@@ -4,7 +4,7 @@ import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { AuthStackParamList } from '@/types/navigation.types';
 import { Ionicons } from '@expo/vector-icons';
-import { authAPI, handleAPIError } from '@/utils/api';
+import { authAPI, handleAPIError } from '@/api/api';
 type RegisterScreenNavigationProp = NativeStackNavigationProp<AuthStackParamList, 'Register'>;
 const RegisterScreen = () => {
   const navigation = useNavigation<RegisterScreenNavigationProp>();

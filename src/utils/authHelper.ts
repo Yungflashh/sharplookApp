@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { authAPI, handleAPIError } from '@/utils/api';
+import { authAPI, handleAPIError } from '@/api/api';
 interface User {
   _id: string;
   firstName: string;
