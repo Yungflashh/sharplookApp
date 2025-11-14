@@ -13,6 +13,10 @@ import {
 import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useNavigation } from '@react-navigation/native';
+import { StackNavigationProp } from '@react-navigation/stack';
+import { RootStackParamList } from '@/types/navigation.types';
+import VendorSidebar from '@/components/VendorSidebar';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -34,10 +38,17 @@ interface Stat {
   isPositive: boolean;
 }
 
-const VendorDashboardScreen = () => {
-  const [showBalance, setShowBalance] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
+type VendorDashboardScreenNavigationProp = StackNavigationProp<
+  RootStackParamList,
+  'Main'
+>;
+
+const VendorDashboardScreen: React.FC = () => {
+  const navigation = useNavigation<VendorDashboardScreenNavigationProp>();
+  const [showBalance, setShowBalance] = useState<boolean>(false);
+  const [refreshing, setRefreshing] = useState<boolean>(false);
   const [selectedPeriod, setSelectedPeriod] = useState<'day' | 'week' | 'month'>('week');
+  const [sidebarVisible, setSidebarVisible] = useState<boolean>(false);
   
   // Animation values
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -135,11 +146,11 @@ const VendorDashboardScreen = () => {
     }, 2000);
   }, []);
 
-  const formatBalance = (amount: number) => {
+  const formatBalance = (amount: number): string => {
     return `₦${amount.toLocaleString()}`;
   };
 
-  const renderIcon = (iconFamily: string, iconName: string, size: number, color: string) => {
+  const renderIcon = (iconFamily: string, iconName: string, size: number, color: string): JSX.Element => {
     switch (iconFamily) {
       case 'material':
         return <MaterialCommunityIcons name={iconName as any} size={size} color={color} />;
@@ -160,6 +171,7 @@ const VendorDashboardScreen = () => {
           <TouchableOpacity 
             className="w-10 h-10 items-center justify-center"
             activeOpacity={0.7}
+            onPress={() => setSidebarVisible(true)}
           >
             <Ionicons name="menu" size={28} color="#eb278d" />
           </TouchableOpacity>
@@ -170,6 +182,7 @@ const VendorDashboardScreen = () => {
             <TouchableOpacity 
               className="relative w-10 h-10 items-center justify-center"
               activeOpacity={0.7}
+              onPress={() => navigation.navigate('Message')}
             >
               <Ionicons name="chatbubble-ellipses-outline" size={24} color="#eb278d" />
               <View className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white" />
@@ -178,6 +191,7 @@ const VendorDashboardScreen = () => {
             <TouchableOpacity 
               className="relative w-10 h-10 items-center justify-center"
               activeOpacity={0.7}
+              onPress={() => navigation.navigate('Notification')}
             >
               <Ionicons name="notifications-outline" size={26} color="#eb278d" />
               <View className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white" />
@@ -572,6 +586,14 @@ const VendorDashboardScreen = () => {
           </TouchableOpacity>
         </View>
       </ScrollView>
+
+      {/* Sidebar Component */}
+      <VendorSidebar
+        visible={sidebarVisible}
+        onClose={() => setSidebarVisible(false)}
+        userName="John's Store"
+        userEmail="vendor@example.com"
+      />
     </SafeAreaView>
   );
 };

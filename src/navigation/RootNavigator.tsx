@@ -3,6 +3,8 @@ import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { checkAuthStatus, checkOnboardingStatus } from '@/utils/authHelper';
 import AuthNavigator from '@/navigation/AuthNavigator';
+import MessageScreen from '@/screens/vendor/MessageScreen';
+import NotificationScreen from '@/screens/vendor/NotificationScreen';
 import MainNavigator from '@/navigation/MainNavigator';
 import type { RootStackParamList } from '@/types/navigation.types';
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -53,11 +55,15 @@ const RootNavigator = () => {
   }}>
       {!isAuthenticated ? <Stack.Screen name="Auth" component={AuthNavigator} options={{
       animationTypeForReplace: 'pop'
-    }} /> : <Stack.Screen name="Main" component={MainNavigator} initialParams={{
+    }} /> : <>
+    <Stack.Screen name="Main" component={MainNavigator} initialParams={{
       isVendor
     }} options={{
       animationTypeForReplace: 'push'
-    }} />}
+    }} />
+    <Stack.Screen name="Message" component={MessageScreen} />
+    <Stack.Screen name="Notification" component={NotificationScreen} />
+    </>}
     </Stack.Navigator>;
 };
 const styles = StyleSheet.create({

@@ -8,6 +8,8 @@ export type RootStackParamList = {
   Main: {
     isVendor?: boolean;
   };
+  Message: undefined;
+  Notification: undefined;
 };
 export type AuthStackParamList = {
   Login: undefined;
