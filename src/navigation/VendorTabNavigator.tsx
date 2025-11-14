@@ -1,13 +1,12 @@
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
-import type { ClientTabParamList } from '@/types/navigation.types';
-import ClientDashboardScreen from '@/screens/client/ClientDashboardScreen';
-import ClientProfileScreen from '@/screens/client/ClientProfileScreen';
-const Tab = createBottomTabNavigator<ClientTabParamList>();
-const ClientTabNavigator = () => {
+import type { VendorTabParamList } from '@/types/navigation.types';
+import VendorDashboardScreen from '@/screens/vendor/VendorDashboardScreen';
+const Tab = createBottomTabNavigator<VendorTabParamList>();
+const VendorTabNavigator = () => {
   return <Tab.Navigator screenOptions={{
-    tabBarActiveTintColor: '#E91E63',
+    tabBarActiveTintColor: '#9C27B0',
     tabBarInactiveTintColor: '#999',
     tabBarStyle: {
       backgroundColor: '#fff',
@@ -31,28 +30,28 @@ const ClientTabNavigator = () => {
     },
     headerShown: false
   }}>
-      <Tab.Screen name="Home" component={ClientDashboardScreen} options={{
+      <Tab.Screen name="Dashboard" component={VendorDashboardScreen} options={{
       tabBarIcon: ({
         color,
         size
       }) => <Ionicons name="home" size={size} color={color} />
     }} />
       
-      <Tab.Screen name="Bookings" component={ClientDashboardScreen} options={{
+      <Tab.Screen name="Bookings" component={VendorDashboardScreen} options={{
       tabBarIcon: ({
         color,
         size
       }) => <Ionicons name="calendar" size={size} color={color} />
     }} />
       
-      {/* <Tab.Screen name="Notification" component={ClientDashboardScreen} options={{
+      <Tab.Screen name="Services" component={VendorDashboardScreen} options={{
       tabBarIcon: ({
         color,
         size
-      }) => <Ionicons name="search" size={size} color={color} />
-    }} /> */}
+      }) => <Ionicons name="briefcase" size={size} color={color} />
+    }} />
       
-      <Tab.Screen name="Profile" component={ClientProfileScreen} options={{
+      <Tab.Screen name="Profile" component={VendorDashboardScreen} options={{
       tabBarIcon: ({
         color,
         size
@@ -60,4 +59,4 @@ const ClientTabNavigator = () => {
     }} />
     </Tab.Navigator>;
 };
-export default ClientTabNavigator;
+export default VendorTabNavigator;

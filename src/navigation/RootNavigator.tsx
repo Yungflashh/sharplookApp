@@ -4,21 +4,29 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { checkAuthStatus, checkOnboardingStatus } from '@/utils/authHelper';
 import AuthNavigator from '@/navigation/AuthNavigator';
 import MainNavigator from '@/navigation/MainNavigator';
-const Stack = createNativeStackNavigator();
+import type { RootStackParamList } from '@/types/navigation.types';
+const Stack = createNativeStackNavigator<RootStackParamList>();
 const RootNavigator = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isVendor, setIsVendor] = useState(false);
-  const [hasSeenOnboarding, setHasSeenOnboarding] = useState(false);
   useEffect(() => {
     initializeApp();
   }, []);
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      const authStatus = await checkAuthStatus();
+      if (authStatus.isAuthenticated !== isAuthenticated) {
+        console.log('🔄 Auth state changed:', authStatus.isAuthenticated);
+        setIsAuthenticated(authStatus.isAuthenticated);
+        setIsVendor(authStatus.isVendor);
+      }
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [isAuthenticated]);
   const initializeApp = async () => {
     try {
       console.log('🔄 Initializing app...');
-      const onboardingComplete = await checkOnboardingStatus();
-      setHasSeenOnboarding(onboardingComplete);
-      console.log('📱 Onboarding status:', onboardingComplete ? 'Completed' : 'Not completed');
       const authStatus = await checkAuthStatus();
       setIsAuthenticated(authStatus.isAuthenticated);
       setIsVendor(authStatus.isVendor);
@@ -43,11 +51,12 @@ const RootNavigator = () => {
   return <Stack.Navigator screenOptions={{
     headerShown: false
   }}>
-      {}
-      
-      {}
-      {!isAuthenticated ? <Stack.Screen name="Auth" component={AuthNavigator} /> : <Stack.Screen name="Main" component={MainNavigator} initialParams={{
+      {!isAuthenticated ? <Stack.Screen name="Auth" component={AuthNavigator} options={{
+      animationTypeForReplace: 'pop'
+    }} /> : <Stack.Screen name="Main" component={MainNavigator} initialParams={{
       isVendor
+    }} options={{
+      animationTypeForReplace: 'push'
     }} />}
     </Stack.Navigator>;
 };

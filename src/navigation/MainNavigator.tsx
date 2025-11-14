@@ -1,16 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { getStoredUser } from '@/utils/authHelper';
-import ClientDashboardScreen from '@/screens/client/ClientDashboardScreen';
-import VendorDashboardScreen from '@/screens/vendor/VendorDashboardScreen';
-interface MainNavigatorProps {
-  route?: {
-    params?: {
-      isVendor?: boolean;
-    };
-  };
-}
-const MainNavigator: React.FC<MainNavigatorProps> = ({
+import ClientTabNavigator from '@/navigation/ClientTabNavigator';
+import VendorTabNavigator from '@/navigation/VendorTabNavigator';
+import type { RootStackScreenProps } from '@/types/navigation.types';
+type Props = RootStackScreenProps<'Main'>;
+const MainNavigator: React.FC<Props> = ({
   route
 }) => {
   const [isVendor, setIsVendor] = useState<boolean | null>(null);
@@ -46,8 +41,7 @@ const MainNavigator: React.FC<MainNavigatorProps> = ({
         <ActivityIndicator size="large" color="#E91E63" />
       </View>;
   }
-  // Glitch will add these components
-  return isVendor ? <VendorDashboardScreen /> : <ClientDashboardScreen />;
+  return isVendor ? <VendorTabNavigator /> : <ClientTabNavigator />;
 };
 const styles = StyleSheet.create({
   loadingContainer: {
