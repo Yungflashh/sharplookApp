@@ -5,60 +5,100 @@ import type { VendorTabParamList } from '@/types/navigation.types';
 import VendorDashboardScreen from '@/screens/vendor/VendorDashboardScreen';
 import ClientDashboardScreen from '@/screens/client/ClientDashboardScreen';
 import ClientProfileScreen from '@/screens/client/ClientProfileScreen';
+import VendorProfileScreen from '@/screens/vendor/VendoreProfileScreen';
+
 const Tab = createBottomTabNavigator<VendorTabParamList>();
+
 const VendorTabNavigator = () => {
-  return <Tab.Navigator screenOptions={{
-    tabBarActiveTintColor: '#9C27B0',
-    tabBarInactiveTintColor: '#999',
-    tabBarStyle: {
-      backgroundColor: '#fff',
-      borderTopColor: '#E0E0E0',
-      borderTopWidth: 1,
-      height: 60,
-      paddingBottom: 8,
-      paddingTop: 8,
-      elevation: 8,
-      shadowColor: '#000',
-      shadowOffset: {
-        width: 0,
-        height: -2
-      },
-      shadowOpacity: 0.1,
-      shadowRadius: 4
-    },
-    tabBarLabelStyle: {
-      fontSize: 12,
-      fontWeight: '600'
-    },
-    headerShown: false
-  }}>
-      <Tab.Screen name="Dashboard" component={VendorDashboardScreen} options={{
-      tabBarIcon: ({
-        color,
-        size
-      }) => <Ionicons name="home" size={size} color={color} />
-    }} />
+  return (
+    <Tab.Navigator
+      screenOptions={{
+        tabBarActiveTintColor: '#ec4899', // pink-500
+        tabBarInactiveTintColor: '#9ca3af', // gray-400
+        tabBarStyle: {
+          backgroundColor: '#ffffff',
+          borderTopColor: '#f3f4f6', // gray-100
+          borderTopWidth: 1,
+          height: 65,
+          paddingBottom: 10,
+          paddingTop: 10,
+          elevation: 0,
+          shadowColor: '#000000',
+          shadowOffset: {
+            width: 0,
+            height: -4
+          },
+          shadowOpacity: 0.05,
+          shadowRadius: 8
+        },
+        tabBarLabelStyle: {
+          fontSize: 11,
+          fontWeight: '600',
+          marginTop: 2
+        },
+        tabBarItemStyle: {
+          paddingVertical: 4
+        },
+        headerShown: false
+      }}
+    >
+      <Tab.Screen
+        name="Dashboard"
+        component={VendorDashboardScreen}
+        options={{
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons 
+              name={focused ? "home" : "home-outline"} 
+              size={size} 
+              color={color} 
+            />
+          )
+        }}
+      />
       
-      <Tab.Screen name="Bookings" component={VendorDashboardScreen} options={{
-      tabBarIcon: ({
-        color,
-        size
-      }) => <Ionicons name="calendar" size={size} color={color} />
-    }} />
+      <Tab.Screen
+        name="Bookings"
+        component={VendorDashboardScreen}
+        options={{
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons 
+              name={focused ? "calendar" : "calendar-outline"} 
+              size={size} 
+              color={color} 
+            />
+          )
+        }}
+      />
       
-      <Tab.Screen name="Services" component={VendorDashboardScreen} options={{
-      tabBarIcon: ({
-        color,
-        size
-      }) => <Ionicons name="briefcase" size={size} color={color} />
-    }} />
+      <Tab.Screen
+        name="Services"
+        component={VendorDashboardScreen}
+        options={{
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons 
+              name={focused ? "briefcase" : "briefcase-outline"} 
+              size={size} 
+              color={color} 
+            />
+          )
+        }}
+      />
       
-      <Tab.Screen name="Profile" component={ClientProfileScreen} options={{
-      tabBarIcon: ({
-        color,
-        size
-      }) => <Ionicons name="person" size={size} color={color} />
-    }} />
-    </Tab.Navigator>;
+      <Tab.Screen
+        name="Profile"
+        component={VendorProfileScreen}
+        options={{
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons 
+              name={focused ? "person" : "person-outline"} 
+              size={size} 
+              color={color} 
+            />
+          )
+        }}
+      />
+    </Tab.Navigator>
+  );
 };
+
 export default VendorTabNavigator;
