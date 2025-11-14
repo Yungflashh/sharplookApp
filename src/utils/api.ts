@@ -59,6 +59,8 @@ export const authAPI = {
     email: string;
     phone: string;
     password: string;
+    isVendor?: boolean;
+    referralId?: string;
   }) => {
     const response = await api.post('/auth/register', userData);
     return response.data;

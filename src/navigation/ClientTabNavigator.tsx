@@ -45,12 +45,7 @@ const ClientTabNavigator = () => {
       }) => <Ionicons name="calendar" size={size} color={color} />
     }} />
       
-      {/* <Tab.Screen name="Notification" component={ClientDashboardScreen} options={{
-      tabBarIcon: ({
-        color,
-        size
-      }) => <Ionicons name="search" size={size} color={color} />
-    }} /> */}
+      {}
       
       <Tab.Screen name="Profile" component={ClientProfileScreen} options={{
       tabBarIcon: ({

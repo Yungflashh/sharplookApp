@@ -1,16 +1,22 @@
 import React, { useState } from 'react';
 import { View, TextInput, TouchableOpacity, Text, Alert, ActivityIndicator, Image, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { AuthStackParamList } from '@/types/navigation.types';
 import { Ionicons } from '@expo/vector-icons';
+import { authAPI, handleAPIError } from '@/utils/api';
+type RegisterScreenNavigationProp = NativeStackNavigationProp<AuthStackParamList, 'Register'>;
 const RegisterScreen = () => {
-  const navigation = useNavigation();
+  const navigation = useNavigation<RegisterScreenNavigationProp>();
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [referralId, setReferralId] = useState('');
   const [agreeToTerms, setAgreeToTerms] = useState(false);
+  const [registerAsVendor, setRegisterAsVendor] = useState(false);
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -18,6 +24,7 @@ const RegisterScreen = () => {
     firstName: '',
     lastName: '',
     email: '',
+    phone: '',
     password: '',
     confirmPassword: '',
     terms: ''
@@ -28,6 +35,7 @@ const RegisterScreen = () => {
       firstName: '',
       lastName: '',
       email: '',
+      phone: '',
       password: '',
       confirmPassword: '',
       terms: ''
@@ -45,6 +53,13 @@ const RegisterScreen = () => {
       valid = false;
     } else if (!/\S+@\S+\.\S+/.test(email)) {
       newErrors.email = 'Email is invalid';
+      valid = false;
+    }
+    if (!phone.trim()) {
+      newErrors.phone = 'Phone number is required';
+      valid = false;
+    } else if (!/^[0-9]{10,15}$/.test(phone.replace(/[\s\-\(\)]/g, ''))) {
+      newErrors.phone = 'Phone number is invalid';
       valid = false;
     }
     if (!password) {
@@ -68,31 +83,67 @@ const RegisterScreen = () => {
     setErrors(newErrors);
     return valid;
   };
+  const handleVendorCheckboxPress = () => {
+    if (!registerAsVendor) {
+      Alert.alert('Register as Vendor', 'Are you sure you want to register as a vendor? You will need to complete additional profile setup and provide business information.', [{
+        text: 'Cancel',
+        style: 'cancel',
+        onPress: () => {}
+      }, {
+        text: 'Yes, Continue',
+        onPress: () => {
+          setRegisterAsVendor(true);
+        }
+      }]);
+    } else {
+      setRegisterAsVendor(false);
+    }
+  };
   const handleRegister = async () => {
     if (!validateForm()) {
       return;
     }
     setLoading(true);
     try {
-      setTimeout(() => {
-        setLoading(false);
-        Alert.alert('Success', 'Account created successfully!', [{
-          text: 'OK',
-          onPress: () => navigation.navigate('Auth', {
-            screen: 'Login'
-          })
-        }]);
-      }, 1500);
-    } catch (error) {
+      const registerData: any = {
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
+        email: email.trim().toLowerCase(),
+        phone: phone.trim(),
+        password: password,
+        confirmPassword: confirmPassword,
+        isVendor: registerAsVendor
+      };
+      if (referralId.trim()) {
+        registerData.referralId = referralId.trim();
+      }
+      console.log(registerData);
+      const response = await authAPI.register(registerData);
+      if (response.success) {
+        if (registerAsVendor) {
+          Alert.alert('Success', 'Account created successfully! Please complete your vendor profile.', [{
+            text: 'OK',
+            onPress: () => navigation.navigate('VendorProfileSetup')
+          }]);
+        } else {
+          Alert.alert('Success', 'Account created successfully!', [{
+            text: 'OK',
+            onPress: () => navigation.navigate('Login')
+          }]);
+        }
+      } else {
+        Alert.alert('Registration Failed', response.message || 'Unable to create account. Please try again.');
+      }
+    } catch (error: any) {
       console.error('Registration error:', error);
-      Alert.alert('Error', 'An unexpected error occurred');
+      const apiError = handleAPIError(error);
+      Alert.alert('Registration Failed', apiError.message);
+    } finally {
       setLoading(false);
     }
   };
   const handleLogin = () => {
-    navigation.navigate('Auth', {
-      screen: 'Login'
-    });
+    navigation.navigate('Login');
   };
   return <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} className="flex-1 bg-white">
       <ScrollView contentContainerStyle={{
@@ -153,6 +204,18 @@ const RegisterScreen = () => {
 
         {}
         <View className="mb-4">
+          <TextInput className={`w-full px-4 py-3.5 rounded-lg border ${errors.phone ? 'border-pink-500' : 'border-gray-200'} bg-gray-50 text-black text-sm`} placeholder="Enter Phone Number" placeholderTextColor="#9CA3AF" value={phone} onChangeText={text => {
+          setPhone(text);
+          setErrors({
+            ...errors,
+            phone: ''
+          });
+        }} keyboardType="phone-pad" editable={!loading} />
+          {errors.phone ? <Text className="text-pink-500 text-xs mt-1 ml-1">{errors.phone}</Text> : null}
+        </View>
+
+        {}
+        <View className="mb-4">
           <View className="relative">
             <TextInput className={`w-full px-4 py-3.5 pr-12 rounded-lg border ${errors.password ? 'border-pink-500' : 'border-gray-200'} bg-gray-50 text-black text-sm`} placeholder="Create Password" placeholderTextColor="#9CA3AF" value={password} onChangeText={text => {
             setPassword(text);
@@ -187,33 +250,32 @@ const RegisterScreen = () => {
 
         {}
         <View className="mb-4">
-          <TextInput className="w-full px-4 py-3.5 rounded-lg border border-gray-200 bg-gray-50 text-black text-sm" placeholder="Referral ID(Optional)" placeholderTextColor="#9CA3AF" value={referralId} onChangeText={setReferralId} editable={!loading} />
+          <TextInput className="w-full px-4 py-3.5 rounded-lg border border-gray-200 bg-gray-50 text-black text-sm" placeholder="Referral ID (Optional)" placeholderTextColor="#9CA3AF" value={referralId} onChangeText={setReferralId} editable={!loading} />
         </View>
 
         {}
         <View className="mb-6">
           <TouchableOpacity className="flex-row items-start" onPress={() => setAgreeToTerms(!agreeToTerms)} disabled={loading}>
-            <View className={`w-5 h-5 rounded border-2 my-4 ${agreeToTerms ? 'border-pink-500 bg-pink-500' : 'border-pink-500 bg-white'} items-center justify-center mr-2`}>
+            <View className={`w-5 h-5 rounded border-2 mt-0.5 ${agreeToTerms ? 'border-pink-500 bg-pink-500' : 'border-pink-500 bg-white'} items-center justify-center mr-2`}>
               {agreeToTerms && <Ionicons name="checkmark" size={14} color="#FFFFFF" />}
             </View>
-            <Text className="text-[13px] my-4 text-gray-700 flex-1">
+            <Text className="text-[13px] text-gray-700 flex-1">
               By signing up, you agree to our{' '}
               <Text className="text-pink-500 font-medium">Privacy Policy</Text> and{' '}
               <Text className="text-pink-500 font-medium">Terms of Use</Text>
             </Text>
           </TouchableOpacity>
 
-          {/* register as vendor */}
-
-
-          <TouchableOpacity className="flex-row items-start" onPress={() => setAgreeToTerms(!agreeToTerms)} disabled={loading}>
-            <View className={`w-5 h-5 rounded border-2 my-2 ${agreeToTerms ? 'border-pink-500 bg-pink-500' : 'border-pink-500 bg-white'} items-center justify-center mr-2`}>
-              {agreeToTerms && <Ionicons name="checkmark" size={14} color="#FFFFFF" />}
+          {}
+          <TouchableOpacity className="flex-row items-start mt-3" onPress={handleVendorCheckboxPress} disabled={loading}>
+            <View className={`w-5 h-5 rounded border-2 mt-0.5 ${registerAsVendor ? 'border-pink-500 bg-pink-500' : 'border-pink-500 bg-white'} items-center justify-center mr-2`}>
+              {registerAsVendor && <Ionicons name="checkmark" size={14} color="#FFFFFF" />}
             </View>
-            <Text className="text-[13px] my-2 text-gray-700 flex-1">
+            <Text className="text-[13px] text-gray-700 flex-1">
               Register as Vendor
             </Text>
           </TouchableOpacity>
+
           {errors.terms ? <Text className="text-pink-500 text-xs mt-1 ml-1">{errors.terms}</Text> : null}
         </View>
 

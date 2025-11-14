@@ -14,6 +14,7 @@ export type AuthStackParamList = {
   Register: undefined;
   ForgotPassword: undefined;
   VendorLogin: undefined;
+  VendorProfileSetup: undefined;
 };
 export type ClientTabParamList = {
   Home: undefined;
