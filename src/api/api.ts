@@ -195,24 +195,105 @@ export const walletAPI = {
     return response.data;
   }
 };
-export const handleAPIError = (error: any) => {
+export interface APIError {
+  message: string;
+  status: number;
+  data?: any;
+  fieldErrors?: Record<string, string>;
+  isNetworkError?: boolean;
+  isValidationError?: boolean;
+}
+
+export const handleAPIError = (error: any): APIError => {
   if (axios.isAxiosError(error)) {
     const axiosError = error as AxiosError<any>;
-    if (axiosError.response) {
+
+    // No response - network error
+    if (!axiosError.response) {
+      if (axiosError.code === 'ECONNABORTED') {
+        return {
+          message: 'Request timeout. Please try again.',
+          status: 0,
+          isNetworkError: true
+        };
+      }
       return {
-        message: axiosError.response.data?.message || 'An error occurred',
-        status: axiosError.response.status,
-        data: axiosError.response.data
-      };
-    } else if (axiosError.request) {
-      return {
-        message: 'Network error. Please check your connection.',
-        status: 0
+        message: 'Network error. Please check your internet connection and try again.',
+        status: 0,
+        isNetworkError: true
       };
     }
+
+    const { status, data } = axiosError.response;
+
+    // Handle validation errors (400)
+    if (status === 400 && data?.errors) {
+      const fieldErrors: Record<string, string> = {};
+
+      // Parse field-specific errors if they exist
+      if (Array.isArray(data.errors)) {
+        data.errors.forEach((err: any) => {
+          if (err.field && err.message) {
+            fieldErrors[err.field] = err.message;
+          }
+        });
+      } else if (typeof data.errors === 'object') {
+        Object.keys(data.errors).forEach(field => {
+          fieldErrors[field] = data.errors[field];
+        });
+      }
+
+      return {
+        message: data.message || 'Please check your input and try again.',
+        status,
+        data,
+        fieldErrors: Object.keys(fieldErrors).length > 0 ? fieldErrors : undefined,
+        isValidationError: true
+      };
+    }
+
+    // Handle specific error codes
+    let message = data?.message || 'An error occurred';
+
+    switch (status) {
+      case 401:
+        message = data?.message || 'Invalid credentials. Please check your email and password.';
+        break;
+      case 403:
+        message = data?.message || 'Access denied. You do not have permission to perform this action.';
+        break;
+      case 404:
+        message = data?.message || 'Resource not found.';
+        break;
+      case 409:
+        message = data?.message || 'This resource already exists.';
+        break;
+      case 422:
+        message = data?.message || 'Invalid data provided.';
+        break;
+      case 429:
+        message = 'Too many requests. Please try again later.';
+        break;
+      case 500:
+        message = 'Server error. Please try again later.';
+        break;
+      case 503:
+        message = 'Service temporarily unavailable. Please try again later.';
+        break;
+      default:
+        message = data?.message || 'An unexpected error occurred.';
+    }
+
+    return {
+      message,
+      status,
+      data
+    };
   }
+
+  // Non-Axios errors
   return {
-    message: error.message || 'An unexpected error occurred',
+    message: error?.message || 'An unexpected error occurred',
     status: 500
   };
 };

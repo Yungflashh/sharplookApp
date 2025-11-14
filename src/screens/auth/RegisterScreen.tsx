@@ -1,11 +1,14 @@
 import React, { useState } from 'react';
-import { View, TextInput, TouchableOpacity, Text, Alert, ActivityIndicator, Image, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, TouchableOpacity, Text, Alert, Image, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { AuthStackParamList } from '@/types/navigation.types';
 import { Ionicons } from '@expo/vector-icons';
+import { AuthStackParamList } from '@/types/navigation.types';
 import { authAPI, handleAPIError } from '@/api/api';
+import { Input, PasswordInput, Button, Checkbox, SocialLoginFullButton, PhoneInput, CountryCodePicker } from '@/components/ui/forms';
+
 type RegisterScreenNavigationProp = NativeStackNavigationProp<AuthStackParamList, 'Register'>;
+
 const RegisterScreen = () => {
   const navigation = useNavigation<RegisterScreenNavigationProp>();
   const [firstName, setFirstName] = useState('');
@@ -18,8 +21,9 @@ const RegisterScreen = () => {
   const [agreeToTerms, setAgreeToTerms] = useState(false);
   const [registerAsVendor, setRegisterAsVendor] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [countryCode, setCountryCode] = useState('+234');
+  const [showCountryPicker, setShowCountryPicker] = useState(false);
+  const [generalError, setGeneralError] = useState('');
   const [errors, setErrors] = useState({
     firstName: '',
     lastName: '',
@@ -83,8 +87,8 @@ const RegisterScreen = () => {
     setErrors(newErrors);
     return valid;
   };
-  const handleVendorCheckboxPress = () => {
-    if (!registerAsVendor) {
+  const handleVendorCheckboxPress = (checked: boolean) => {
+    if (checked) {
       Alert.alert('Register as Vendor', 'Are you sure you want to register as a vendor? You will need to complete additional profile setup and provide business information.', [{
         text: 'Cancel',
         style: 'cancel',
@@ -100,25 +104,33 @@ const RegisterScreen = () => {
     }
   };
   const handleRegister = async () => {
+    // Clear previous errors
+    setGeneralError('');
+
     if (!validateForm()) {
       return;
     }
+
     setLoading(true);
+
     try {
       const registerData: any = {
         firstName: firstName.trim(),
         lastName: lastName.trim(),
         email: email.trim().toLowerCase(),
-        phone: phone.trim(),
+        phone: `${countryCode}${phone.trim()}`,
         password: password,
         confirmPassword: confirmPassword,
         isVendor: registerAsVendor
       };
+
       if (referralId.trim()) {
         registerData.referralId = referralId.trim();
       }
+
       console.log(registerData);
       const response = await authAPI.register(registerData);
+
       if (response.success) {
         if (registerAsVendor) {
           Alert.alert('Success', 'Account created successfully! Please complete your vendor profile.', [{
@@ -132,12 +144,29 @@ const RegisterScreen = () => {
           }]);
         }
       } else {
-        Alert.alert('Registration Failed', response.message || 'Unable to create account. Please try again.');
+        setGeneralError(response.message || 'Unable to create account. Please try again.');
       }
     } catch (error: any) {
       console.error('Registration error:', error);
       const apiError = handleAPIError(error);
-      Alert.alert('Registration Failed', apiError.message);
+
+      // Handle field-specific errors from backend
+      if (apiError.fieldErrors) {
+        const newErrors = { ...errors };
+        Object.keys(apiError.fieldErrors).forEach(field => {
+          if (field in newErrors) {
+            (newErrors as any)[field] = apiError.fieldErrors![field];
+          }
+        });
+        setErrors(newErrors);
+      }
+
+      // Show general error message
+      if (apiError.isNetworkError) {
+        setGeneralError('Network error. Please check your internet connection and try again.');
+      } else {
+        setGeneralError(apiError.message || 'Registration failed. Please try again.');
+      }
     } finally {
       setLoading(false);
     }
@@ -145,175 +174,143 @@ const RegisterScreen = () => {
   const handleLogin = () => {
     navigation.navigate('Login');
   };
-  return <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} className="flex-1 bg-white">
-      <ScrollView contentContainerStyle={{
-      flexGrow: 1,
-      paddingHorizontal: 24,
-      paddingTop: 60,
-      paddingBottom: 40
-    }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-        {}
-        <View className="items-center mb-8">
-          <Image source={require('@/assets/logo.png')} className="w-28 h-16" resizeMode="contain" />
-        </View>
+  return <View className="flex-1 bg-white">
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} className="flex-1">
+        <ScrollView contentContainerStyle={{
+        flexGrow: 1,
+        paddingHorizontal: 24,
+        paddingTop: 60,
+        paddingBottom: 40
+      }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+          {/* Logo Section */}
+          <View className="items-center mb-8">
+            <Image source={require('@/assets/logo.png')} className="w-28 h-16" resizeMode="contain" />
+          </View>
 
-        {}
-        <Text className="text-2xl font-bold text-center text-black mb-2">
-          Create Your Account
-        </Text>
-        <Text className="text-sm text-center text-gray-600 mb-6">
-          Please fill the details below
-        </Text>
+          {/* Header */}
+          <View className="mb-6">
+            <Text className="text-3xl font-bold text-center text-black mb-2">
+              Create Your Account
+            </Text>
+            <Text className="text-base text-center text-gray-700">
+              Please fill the details below
+            </Text>
+          </View>
 
-        {}
-        <View className="flex-row gap-3 mb-4">
-          <View className="flex-1">
-            <TextInput className={`w-full px-4 py-3.5 rounded-lg border ${errors.firstName ? 'border-pink-500' : 'border-gray-200'} bg-gray-50 text-black text-sm`} placeholder="First Name" placeholderTextColor="#9CA3AF" value={firstName} onChangeText={text => {
+          {/* General Error Message */}
+          {generalError ? (
+            <View className="bg-red-50 border border-red-200 rounded-xl p-4 mb-6 flex-row items-start">
+              <Ionicons name="alert-circle" size={20} color="#DC2626" style={{ marginRight: 8, marginTop: 2 }} />
+              <Text className="text-red-600 text-sm flex-1">{generalError}</Text>
+            </View>
+          ) : null}
+
+          {/* Name Inputs */}
+          <View className="flex-row gap-3">
+            <Input containerClassName="flex-1 mb-0" label="First Name" placeholder="" value={firstName} onChangeText={text => {
             setFirstName(text);
             setErrors({
               ...errors,
               firstName: ''
             });
-          }} editable={!loading} />
-            {errors.firstName ? <Text className="text-pink-500 text-xs mt-1 ml-1">{errors.firstName}</Text> : null}
-          </View>
+            setGeneralError('');
+          }} error={errors.firstName} editable={!loading} />
 
-          <View className="flex-1">
-            <TextInput className={`w-full px-4 py-3.5 rounded-lg border ${errors.lastName ? 'border-pink-500' : 'border-gray-200'} bg-gray-50 text-black text-sm`} placeholder="Last Name" placeholderTextColor="#9CA3AF" value={lastName} onChangeText={text => {
+            <Input containerClassName="flex-1 mb-0" label="Last Name" placeholder="" value={lastName} onChangeText={text => {
             setLastName(text);
             setErrors({
               ...errors,
               lastName: ''
             });
-          }} editable={!loading} />
-            {errors.lastName ? <Text className="text-pink-500 text-xs mt-1 ml-1">{errors.lastName}</Text> : null}
+            setGeneralError('');
+          }} error={errors.lastName} editable={!loading} />
           </View>
-        </View>
 
-        {}
-        <View className="mb-4">
-          <TextInput className={`w-full px-4 py-3.5 rounded-lg border ${errors.email ? 'border-pink-500' : 'border-gray-200'} bg-gray-50 text-black text-sm`} placeholder="Enter E-mail Address" placeholderTextColor="#9CA3AF" value={email} onChangeText={text => {
+          {/* Email Input */}
+          <Input label="Enter E-mail Address" placeholder="" value={email} onChangeText={text => {
           setEmail(text);
           setErrors({
             ...errors,
             email: ''
           });
-        }} autoCapitalize="none" keyboardType="email-address" editable={!loading} />
-          {errors.email ? <Text className="text-pink-500 text-xs mt-1 ml-1">{errors.email}</Text> : null}
-        </View>
+          setGeneralError('');
+        }} error={errors.email} autoCapitalize="none" keyboardType="email-address" editable={!loading} />
 
-        {}
-        <View className="mb-4">
-          <TextInput className={`w-full px-4 py-3.5 rounded-lg border ${errors.phone ? 'border-pink-500' : 'border-gray-200'} bg-gray-50 text-black text-sm`} placeholder="Enter Phone Number" placeholderTextColor="#9CA3AF" value={phone} onChangeText={text => {
+          {/* Phone Input */}
+          <PhoneInput label="Enter Phone Number" placeholder="8123456789" value={phone} onChangeText={text => {
           setPhone(text);
           setErrors({
             ...errors,
             phone: ''
           });
-        }} keyboardType="phone-pad" editable={!loading} />
-          {errors.phone ? <Text className="text-pink-500 text-xs mt-1 ml-1">{errors.phone}</Text> : null}
-        </View>
+          setGeneralError('');
+        }} error={errors.phone} editable={!loading} countryCode={countryCode} onCountryCodePress={() => setShowCountryPicker(true)} />
 
-        {}
-        <View className="mb-4">
-          <View className="relative">
-            <TextInput className={`w-full px-4 py-3.5 pr-12 rounded-lg border ${errors.password ? 'border-pink-500' : 'border-gray-200'} bg-gray-50 text-black text-sm`} placeholder="Create Password" placeholderTextColor="#9CA3AF" value={password} onChangeText={text => {
-            setPassword(text);
-            setErrors({
-              ...errors,
-              password: ''
-            });
-          }} secureTextEntry={!showPassword} editable={!loading} />
-            <TouchableOpacity className="absolute right-4 top-3.5" onPress={() => setShowPassword(!showPassword)}>
-              <Ionicons name={showPassword ? 'eye-off' : 'eye'} size={22} color="#eb278d" />
+          {/* Password Input */}
+          <PasswordInput label="Password" placeholder="" value={password} onChangeText={text => {
+          setPassword(text);
+          setErrors({
+            ...errors,
+            password: ''
+          });
+          setGeneralError('');
+        }} error={errors.password} editable={!loading} />
+
+          {/* Confirm Password Input */}
+          <PasswordInput label="Confirm Password" placeholder="" value={confirmPassword} onChangeText={text => {
+          setConfirmPassword(text);
+          setErrors({
+            ...errors,
+            confirmPassword: ''
+          });
+          setGeneralError('');
+        }} error={errors.confirmPassword} editable={!loading} />
+
+          {/* Referral Input */}
+          <Input label="Referral Code (optional)" placeholder="" value={referralId} onChangeText={setReferralId} editable={!loading} />
+
+          {/* Checkboxes */}
+          <View className="mb-6">
+            <Checkbox checked={agreeToTerms} onChange={setAgreeToTerms} disabled={loading} error={errors.terms} label={<Text className="text-sm text-gray-700 flex-1">
+                  By signing up, you agree to our{' '}
+                  <Text className="text-pink-500 font-semibold">Privacy Policy</Text> and{' '}
+                  <Text className="text-pink-500 font-semibold">Terms of Use</Text>
+                </Text>} containerClassName="mb-3" />
+
+            <Checkbox checked={registerAsVendor} onChange={handleVendorCheckboxPress} disabled={loading} label="Register as Vendor" />
+          </View>
+
+          {/* Register Button */}
+          <Button onPress={handleRegister} loading={loading} disabled={loading} containerClassName="mb-6">
+            Create Account
+          </Button>
+
+          {/* Divider */}
+          <View className="flex-row items-center mb-6">
+            <View className="flex-1 h-px bg-pink-200" />
+            <Text className="px-4 text-sm text-gray-700">or sign up with</Text>
+            <View className="flex-1 h-px bg-pink-200" />
+          </View>
+
+          {/* Social Login Buttons */}
+          <View className="gap-3 mb-8">
+            <SocialLoginFullButton platform="google" />
+            <SocialLoginFullButton platform="facebook" />
+            <SocialLoginFullButton platform="apple" />
+          </View>
+
+          {/* Login Link */}
+          <View className="flex-row justify-center items-center">
+            <Text className="text-base text-gray-700">Already have an account? </Text>
+            <TouchableOpacity onPress={handleLogin} disabled={loading} activeOpacity={0.7}>
+              <Text className="text-base text-pink-600 font-bold">Login</Text>
             </TouchableOpacity>
           </View>
-          {errors.password ? <Text className="text-pink-500 text-xs mt-1 ml-1">{errors.password}</Text> : null}
-        </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
 
-        {}
-        <View className="mb-4">
-          <View className="relative">
-            <TextInput className={`w-full px-4 py-3.5 pr-12 rounded-lg border ${errors.confirmPassword ? 'border-pink-500' : 'border-gray-200'} bg-gray-50 text-black text-sm`} placeholder="Confirm Password" placeholderTextColor="#9CA3AF" value={confirmPassword} onChangeText={text => {
-            setConfirmPassword(text);
-            setErrors({
-              ...errors,
-              confirmPassword: ''
-            });
-          }} secureTextEntry={!showConfirmPassword} editable={!loading} />
-            <TouchableOpacity className="absolute right-4 top-3.5" onPress={() => setShowConfirmPassword(!showConfirmPassword)}>
-              <Ionicons name={showConfirmPassword ? 'eye-off' : 'eye'} size={22} color="#eb278d" />
-            </TouchableOpacity>
-          </View>
-          {errors.confirmPassword ? <Text className="text-pink-500 text-xs mt-1 ml-1">{errors.confirmPassword}</Text> : null}
-        </View>
-
-        {}
-        <View className="mb-4">
-          <TextInput className="w-full px-4 py-3.5 rounded-lg border border-gray-200 bg-gray-50 text-black text-sm" placeholder="Referral ID (Optional)" placeholderTextColor="#9CA3AF" value={referralId} onChangeText={setReferralId} editable={!loading} />
-        </View>
-
-        {}
-        <View className="mb-6">
-          <TouchableOpacity className="flex-row items-start" onPress={() => setAgreeToTerms(!agreeToTerms)} disabled={loading}>
-            <View className={`w-5 h-5 rounded border-2 mt-0.5 ${agreeToTerms ? 'border-pink-500 bg-pink-500' : 'border-pink-500 bg-white'} items-center justify-center mr-2`}>
-              {agreeToTerms && <Ionicons name="checkmark" size={14} color="#FFFFFF" />}
-            </View>
-            <Text className="text-[13px] text-gray-700 flex-1">
-              By signing up, you agree to our{' '}
-              <Text className="text-pink-500 font-medium">Privacy Policy</Text> and{' '}
-              <Text className="text-pink-500 font-medium">Terms of Use</Text>
-            </Text>
-          </TouchableOpacity>
-
-          {}
-          <TouchableOpacity className="flex-row items-start mt-3" onPress={handleVendorCheckboxPress} disabled={loading}>
-            <View className={`w-5 h-5 rounded border-2 mt-0.5 ${registerAsVendor ? 'border-pink-500 bg-pink-500' : 'border-pink-500 bg-white'} items-center justify-center mr-2`}>
-              {registerAsVendor && <Ionicons name="checkmark" size={14} color="#FFFFFF" />}
-            </View>
-            <Text className="text-[13px] text-gray-700 flex-1">
-              Register as Vendor
-            </Text>
-          </TouchableOpacity>
-
-          {errors.terms ? <Text className="text-pink-500 text-xs mt-1 ml-1">{errors.terms}</Text> : null}
-        </View>
-
-        {}
-        <TouchableOpacity className={`rounded-lg py-4 items-center mb-6 ${loading ? 'bg-pink-400' : 'bg-pink-500'}`} onPress={handleRegister} disabled={loading} activeOpacity={0.8}>
-          {loading ? <ActivityIndicator color="#fff" /> : <Text className="text-white text-base font-semibold">Create Account</Text>}
-        </TouchableOpacity>
-
-        {}
-        <Text className="text-center text-sm text-gray-600 mb-4">Sign Up with</Text>
-
-        {}
-        <View className="flex-row justify-center items-center gap-6 mb-6">
-          <TouchableOpacity className="w-12 h-12 rounded-full bg-gray-100 items-center justify-center">
-            <Ionicons name="call" size={24} color="#000" />
-          </TouchableOpacity>
-          
-          <TouchableOpacity className="w-12 h-12 rounded-full bg-blue-600 items-center justify-center">
-            <Ionicons name="logo-facebook" size={24} color="#fff" />
-          </TouchableOpacity>
-          
-          <TouchableOpacity className="w-12 h-12 rounded-full bg-blue-400 items-center justify-center">
-            <Ionicons name="logo-twitter" size={24} color="#fff" />
-          </TouchableOpacity>
-          
-          <TouchableOpacity className="w-12 h-12 rounded-full bg-black items-center justify-center">
-            <Ionicons name="logo-apple" size={24} color="#fff" />
-          </TouchableOpacity>
-        </View>
-
-        {}
-        <View className="flex-row justify-center items-center">
-          <Text className="text-sm text-gray-600">Already have an account? </Text>
-          <TouchableOpacity onPress={handleLogin} disabled={loading}>
-            <Text className="text-sm text-pink-500 font-semibold">Log in</Text>
-          </TouchableOpacity>
-        </View>
-      </ScrollView>
-    </KeyboardAvoidingView>;
+      {/* Country Code Picker Modal */}
+      <CountryCodePicker visible={showCountryPicker} onClose={() => setShowCountryPicker(false)} onSelect={setCountryCode} selectedCode={countryCode} />
+    </View>;
 };
 export default RegisterScreen;
