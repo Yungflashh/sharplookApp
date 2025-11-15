@@ -143,6 +143,26 @@ export const vendorAPI = {
   getBookings: async () => {
     const response = await api.get('/vendors/bookings');
     return response.data;
+  },
+  getTopVendors: async () => {
+    const response = await api.get('/users/top-vendors');
+    return response.data;
+  },
+  getAllVendors: async (params?: {
+    category?: string;
+    location?: string;
+    minRating?: number;
+    page?: number;
+    limit?: number;
+  }) => {
+    const response = await api.get('/users/allVendors', {
+      params
+    });
+    return response.data;
+  },
+  getVendorProfile: async (vendorId: string) => {
+    const response = await api.get(`/vendors/${vendorId}/profile`);
+    return response.data;
   }
 };
 export const bookingAPI = {
@@ -195,6 +215,103 @@ export const walletAPI = {
     return response.data;
   }
 };
+export const servicesAPI = {
+  getMyServices: async () => {
+    const response = await api.get('/services/my-services');
+    return response.data;
+  },
+  createService: async (serviceData: {
+    name: string;
+    description: string;
+    category: string;
+    basePrice: number;
+    priceType: 'fixed' | 'variable';
+    currency: string;
+    duration: number;
+    serviceArea: {
+      type: string;
+      coordinates: number[];
+      radius: number;
+    };
+  }) => {
+    const response = await api.post('/services', serviceData);
+    return response.data;
+  },
+  getServiceById: async (serviceId: string) => {
+    const response = await api.get(`/services/${serviceId}`);
+    return response.data;
+  },
+  updateService: async (serviceId: string, serviceData: any) => {
+    const response = await api.put(`/services/${serviceId}`, serviceData);
+    return response.data;
+  },
+  deleteService: async (serviceId: string) => {
+    const response = await api.delete(`/services/${serviceId}`);
+    return response.data;
+  },
+  searchServices: async (params: {
+    query?: string;
+    category?: string;
+    minPrice?: number;
+    maxPrice?: number;
+    location?: {
+      lat: number;
+      lng: number;
+      radius?: number;
+    };
+  }) => {
+    const response = await api.get('/services/search', {
+      params
+    });
+    return response.data;
+  },
+  getServiceReviews: async (serviceId: string) => {
+    const response = await api.get(`/services/${serviceId}/reviews`);
+    return response.data;
+  },
+  uploadServiceImages: async (serviceId: string, images: any[]) => {
+    const formData = new FormData();
+    images.forEach((image, index) => {
+      formData.append('images', {
+        uri: image.uri,
+        type: image.type || 'image/jpeg',
+        name: image.fileName || `image_${index}.jpg`
+      } as any);
+    });
+    const response = await api.post(`/services/${serviceId}/images`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      }
+    });
+    return response.data;
+  },
+  deleteServiceImage: async (serviceId: string, imageId: string) => {
+    const response = await api.delete(`/services/${serviceId}/images/${imageId}`);
+    return response.data;
+  }
+};
+export const categoriesAPI = {
+  getActiveCategories: async () => {
+    const response = await api.get('/categories');
+    return response.data;
+  },
+  getAll: async () => {
+    const response = await api.get('/categories');
+    return response.data;
+  },
+  getById: async (categoryId: string) => {
+    const response = await api.get(`/categories/${categoryId}`);
+    return response.data;
+  },
+  searchCategories: async (query: string) => {
+    const response = await api.get('/categories/search', {
+      params: {
+        query
+      }
+    });
+    return response.data;
+  }
+};
 export interface APIError {
   message: string;
   status: number;
@@ -203,12 +320,9 @@ export interface APIError {
   isNetworkError?: boolean;
   isValidationError?: boolean;
 }
-
 export const handleAPIError = (error: any): APIError => {
   if (axios.isAxiosError(error)) {
     const axiosError = error as AxiosError<any>;
-
-    // No response - network error
     if (!axiosError.response) {
       if (axiosError.code === 'ECONNABORTED') {
         return {
@@ -223,14 +337,12 @@ export const handleAPIError = (error: any): APIError => {
         isNetworkError: true
       };
     }
-
-    const { status, data } = axiosError.response;
-
-    // Handle validation errors (400)
+    const {
+      status,
+      data
+    } = axiosError.response;
     if (status === 400 && data?.errors) {
       const fieldErrors: Record<string, string> = {};
-
-      // Parse field-specific errors if they exist
       if (Array.isArray(data.errors)) {
         data.errors.forEach((err: any) => {
           if (err.field && err.message) {
@@ -242,7 +354,6 @@ export const handleAPIError = (error: any): APIError => {
           fieldErrors[field] = data.errors[field];
         });
       }
-
       return {
         message: data.message || 'Please check your input and try again.',
         status,
@@ -251,10 +362,7 @@ export const handleAPIError = (error: any): APIError => {
         isValidationError: true
       };
     }
-
-    // Handle specific error codes
     let message = data?.message || 'An error occurred';
-
     switch (status) {
       case 401:
         message = data?.message || 'Invalid credentials. Please check your email and password.';
@@ -283,15 +391,12 @@ export const handleAPIError = (error: any): APIError => {
       default:
         message = data?.message || 'An unexpected error occurred.';
     }
-
     return {
       message,
       status,
       data
     };
   }
-
-  // Non-Axios errors
   return {
     message: error?.message || 'An unexpected error occurred',
     status: 500
