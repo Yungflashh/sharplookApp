@@ -57,10 +57,10 @@ const RootNavigator = () => {
       animationTypeForReplace: 'pop'
     }} /> : <>
     <Stack.Screen name="Main" component={MainNavigator} initialParams={{
-      isVendor
-    }} options={{
-      animationTypeForReplace: 'push'
-    }} />
+        isVendor
+      }} options={{
+        animationTypeForReplace: 'push'
+      }} />
     <Stack.Screen name="Message" component={MessageScreen} />
     <Stack.Screen name="Notification" component={NotificationScreen} />
     </>}

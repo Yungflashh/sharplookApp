@@ -6,9 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { AuthStackParamList } from '@/types/navigation.types';
 import { authAPI, handleAPIError } from '@/api/api';
 import { Input, PasswordInput, Button, Checkbox, SocialLoginFullButton, PhoneInput, CountryCodePicker } from '@/components/ui/forms';
-
 type RegisterScreenNavigationProp = NativeStackNavigationProp<AuthStackParamList, 'Register'>;
-
 const RegisterScreen = () => {
   const navigation = useNavigation<RegisterScreenNavigationProp>();
   const [firstName, setFirstName] = useState('');
@@ -104,15 +102,11 @@ const RegisterScreen = () => {
     }
   };
   const handleRegister = async () => {
-    // Clear previous errors
     setGeneralError('');
-
     if (!validateForm()) {
       return;
     }
-
     setLoading(true);
-
     try {
       const registerData: any = {
         firstName: firstName.trim(),
@@ -123,14 +117,11 @@ const RegisterScreen = () => {
         confirmPassword: confirmPassword,
         isVendor: registerAsVendor
       };
-
       if (referralId.trim()) {
         registerData.referralId = referralId.trim();
       }
-
       console.log(registerData);
       const response = await authAPI.register(registerData);
-
       if (response.success) {
         if (registerAsVendor) {
           Alert.alert('Success', 'Account created successfully! Please complete your vendor profile.', [{
@@ -149,10 +140,10 @@ const RegisterScreen = () => {
     } catch (error: any) {
       console.error('Registration error:', error);
       const apiError = handleAPIError(error);
-
-      // Handle field-specific errors from backend
       if (apiError.fieldErrors) {
-        const newErrors = { ...errors };
+        const newErrors = {
+          ...errors
+        };
         Object.keys(apiError.fieldErrors).forEach(field => {
           if (field in newErrors) {
             (newErrors as any)[field] = apiError.fieldErrors![field];
@@ -160,8 +151,6 @@ const RegisterScreen = () => {
         });
         setErrors(newErrors);
       }
-
-      // Show general error message
       if (apiError.isNetworkError) {
         setGeneralError('Network error. Please check your internet connection and try again.');
       } else {
@@ -182,12 +171,12 @@ const RegisterScreen = () => {
         paddingTop: 60,
         paddingBottom: 40
       }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-          {/* Logo Section */}
+          {}
           <View className="items-center mb-8">
             <Image source={require('@/assets/logo.png')} className="w-28 h-16" resizeMode="contain" />
           </View>
 
-          {/* Header */}
+          {}
           <View className="mb-6">
             <Text className="text-3xl font-bold text-center text-black mb-2">
               Create Your Account
@@ -197,15 +186,16 @@ const RegisterScreen = () => {
             </Text>
           </View>
 
-          {/* General Error Message */}
-          {generalError ? (
-            <View className="bg-red-50 border border-red-200 rounded-xl p-4 mb-6 flex-row items-start">
-              <Ionicons name="alert-circle" size={20} color="#DC2626" style={{ marginRight: 8, marginTop: 2 }} />
+          {}
+          {generalError ? <View className="bg-red-50 border border-red-200 rounded-xl p-4 mb-6 flex-row items-start">
+              <Ionicons name="alert-circle" size={20} color="#DC2626" style={{
+            marginRight: 8,
+            marginTop: 2
+          }} />
               <Text className="text-red-600 text-sm flex-1">{generalError}</Text>
-            </View>
-          ) : null}
+            </View> : null}
 
-          {/* Name Inputs */}
+          {}
           <View className="flex-row gap-3">
             <Input containerClassName="flex-1 mb-0" label="First Name" placeholder="" value={firstName} onChangeText={text => {
             setFirstName(text);
@@ -226,7 +216,7 @@ const RegisterScreen = () => {
           }} error={errors.lastName} editable={!loading} />
           </View>
 
-          {/* Email Input */}
+          {}
           <Input label="Enter E-mail Address" placeholder="" value={email} onChangeText={text => {
           setEmail(text);
           setErrors({
@@ -236,7 +226,7 @@ const RegisterScreen = () => {
           setGeneralError('');
         }} error={errors.email} autoCapitalize="none" keyboardType="email-address" editable={!loading} />
 
-          {/* Phone Input */}
+          {}
           <PhoneInput label="Enter Phone Number" placeholder="8123456789" value={phone} onChangeText={text => {
           setPhone(text);
           setErrors({
@@ -246,7 +236,7 @@ const RegisterScreen = () => {
           setGeneralError('');
         }} error={errors.phone} editable={!loading} countryCode={countryCode} onCountryCodePress={() => setShowCountryPicker(true)} />
 
-          {/* Password Input */}
+          {}
           <PasswordInput label="Password" placeholder="" value={password} onChangeText={text => {
           setPassword(text);
           setErrors({
@@ -256,7 +246,7 @@ const RegisterScreen = () => {
           setGeneralError('');
         }} error={errors.password} editable={!loading} />
 
-          {/* Confirm Password Input */}
+          {}
           <PasswordInput label="Confirm Password" placeholder="" value={confirmPassword} onChangeText={text => {
           setConfirmPassword(text);
           setErrors({
@@ -266,10 +256,10 @@ const RegisterScreen = () => {
           setGeneralError('');
         }} error={errors.confirmPassword} editable={!loading} />
 
-          {/* Referral Input */}
+          {}
           <Input label="Referral Code (optional)" placeholder="" value={referralId} onChangeText={setReferralId} editable={!loading} />
 
-          {/* Checkboxes */}
+          {}
           <View className="mb-6">
             <Checkbox checked={agreeToTerms} onChange={setAgreeToTerms} disabled={loading} error={errors.terms} label={<Text className="text-sm text-gray-700 flex-1">
                   By signing up, you agree to our{' '}
@@ -280,26 +270,26 @@ const RegisterScreen = () => {
             <Checkbox checked={registerAsVendor} onChange={handleVendorCheckboxPress} disabled={loading} label="Register as Vendor" />
           </View>
 
-          {/* Register Button */}
+          {}
           <Button onPress={handleRegister} loading={loading} disabled={loading} containerClassName="mb-6">
             Create Account
           </Button>
 
-          {/* Divider */}
+          {}
           <View className="flex-row items-center mb-6">
             <View className="flex-1 h-px bg-pink-200" />
             <Text className="px-4 text-sm text-gray-700">or sign up with</Text>
             <View className="flex-1 h-px bg-pink-200" />
           </View>
 
-          {/* Social Login Buttons */}
+          {}
           <View className="gap-3 mb-8">
             <SocialLoginFullButton platform="google" />
             <SocialLoginFullButton platform="facebook" />
             <SocialLoginFullButton platform="apple" />
           </View>
 
-          {/* Login Link */}
+          {}
           <View className="flex-row justify-center items-center">
             <Text className="text-base text-gray-700">Already have an account? </Text>
             <TouchableOpacity onPress={handleLogin} disabled={loading} activeOpacity={0.7}>
@@ -309,7 +299,7 @@ const RegisterScreen = () => {
         </ScrollView>
       </KeyboardAvoidingView>
 
-      {/* Country Code Picker Modal */}
+      {}
       <CountryCodePicker visible={showCountryPicker} onClose={() => setShowCountryPicker(false)} onSelect={setCountryCode} selectedCode={countryCode} />
     </View>;
 };
