@@ -55,13 +55,31 @@ export const loginUser = async (email: string, password: string): Promise<AuthRe
         user
       };
     } else {
+      console.error('❌ Login Failed:', {
+        message: response.message || 'Login failed',
+        response: response
+      });
       return {
         success: false,
         error: response.message || 'Login failed'
       };
     }
-  } catch (error) {
+  } catch (error: any) {
+    console.error('❌ Login Error:', error);
+    console.error('❌ Login Error Response:', error?.response);
+    console.error('❌ Login Error Data:', error?.response?.data);
+    console.error('❌ Login Error Status:', error?.response?.status);
+    console.error('❌ Login Error Headers:', error?.response?.headers);
+
     const apiError = handleAPIError(error);
+    console.error('❌ Login API Error (Processed):', {
+      message: apiError.message,
+      status: apiError.status,
+      data: apiError.data,
+      isNetworkError: apiError.isNetworkError,
+      fieldErrors: apiError.fieldErrors,
+      isValidationError: apiError.isValidationError
+    });
     return {
       success: false,
       error: apiError.message
@@ -98,13 +116,31 @@ export const registerUser = async (userData: {
         success: true
       };
     } else {
+      console.error('❌ Registration Failed:', {
+        message: response.message || 'Registration failed',
+        response: response
+      });
       return {
         success: false,
         error: response.message || 'Registration failed'
       };
     }
-  } catch (error) {
+  } catch (error: any) {
+    console.error('❌ Registration Error:', error);
+    console.error('❌ Registration Error Response:', error?.response);
+    console.error('❌ Registration Error Data:', error?.response?.data);
+    console.error('❌ Registration Error Status:', error?.response?.status);
+    console.error('❌ Registration Error Headers:', error?.response?.headers);
+
     const apiError = handleAPIError(error);
+    console.error('❌ Registration API Error (Processed):', {
+      message: apiError.message,
+      status: apiError.status,
+      data: apiError.data,
+      isNetworkError: apiError.isNetworkError,
+      fieldErrors: apiError.fieldErrors,
+      isValidationError: apiError.isValidationError
+    });
     return {
       success: false,
       error: apiError.message
@@ -119,8 +155,13 @@ export const logoutUser = async (): Promise<AuthResult> => {
       success: true
     };
   } catch (error) {
+    console.error('❌ Logout Error:', error);
     await AsyncStorage.multiRemove(['accessToken', 'refreshToken', 'userData', 'isAuthenticated']);
     const apiError = handleAPIError(error);
+    console.error('❌ Logout API Error:', {
+      message: apiError.message,
+      isNetworkError: apiError.isNetworkError
+    });
     return {
       success: true,
       error: apiError.message

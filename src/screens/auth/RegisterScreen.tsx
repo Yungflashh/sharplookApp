@@ -5,7 +5,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { AuthStackParamList } from '@/types/navigation.types';
 import { authAPI, handleAPIError } from '@/api/api';
-import { Input, PasswordInput, Button, Checkbox, SocialLoginFullButton, PhoneInput, CountryCodePicker } from '@/components/ui/forms';
+import { Input, PasswordInput, Button, Checkbox, SocialLoginButton, PhoneInput, CountryCodePicker } from '@/components/ui/forms';
 type RegisterScreenNavigationProp = NativeStackNavigationProp<AuthStackParamList, 'Register'>;
 const RegisterScreen = () => {
   const navigation = useNavigation<RegisterScreenNavigationProp>();
@@ -283,10 +283,10 @@ const RegisterScreen = () => {
           </View>
 
           {}
-          <View className="gap-3 mb-8">
-            <SocialLoginFullButton platform="google" />
-            <SocialLoginFullButton platform="facebook" />
-            <SocialLoginFullButton platform="apple" />
+          <View className="flex-row justify-center items-center gap-4 mb-8">
+            <SocialLoginButton platform="google" size="lg" />
+            <SocialLoginButton platform="facebook" size="lg" />
+            <SocialLoginButton platform="apple" size="lg" />
           </View>
 
           {}

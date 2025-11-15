@@ -13,11 +13,44 @@ api.interceptors.request.use(async (config: InternalAxiosRequestConfig) => {
   if (token && config.headers) {
     config.headers.Authorization = `Bearer ${token}`;
   }
+
+  // Log request details
+  console.log('🟢 API Request:', {
+    method: config.method?.toUpperCase(),
+    url: config.url,
+    baseURL: config.baseURL,
+    fullURL: `${config.baseURL}${config.url}`,
+    data: config.data,
+    headers: config.headers
+  });
+
   return config;
 }, (error: AxiosError) => {
+  console.error('🔴 Request Interceptor Error:', error);
   return Promise.reject(error);
 });
-api.interceptors.response.use(response => response, async (error: AxiosError) => {
+api.interceptors.response.use(response => {
+  // Log successful responses
+  console.log('✅ API Response:', {
+    status: response.status,
+    statusText: response.statusText,
+    url: response.config.url,
+    data: response.data
+  });
+  return response;
+}, async (error: AxiosError) => {
+  // Log the full error details
+  console.error('🔴 API Error Interceptor:', {
+    message: error.message,
+    code: error.code,
+    url: error.config?.url,
+    method: error.config?.method,
+    status: error.response?.status,
+    statusText: error.response?.statusText,
+    responseData: error.response?.data,
+    requestData: error.config?.data
+  });
+
   const originalRequest = error.config as InternalAxiosRequestConfig & {
     _retry?: boolean;
   };
@@ -39,6 +72,7 @@ api.interceptors.response.use(response => response, async (error: AxiosError) =>
         return api(originalRequest);
       }
     } catch (refreshError) {
+      console.error('🔴 Token Refresh Error:', refreshError);
       await AsyncStorage.multiRemove(['accessToken', 'refreshToken', 'userData', 'isAuthenticated']);
       return Promise.reject(refreshError);
     }
@@ -120,6 +154,19 @@ export const userAPI = {
   }
 };
 export const vendorAPI = {
+  setupProfile: async (setupData: {
+    businessName: string;
+    businessDescription: string;
+    serviceCategories: string[];
+    vendorType: 'home_service' | 'in_shop' | 'both';
+    location: {
+      coordinates: number[];
+      address: string;
+    };
+  }) => {
+    const response = await api.post('/vendors/setup', setupData);
+    return response.data;
+  },
   getProfile: async () => {
     const response = await api.get('/vendors/profile');
     return response.data;

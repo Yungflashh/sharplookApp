@@ -7,3 +7,7 @@ testtest123@gmail.com
 1. add proper auth error handling
 2. fix the auth UI Flow and make the ui component friendly
 3. vendor profile set up
+
+theblazingprince1000@gmail.com
+test@Th7
+9083984384

@@ -112,7 +112,6 @@ const SocialLoginButton: React.FC<SocialLoginButtonProps> = ({
           rounded-full
           items-center
           justify-center
-          shadow-md
         `}>
         <Ionicons name={platformStyles.icon} size={sizeStyles.iconSize} color={platformStyles.iconColor} />
       </TouchableOpacity>
