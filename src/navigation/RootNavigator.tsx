@@ -6,6 +6,9 @@ import AuthNavigator from '@/navigation/AuthNavigator';
 import MessageScreen from '@/screens/vendor/MessageScreen';
 import NotificationScreen from '@/screens/vendor/NotificationScreen';
 import MainNavigator from '@/navigation/MainNavigator';
+import ChatScreen from '../components/clientComponent/ChatScreen';
+import CartScreen from '../components/clientComponent/CartScreen';
+import ChatDetailScreen from '@/components/clientComponent/ChatDetailScreen';
 import type { RootStackParamList } from '@/types/navigation.types';
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const RootNavigator = () => {
@@ -63,6 +66,9 @@ const RootNavigator = () => {
       }} />
     <Stack.Screen name="Message" component={MessageScreen} />
     <Stack.Screen name="Notification" component={NotificationScreen} />
+    <Stack.Screen name="Chat" component={ChatScreen} />
+    <Stack.Screen name="Cart" component={CartScreen} />
+    <Stack.Screen name="ChatDetail" component={ChatDetailScreen} />
     </>}
     </Stack.Navigator>;
 };

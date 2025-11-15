@@ -14,6 +14,9 @@ import {
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { RootStackParamList } from '@/types/navigation.types';
 import ClientSidebar from '@/components/clientComponent/ClientSidebar';
 
 import FilterModal from '@/components/FilterModal';
@@ -36,7 +39,13 @@ interface Vendor {
   reviews: number;
 }
 
+type ClientDashboardScreenNavigationProp = NativeStackNavigationProp<
+  RootStackParamList,
+  'Main'
+>;
+
 const ClientDashboardScreen: React.FC = () => {
+  const navigation = useNavigation<ClientDashboardScreenNavigationProp>();
   const [sidebarVisible, setSidebarVisible] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedCategory, setSelectedCategory] = useState<string>('');
@@ -144,7 +153,7 @@ const ClientDashboardScreen: React.FC = () => {
       id: '2',
       name: 'AdeChioma signature hair',
       image: 'https://via.placeholder.com/150/1a1a2e/FFFFFF?text=AdeChioma',
-      service: 'Home Service',
+      service: 'In-Shop',
       rating: 0.0,
       reviews: 0,
     },
@@ -188,6 +197,7 @@ const ClientDashboardScreen: React.FC = () => {
             <TouchableOpacity
               className="relative w-11 h-11 items-center justify-center"
               activeOpacity={0.7}
+              onPress={() => navigation.navigate('Chat')}
             >
               <Ionicons name="chatbubble-ellipses-outline" size={24} color="#eb278d" />
               <View className="absolute top-1.5 right-1.5 w-2 h-2 bg-pink-500 rounded-full" />
@@ -196,6 +206,7 @@ const ClientDashboardScreen: React.FC = () => {
             <TouchableOpacity
               className="relative w-11 h-11 items-center justify-center"
               activeOpacity={0.7}
+              onPress={() => navigation.navigate('Cart')}
             >
               <Ionicons name="cart-outline" size={26} color="#eb278d" />
               <View className="absolute top-1 right-1 w-5 h-5 bg-pink-500 rounded-full items-center justify-center">

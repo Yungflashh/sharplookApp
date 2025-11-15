@@ -10,6 +10,9 @@ export type RootStackParamList = {
   };
   Message: undefined;
   Notification: undefined;
+  Chat: undefined;
+  Cart: undefined;
+  ChatDetail: { vendorId: string; vendorName: string };
 };
 export type AuthStackParamList = {
   Login: undefined;
