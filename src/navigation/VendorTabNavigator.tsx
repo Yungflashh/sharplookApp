@@ -3,9 +3,8 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import type { VendorTabParamList } from '@/types/navigation.types';
 import VendorDashboardScreen from '@/screens/vendor/VendorDashboardScreen';
-import ClientDashboardScreen from '@/screens/client/ClientDashboardScreen';
-import ClientProfileScreen from '@/screens/client/ClientProfileScreen';
 import VendorProfileScreen from '@/screens/vendor/VendoreProfileScreen';
+import VendorBooking from '@/screens/vendor/VendorBooking';
 
 const Tab = createBottomTabNavigator<VendorTabParamList>();
 
@@ -58,7 +57,7 @@ const VendorTabNavigator = () => {
       
       <Tab.Screen
         name="Bookings"
-        component={VendorDashboardScreen}
+        component={VendorBooking}
         options={{
           tabBarIcon: ({ color, size, focused }) => (
             <Ionicons 
