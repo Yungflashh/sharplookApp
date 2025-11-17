@@ -13,8 +13,6 @@ api.interceptors.request.use(async (config: InternalAxiosRequestConfig) => {
   if (token && config.headers) {
     config.headers.Authorization = `Bearer ${token}`;
   }
-
-  // Log request details
   console.log('🟢 API Request:', {
     method: config.method?.toUpperCase(),
     url: config.url,
@@ -23,14 +21,12 @@ api.interceptors.request.use(async (config: InternalAxiosRequestConfig) => {
     data: config.data,
     headers: config.headers
   });
-
   return config;
 }, (error: AxiosError) => {
   console.error('🔴 Request Interceptor Error:', error);
   return Promise.reject(error);
 });
 api.interceptors.response.use(response => {
-  // Log successful responses
   console.log('✅ API Response:', {
     status: response.status,
     statusText: response.statusText,
@@ -39,7 +35,6 @@ api.interceptors.response.use(response => {
   });
   return response;
 }, async (error: AxiosError) => {
-  // Log the full error details
   console.error('🔴 API Error Interceptor:', {
     message: error.message,
     code: error.code,
@@ -50,7 +45,6 @@ api.interceptors.response.use(response => {
     responseData: error.response?.data,
     requestData: error.config?.data
   });
-
   const originalRequest = error.config as InternalAxiosRequestConfig & {
     _retry?: boolean;
   };
@@ -202,7 +196,7 @@ export const vendorAPI = {
     page?: number;
     limit?: number;
   }) => {
-    const response = await api.get('/users/allVendors', {
+    const response = await api.get('users/vendors', {
       params
     });
     return response.data;
@@ -210,31 +204,421 @@ export const vendorAPI = {
   getVendorProfile: async (vendorId: string) => {
     const response = await api.get(`/vendors/${vendorId}/profile`);
     return response.data;
+  },
+  getVendorDetail: async (vendorId: string, options?: {
+    includeServices?: boolean;
+    includeReviews?: boolean;
+    reviewsLimit?: number;
+  }) => {
+    const params = new URLSearchParams();
+    if (options?.includeServices !== undefined) {
+      params.append('includeServices', String(options.includeServices));
+    }
+    if (options?.includeReviews !== undefined) {
+      params.append('includeReviews', String(options.includeReviews));
+    }
+    if (options?.reviewsLimit) {
+      params.append('reviewsLimit', String(options.reviewsLimit));
+    }
+    const queryString = params.toString();
+    const url = queryString ? `/users/vendors/${vendorId}?${queryString}` : `/users/vendors/${vendorId}`;
+    const response = await api.get(url);
+    return response.data;
+  },
+  getVendorServices: async (vendorId: string, page: number = 1) => {
+    const response = await api.get(`/users/vendors/${vendorId}/services`, {
+      params: {
+        page,
+        limit: 10
+      }
+    });
+    return response.data;
+  },
+  getVendorReviews: async (vendorId: string, page: number = 1) => {
+    const response = await api.get(`/users/vendors/${vendorId}/reviews`, {
+      params: {
+        page,
+        limit: 10
+      }
+    });
+    return response.data;
+  },
+  getVendorAvailability: async (vendorId: string, date?: string) => {
+    const response = await api.get(`/users/vendors/${vendorId}/availability`, {
+      params: date ? {
+        date
+      } : {}
+    });
+    return response.data;
+  },
+  getVendorStats: async (vendorId: string) => {
+    const response = await api.get(`/users/vendors/${vendorId}/stats`);
+    return response.data;
+  }
+};
+export const disputeAPI = {
+  createDispute: async (disputeData: {
+    bookingId: string;
+    reason: string;
+    description: string;
+    category: string;
+    evidence?: {
+      type: string;
+      content: string;
+    }[];
+  }) => {
+    const response = await api.post('/disputes', disputeData);
+    return response.data;
+  },
+  getMyDisputes: async (params?: {
+    status?: string;
+    category?: string;
+    page?: number;
+    limit?: number;
+  }) => {
+    const response = await api.get('/disputes/my-disputes', {
+      params
+    });
+    return response.data;
+  },
+  getDisputeById: async (disputeId: string) => {
+    const response = await api.get(`/disputes/${disputeId}`);
+    return response.data;
+  },
+  addEvidence: async (disputeId: string, evidence: {
+    type: string;
+    content: string;
+  }[]) => {
+    const response = await api.post(`/disputes/${disputeId}/evidence`, {
+      evidence
+    });
+    return response.data;
+  },
+  addMessage: async (disputeId: string, message: string, attachments?: string[]) => {
+    const response = await api.post(`/disputes/${disputeId}/messages`, {
+      message,
+      attachments
+    });
+    return response.data;
+  },
+  getAllDisputes: async (params?: {
+    status?: string;
+    category?: string;
+    priority?: string;
+    assignedTo?: string;
+    page?: number;
+    limit?: number;
+  }) => {
+    const response = await api.get('/disputes', {
+      params
+    });
+    return response.data;
+  },
+  getDisputeStats: async () => {
+    const response = await api.get('/disputes/stats');
+    return response.data;
+  },
+  assignDispute: async (disputeId: string, assignToId: string) => {
+    const response = await api.post(`/disputes/${disputeId}/assign`, {
+      assignToId
+    });
+    return response.data;
+  },
+  updatePriority: async (disputeId: string, priority: 'low' | 'medium' | 'high' | 'urgent') => {
+    const response = await api.put(`/disputes/${disputeId}/priority`, {
+      priority
+    });
+    return response.data;
+  },
+  resolveDispute: async (disputeId: string, resolutionData: {
+    resolution: 'refund_client' | 'pay_vendor' | 'partial_refund' | 'no_action';
+    resolutionDetails: string;
+    refundAmount?: number;
+    vendorPaymentAmount?: number;
+  }) => {
+    const response = await api.post(`/disputes/${disputeId}/resolve`, resolutionData);
+    return response.data;
+  },
+  closeDispute: async (disputeId: string) => {
+    const response = await api.post(`/disputes/${disputeId}/close`);
+    return response.data;
+  }
+};
+export const reviewAPI = {
+  createReview: async (reviewData: {
+    bookingId: string;
+    rating: number;
+    title?: string;
+    comment: string;
+    detailedRatings?: {
+      quality?: number;
+      punctuality?: number;
+      communication?: number;
+      value?: number;
+    };
+    images?: string[];
+  }) => {
+    const response = await api.post('/reviews', reviewData);
+    return response.data;
+  },
+  getMyReviews: async (params?: {
+    page?: number;
+    limit?: number;
+  }) => {
+    const response = await api.get('/reviews/my-reviews', {
+      params
+    });
+    return response.data;
+  },
+  getReviewsForUser: async (userId: string, params?: {
+    rating?: number;
+    minRating?: number;
+    page?: number;
+    limit?: number;
+  }) => {
+    const response = await api.get(`/reviews/user/${userId}`, {
+      params
+    });
+    return response.data;
+  },
+  getServiceReviews: async (serviceId: string, params?: {
+    rating?: number;
+    minRating?: number;
+    page?: number;
+    limit?: number;
+  }) => {
+    const response = await api.get(`/reviews/service/${serviceId}`, {
+      params
+    });
+    return response.data;
+  },
+  getReviewById: async (reviewId: string) => {
+    const response = await api.get(`/reviews/${reviewId}`);
+    return response.data;
+  },
+  respondToReview: async (reviewId: string, comment: string) => {
+    const response = await api.post(`/reviews/${reviewId}/respond`, {
+      comment
+    });
+    return response.data;
+  },
+  voteHelpful: async (reviewId: string, isHelpful: boolean) => {
+    const response = await api.post(`/reviews/${reviewId}/vote`, {
+      isHelpful
+    });
+    return response.data;
+  },
+  flagReview: async (reviewId: string, reason: string) => {
+    const response = await api.post(`/reviews/${reviewId}/flag`, {
+      reason
+    });
+    return response.data;
+  },
+  getReviewStats: async (userId: string) => {
+    const response = await api.get(`/reviews/user/${userId}/stats`);
+    return response.data;
+  },
+  getAllReviews: async (params?: {
+    isFlagged?: boolean;
+    isApproved?: boolean;
+    rating?: number;
+    page?: number;
+    limit?: number;
+  }) => {
+    const response = await api.get('/reviews', {
+      params
+    });
+    return response.data;
+  },
+  approveReview: async (reviewId: string) => {
+    const response = await api.post(`/reviews/${reviewId}/approve`);
+    return response.data;
+  },
+  hideReview: async (reviewId: string, reason: string) => {
+    const response = await api.post(`/reviews/${reviewId}/hide`, {
+      reason
+    });
+    return response.data;
+  },
+  unhideReview: async (reviewId: string) => {
+    const response = await api.post(`/reviews/${reviewId}/unhide`);
+    return response.data;
   }
 };
 export const bookingAPI = {
-  create: async (bookingData: any) => {
+  createBooking: async (bookingData: {
+    service: string;
+    scheduledDate: string;
+    scheduledTime?: string;
+    location?: {
+      address: string;
+      city: string;
+      state: string;
+      coordinates: [number, number];
+    };
+    clientNotes?: string;
+  }) => {
     const response = await api.post('/bookings', bookingData);
     return response.data;
   },
-  getAll: async () => {
-    const response = await api.get('/bookings');
-    return response.data;
-  },
-  getById: async (bookingId: string) => {
+  getBookingById: async (bookingId: string) => {
     const response = await api.get(`/bookings/${bookingId}`);
     return response.data;
   },
-  update: async (bookingId: string, updateData: any) => {
-    const response = await api.put(`/bookings/${bookingId}`, updateData);
+  getMyBookings: async (params?: {
+    role?: 'client' | 'vendor';
+    status?: string;
+    page?: number;
+    limit?: number;
+  }) => {
+    const response = await api.get('/bookings/my-bookings', {
+      params
+    });
     return response.data;
   },
-  cancel: async (bookingId: string) => {
-    const response = await api.post(`/bookings/${bookingId}/cancel`);
+  acceptBooking: async (bookingId: string) => {
+    const response = await api.post(`/bookings/${bookingId}/accept`);
     return response.data;
   },
-  complete: async (bookingId: string) => {
+  rejectBooking: async (bookingId: string, reason?: string) => {
+    const response = await api.post(`/bookings/${bookingId}/reject`, {
+      reason
+    });
+    return response.data;
+  },
+  startBooking: async (bookingId: string) => {
+    const response = await api.post(`/bookings/${bookingId}/start`);
+    return response.data;
+  },
+  markComplete: async (bookingId: string) => {
     const response = await api.post(`/bookings/${bookingId}/complete`);
+    return response.data;
+  },
+  cancelBooking: async (bookingId: string, reason?: string) => {
+    const response = await api.post(`/bookings/${bookingId}/cancel`, {
+      reason
+    });
+    return response.data;
+  },
+  updateBooking: async (bookingId: string, updates: {
+    clientNotes?: string;
+    vendorNotes?: string;
+  }) => {
+    const response = await api.put(`/bookings/${bookingId}`, updates);
+    return response.data;
+  },
+  getBookingStats: async (role: 'client' | 'vendor' = 'client') => {
+    const response = await api.get('/bookings/stats', {
+      params: {
+        role
+      }
+    });
+    return response.data;
+  },
+  createOffer: async (offerData: {
+    category: string;
+    serviceDescription: string;
+    preferredDate: string;
+    preferredTime?: string;
+    budgetRange: {
+      min: number;
+      max: number;
+    };
+    location: {
+      address: string;
+      city: string;
+      state: string;
+      coordinates: [number, number];
+    };
+    images?: string[];
+    notes?: string;
+  }) => {
+    const response = await api.post('/bookings/offers', offerData);
+    return response.data;
+  },
+  getAvailableOffers: async (params?: {
+    category?: string;
+    priceMin?: number;
+    priceMax?: number;
+    latitude?: number;
+    longitude?: number;
+    maxDistance?: number;
+    page?: number;
+    limit?: number;
+  }) => {
+    const response = await api.get('/bookings/offers/available', {
+      params
+    });
+    return response.data;
+  },
+  getMyOffers: async (params?: {
+    page?: number;
+    limit?: number;
+  }) => {
+    const response = await api.get('/bookings/offers/my-offers', {
+      params
+    });
+    return response.data;
+  },
+  getMyResponses: async (params?: {
+    page?: number;
+    limit?: number;
+  }) => {
+    const response = await api.get('/bookings/offers/my-responses', {
+      params
+    });
+    return response.data;
+  },
+  getOfferById: async (offerId: string) => {
+    const response = await api.get(`/bookings/offers/${offerId}`);
+    return response.data;
+  },
+  respondToOffer: async (offerId: string, responseData: {
+    proposedPrice: number;
+    message?: string;
+    estimatedDuration?: number;
+  }) => {
+    const response = await api.post(`/bookings/offers/${offerId}/respond`, responseData);
+    return response.data;
+  },
+  counterOffer: async (offerId: string, responseId: string, counterPrice: number) => {
+    const response = await api.post(`/bookings/offers/${offerId}/responses/${responseId}/counter`, {
+      counterPrice
+    });
+    return response.data;
+  },
+  acceptResponse: async (offerId: string, responseId: string) => {
+    const response = await api.post(`/bookings/offers/${offerId}/responses/${responseId}/accept`);
+    return response.data;
+  },
+  closeOffer: async (offerId: string) => {
+    const response = await api.post(`/bookings/offers/${offerId}/close`);
+    return response.data;
+  }
+};
+export const paymentAPI = {
+  initializePayment: async (paymentData: {
+    bookingId: string;
+    metadata?: any;
+  }) => {
+    const response = await api.post('/payments/initialize', paymentData);
+    return response.data;
+  },
+  verifyPayment: async (reference: string) => {
+    const response = await api.get(`/payments/verify/${reference}`);
+    return response.data;
+  },
+  getPaymentById: async (paymentId: string) => {
+    const response = await api.get(`/payments/${paymentId}`);
+    return response.data;
+  },
+  getMyPayments: async (params?: {
+    page?: number;
+    limit?: number;
+  }) => {
+    const response = await api.get('/payments/my-payments', {
+      params
+    });
     return response.data;
   }
 };
@@ -243,22 +627,44 @@ export const walletAPI = {
     const response = await api.get('/wallet/balance');
     return response.data;
   },
-  getTransactions: async () => {
-    const response = await api.get('/wallet/transactions');
-    return response.data;
-  },
-  addFunds: async (amount: number, paymentMethod: string) => {
-    const response = await api.post('/wallet/add-funds', {
-      amount,
-      paymentMethod
+  getTransactions: async (params?: {
+    type?: string;
+    status?: string;
+    startDate?: string;
+    endDate?: string;
+    page?: number;
+    limit?: number;
+  }) => {
+    const response = await api.get('/wallet/transactions', {
+      params
     });
     return response.data;
   },
-  withdraw: async (amount: number, accountDetails: any) => {
-    const response = await api.post('/wallet/withdraw', {
-      amount,
-      accountDetails
+  getStats: async () => {
+    const response = await api.get('/wallet/stats');
+    return response.data;
+  },
+  requestWithdrawal: async (withdrawalData: {
+    amount: number;
+    bankCode: string;
+    accountNumber: string;
+    accountName: string;
+    narration?: string;
+  }) => {
+    const response = await api.post('/wallet/withdraw', withdrawalData);
+    return response.data;
+  },
+  getMyWithdrawals: async (params?: {
+    page?: number;
+    limit?: number;
+  }) => {
+    const response = await api.get('/wallet/withdrawals/my-withdrawals', {
+      params
     });
+    return response.data;
+  },
+  getWithdrawalById: async (withdrawalId: string) => {
+    const response = await api.get(`/wallet/withdrawals/${withdrawalId}`);
     return response.data;
   }
 };

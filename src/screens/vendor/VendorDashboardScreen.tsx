@@ -1,5 +1,5 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StatusBar, Animated, Dimensions, RefreshControl, Platform } from 'react-native';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { View, Text, TouchableOpacity, ScrollView, StatusBar, Animated, Dimensions, RefreshControl, Platform, Alert } from 'react-native';
 import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -7,6 +7,7 @@ import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '@/types/navigation.types';
 import VendorSidebar from '@/components/VendorSidebar';
+import { vendorAPI, walletAPI, bookingAPI, servicesAPI, handleAPIError, userAPI } from '@/api/api';
 const {
   width: SCREEN_WIDTH
 } = Dimensions.get('window');
@@ -25,6 +26,26 @@ interface Stat {
   change: string;
   isPositive: boolean;
 }
+interface VendorProfile {
+  businessName: string;
+  businessDescription?: string;
+  rating?: number;
+  totalReviews?: number;
+  isActive?: boolean;
+  createdAt?: string;
+}
+interface WalletData {
+  balance: number;
+  pendingBalance: number;
+  totalEarnings: number;
+}
+interface RecentActivity {
+  icon: string;
+  title: string;
+  subtitle: string;
+  time: string;
+  color: string;
+}
 type VendorDashboardScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Main'>;
 const VendorDashboardScreen: React.FC = () => {
   const navigation = useNavigation<VendorDashboardScreenNavigationProp>();
@@ -32,67 +53,141 @@ const VendorDashboardScreen: React.FC = () => {
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [selectedPeriod, setSelectedPeriod] = useState<'day' | 'week' | 'month'>('week');
   const [sidebarVisible, setSidebarVisible] = useState<boolean>(false);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [vendorProfile, setVendorProfile] = useState<VendorProfile | null>(null);
+  const [walletData, setWalletData] = useState<WalletData>({
+    balance: 0,
+    pendingBalance: 0,
+    totalEarnings: 0
+  });
+  const [bookingsData, setBookingsData] = useState<any[]>([]);
+  const [servicesData, setServicesData] = useState<any[]>([]);
+  const [stats, setStats] = useState<Stat[]>([{
+    label: 'Total Orders',
+    value: '0',
+    change: '+0%',
+    isPositive: true
+  }, {
+    label: 'Active Products',
+    value: '0',
+    change: '+0',
+    isPositive: true
+  }, {
+    label: 'Avg. Rating',
+    value: '0.0',
+    change: '+0.0',
+    isPositive: true
+  }, {
+    label: 'Response Rate',
+    value: '0%',
+    change: '0%',
+    isPositive: true
+  }]);
+  const [recentActivities, setRecentActivities] = useState<RecentActivity[]>([]);
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
   const scaleAnim = useRef(new Animated.Value(0.95)).current;
   const balanceOpacity = useRef(new Animated.Value(0)).current;
-  const balance = 25000;
-  const pendingBalance = 5000;
-  const totalEarnings = 150000;
-  const stats: Stat[] = [{
-    label: 'Total Orders',
-    value: '124',
-    change: '+12%',
-    isPositive: true
-  }, {
-    label: 'Active Products',
-    value: '18',
-    change: '+3',
-    isPositive: true
-  }, {
-    label: 'Avg. Rating',
-    value: '4.8',
-    change: '+0.2',
-    isPositive: true
-  }, {
-    label: 'Response Rate',
-    value: '98%',
-    change: '-1%',
-    isPositive: false
-  }];
-  const quickActions: QuickAction[] = [{
-    id: '1',
-    title: 'Add Product',
-    icon: 'add-circle-outline',
-    iconFamily: 'ionicons',
-    color: '#eb278d',
-    bgColor: '#fce7f3',
-    onPress: () => console.log('Add Product')
-  }, {
-    id: '2',
-    title: 'Orders',
-    icon: 'package',
-    iconFamily: 'feather',
-    color: '#3b82f6',
-    bgColor: '#dbeafe',
-    onPress: () => console.log('Orders')
-  }, {
-    id: '3',
-    title: 'Analytics',
-    icon: 'chart-line',
-    iconFamily: 'material',
-    color: '#10b981',
-    bgColor: '#d1fae5',
-    onPress: () => console.log('Analytics')
-  }, {
-    id: '4',
-    title: 'Promotions',
-    icon: 'tag-outline',
-    iconFamily: 'material',
-    color: '#f59e0b',
-    bgColor: '#fed7aa',
-    onPress: () => console.log('Promotions')
-  }];
+  const fetchDashboardData = async () => {
+    try {
+      setLoading(true);
+      const profileResponse = await userAPI.getProfile();
+      console.log(profileResponse.data);
+      if (profileResponse.success) {
+        setVendorProfile(profileResponse.data.user);
+      }
+      const walletResponse = await walletAPI.getBalance();
+      if (walletResponse.success) {
+        setWalletData({
+          balance: walletResponse.data.balance || 0,
+          pendingBalance: walletResponse.data.pendingBalance || 0,
+          totalEarnings: walletResponse.data.totalEarnings || 0
+        });
+      }
+      const bookingsResponse = await vendorAPI.getBookings();
+      if (bookingsResponse.success) {
+        setBookingsData(bookingsResponse.data || []);
+        updateStatsFromBookings(bookingsResponse.data || []);
+        generateRecentActivities(bookingsResponse.data || []);
+      }
+      const servicesResponse = await servicesAPI.getMyServices();
+      if (servicesResponse.success) {
+        setServicesData(servicesResponse.data || []);
+        updateServicesStats(servicesResponse.data || []);
+      }
+    } catch (error) {
+      const apiError = handleAPIError(error);
+      console.error('Dashboard fetch error:', apiError);
+      Alert.alert('Error', apiError.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+  const updateStatsFromBookings = (bookings: any[]) => {
+    const completedBookings = bookings.filter(b => b.status === 'completed');
+    const pendingBookings = bookings.filter(b => b.status === 'pending');
+    setStats(prevStats => [{
+      label: 'Total Orders',
+      value: bookings.length.toString(),
+      change: `+${pendingBookings.length}%`,
+      isPositive: pendingBookings.length > 0
+    }, prevStats[1], prevStats[2], {
+      label: 'Completed',
+      value: completedBookings.length.toString(),
+      change: `${Math.round(completedBookings.length / (bookings.length || 1) * 100)}%`,
+      isPositive: true
+    }]);
+  };
+  const updateServicesStats = (services: any[]) => {
+    const activeServices = services.filter(s => s.isActive !== false);
+    setStats(prevStats => [prevStats[0], {
+      label: 'Active Services',
+      value: activeServices.length.toString(),
+      change: `+${services.length - activeServices.length}`,
+      isPositive: activeServices.length > 0
+    }, prevStats[2], prevStats[3]]);
+  };
+  const generateRecentActivities = (bookings: any[]) => {
+    const activities: RecentActivity[] = bookings.slice(0, 3).map((booking, index) => {
+      const timeAgo = getTimeAgo(booking.createdAt || new Date());
+      return {
+        icon: booking.status === 'completed' ? 'checkmark-circle' : booking.status === 'pending' ? 'time' : 'cart',
+        title: `Booking #${booking._id?.slice(-4) || index}`,
+        subtitle: `${booking.serviceName || 'Service'} • ₦${booking.totalAmount?.toLocaleString() || '0'}`,
+        time: timeAgo,
+        color: booking.status === 'completed' ? '#10b981' : booking.status === 'pending' ? '#f59e0b' : '#3b82f6'
+      };
+    });
+    setRecentActivities(activities);
+  };
+  const getTimeAgo = (date: Date | string): string => {
+    const now = new Date();
+    const past = new Date(date);
+    const diffMs = now.getTime() - past.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+    if (diffMins < 60) return `${diffMins} min ago`;
+    if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
+    return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+  };
+  useEffect(() => {
+    if (vendorProfile?.rating) {
+      setStats(prevStats => {
+        const newStats = [...prevStats];
+        newStats[2] = {
+          label: 'Avg. Rating',
+          value: vendorProfile.rating?.toFixed(1) || '0.0',
+          change: '+0.2',
+          isPositive: true
+        };
+        return newStats;
+      });
+    }
+  }, [vendorProfile]);
+  useEffect(() => {
+    fetchDashboardData();
+  }, []);
   useEffect(() => {
     Animated.parallel([Animated.timing(fadeAnim, {
       toValue: 1,
@@ -116,15 +211,56 @@ const VendorDashboardScreen: React.FC = () => {
       useNativeDriver: true
     }).start();
   }, [showBalance]);
-  const onRefresh = React.useCallback(() => {
+  const onRefresh = useCallback(() => {
     setRefreshing(true);
-    setTimeout(() => {
+    fetchDashboardData().finally(() => {
       setRefreshing(false);
-    }, 2000);
+    });
   }, []);
   const formatBalance = (amount: number): string => {
     return `₦${amount.toLocaleString()}`;
   };
+  const quickActions: QuickAction[] = [{
+    id: '1',
+    title: 'Add Service',
+    icon: 'add-circle-outline',
+    iconFamily: 'ionicons',
+    color: '#eb278d',
+    bgColor: '#fce7f3',
+    onPress: () => {
+      console.log('Add Service');
+    }
+  }, {
+    id: '2',
+    title: 'Bookings',
+    icon: 'package',
+    iconFamily: 'feather',
+    color: '#3b82f6',
+    bgColor: '#dbeafe',
+    onPress: () => {
+      console.log('Bookings');
+    }
+  }, {
+    id: '3',
+    title: 'My Services',
+    icon: 'briefcase-outline',
+    iconFamily: 'ionicons',
+    color: '#10b981',
+    bgColor: '#d1fae5',
+    onPress: () => {
+      console.log('My Services');
+    }
+  }, {
+    id: '4',
+    title: 'Wallet',
+    icon: 'wallet-outline',
+    iconFamily: 'ionicons',
+    color: '#f59e0b',
+    bgColor: '#fed7aa',
+    onPress: () => {
+      console.log('Wallet');
+    }
+  }];
   const renderIcon = (iconFamily: string, iconName: string, size: number, color: string): JSX.Element => {
     switch (iconFamily) {
       case 'material':
@@ -134,6 +270,12 @@ const VendorDashboardScreen: React.FC = () => {
       default:
         return <Ionicons name={iconName as any} size={size} color={color} />;
     }
+  };
+  const getGreeting = (): string => {
+    const hour = new Date().getHours();
+    if (hour < 12) return 'Good morning! 👋';
+    if (hour < 18) return 'Good afternoon! 👋';
+    return 'Good evening! 👋';
   };
   return <SafeAreaView className="flex-1 bg-gray-50">
       <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
@@ -173,16 +315,23 @@ const VendorDashboardScreen: React.FC = () => {
       }}>
           <View className="flex-row items-center justify-between">
             <View className="flex-1">
-              <Text className="text-gray-600 text-sm mb-1">Good morning! 👋</Text>
+              <Text className="text-gray-600 text-sm mb-1">{getGreeting()}</Text>
               <Text className="text-2xl font-bold text-gray-900">
-                John's Store
+                {vendorProfile?.businessName || vendorProfile?.firstName || "User"}
               </Text>
               <View className="flex-row items-center mt-2">
                 <View className="flex-row items-center bg-green-100 px-2 py-1 rounded-full">
                   <View className="w-2 h-2 bg-green-500 rounded-full mr-1.5" />
-                  <Text className="text-green-700 text-xs font-semibold">Active</Text>
+                  <Text className="text-green-700 text-xs font-semibold">
+                    {vendorProfile?.isActive !== false ? 'Active' : 'Inactive'}
+                  </Text>
                 </View>
-                <Text className="text-gray-500 text-xs ml-3">Since Jan 2024</Text>
+                {vendorProfile?.createdAt && <Text className="text-gray-500 text-xs ml-3">
+                    Since {new Date(vendorProfile.createdAt).toLocaleDateString('en-US', {
+                  month: 'short',
+                  year: 'numeric'
+                })}
+                  </Text>}
               </View>
             </View>
             
@@ -249,7 +398,15 @@ const VendorDashboardScreen: React.FC = () => {
                   </TouchableOpacity>
                 </View>
                 
-                <TouchableOpacity className="flex-row items-center gap-1 bg-white/20 px-3 py-1.5 rounded-full" activeOpacity={0.7}>
+                <TouchableOpacity className="flex-row items-center gap-1 bg-white/20 px-3 py-1.5 rounded-full" activeOpacity={0.7} onPress={async () => {
+                try {
+                  const transactions = await walletAPI.getTransactions();
+                  console.log('Transactions:', transactions);
+                } catch (error) {
+                  const apiError = handleAPIError(error);
+                  Alert.alert('Error', apiError.message);
+                }
+              }}>
                   <Text className="text-white text-xs font-semibold">
                     History
                   </Text>
@@ -263,20 +420,20 @@ const VendorDashboardScreen: React.FC = () => {
                 opacity: balanceOpacity
               }}>
                     <Text className="text-white text-4xl font-bold tracking-tight mb-2">
-                      {formatBalance(balance)}
+                      {formatBalance(walletData.balance)}
                     </Text>
                     <View className="flex-row items-center gap-4">
                       <View>
                         <Text className="text-white/70 text-xs">Pending</Text>
                         <Text className="text-white font-semibold">
-                          {formatBalance(pendingBalance)}
+                          {formatBalance(walletData.pendingBalance)}
                         </Text>
                       </View>
                       <View className="w-px h-8 bg-white/30" />
                       <View>
                         <Text className="text-white/70 text-xs">Total Earned</Text>
                         <Text className="text-white font-semibold">
-                          {formatBalance(totalEarnings)}
+                          {formatBalance(walletData.totalEarnings)}
                         </Text>
                       </View>
                     </View>
@@ -290,14 +447,18 @@ const VendorDashboardScreen: React.FC = () => {
 
               {}
               <View className="flex-row gap-4">
-                <TouchableOpacity className="flex-1 bg-white/20 rounded-2xl py-3 items-center flex-row justify-center gap-2" activeOpacity={0.7}>
+                <TouchableOpacity className="flex-1 bg-white/20 rounded-2xl py-3 items-center flex-row justify-center gap-2" activeOpacity={0.7} onPress={() => {
+                console.log('Fund Wallet');
+              }}>
                   <View className="w-10 h-10 rounded-full bg-white/30 items-center justify-center">
                     <Ionicons name="add" size={20} color="#fff" />
                   </View>
                   <Text className="text-white text-sm font-semibold">Fund Wallet</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity className="flex-1 bg-white rounded-2xl py-3 items-center flex-row justify-center gap-2" activeOpacity={0.7}>
+                <TouchableOpacity className="flex-1 bg-white rounded-2xl py-3 items-center flex-row justify-center gap-2" activeOpacity={0.7} onPress={() => {
+                console.log('Withdraw');
+              }}>
                   <View className="w-10 h-10 rounded-full bg-pink-100 items-center justify-center">
                     <Ionicons name="arrow-up" size={20} color="#eb278d" />
                   </View>
@@ -393,87 +554,71 @@ const VendorDashboardScreen: React.FC = () => {
 
           <View className="bg-white rounded-2xl overflow-hidden">
             {}
-            {[{
-            icon: 'cart',
-            title: 'New Order #1234',
-            subtitle: '2 items • ₦12,500',
-            time: '2 min ago',
-            color: '#3b82f6'
-          }, {
-            icon: 'star',
-            title: 'New Review',
-            subtitle: '5 stars from John D.',
-            time: '1 hour ago',
-            color: '#f59e0b'
-          }, {
-            icon: 'cube',
-            title: 'Product Added',
-            subtitle: 'Summer Collection Dress',
-            time: '3 hours ago',
-            color: '#10b981'
-          }].map((item, index) => <TouchableOpacity key={index} className="flex-row items-center p-4 border-b border-gray-100" activeOpacity={0.7}>
-                <View className="w-10 h-10 rounded-xl items-center justify-center mr-3" style={{
+            {recentActivities.length > 0 ? recentActivities.map((item, index) => <TouchableOpacity key={index} className="flex-row items-center p-4 border-b border-gray-100" activeOpacity={0.7}>
+                  <View className="w-10 h-10 rounded-xl items-center justify-center mr-3" style={{
               backgroundColor: `${item.color}20`
             }}>
-                  <Ionicons name={item.icon as any} size={20} color={item.color} />
-                </View>
-                <View className="flex-1">
-                  <Text className="text-gray-900 font-semibold text-sm">{item.title}</Text>
-                  <Text className="text-gray-500 text-xs mt-0.5">{item.subtitle}</Text>
-                </View>
-                <Text className="text-gray-400 text-xs">{item.time}</Text>
-              </TouchableOpacity>)}
+                    <Ionicons name={item.icon as any} size={20} color={item.color} />
+                  </View>
+                  <View className="flex-1">
+                    <Text className="text-gray-900 font-semibold text-sm">{item.title}</Text>
+                    <Text className="text-gray-500 text-xs mt-0.5">{item.subtitle}</Text>
+                  </View>
+                  <Text className="text-gray-400 text-xs">{item.time}</Text>
+                </TouchableOpacity>) : <View className="p-8 items-center">
+                <Ionicons name="time-outline" size={48} color="#d1d5db" />
+                <Text className="text-gray-400 text-sm mt-2">No recent activity</Text>
+              </View>}
             
             {}
-            <TouchableOpacity className="flex-row items-center justify-center p-3 bg-gray-50" activeOpacity={0.7}>
-              <Text className="text-pink-600 text-sm font-semibold mr-1">Load More</Text>
-              <Ionicons name="chevron-down" size={16} color="#eb278d" />
-            </TouchableOpacity>
+            {recentActivities.length > 0 && <TouchableOpacity className="flex-row items-center justify-center p-3 bg-gray-50" activeOpacity={0.7}>
+                <Text className="text-pink-600 text-sm font-semibold mr-1">Load More</Text>
+                <Ionicons name="chevron-down" size={16} color="#eb278d" />
+              </TouchableOpacity>}
           </View>
         </View>
 
         {}
         <View className="px-5 py-4 mb-4">
-          <Text className="text-lg font-bold text-gray-900 mb-4">Inventory Status</Text>
+          <Text className="text-lg font-bold text-gray-900 mb-4">Service Status</Text>
           
-          <View className="bg-gradient-to-r from-orange-50 to-yellow-50 rounded-2xl p-4 border border-orange-200">
-            <View className="flex-row items-center">
-              <View className="w-12 h-12 rounded-xl bg-orange-100 items-center justify-center mr-3">
-                <Ionicons name="alert-circle" size={24} color="#f97316" />
-              </View>
-              <View className="flex-1">
-                <Text className="text-gray-900 font-semibold text-sm">Low Stock Alert</Text>
-                <Text className="text-gray-600 text-xs mt-0.5">3 products running low</Text>
-              </View>
-              <TouchableOpacity className="bg-orange-500 px-4 py-2 rounded-full" activeOpacity={0.7}>
-                <Text className="text-white text-xs font-semibold">View</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          {}
-          <TouchableOpacity className="mt-4" activeOpacity={0.7}>
-            <LinearGradient colors={['#fce7f3', '#fdf2f8']} start={{
+          {servicesData.length === 0 ? <TouchableOpacity className="mt-4" activeOpacity={0.7}>
+              <LinearGradient colors={['#fce7f3', '#fdf2f8']} start={{
             x: 0,
             y: 0
           }} end={{
             x: 1,
             y: 0
           }} className="rounded-2xl p-4 border border-pink-200">
-              <View className="flex-row items-center justify-center">
-                <Ionicons name="add-circle" size={24} color="#eb278d" />
-                <Text className="text-pink-600 font-semibold ml-2">Add Your First Product</Text>
+                <View className="flex-row items-center justify-center">
+                  <Ionicons name="add-circle" size={24} color="#eb278d" />
+                  <Text className="text-pink-600 font-semibold ml-2">Add Your First Service</Text>
+                </View>
+                <Text className="text-gray-500 text-xs text-center mt-2">
+                  Start earning today by adding your services
+                </Text>
+              </LinearGradient>
+            </TouchableOpacity> : <View className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-2xl p-4 border border-green-200">
+              <View className="flex-row items-center">
+                <View className="w-12 h-12 rounded-xl bg-green-100 items-center justify-center mr-3">
+                  <Ionicons name="checkmark-circle" size={24} color="#10b981" />
+                </View>
+                <View className="flex-1">
+                  <Text className="text-gray-900 font-semibold text-sm">Active Services</Text>
+                  <Text className="text-gray-600 text-xs mt-0.5">
+                    {servicesData.length} service{servicesData.length > 1 ? 's' : ''} available
+                  </Text>
+                </View>
+                <TouchableOpacity className="bg-green-500 px-4 py-2 rounded-full" activeOpacity={0.7}>
+                  <Text className="text-white text-xs font-semibold">Manage</Text>
+                </TouchableOpacity>
               </View>
-              <Text className="text-gray-500 text-xs text-center mt-2">
-                Start selling today by adding your products
-              </Text>
-            </LinearGradient>
-          </TouchableOpacity>
+            </View>}
         </View>
       </ScrollView>
 
       {}
-      <VendorSidebar visible={sidebarVisible} onClose={() => setSidebarVisible(false)} userName="John's Store" userEmail="vendor@example.com" />
+      <VendorSidebar visible={sidebarVisible} onClose={() => setSidebarVisible(false)} userName={vendorProfile?.businessName || 'Vendor'} userEmail="vendor@example.com" />
     </SafeAreaView>;
 };
 export default VendorDashboardScreen;

@@ -3,6 +3,7 @@
     "name": "sharpLook",
     "slug": "sharpLook",
     "version": "1.0.0",
+    "scheme": "sharpLook",
     "web": {
       "favicon": "./assets/favicon.png"
     },
@@ -23,14 +24,33 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.this-iskoda.sharpLook"
+      "bundleIdentifier": "com.sharplook.app",
+      "infoPlist": {
+        "CFBundleURLTypes": [
+          {
+            "CFBundleURLSchemes": ["sharpLook"]
+          }
+        ]
+      }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "com.thisiskoda.sharpLook"
+      "package": "com.sharplook.app",
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "sharpLook"
+            }
+          ],
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
+      ]
     }
   }
 }

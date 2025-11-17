@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import type { ClientTabParamList } from '@/types/navigation.types';
 import ClientDashboardScreen from '@/screens/client/ClientDashboardScreen';
 import ClientProfileScreen from '@/screens/client/ClientProfileScreen';
+import BookingsScreen from '@/screens/client/BookingScreen';
 const Tab = createBottomTabNavigator<ClientTabParamList>();
 const ClientTabNavigator = () => {
   return <Tab.Navigator screenOptions={{
@@ -38,7 +39,7 @@ const ClientTabNavigator = () => {
       }) => <Ionicons name="home" size={size} color={color} />
     }} />
       
-      <Tab.Screen name="Bookings" component={ClientDashboardScreen} options={{
+      <Tab.Screen name="Bookings" component={BookingsScreen} options={{
       tabBarIcon: ({
         color,
         size

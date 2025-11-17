@@ -4,9 +4,8 @@ import { Ionicons } from '@expo/vector-icons';
 import type { VendorTabParamList } from '@/types/navigation.types';
 import VendorDashboardScreen from '@/screens/vendor/VendorDashboardScreen';
 import VendorProfileScreen from '@/screens/vendor/VendoreProfileScreen';
-import VendorBooking from '@/screens/vendor/VendorBooking';
+import VendorBooking from '@/screens/vendor/VendorBookingScreen';
 import VendorServicesScreen from '@/screens/vendor/VendorServicesScreen';
-
 const Tab = createBottomTabNavigator<VendorTabParamList>();
 const VendorTabNavigator = () => {
   return <Tab.Navigator screenOptions={{
@@ -46,19 +45,13 @@ const VendorTabNavigator = () => {
       }) => <Ionicons name={focused ? "home" : "home-outline"} size={size} color={color} />
     }} />
       
-      <Tab.Screen
-        name="Bookings"
-        component={VendorBooking}
-        options={{
-          tabBarIcon: ({ color, size, focused }) => (
-            <Ionicons 
-              name={focused ? "calendar" : "calendar-outline"} 
-              size={size} 
-              color={color} 
-            />
-          )
-        }}
-      />
+      <Tab.Screen name="Bookings" component={VendorBooking} options={{
+      tabBarIcon: ({
+        color,
+        size,
+        focused
+      }) => <Ionicons name={focused ? "calendar" : "calendar-outline"} size={size} color={color} />
+    }} />
       
       <Tab.Screen name="Services" component={VendorServicesScreen} options={{
       tabBarIcon: ({

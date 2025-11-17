@@ -70,7 +70,6 @@ export const loginUser = async (email: string, password: string): Promise<AuthRe
     console.error('❌ Login Error Data:', error?.response?.data);
     console.error('❌ Login Error Status:', error?.response?.status);
     console.error('❌ Login Error Headers:', error?.response?.headers);
-
     const apiError = handleAPIError(error);
     console.error('❌ Login API Error (Processed):', {
       message: apiError.message,
@@ -131,7 +130,6 @@ export const registerUser = async (userData: {
     console.error('❌ Registration Error Data:', error?.response?.data);
     console.error('❌ Registration Error Status:', error?.response?.status);
     console.error('❌ Registration Error Headers:', error?.response?.headers);
-
     const apiError = handleAPIError(error);
     console.error('❌ Registration API Error (Processed):', {
       message: apiError.message,

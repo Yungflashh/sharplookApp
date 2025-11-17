@@ -12,7 +12,45 @@ export type RootStackParamList = {
   Notification: undefined;
   Chat: undefined;
   Cart: undefined;
-  ChatDetail: { vendorId: string; vendorName: string };
+  ChatDetail: {
+    vendorId: string;
+    vendorName: string;
+  };
+  AllVendors: undefined;
+  VendorDetail: {
+    vendorId: string;
+  };
+  CreateBooking: {
+    service: {
+      _id: string;
+      name: string;
+      description?: string;
+      basePrice: number;
+      duration?: number;
+      category?: any;
+      isActive?: boolean;
+    };
+    vendor: {
+      _id: string;
+      vendorProfile: {
+        businessName: string;
+        vendorType: string;
+        location?: {
+          address: string;
+          city: string;
+          state: string;
+          coordinates: [number, number];
+        };
+      };
+    };
+  };
+  BookingDetail: {
+    bookingId: string;
+  };
+  Payment: {
+    bookingId: string;
+    amount: number;
+  };
 };
 export type AuthStackParamList = {
   Login: undefined;
