@@ -4,7 +4,6 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { checkAuthStatus, checkOnboardingStatus } from '@/utils/authHelper';
 import AuthNavigator from '@/navigation/AuthNavigator';
 import MessageScreen from '@/screens/vendor/MessageScreen';
-import NotificationScreen from '@/screens/vendor/NotificationScreen';
 import MainNavigator from '@/navigation/MainNavigator';
 import ChatScreen from '../components/clientComponent/ChatScreen';
 import CartScreen from '../components/clientComponent/CartScreen';
@@ -21,6 +20,12 @@ import CreateDisputeScreen from '@/components/CreateDisputeScreen';
 import DisputeDetailScreen from '@/components/DisputeDetail';
 import CreateReviewScreen from '@/components/clientComponent/CreateReview';
 import ReviewsScreen from '@/components/ReviewsScreen';
+import PersonalInformationScreen from '@/components/clientComponent/ProfleSettings/PersonalInformationScreen';
+import FavoritesScreen from '@/components/clientComponent/ProfleSettings/FavoritesScreen';
+import PrivacySecurityScreen from '@/components/clientComponent/ProfleSettings/PrivacySecurityScreen';
+import NotificationSettingsScreen from '@/components/clientComponent/ProfleSettings/NotificationSettingsScreen';
+import HelpCenterScreen from '@/components/clientComponent/ProfleSettings/HelpCenterScreen';
+import NotificationsScreen from '@/components/NoitificationScreen';
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const RootNavigator = () => {
   useDeepLinking();
@@ -77,7 +82,6 @@ const RootNavigator = () => {
         animationTypeForReplace: 'push'
       }} />
           <Stack.Screen name="Message" component={MessageScreen} />
-          <Stack.Screen name="Notification" component={NotificationScreen} />
           <Stack.Screen name="Chat" component={ChatScreen} />
           <Stack.Screen name="Cart" component={CartScreen} />
           <Stack.Screen name="ChatDetail" component={ChatDetailScreen} />
@@ -111,6 +115,25 @@ const RootNavigator = () => {
         animation: 'slide_from_right'
       }} />
           <Stack.Screen name="Reviews" component={ReviewsScreen} options={{
+        animation: 'slide_from_right'
+      }} />
+          <Stack.Screen name="PersonalInformation" component={PersonalInformationScreen} options={{
+        animation: 'slide_from_right'
+      }} />
+          {}
+          <Stack.Screen name="Favourites" component={FavoritesScreen} options={{
+        animation: 'slide_from_right'
+      }} />
+          <Stack.Screen name="NotificationsSetting" component={NotificationSettingsScreen} options={{
+        animation: 'slide_from_right'
+      }} />
+          <Stack.Screen name="PrivacySetting" component={PrivacySecurityScreen} options={{
+        animation: 'slide_from_right'
+      }} />
+          <Stack.Screen name="HelpCenter" component={HelpCenterScreen} options={{
+        animation: 'slide_from_right'
+      }} />
+          <Stack.Screen name="Notifications" component={NotificationsScreen} options={{
         animation: 'slide_from_right'
       }} />
 

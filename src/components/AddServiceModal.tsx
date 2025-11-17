@@ -22,7 +22,7 @@ interface AddServiceModalProps {
   visible: boolean;
   service?: any;
   onClose: () => void;
-  onSave: (service: ServiceFormData) => Promise<void>;
+  onSave: (service: ServiceFormData, images: any[]) => Promise<void>;
 }
 const AddServiceModal: React.FC<AddServiceModalProps> = ({
   visible,
@@ -37,15 +37,15 @@ const AddServiceModal: React.FC<AddServiceModalProps> = ({
     basePrice: 0,
     priceType: 'fixed',
     currency: 'NGN',
-    duration: 30,
+    duration: 0,
     serviceArea: {
       type: 'Point',
-      coordinates: [3.3792, 6.5244],
+      coordinates: [],
       radius: 10000
     }
   });
   const [categories, setCategories] = useState<any[]>([]);
-  const [selectedImages, setSelectedImages] = useState<string[]>([]);
+  const [selectedImages, setSelectedImages] = useState<any[]>([]);
   const [errors, setErrors] = useState<any>({});
   const [loading, setLoading] = useState(false);
   const [loadingLocation, setLoadingLocation] = useState(false);
@@ -63,7 +63,14 @@ const AddServiceModal: React.FC<AddServiceModalProps> = ({
           duration: service.duration,
           serviceArea: service.serviceArea || formData.serviceArea
         });
-        setSelectedImages(service.images || []);
+        if (service.images && service.images.length > 0) {
+          const existingImages = service.images.map((url: string, index: number) => ({
+            uri: url,
+            name: `existing_${index}.jpg`,
+            type: 'image/jpeg'
+          }));
+          setSelectedImages(existingImages);
+        }
       } else {
         resetForm();
       }
@@ -119,13 +126,27 @@ const AddServiceModal: React.FC<AddServiceModalProps> = ({
     }
   };
   const pickImages = async () => {
+    if (selectedImages.length >= 5) {
+      Alert.alert('Limit Reached', 'You can only upload up to 5 images');
+      return;
+    }
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsMultipleSelection: true,
       quality: 0.8
     });
     if (!result.canceled) {
-      const newImages = result.assets.map(asset => asset.uri);
+      const remainingSlots = 5 - selectedImages.length;
+      const newImages = result.assets.slice(0, remainingSlots).map(asset => {
+        const filename = asset.uri.split('/').pop() || 'image.jpg';
+        const match = /\.(\w+)$/.exec(filename);
+        const type = match ? `image/${match[1]}` : 'image/jpeg';
+        return {
+          uri: asset.uri,
+          name: filename,
+          type: type
+        };
+      });
       setSelectedImages([...selectedImages, ...newImages]);
     }
   };
@@ -164,9 +185,11 @@ const AddServiceModal: React.FC<AddServiceModalProps> = ({
     if (!validateForm()) return;
     setLoading(true);
     try {
-      await onSave(formData);
+      await onSave(formData, selectedImages);
       resetForm();
-    } catch (error) {} finally {
+    } catch (error) {
+      console.error('Error saving service:', error);
+    } finally {
       setLoading(false);
     }
   };
@@ -343,19 +366,23 @@ const AddServiceModal: React.FC<AddServiceModalProps> = ({
 
           {}
           <View className="mb-8">
-            <Text className="text-sm font-semibold text-gray-900 mb-2">Service Images</Text>
-            <TouchableOpacity className="border-2 border-dashed border-gray-300 rounded-xl p-6 items-center bg-gray-50" onPress={pickImages}>
+            <Text className="text-sm font-semibold text-gray-900 mb-2">
+              Service Images ({selectedImages.length}/5)
+            </Text>
+            <TouchableOpacity className="border-2 border-dashed border-gray-300 rounded-xl p-6 items-center bg-gray-50" onPress={pickImages} disabled={selectedImages.length >= 5}>
               <Ionicons name="cloud-upload-outline" size={32} color="#eb278d" />
               <Text className="font-medium mt-2" style={{
               color: '#eb278d'
-            }}>Upload Images</Text>
+            }}>
+                {selectedImages.length >= 5 ? 'Maximum Images Reached' : 'Upload Images'}
+              </Text>
               <Text className="text-xs text-gray-500 mt-1">Max 5 images</Text>
             </TouchableOpacity>
-            
-            {selectedImages.length > 0 && <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mt-3 gap-2">
-                {selectedImages.map((uri, index) => <View key={index} className="relative mr-2">
+
+            {selectedImages.length > 0 && <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mt-3">
+                {selectedImages.map((image, index) => <View key={index} className="relative mr-2">
                     <Image source={{
-                uri
+                uri: image.uri
               }} className="w-20 h-20 rounded-lg" />
                     <TouchableOpacity className="absolute -top-2 -right-2 bg-[#FF0000] rounded-full p-1" onPress={() => removeImage(index)}>
                       <Ionicons name="close" size={16} color="#fff" />
