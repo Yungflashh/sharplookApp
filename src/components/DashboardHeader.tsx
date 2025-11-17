@@ -6,14 +6,18 @@ interface DashboardHeaderProps {
   onMenuPress: () => void;
   onChatPress: () => void;
   onCartPress: () => void;
+  onNotificationPress: () => void;
   cartItemCount?: number;
+  unreadNotificationCount?: number;
 }
 const DashboardHeader: React.FC<DashboardHeaderProps> = ({
   userName,
   onMenuPress,
   onChatPress,
   onCartPress,
-  cartItemCount = 0
+  onNotificationPress,
+  cartItemCount = 0,
+  unreadNotificationCount = 0
 }) => {
   return <View style={styles.container}>
       <View style={styles.topRow}>
@@ -22,6 +26,16 @@ const DashboardHeader: React.FC<DashboardHeaderProps> = ({
         </TouchableOpacity>
 
         <View style={styles.rightIcons}>
+          {}
+          <TouchableOpacity onPress={onNotificationPress} style={styles.iconButton}>
+            <Ionicons name="notifications-outline" size={24} color="#333" />
+            {unreadNotificationCount > 0 && <View style={styles.badge}>
+                <Text style={styles.badgeText}>
+                  {unreadNotificationCount > 99 ? '99+' : unreadNotificationCount}
+                </Text>
+              </View>}
+          </TouchableOpacity>
+
           <TouchableOpacity onPress={onChatPress} style={styles.iconButton}>
             <Ionicons name="chatbubble-ellipses-outline" size={24} color="#333" />
           </TouchableOpacity>

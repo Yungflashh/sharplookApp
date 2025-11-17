@@ -138,7 +138,18 @@ export const userAPI = {
     const response = await api.put('/users/profile', userData);
     return response.data;
   },
-  updatePreferences: async (preferences: any) => {
+  updatePreferences: async (preferences: {
+    notificationsEnabled?: boolean;
+    emailNotifications?: boolean;
+    pushNotifications?: boolean;
+    bookingUpdates?: boolean;
+    newMessages?: boolean;
+    paymentAlerts?: boolean;
+    reminderNotifications?: boolean;
+    promotions?: boolean;
+    darkMode?: boolean;
+    fingerprintEnabled?: boolean;
+  }) => {
     const response = await api.put('/users/preferences', preferences);
     return response.data;
   },
@@ -686,16 +697,62 @@ export const servicesAPI = {
       coordinates: number[];
       radius: number;
     };
-  }) => {
-    const response = await api.post('/services', serviceData);
+  }, images?: any[]) => {
+    const formData = new FormData();
+    Object.keys(serviceData).forEach(key => {
+      const value = serviceData[key as keyof typeof serviceData];
+      if (key === 'serviceArea') {
+        formData.append(key, JSON.stringify(value));
+      } else {
+        formData.append(key, value as any);
+      }
+    });
+    if (images && images.length > 0) {
+      images.forEach((image, index) => {
+        formData.append('images', {
+          uri: image.uri,
+          type: image.type || 'image/jpeg',
+          name: image.name || `image_${index}.jpg`
+        } as any);
+      });
+    }
+    const response = await api.post('/services', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      }
+    });
     return response.data;
   },
   getServiceById: async (serviceId: string) => {
     const response = await api.get(`/services/${serviceId}`);
     return response.data;
   },
-  updateService: async (serviceId: string, serviceData: any) => {
-    const response = await api.put(`/services/${serviceId}`, serviceData);
+  updateService: async (serviceId: string, serviceData: any, images?: any[]) => {
+    const formData = new FormData();
+    Object.keys(serviceData).forEach(key => {
+      const value = serviceData[key];
+      if (key === 'serviceArea' && typeof value === 'object') {
+        formData.append(key, JSON.stringify(value));
+      } else if (value !== undefined && value !== null) {
+        formData.append(key, value);
+      }
+    });
+    if (images && images.length > 0) {
+      images.forEach((image, index) => {
+        if (image.uri && !image.uri.startsWith('http')) {
+          formData.append('images', {
+            uri: image.uri,
+            type: image.type || 'image/jpeg',
+            name: image.name || `image_${index}.jpg`
+          } as any);
+        }
+      });
+    }
+    const response = await api.put(`/services/${serviceId}`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      }
+    });
     return response.data;
   },
   deleteService: async (serviceId: string) => {
@@ -761,6 +818,70 @@ export const categoriesAPI = {
       params: {
         query
       }
+    });
+    return response.data;
+  }
+};
+export const notificationAPI = {
+  getNotifications: async (params?: {
+    page?: number;
+    limit?: number;
+    type?: string;
+    isRead?: boolean;
+  }) => {
+    const response = await api.get('/notifications', {
+      params
+    });
+    return response.data;
+  },
+  getUnreadCount: async () => {
+    const response = await api.get('/notifications/unread-count');
+    return response.data;
+  },
+  markAsRead: async (notificationId: string) => {
+    const response = await api.put(`/notifications/${notificationId}/read`);
+    return response.data;
+  },
+  markAllAsRead: async () => {
+    const response = await api.put('/notifications/read-all');
+    return response.data;
+  },
+  deleteNotification: async (notificationId: string) => {
+    const response = await api.delete(`/notifications/${notificationId}`);
+    return response.data;
+  },
+  clearAllNotifications: async () => {
+    const response = await api.delete('/notifications');
+    return response.data;
+  },
+  getNotificationSettings: async () => {
+    const response = await api.get('/notifications/settings');
+    return response.data;
+  },
+  updateNotificationSettings: async (settings: {
+    notificationsEnabled?: boolean;
+    emailNotifications?: boolean;
+    pushNotifications?: boolean;
+    bookingUpdates?: boolean;
+    newMessages?: boolean;
+    paymentAlerts?: boolean;
+    reminderNotifications?: boolean;
+    promotions?: boolean;
+  }) => {
+    const response = await api.put('/notifications/settings', settings);
+    return response.data;
+  },
+  registerDeviceToken: async (data: {
+    token: string;
+    deviceType: 'ios' | 'android' | 'web';
+    deviceName?: string;
+  }) => {
+    const response = await api.post('/notifications/register-device', data);
+    return response.data;
+  },
+  unregisterDeviceToken: async (token: string) => {
+    const response = await api.post('/notifications/unregister-device', {
+      token
     });
     return response.data;
   }

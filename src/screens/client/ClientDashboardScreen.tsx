@@ -3,13 +3,13 @@ import { View, Text, TouchableOpacity, ScrollView, TextInput, Image, Dimensions,
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '@/types/navigation.types';
 import ClientSidebar from '@/components/clientComponent/ClientSidebar';
 import FilterModal from '@/components/FilterModal';
 import VendorCard from '@/components/clientComponent/VendorCard';
-import { userAPI, vendorAPI, categoriesAPI, servicesAPI, handleAPIError } from '@/api/api';
+import { userAPI, vendorAPI, categoriesAPI, servicesAPI, notificationAPI, handleAPIError } from '@/api/api';
 import { parseVendors, extractVendorsFromResponse, FormattedVendor, filterVendorsByQuery, sortVendors } from '@/utils/vendorUtils';
 const {
   width: SCREEN_WIDTH
@@ -21,6 +21,10 @@ interface Category {
   label: string;
 }
 interface UserProfile {
+  user?: {
+    firstName?: string;
+    lastName?: string;
+  };
   firstName?: string;
   lastName?: string;
   email?: string;
@@ -42,6 +46,7 @@ const ClientDashboardScreen: React.FC = () => {
   const [favoriteVendors, setFavoriteVendors] = useState<Set<string>>(new Set());
   const [recommendedServices, setRecommendedServices] = useState<any[]>([]);
   const [cartItemsCount, setCartItemsCount] = useState<number>(0);
+  const [unreadNotificationCount, setUnreadNotificationCount] = useState<number>(0);
   const [filters, setFilters] = useState({
     searchName: '',
     category: '',
@@ -67,6 +72,21 @@ const ClientDashboardScreen: React.FC = () => {
     'massage': 'fitness',
     'facial': 'happy',
     'others': 'ellipsis-horizontal'
+  };
+  const fetchUnreadNotificationCount = async () => {
+    try {
+      const response = await notificationAPI.getUnreadCount();
+      console.log('Unread count response:', response);
+      if (response.data?.count !== undefined) {
+        setUnreadNotificationCount(response.data.count);
+      } else if (response.data?.data?.count !== undefined) {
+        setUnreadNotificationCount(response.data.data.count);
+      } else if (response.count !== undefined) {
+        setUnreadNotificationCount(response.count);
+      }
+    } catch (error) {
+      console.error('Error fetching unread notification count:', error);
+    }
   };
   const fetchUserProfile = async () => {
     try {
@@ -213,7 +233,7 @@ const ClientDashboardScreen: React.FC = () => {
   const fetchDashboardData = async () => {
     try {
       setLoading(true);
-      await Promise.all([fetchUserProfile(), fetchCategories(), fetchTopVendors(), fetchAllVendors()]);
+      await Promise.all([fetchUserProfile(), fetchCategories(), fetchTopVendors(), fetchAllVendors(), fetchUnreadNotificationCount()]);
     } catch (error) {
       console.error('Dashboard data fetch error:', error);
     } finally {
@@ -223,6 +243,11 @@ const ClientDashboardScreen: React.FC = () => {
   useEffect(() => {
     fetchDashboardData();
   }, []);
+  useFocusEffect(useCallback(() => {
+    fetchUnreadNotificationCount();
+    const interval = setInterval(fetchUnreadNotificationCount, 30000);
+    return () => clearInterval(interval);
+  }, []));
   useEffect(() => {
     Animated.parallel([Animated.timing(fadeAnim, {
       toValue: 1,
@@ -314,8 +339,11 @@ const ClientDashboardScreen: React.FC = () => {
       </View>;
   };
   const getUserDisplayName = (): string => {
-    if (userProfile?.user.firstName) {
+    if (userProfile?.user?.firstName) {
       return userProfile.user.firstName;
+    }
+    if (userProfile?.firstName) {
+      return userProfile.firstName;
     }
     return 'User';
   };
@@ -331,18 +359,51 @@ const ClientDashboardScreen: React.FC = () => {
           </View>
 
           <View className="flex-row items-center gap-3">
+            {}
+            <TouchableOpacity className="relative w-11 h-11 items-center justify-center" activeOpacity={0.7} onPress={() => navigation.navigate('Notifications' as never)}>
+              <Ionicons name="notifications-outline" size={24} color="#eb278d" />
+              {unreadNotificationCount > 0 && <View className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] bg-pink-500 rounded-full items-center justify-center px-1" style={{
+              shadowColor: '#eb278d',
+              shadowOffset: {
+                width: 0,
+                height: 2
+              },
+              shadowOpacity: 0.3,
+              shadowRadius: 3,
+              elevation: 4
+            }}>
+                  <Text className="text-white text-[10px] font-bold">
+                    {unreadNotificationCount > 99 ? '99+' : unreadNotificationCount}
+                  </Text>
+                </View>}
+            </TouchableOpacity>
+
+            {}
             <TouchableOpacity className="relative w-11 h-11 items-center justify-center" activeOpacity={0.7} onPress={() => navigation.navigate('Chat')}>
               <Ionicons name="chatbubble-ellipses-outline" size={24} color="#eb278d" />
               <View className="absolute top-1.5 right-1.5 w-2 h-2 bg-pink-500 rounded-full" />
             </TouchableOpacity>
 
+            {}
             <TouchableOpacity className="relative w-11 h-11 items-center justify-center" activeOpacity={0.7} onPress={() => navigation.navigate('Cart')}>
               <Ionicons name="cart-outline" size={26} color="#eb278d" />
-              {cartItemsCount > 0 && <View className="absolute top-1 right-1 w-5 h-5 bg-pink-500 rounded-full items-center justify-center">
-                  <Text className="text-white text-[10px] font-bold">{cartItemsCount}</Text>
+              {cartItemsCount > 0 && <View className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] bg-pink-500 rounded-full items-center justify-center px-1" style={{
+              shadowColor: '#eb278d',
+              shadowOffset: {
+                width: 0,
+                height: 2
+              },
+              shadowOpacity: 0.3,
+              shadowRadius: 3,
+              elevation: 4
+            }}>
+                  <Text className="text-white text-[10px] font-bold">
+                    {cartItemsCount > 99 ? '99+' : cartItemsCount}
+                  </Text>
                 </View>}
             </TouchableOpacity>
 
+            {}
             <TouchableOpacity className="w-11 h-11 items-center justify-center" activeOpacity={0.7} onPress={() => setSidebarVisible(true)}>
               <Ionicons name="menu" size={28} color="#eb278d" />
             </TouchableOpacity>
@@ -374,6 +435,7 @@ const ClientDashboardScreen: React.FC = () => {
         </View>
       </View>
 
+      {}
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{
       paddingBottom: 100
     }} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#eb278d" colors={['#eb278d']} />}>
@@ -515,7 +577,9 @@ const ClientDashboardScreen: React.FC = () => {
                 <View className="w-24 h-24 rounded-full bg-gray-100 items-center justify-center mb-4">
                   <Ionicons name="cube-outline" size={48} color="#d1d5db" />
                 </View>
-                <Text className="text-gray-400 text-sm font-medium">No recommended services</Text>
+                <Text className="text-gray-400 text-sm font-medium">
+                  No recommended services
+                </Text>
                 <Text className="text-gray-300 text-xs mt-1">Check back later for updates</Text>
               </View>}
           </View>}
@@ -557,7 +621,7 @@ const ClientDashboardScreen: React.FC = () => {
       </ScrollView>
 
       {}
-      <ClientSidebar visible={sidebarVisible} onClose={() => setSidebarVisible(false)} userName={getUserDisplayName()} userEmail={userProfile?.email || 'user@example.com'} />
+      <ClientSidebar visible={sidebarVisible} onClose={() => setSidebarVisible(false)} userName={getUserDisplayName()} userEmail={userProfile?.user?.email || userProfile?.email || 'user@example.com'} />
 
       {}
       <FilterModal visible={filterModalVisible} onClose={() => setFilterModalVisible(false)} filters={filters} categories={categories.map(c => ({

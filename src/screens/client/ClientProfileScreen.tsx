@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, Platform } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
 import { getStoredUser, logoutUser } from '@/utils/authHelper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -21,6 +22,7 @@ const ClientProfileScreen: React.FC = () => {
   const [showLogoutModal, setShowLogoutModal] = useState<boolean>(false);
   const [showDeleteModal, setShowDeleteModal] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(false);
+  const navigation = useNavigation();
   useEffect(() => {
     loadUserData();
   }, []);
@@ -51,54 +53,26 @@ const ClientProfileScreen: React.FC = () => {
       setLoading(false);
     }
   };
-  const stats = [{
-    label: 'Bookings',
-    value: '12',
-    icon: 'calendar'
-  }, {
-    label: 'Favorites',
-    value: '8',
-    icon: 'heart'
-  }, {
-    label: 'Reviews',
-    value: '5',
-    icon: 'star'
-  }];
   const menuSections: MenuSection[] = [{
     title: 'Account',
     items: [{
       icon: 'person-circle-outline',
       title: 'Personal Information',
       subtitle: 'Update your profile details',
-      onPress: () => console.log('Personal Info')
-    }, {
-      icon: 'location-outline',
-      title: 'My Addresses',
-      subtitle: 'Manage delivery addresses',
-      onPress: () => console.log('Addresses')
-    }, {
-      icon: 'card-outline',
-      title: 'Payment Methods',
-      subtitle: 'Manage payment options',
-      onPress: () => console.log('Payment')
+      onPress: () => navigation.navigate("PersonalInformation")
     }]
   }, {
     title: 'Bookings & Orders',
     items: [{
-      icon: 'calendar-outline',
-      title: 'My Bookings',
-      subtitle: 'View your appointments',
-      onPress: () => console.log('Bookings')
-    }, {
       icon: 'receipt-outline',
       title: 'Order History',
       subtitle: 'Track your orders',
-      onPress: () => console.log('Orders')
+      onPress: () => navigation.navigate("OrderHistory")
     }, {
       icon: 'heart-outline',
       title: 'My Favorites',
       subtitle: 'Saved vendors and services',
-      onPress: () => console.log('Favorites')
+      onPress: () => navigation.navigate("Favourites")
     }]
   }, {
     title: 'Preferences',
@@ -106,12 +80,12 @@ const ClientProfileScreen: React.FC = () => {
       icon: 'notifications-outline',
       title: 'Notifications',
       subtitle: 'Manage notification settings',
-      onPress: () => console.log('Notifications')
+      onPress: () => navigation.navigate("NotificationsSetting")
     }, {
       icon: 'shield-checkmark-outline',
       title: 'Privacy & Security',
       subtitle: 'Password and security settings',
-      onPress: () => console.log('Privacy')
+      onPress: () => navigation.navigate("PrivacySetting")
     }, {
       icon: 'language-outline',
       iconFamily: 'material',
@@ -125,7 +99,7 @@ const ClientProfileScreen: React.FC = () => {
       icon: 'help-circle-outline',
       title: 'Help Center',
       subtitle: 'FAQs and support',
-      onPress: () => console.log('Help')
+      onPress: () => navigation.navigate("HelpCenter")
     }, {
       icon: 'chatbubble-ellipses-outline',
       title: 'Contact Support',
@@ -196,13 +170,7 @@ const ClientProfileScreen: React.FC = () => {
           </View>
 
           {}
-          <View className="flex-row px-5 pt-5 pb-3 justify-between">
-            {stats.map((stat, index) => <TouchableOpacity key={index} className="flex-1 mx-1 items-center bg-white/15 py-4 rounded-2xl" activeOpacity={0.7}>
-                <Ionicons name={stat.icon as any} size={22} color="rgba(255, 255, 255, 0.9)" />
-                <Text className="text-xl font-bold text-white mt-2">{stat.value}</Text>
-                <Text className="text-[11px] text-white/80 mt-0.5">{stat.label}</Text>
-              </TouchableOpacity>)}
-          </View>
+          {}
         </View>
 
         {}
