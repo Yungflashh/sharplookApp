@@ -104,7 +104,7 @@ const ChatScreen: React.FC = () => {
         </View>
 
         {}
-        <View className="flex-row px-5 mt-4 gap-2">
+        <View className="flex-row px-5 py-2 mt-4 gap-2">
           <TouchableOpacity onPress={() => setActiveTab('all')} className={`flex-1 py-2.5 rounded-xl ${activeTab === 'all' ? 'bg-white' : 'bg-white/20'}`} activeOpacity={0.7}>
             <Text className={`text-center font-semibold text-sm ${activeTab === 'all' ? 'text-pink-600' : 'text-white'}`}>
               All Messages
