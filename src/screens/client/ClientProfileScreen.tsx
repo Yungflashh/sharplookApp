@@ -71,25 +71,10 @@ const ClientProfileScreen: React.FC = () => {
       title: 'Personal Information',
       subtitle: 'Update your profile details',
       onPress: () => console.log('Personal Info')
-    }, {
-      icon: 'location-outline',
-      title: 'My Addresses',
-      subtitle: 'Manage delivery addresses',
-      onPress: () => console.log('Addresses')
-    }, {
-      icon: 'card-outline',
-      title: 'Payment Methods',
-      subtitle: 'Manage payment options',
-      onPress: () => console.log('Payment')
     }]
   }, {
     title: 'Bookings & Orders',
     items: [{
-      icon: 'calendar-outline',
-      title: 'My Bookings',
-      subtitle: 'View your appointments',
-      onPress: () => console.log('Bookings')
-    }, {
       icon: 'receipt-outline',
       title: 'Order History',
       subtitle: 'Track your orders',
