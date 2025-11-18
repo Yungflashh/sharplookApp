@@ -292,7 +292,7 @@ const ClientDashboardScreen: React.FC = () => {
     if (newFilters.category) {
       params.category = newFilters.category;
     }
-    if (newFilters.minPrice || newFilters.maxPrice) {}
+    if (newFilters.minPrice || newFilters.maxPrice) { }
     await fetchAllVendors(params);
   };
   const handleResetFilters = () => {
@@ -334,9 +334,9 @@ const ClientDashboardScreen: React.FC = () => {
   };
   const renderStars = (rating: number) => {
     return <View className="flex-row items-center">
-        {[1, 2, 3, 4, 5].map(star => <Ionicons key={star} name={star <= rating ? 'star' : 'star-outline'} size={14} color={star <= rating ? '#fbbf24' : '#d1d5db'} />)}
-        <Text className="text-xs text-gray-500 ml-1.5">{rating.toFixed(1)}</Text>
-      </View>;
+      {[1, 2, 3, 4, 5].map(star => <Ionicons key={star} name={star <= rating ? 'star' : 'star-outline'} size={14} color={star <= rating ? '#fbbf24' : '#d1d5db'} />)}
+      <Text className="text-xs text-gray-500 ml-1.5">{rating.toFixed(1)}</Text>
+    </View>;
   };
   const getUserDisplayName = (): string => {
     if (userProfile?.user?.firstName) {
@@ -348,79 +348,79 @@ const ClientDashboardScreen: React.FC = () => {
     return 'User';
   };
   return <SafeAreaView className="flex-1 bg-gray-50" edges={['top']}>
-      {}
-      <View className="bg-white px-5 pt-4 pb-3">
-        <View className="flex-row items-center justify-between mb-4">
-          <View className="flex-1">
-            <Text className="text-2xl font-bold text-gray-900">
-              Hello {getUserDisplayName()}
-            </Text>
-            <Text className="text-sm text-gray-500 mt-0.5">Welcome to Sharplook</Text>
-          </View>
-
-          <View className="flex-row items-center gap-3">
-            {}
-            <TouchableOpacity className="relative w-11 h-11 items-center justify-center" activeOpacity={0.7} onPress={() => navigation.navigate('Notifications' as never)}>
-              <Ionicons name="notifications-outline" size={24} color="#eb278d" />
-              {unreadNotificationCount > 0 && <View className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] bg-pink-500 rounded-full items-center justify-center px-1" style={{
-              shadowColor: '#eb278d',
-              shadowOffset: {
-                width: 0,
-                height: 2
-              },
-              shadowOpacity: 0.3,
-              shadowRadius: 3,
-              elevation: 4
-            }}>
-                  <Text className="text-white text-[10px] font-bold">
-                    {unreadNotificationCount > 99 ? '99+' : unreadNotificationCount}
-                  </Text>
-                </View>}
-            </TouchableOpacity>
-
-            {}
-            <TouchableOpacity className="relative w-11 h-11 items-center justify-center" activeOpacity={0.7} onPress={() => navigation.navigate('Chat')}>
-              <Ionicons name="chatbubble-ellipses-outline" size={24} color="#eb278d" />
-              <View className="absolute top-1.5 right-1.5 w-2 h-2 bg-pink-500 rounded-full" />
-            </TouchableOpacity>
-
-            {}
-            <TouchableOpacity className="relative w-11 h-11 items-center justify-center" activeOpacity={0.7} onPress={() => navigation.navigate('Cart')}>
-              <Ionicons name="cart-outline" size={26} color="#eb278d" />
-              {cartItemsCount > 0 && <View className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] bg-pink-500 rounded-full items-center justify-center px-1" style={{
-              shadowColor: '#eb278d',
-              shadowOffset: {
-                width: 0,
-                height: 2
-              },
-              shadowOpacity: 0.3,
-              shadowRadius: 3,
-              elevation: 4
-            }}>
-                  <Text className="text-white text-[10px] font-bold">
-                    {cartItemsCount > 99 ? '99+' : cartItemsCount}
-                  </Text>
-                </View>}
-            </TouchableOpacity>
-
-            {}
-            <TouchableOpacity className="w-11 h-11 items-center justify-center" activeOpacity={0.7} onPress={() => setSidebarVisible(true)}>
-              <Ionicons name="menu" size={28} color="#eb278d" />
-            </TouchableOpacity>
-          </View>
+    { }
+    <View className="bg-white px-5 pt-4 pb-3">
+      <View className="flex-row items-center justify-between mb-4">
+        <View className="flex-1">
+          <Text className="text-2xl font-bold text-gray-900">
+            Hello {getUserDisplayName()}
+          </Text>
+          <Text className="text-sm text-gray-500 mt-0.5">Welcome to Sharplook</Text>
         </View>
 
-        {}
         <View className="flex-row items-center gap-3">
-          <View className="flex-1 flex-row items-center bg-gray-100 rounded-2xl px-4 py-3">
-            <Ionicons name="search" size={20} color="#9ca3af" />
-            <TextInput className="flex-1 ml-2 text-sm text-gray-900" placeholder="Search Shop or Vendor" placeholderTextColor="#9ca3af" value={searchQuery} onChangeText={setSearchQuery} />
-            {searchQuery.length > 0 && <TouchableOpacity onPress={() => setSearchQuery('')}>
-                <Ionicons name="close-circle" size={20} color="#9ca3af" />
-              </TouchableOpacity>}
-          </View>
+          { }
+          <TouchableOpacity className="relative w-11 h-11 items-center justify-center" activeOpacity={0.7} onPress={() => navigation.navigate('Notifications' as never)}>
+            <Ionicons name="notifications-outline" size={24} color="#eb278d" />
+            {unreadNotificationCount > 0 && <View className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] bg-pink-500 rounded-full items-center justify-center px-1" style={{
+              shadowColor: '#eb278d',
+              shadowOffset: {
+                width: 0,
+                height: 2
+              },
+              shadowOpacity: 0.3,
+              shadowRadius: 3,
+              elevation: 4
+            }}>
+              <Text className="text-white text-[10px] font-bold">
+                {unreadNotificationCount > 99 ? '99+' : unreadNotificationCount}
+              </Text>
+            </View>}
+          </TouchableOpacity>
 
-          <TouchableOpacity className="w-12 h-12 rounded-2xl bg-pink-500 items-center justify-center" activeOpacity={0.7} onPress={() => setFilterModalVisible(true)} style={{
+          { }
+          <TouchableOpacity className="relative w-11 h-11 items-center justify-center" activeOpacity={0.7} onPress={() => navigation.navigate('Chat')}>
+            <Ionicons name="chatbubble-ellipses-outline" size={24} color="#eb278d" />
+            <View className="absolute top-1.5 right-1.5 w-2 h-2 bg-pink-500 rounded-full" />
+          </TouchableOpacity>
+
+          { }
+          <TouchableOpacity className="relative w-11 h-11 items-center justify-center" activeOpacity={0.7} onPress={() => navigation.navigate('Cart')}>
+            <Ionicons name="cart-outline" size={26} color="#eb278d" />
+            {cartItemsCount > 0 && <View className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] bg-pink-500 rounded-full items-center justify-center px-1" style={{
+              shadowColor: '#eb278d',
+              shadowOffset: {
+                width: 0,
+                height: 2
+              },
+              shadowOpacity: 0.3,
+              shadowRadius: 3,
+              elevation: 4
+            }}>
+              <Text className="text-white text-[10px] font-bold">
+                {cartItemsCount > 99 ? '99+' : cartItemsCount}
+              </Text>
+            </View>}
+          </TouchableOpacity>
+
+          { }
+          <TouchableOpacity className="w-11 h-11 items-center justify-center" activeOpacity={0.7} onPress={() => setSidebarVisible(true)}>
+            <Ionicons name="menu" size={28} color="#eb278d" />
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      { }
+      <View className="flex-row items-center gap-3">
+        <View className="flex-1 flex-row items-center bg-gray-100 rounded-2xl px-4 py-3">
+          <Ionicons name="search" size={20} color="#9ca3af" />
+          <TextInput className="flex-1 ml-2 text-sm text-gray-900" placeholder="Search Shop or Vendor" placeholderTextColor="#9ca3af" value={searchQuery} onChangeText={setSearchQuery} />
+          {searchQuery.length > 0 && <TouchableOpacity onPress={() => setSearchQuery('')}>
+            <Ionicons name="close-circle" size={20} color="#9ca3af" />
+          </TouchableOpacity>}
+        </View>
+
+        <TouchableOpacity className="w-12 h-12 rounded-2xl bg-pink-500 items-center justify-center" activeOpacity={0.7} onPress={() => setFilterModalVisible(true)} style={{
           shadowColor: '#eb278d',
           shadowOffset: {
             width: 0,
@@ -430,29 +430,29 @@ const ClientDashboardScreen: React.FC = () => {
           shadowRadius: 8,
           elevation: 6
         }}>
-            <Ionicons name="options-outline" size={22} color="#fff" />
-          </TouchableOpacity>
-        </View>
+          <Ionicons name="options-outline" size={22} color="#fff" />
+        </TouchableOpacity>
       </View>
+    </View>
 
-      {}
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{
+    { }
+    <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{
       paddingBottom: 100
     }} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#eb278d" colors={['#eb278d']} />}>
-        {}
-        <Animated.View className="px-5 py-6" style={{
+      { }
+      <Animated.View className="px-5 py-6" style={{
         opacity: fadeAnim,
         transform: [{
           translateY: slideAnim
         }]
       }}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{
           gap: 12
         }}>
-            {categories.map((category, index) => <TouchableOpacity key={category.id} className="items-center" style={{
+          {categories.map((category, index) => <TouchableOpacity key={category.id} className="items-center" style={{
             width: 70
           }} activeOpacity={0.7} onPress={() => handleCategorySelect(category.id)}>
-                <View className={`w-14 h-14 rounded-full items-center justify-center mb-2 ${selectedCategory === category.id ? 'bg-pink-100' : 'bg-white'}`} style={{
+            <View className={`w-14 h-14 rounded-full items-center justify-center mb-2 ${selectedCategory === category.id ? 'bg-pink-100' : 'bg-white'}`} style={{
               borderWidth: 2,
               borderColor: selectedCategory === category.id ? '#eb278d' : '#eb278c5d',
               shadowColor: '#000',
@@ -464,35 +464,35 @@ const ClientDashboardScreen: React.FC = () => {
               shadowRadius: 4,
               elevation: 2
             }}>
-                  <Ionicons name={category.icon as any} size={24} color={selectedCategory === category.id ? '#eb278d' : '#9ca3af'} />
-                </View>
-                <Text className="text-[10px] text-gray-700 text-center font-medium leading-3" numberOfLines={3} style={{
+              <Ionicons name={category.icon as any} size={24} color={selectedCategory === category.id ? '#eb278d' : '#9ca3af'} />
+            </View>
+            <Text className="text-[10px] text-gray-700 text-center font-medium leading-3" numberOfLines={3} style={{
               width: 70
             }}>
-                  {category.label}
-                </Text>
-              </TouchableOpacity>)}
-          </ScrollView>
-        </Animated.View>
+              {category.label}
+            </Text>
+          </TouchableOpacity>)}
+        </ScrollView>
+      </Animated.View>
 
-        {}
-        <View className="py-6">
-          <View className="flex-row items-center justify-between px-5 mb-4">
-            <View>
-              <Text className="text-xl font-bold text-gray-900">Top Vendors</Text>
-              <Text className="text-xs text-gray-500 mt-0.5">Highly rated professionals</Text>
-            </View>
-            <TouchableOpacity className="flex-row items-center" activeOpacity={0.7} onPress={() => navigation.navigate('AllVendors')}>
-              <Text className="text-sm text-pink-600 font-semibold mr-1">See All</Text>
-              <Ionicons name="chevron-forward" size={16} color="#eb278d" />
-            </TouchableOpacity>
+      { }
+      <View className="py-6">
+        <View className="flex-row items-center justify-between px-5 mb-4">
+          <View>
+            <Text className="text-xl font-bold text-gray-900">Top Vendors</Text>
+            <Text className="text-xs text-gray-500 mt-0.5">Highly rated professionals</Text>
           </View>
+          <TouchableOpacity className="flex-row items-center" activeOpacity={0.7} onPress={() => navigation.navigate('AllVendors')}>
+            <Text className="text-sm text-pink-600 font-semibold mr-1">See All</Text>
+            <Ionicons name="chevron-forward" size={16} color="#eb278d" />
+          </TouchableOpacity>
+        </View>
 
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{
           paddingHorizontal: 20,
           paddingRight: 20
         }}>
-            {topVendors.length > 0 ? topVendors.map((vendor, index) => <Animated.View key={vendor.id} className="mr-4" style={{
+          {topVendors.length > 0 ? topVendors.map((vendor, index) => <Animated.View key={vendor.id} className="mr-4" style={{
             opacity: fadeAnim,
             transform: [{
               translateY: slideAnim.interpolate({
@@ -501,7 +501,7 @@ const ClientDashboardScreen: React.FC = () => {
               })
             }]
           }}>
-                  <VendorCard vendor={{
+            <VendorCard vendor={{
               id: vendor.id,
               businessName: vendor.businessName,
               image: vendor.image,
@@ -511,37 +511,21 @@ const ClientDashboardScreen: React.FC = () => {
               isVerified: vendor.isVerified,
               vendorType: vendor.vendorType
             }} width={SCREEN_WIDTH * 0.45} onPress={() => handleVendorPress(vendor.id)} onFavoritePress={() => handleFavoriteToggle(vendor.id)} isFavorite={favoriteVendors.has(vendor.id)} />
-                </Animated.View>) : <View className="items-center justify-center py-8 px-5">
-                <Ionicons name="people-outline" size={48} color="#d1d5db" />
-                <Text className="text-gray-400 text-sm mt-2">No vendors available</Text>
-              </View>}
+          </Animated.View>) : <View className="items-center justify-center py-8 px-5">
+            <Ionicons name="people-outline" size={48} color="#d1d5db" />
+            <Text className="text-gray-400 text-sm mt-2">No vendors available</Text>
+          </View>}
+        </ScrollView>
+      </View>
 
-            {}
-            {topVendors.length > 0 && <TouchableOpacity className="rounded-3xl items-center justify-center border-2 border-dashed border-pink-300" style={{
-            width: SCREEN_WIDTH * 0.45,
-            backgroundColor: '#fce7f3'
-          }} activeOpacity={0.7} onPress={() => navigation.navigate('AllVendors')}>
-                <View className="items-center py-20">
-                  <View className="w-16 h-16 rounded-full bg-pink-200 items-center justify-center mb-3">
-                    <Ionicons name="arrow-forward" size={28} color="#eb278d" />
-                  </View>
-                  <Text className="text-pink-600 font-bold text-sm">View All</Text>
-                  <Text className="text-pink-400 text-xs mt-1">
-                    {allVendors.length}+ Vendors
-                  </Text>
-                </View>
-              </TouchableOpacity>}
-          </ScrollView>
-        </View>
+      { }
+      {(searchQuery.trim() || recommendedServices.length > 0) && <View className="px-5 py-6">
+        <Text className="text-lg font-bold text-gray-900 mb-4">
+          {searchQuery.trim() ? 'Search Results' : 'Recommended Services'}
+        </Text>
 
-        {}
-        {(searchQuery.trim() || recommendedServices.length > 0) && <View className="px-5 py-6">
-            <Text className="text-lg font-bold text-gray-900 mb-4">
-              {searchQuery.trim() ? 'Search Results' : 'Recommended Services'}
-            </Text>
-
-            {recommendedServices.length > 0 ? <View className="space-y-3">
-                {recommendedServices.map((service, index) => <TouchableOpacity key={service._id || index} className="bg-white rounded-2xl p-4 flex-row items-center" activeOpacity={0.7} style={{
+        {recommendedServices.length > 0 ? <View className="space-y-3">
+          {recommendedServices.map((service, index) => <TouchableOpacity key={service._id || index} className="bg-white rounded-2xl p-4 flex-row items-center" activeOpacity={0.7} style={{
             shadowColor: '#000',
             shadowOffset: {
               width: 0,
@@ -551,83 +535,48 @@ const ClientDashboardScreen: React.FC = () => {
             shadowRadius: 8,
             elevation: 3
           }}>
-                    <View className="w-16 h-16 rounded-xl bg-pink-100 items-center justify-center mr-3">
-                      <Ionicons name="sparkles" size={28} color="#eb278d" />
-                    </View>
-                    <View className="flex-1">
-                      <Text className="text-base font-bold text-gray-900 mb-1">
-                        {service.name}
-                      </Text>
-                      <Text className="text-xs text-gray-500 mb-2" numberOfLines={1}>
-                        {service.description}
-                      </Text>
-                      <Text className="text-sm font-bold text-pink-600">
-                        ₦{service.basePrice?.toLocaleString()}
-                      </Text>
-                    </View>
-                    <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
-                  </TouchableOpacity>)}
-              </View> : searchQuery.trim() ? <View className="bg-white rounded-2xl p-8 items-center justify-center min-h-[200px]">
-                <View className="w-24 h-24 rounded-full bg-gray-100 items-center justify-center mb-4">
-                  <Ionicons name="search-outline" size={48} color="#d1d5db" />
-                </View>
-                <Text className="text-gray-400 text-sm font-medium">No results found</Text>
-                <Text className="text-gray-300 text-xs mt-1">Try different keywords</Text>
-              </View> : <View className="bg-white rounded-2xl p-8 items-center justify-center min-h-[200px]">
-                <View className="w-24 h-24 rounded-full bg-gray-100 items-center justify-center mb-4">
-                  <Ionicons name="cube-outline" size={48} color="#d1d5db" />
-                </View>
-                <Text className="text-gray-400 text-sm font-medium">
-                  No recommended services
-                </Text>
-                <Text className="text-gray-300 text-xs mt-1">Check back later for updates</Text>
-              </View>}
-          </View>}
+            <View className="w-16 h-16 rounded-xl bg-pink-100 items-center justify-center mr-3">
+              <Ionicons name="sparkles" size={28} color="#eb278d" />
+            </View>
+            <View className="flex-1">
+              <Text className="text-base font-bold text-gray-900 mb-1">
+                {service.name}
+              </Text>
+              <Text className="text-xs text-gray-500 mb-2" numberOfLines={1}>
+                {service.description}
+              </Text>
+              <Text className="text-sm font-bold text-pink-600">
+                ₦{service.basePrice?.toLocaleString()}
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
+          </TouchableOpacity>)}
+        </View> : searchQuery.trim() ? <View className="bg-white rounded-2xl p-8 items-center justify-center min-h-[200px]">
+          <View className="w-24 h-24 rounded-full bg-gray-100 items-center justify-center mb-4">
+            <Ionicons name="search-outline" size={48} color="#d1d5db" />
+          </View>
+          <Text className="text-gray-400 text-sm font-medium">No results found</Text>
+          <Text className="text-gray-300 text-xs mt-1">Try different keywords</Text>
+        </View> : <View className="bg-white rounded-2xl p-8 items-center justify-center min-h-[200px]">
+          <View className="w-24 h-24 rounded-full bg-gray-100 items-center justify-center mb-4">
+            <Ionicons name="cube-outline" size={48} color="#d1d5db" />
+          </View>
+          <Text className="text-gray-400 text-sm font-medium">
+            No recommended services
+          </Text>
+          <Text className="text-gray-300 text-xs mt-1">Check back later for updates</Text>
+        </View>}
+      </View>}
+    </ScrollView>
 
-        {}
-        <View className="px-5 py-2 mb-4">
-          <TouchableOpacity activeOpacity={0.9}>
-            <LinearGradient colors={['#eb278d', '#f472b6']} start={{
-            x: 0,
-            y: 0
-          }} end={{
-            x: 1,
-            y: 1
-          }} className="rounded-2xl p-6" style={{
-            shadowColor: '#eb278d',
-            shadowOffset: {
-              width: 0,
-              height: 4
-            },
-            shadowOpacity: 0.3,
-            shadowRadius: 12,
-            elevation: 8
-          }}>
-              <View className="flex-row items-center justify-between">
-                <View className="flex-1">
-                  <Text className="text-white text-lg font-bold mb-1">Special Offers! 🎉</Text>
-                  <Text className="text-white/90 text-sm mb-3">
-                    Get up to 30% off on selected services
-                  </Text>
-                  <View className="bg-white/20 self-start px-4 py-2 rounded-full">
-                    <Text className="text-white text-xs font-semibold">View Deals</Text>
-                  </View>
-                </View>
-                <Ionicons name="gift" size={60} color="rgba(255, 255, 255, 0.3)" />
-              </View>
-            </LinearGradient>
-          </TouchableOpacity>
-        </View>
-      </ScrollView>
+    { }
+    <ClientSidebar visible={sidebarVisible} onClose={() => setSidebarVisible(false)} userName={getUserDisplayName()} userEmail={userProfile?.user?.email || userProfile?.email || 'user@example.com'} />
 
-      {}
-      <ClientSidebar visible={sidebarVisible} onClose={() => setSidebarVisible(false)} userName={getUserDisplayName()} userEmail={userProfile?.user?.email || userProfile?.email || 'user@example.com'} />
-
-      {}
-      <FilterModal visible={filterModalVisible} onClose={() => setFilterModalVisible(false)} filters={filters} categories={categories.map(c => ({
+    { }
+    <FilterModal visible={filterModalVisible} onClose={() => setFilterModalVisible(false)} filters={filters} categories={categories.map(c => ({
       _id: c.id,
       name: c.name
     }))} onApply={handleApplyFilters} onReset={handleResetFilters} />
-    </SafeAreaView>;
+  </SafeAreaView>;
 };
 export default ClientDashboardScreen;
