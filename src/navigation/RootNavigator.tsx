@@ -26,6 +26,11 @@ import PrivacySecurityScreen from '@/components/clientComponent/ProfleSettings/P
 import NotificationSettingsScreen from '@/components/clientComponent/ProfleSettings/NotificationSettingsScreen';
 import HelpCenterScreen from '@/components/clientComponent/ProfleSettings/HelpCenterScreen';
 import NotificationsScreen from '@/components/NoitificationScreen';
+import CreateOfferScreen from '@/components/clientComponent/CreateOfferScreen';
+import MyOffersScreen from '@/components/clientComponent/MyOffersScreen';
+import OfferDetailScreen from '@/components/clientComponent/OfferDetailScreen';
+import AvailableOffersScreen from '@/components/vendorComponent/AvailableOffersScreen';
+import VendorMyResponsesScreen from '@/components/vendorComponent/VendorMyResponsesScreen';
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const RootNavigator = () => {
   useDeepLinking();
@@ -136,6 +141,34 @@ const RootNavigator = () => {
           <Stack.Screen name="Notifications" component={NotificationsScreen} options={{
         animation: 'slide_from_right'
       }} />
+          <Stack.Screen name="CreateOffer" component={CreateOfferScreen} options={{
+        animation: 'slide_from_right'
+      }} />
+
+      <Stack.Screen
+  name="MyOffers"
+  component={MyOffersScreen}
+  options={{
+        animation: 'slide_from_right'}}
+/>
+<Stack.Screen
+  name="OfferDetail"
+  component={OfferDetailScreen}
+  options={{
+        animation: 'slide_from_right'}}
+/>
+<Stack.Screen
+  name="AvailableOffers"
+  component={AvailableOffersScreen}
+  options={{
+        animation: 'slide_from_right' }}
+/>
+<Stack.Screen
+  name="VendorMyResponses"
+  component={VendorMyResponsesScreen}
+  options={{
+        animation: 'slide_from_right' }}
+/>
 
           
         </>}

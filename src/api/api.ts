@@ -1,5 +1,6 @@
 import axios, { AxiosInstance, AxiosError, InternalAxiosRequestConfig } from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+
 const API_BASE_URL = 'https://sharplook-be.onrender.com/api/v1';
 const api: AxiosInstance = axios.create({
   baseURL: API_BASE_URL,
@@ -680,85 +681,269 @@ export const walletAPI = {
   }
 };
 export const servicesAPI = {
-  getMyServices: async () => {
-    const response = await api.get('/services/my-services');
-    return response.data;
-  },
-  createService: async (serviceData: {
-    name: string;
-    description: string;
-    category: string;
-    basePrice: number;
-    priceType: 'fixed' | 'variable';
-    currency: string;
-    duration: number;
-    serviceArea: {
-      type: string;
-      coordinates: number[];
-      radius: number;
-    };
-  }, images?: any[]) => {
-    const formData = new FormData();
-    Object.keys(serviceData).forEach(key => {
-      const value = serviceData[key as keyof typeof serviceData];
-      if (key === 'serviceArea') {
-        formData.append(key, JSON.stringify(value));
-      } else {
-        formData.append(key, value as any);
+  createService: async (
+    serviceData: {
+      name: string;
+      description: string;
+      category: string;
+      basePrice: number;
+      priceType: 'fixed' | 'variable';
+      currency: string;
+      duration: number;
+      serviceArea: {
+        type: string;
+        coordinates: number[];
+        radius: number;
+      };
+    },
+    images?: any[]
+  ) => {
+    console.log('🔵 [START] createService called');
+    console.log('📦 Service Data:', serviceData);
+    console.log('🖼️ Images array:', images);
+    console.log('🖼️ Images length:', images?.length);
+
+    try {
+      const token = await AsyncStorage.getItem('accessToken');
+      console.log('🔑 Token retrieved:', token ? 'Yes' : 'No');
+
+      // If no images, send as JSON
+      if (!images || images.length === 0) {
+        console.log('📤 No images - using JSON request');
+        const response = await api.post('/services', serviceData);
+        console.log('✅ JSON response:', response.data);
+        return response.data;
       }
-    });
-    if (images && images.length > 0) {
-      images.forEach((image, index) => {
-        formData.append('images', {
-          uri: image.uri,
-          type: image.type || 'image/jpeg',
-          name: image.name || `image_${index}.jpg`
-        } as any);
+
+      console.log('🖼️ Images detected - using FormData');
+      console.log('🔍 Creating FormData instance...');
+      
+      const formData = new FormData();
+      console.log('✅ FormData created');
+
+      // Append text fields one by one with logging
+      console.log('📝 Appending name:', serviceData.name);
+      formData.append('name', serviceData.name);
+      
+      console.log('📝 Appending description:', serviceData.description);
+      formData.append('description', serviceData.description);
+      
+      console.log('📝 Appending category:', serviceData.category);
+      formData.append('category', serviceData.category);
+      
+      console.log('📝 Appending basePrice:', serviceData.basePrice);
+      formData.append('basePrice', String(serviceData.basePrice));
+      
+      console.log('📝 Appending priceType:', serviceData.priceType);
+      formData.append('priceType', serviceData.priceType);
+      
+      console.log('📝 Appending currency:', serviceData.currency);
+      formData.append('currency', serviceData.currency);
+      
+      console.log('📝 Appending duration:', serviceData.duration);
+      formData.append('duration', String(serviceData.duration));
+      
+      console.log('📝 Appending serviceArea:', serviceData.serviceArea);
+      formData.append('serviceArea', JSON.stringify(serviceData.serviceArea));
+
+      console.log('✅ All text fields appended');
+
+      // Append images with detailed logging
+      console.log('🖼️ Starting image append loop...');
+      console.log('🖼️ Images to process:', images.length);
+      
+      if (images && images.length > 0) {
+        for (let i = 0; i < images.length; i++) {
+          console.log(`\n📸 Processing image ${i + 1}/${images.length}`);
+          const image = images[i];
+          console.log('📸 Image object:', image);
+          console.log('📸 Image URI:', image.uri);
+          console.log('📸 Image type:', image.type);
+          console.log('📸 Image name:', image.name);
+          
+          if (image.uri && !image.uri.startsWith('http')) {
+            console.log(`📸 Appending image ${i + 1} to FormData...`);
+            
+            try {
+              formData.append('images', {
+                uri: image.uri,
+                type: image.type || 'image/jpeg',
+                name: image.name || `image_${i}.jpg`,
+              } as any);
+              console.log(`✅ Image ${i + 1} appended successfully`);
+            } catch (appendError) {
+              console.error(`❌ Error appending image ${i + 1}:`, appendError);
+              throw appendError;
+            }
+          } else {
+            console.log(`⏭️ Skipping image ${i + 1} (existing URL)`);
+          }
+        }
+      }
+
+      console.log('✅ All images processed');
+
+      console.log('🌐 Preparing fetch request...');
+      console.log('🌐 URL:', `${API_BASE_URL}/services`);
+      console.log('🌐 Method: POST');
+      console.log('🌐 Headers:', {
+        'Authorization': token ? 'Bearer ***' : 'None',
+        'Content-Type': 'multipart/form-data',
       });
-    }
-    const response = await api.post('/services', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data'
+
+      console.log('🚀 Sending fetch request...');
+
+      const response = await fetch(`${API_BASE_URL}/services`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'multipart/form-data',
+        },
+        body: formData,
+      });
+
+      console.log('📥 Response received');
+      console.log('📥 Response status:', response.status);
+      console.log('📥 Response ok:', response.ok);
+
+      const result = await response.json();
+      console.log('📥 Response data:', result);
+
+      if (!response.ok) {
+        console.error('❌ Response not OK:', result);
+        throw new Error(result.message || 'Failed to create service');
       }
-    });
+
+      console.log('✅ Service created successfully');
+      return result;
+    } catch (error) {
+      console.error('❌❌❌ ERROR CAUGHT ❌❌❌');
+      console.error('Error type:', typeof error);
+      console.error('Error name:', (error as any)?.name);
+      console.error('Error message:', (error as any)?.message);
+      console.error('Error stack:', (error as any)?.stack);
+      console.error('Full error object:', error);
+      throw error;
+    }
+  },
+
+  updateService: async (
+    serviceId: string,
+    serviceData: any,
+    images?: any[]
+  ) => {
+    console.log('🔵 [START] updateService called');
+    console.log('🆔 Service ID:', serviceId);
+    console.log('📦 Service Data:', serviceData);
+    console.log('🖼️ Images:', images);
+
+    try {
+      const token = await AsyncStorage.getItem('accessToken');
+
+      // If no new images, send as JSON
+      if (!images || images.length === 0) {
+        console.log('📤 No new images - using JSON request');
+        const response = await api.put(`/services/${serviceId}`, serviceData);
+        return response.data;
+      }
+
+      console.log('🖼️ New images detected - using FormData');
+      const formData = new FormData();
+
+      // Append service data
+      console.log('📝 Appending service data fields...');
+      const keys = Object.keys(serviceData);
+      for (let i = 0; i < keys.length; i++) {
+        const key = keys[i];
+        const value = serviceData[key];
+        console.log(`📝 Field ${i + 1}: ${key} =`, value);
+        
+        if (key === 'serviceArea' && typeof value === 'object') {
+          formData.append(key, JSON.stringify(value));
+        } else if (key === 'images') {
+          const existingUrls: string[] = [];
+          for (let j = 0; j < value.length; j++) {
+            const img = value[j];
+            if (typeof img === 'string' && img.startsWith('http')) {
+              existingUrls.push(img);
+            }
+          }
+          if (existingUrls.length > 0) {
+            console.log('📝 Existing images:', existingUrls);
+            formData.append('existingImages', JSON.stringify(existingUrls));
+          }
+        } else if (value !== undefined && value !== null) {
+          formData.append(key, String(value));
+        }
+      }
+
+      // Append new images
+      console.log('🖼️ Appending new images...');
+      for (let i = 0; i < images.length; i++) {
+        console.log(`📸 Processing new image ${i + 1}/${images.length}`);
+        const image = images[i];
+        console.log('📸 Image:', image);
+        
+        if (image.uri && !image.uri.startsWith('http')) {
+          try {
+            formData.append('images', {
+              uri: image.uri,
+              type: image.type || 'image/jpeg',
+              name: image.name || `image_${i}.jpg`,
+            } as any);
+            console.log(`✅ Image ${i + 1} appended`);
+          } catch (appendError) {
+            console.error(`❌ Error appending image ${i + 1}:`, appendError);
+            throw appendError;
+          }
+        }
+      }
+
+      console.log('🚀 Sending update request...');
+      const response = await fetch(`${API_BASE_URL}/services/${serviceId}`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'multipart/form-data',
+        },
+        body: formData,
+      });
+
+      console.log('📥 Response status:', response.status);
+      const result = await response.json();
+      console.log('📥 Response data:', result);
+
+      if (!response.ok) {
+        throw new Error(result.message || 'Failed to update service');
+      }
+
+      return result;
+    } catch (error) {
+      console.error('❌ Update service error:', error);
+      console.error('Error details:', {
+        name: (error as any)?.name,
+        message: (error as any)?.message,
+        stack: (error as any)?.stack,
+      });
+      throw error;
+    }
+  },
+
+  getMyServices: async () => {
+    const response = await api.get('/services/vendor/my-services');
     return response.data;
   },
+
   getServiceById: async (serviceId: string) => {
     const response = await api.get(`/services/${serviceId}`);
     return response.data;
   },
-  updateService: async (serviceId: string, serviceData: any, images?: any[]) => {
-    const formData = new FormData();
-    Object.keys(serviceData).forEach(key => {
-      const value = serviceData[key];
-      if (key === 'serviceArea' && typeof value === 'object') {
-        formData.append(key, JSON.stringify(value));
-      } else if (value !== undefined && value !== null) {
-        formData.append(key, value);
-      }
-    });
-    if (images && images.length > 0) {
-      images.forEach((image, index) => {
-        if (image.uri && !image.uri.startsWith('http')) {
-          formData.append('images', {
-            uri: image.uri,
-            type: image.type || 'image/jpeg',
-            name: image.name || `image_${index}.jpg`
-          } as any);
-        }
-      });
-    }
-    const response = await api.put(`/services/${serviceId}`, formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data'
-      }
-    });
-    return response.data;
-  },
+
   deleteService: async (serviceId: string) => {
     const response = await api.delete(`/services/${serviceId}`);
     return response.data;
   },
+
   searchServices: async (params: {
     query?: string;
     category?: string;
@@ -770,35 +955,150 @@ export const servicesAPI = {
       radius?: number;
     };
   }) => {
-    const response = await api.get('/services/search', {
-      params
-    });
+    const response = await api.get('/services/search', { params });
     return response.data;
   },
+
   getServiceReviews: async (serviceId: string) => {
     const response = await api.get(`/services/${serviceId}/reviews`);
     return response.data;
   },
-  uploadServiceImages: async (serviceId: string, images: any[]) => {
-    const formData = new FormData();
-    images.forEach((image, index) => {
-      formData.append('images', {
-        uri: image.uri,
-        type: image.type || 'image/jpeg',
-        name: image.fileName || `image_${index}.jpg`
-      } as any);
-    });
-    const response = await api.post(`/services/${serviceId}/images`, formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data'
+};
+
+export const offerAPI = {
+  // Create offer
+  createOffer: async (offerData: {
+    title: string;
+    description: string;
+    category: string;
+    service?: string;
+    proposedPrice: number;
+    location: {
+      address: string;
+      city: string;
+      state: string;
+      coordinates: [number, number];
+    };
+    preferredDate?: string;
+    preferredTime?: string;
+    flexibility?: 'flexible' | 'specific' | 'urgent';
+    expiresInDays?: number;
+  }, images?: any[]) => {
+    try {
+      const token = await AsyncStorage.getItem('accessToken');
+      
+      // If no images, send as JSON
+      if (!images || images.length === 0) {
+        const response = await api.post('/offers', offerData);
+        return response.data;
       }
+
+      // If images exist, use FormData
+      const formData = new FormData();
+      
+      formData.append('title', offerData.title);
+      formData.append('description', offerData.description);
+      formData.append('category', offerData.category);
+      if (offerData.service) formData.append('service', offerData.service);
+      formData.append('proposedPrice', String(offerData.proposedPrice));
+      formData.append('location', JSON.stringify(offerData.location));
+      if (offerData.preferredDate) formData.append('preferredDate', offerData.preferredDate);
+      if (offerData.preferredTime) formData.append('preferredTime', offerData.preferredTime);
+      if (offerData.flexibility) formData.append('flexibility', offerData.flexibility);
+      if (offerData.expiresInDays) formData.append('expiresInDays', String(offerData.expiresInDays));
+
+      // Append images
+      for (let i = 0; i < images.length; i++) {
+        const image = images[i];
+        if (image.uri) {
+          formData.append('images', {
+            uri: image.uri,
+            type: image.type || 'image/jpeg',
+            name: image.name || `offer_image_${i}.jpg`,
+          } as any);
+        }
+      }
+
+      const response = await fetch(`${API_BASE_URL}/offers`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'multipart/form-data',
+        },
+        body: formData,
+      });
+
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.message);
+      return result;
+    } catch (error) {
+      console.error('Create offer error:', error);
+      throw error;
+    }
+  },
+
+  // Get my offers
+  getMyOffers: async (params?: { page?: number; limit?: number }) => {
+    const response = await api.get('/offers/my-offers', { params });
+    return response.data;
+  },
+
+  // Get available offers (for vendors)
+  getAvailableOffers: async (params?: {
+    category?: string;
+    priceMin?: number;
+    priceMax?: number;
+    latitude?: number;
+    longitude?: number;
+    maxDistance?: number;
+    page?: number;
+    limit?: number;
+  }) => {
+    const response = await api.get('/offers/available/list', { params });
+    return response.data;
+  },
+
+  // Get offer by ID
+  getOfferById: async (offerId: string) => {
+    const response = await api.get(`/offers/${offerId}`);
+    return response.data;
+  },
+
+  // Respond to offer (vendor)
+  respondToOffer: async (offerId: string, responseData: {
+    proposedPrice: number;
+    message?: string;
+    estimatedDuration?: number;
+  }) => {
+    const response = await api.post(`/offers/${offerId}/respond`, responseData);
+    return response.data;
+  },
+
+  // Counter offer (client)
+  counterOffer: async (offerId: string, responseId: string, counterPrice: number) => {
+    const response = await api.post(`/offers/${offerId}/responses/${responseId}/counter`, {
+      counterPrice
     });
     return response.data;
   },
-  deleteServiceImage: async (serviceId: string, imageId: string) => {
-    const response = await api.delete(`/services/${serviceId}/images/${imageId}`);
+
+  // Accept response (client)
+  acceptResponse: async (offerId: string, responseId: string) => {
+    const response = await api.post(`/offers/${offerId}/responses/${responseId}/accept`);
     return response.data;
-  }
+  },
+
+  // Close offer
+  closeOffer: async (offerId: string) => {
+    const response = await api.post(`/offers/${offerId}/close`);
+    return response.data;
+  },
+
+  // Get my responses (vendor)
+  getMyResponses: async (params?: { page?: number; limit?: number }) => {
+    const response = await api.get('/offers/responses/my-responses', { params });
+    return response.data;
+  },
 };
 export const categoriesAPI = {
   getActiveCategories: async () => {

@@ -191,6 +191,7 @@ const BookingsScreen: React.FC = () => {
     bookingId: booking._id
   })} activeOpacity={0.7}>
       {}
+      
       <View className="flex-row items-start justify-between mb-3">
         <View className="flex-1">
           <Text className="text-base font-bold text-gray-900 mb-1">
@@ -279,13 +280,48 @@ const BookingsScreen: React.FC = () => {
   return <SafeAreaView className="flex-1 bg-gray-50">
       {}
       <View className="bg-white px-5 py-4 border-b border-gray-100">
-        <View className="flex-row items-center justify-between mb-4">
-          <Text className="text-2xl font-bold text-gray-900">My Bookings</Text>
-          
-          <TouchableOpacity onPress={() => navigation.navigate('AllVendors')} className="w-10 h-10 rounded-full bg-pink-100 items-center justify-center">
-            <Ionicons name="add" size={24} color="#eb278d" />
-          </TouchableOpacity>
-        </View>
+        {/* Header - Add Make Offer button */}
+<View className="bg-white px-5 py-4 border-b border-gray-100">
+  {/* Header - Update this section in BookingsScreen */}
+<View className="bg-white px-5 py-4 border-b border-gray-100">
+  <View className="flex-row items-center justify-between mb-4">
+    <Text className="text-2xl font-bold text-gray-900">My Bookings</Text>
+    
+    <View className="flex-row gap-2">
+      {/* My Offers Button */}
+      <TouchableOpacity
+        onPress={() => navigation.navigate('MyOffers')}
+        className="flex-row items-center px-3 py-2 rounded-xl bg-purple-100"
+      >
+        <Ionicons name="pricetag" size={18} color="#9333ea" />
+        <Text className="ml-1 text-purple-700 font-semibold text-sm">
+          My Offers
+        </Text>
+      </TouchableOpacity>
+      
+      {/* Make Offer Button */}
+      <TouchableOpacity
+        onPress={() => navigation.navigate('CreateOffer')}
+        className="w-10 h-10 rounded-full bg-purple-100 items-center justify-center"
+      >
+        <Ionicons name="add" size={24} color="#9333ea" />
+      </TouchableOpacity>
+      
+      {/* Browse Services Button */}
+      <TouchableOpacity
+        onPress={() => navigation.navigate('AllVendors')}
+        className="w-10 h-10 rounded-full bg-pink-100 items-center justify-center"
+      >
+        <Ionicons name="search" size={20} color="#eb278d" />
+      </TouchableOpacity>
+    </View>
+  </View>
+  {/* ... rest of header */}
+</View>
+  {/* ... rest of header */}
+</View>
+
+        
 
         {}
         <View className="flex-row items-center bg-gray-50 rounded-xl px-4 py-3 mb-4">
