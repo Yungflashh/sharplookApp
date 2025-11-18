@@ -292,7 +292,7 @@ const ClientDashboardScreen: React.FC = () => {
     if (newFilters.category) {
       params.category = newFilters.category;
     }
-    if (newFilters.minPrice || newFilters.maxPrice) { }
+    if (newFilters.minPrice || newFilters.maxPrice) {}
     await fetchAllVendors(params);
   };
   const handleResetFilters = () => {
@@ -348,7 +348,7 @@ const ClientDashboardScreen: React.FC = () => {
     return 'User';
   };
   return <SafeAreaView className="flex-1 bg-gray-50" edges={['top']}>
-    { }
+    {}
     <View className="bg-white px-5 pt-4 pb-3">
       <View className="flex-row items-center justify-between mb-4">
         <View className="flex-1">
@@ -359,7 +359,7 @@ const ClientDashboardScreen: React.FC = () => {
         </View>
 
         <View className="flex-row items-center gap-3">
-          { }
+          {}
           <TouchableOpacity className="relative w-11 h-11 items-center justify-center" activeOpacity={0.7} onPress={() => navigation.navigate('Notifications' as never)}>
             <Ionicons name="notifications-outline" size={24} color="#eb278d" />
             {unreadNotificationCount > 0 && <View className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] bg-pink-500 rounded-full items-center justify-center px-1" style={{
@@ -378,13 +378,13 @@ const ClientDashboardScreen: React.FC = () => {
             </View>}
           </TouchableOpacity>
 
-          { }
+          {}
           <TouchableOpacity className="relative w-11 h-11 items-center justify-center" activeOpacity={0.7} onPress={() => navigation.navigate('Chat')}>
             <Ionicons name="chatbubble-ellipses-outline" size={24} color="#eb278d" />
             <View className="absolute top-1.5 right-1.5 w-2 h-2 bg-pink-500 rounded-full" />
           </TouchableOpacity>
 
-          { }
+          {}
           <TouchableOpacity className="relative w-11 h-11 items-center justify-center" activeOpacity={0.7} onPress={() => navigation.navigate('Cart')}>
             <Ionicons name="cart-outline" size={26} color="#eb278d" />
             {cartItemsCount > 0 && <View className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] bg-pink-500 rounded-full items-center justify-center px-1" style={{
@@ -403,14 +403,14 @@ const ClientDashboardScreen: React.FC = () => {
             </View>}
           </TouchableOpacity>
 
-          { }
+          {}
           <TouchableOpacity className="w-11 h-11 items-center justify-center" activeOpacity={0.7} onPress={() => setSidebarVisible(true)}>
             <Ionicons name="menu" size={28} color="#eb278d" />
           </TouchableOpacity>
         </View>
       </View>
 
-      { }
+      {}
       <View className="flex-row items-center gap-3">
         <View className="flex-1 flex-row items-center bg-gray-100 rounded-2xl px-4 py-3">
           <Ionicons name="search" size={20} color="#9ca3af" />
@@ -435,11 +435,11 @@ const ClientDashboardScreen: React.FC = () => {
       </View>
     </View>
 
-    { }
+    {}
     <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{
       paddingBottom: 100
     }} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#eb278d" colors={['#eb278d']} />}>
-      { }
+      {}
       <Animated.View className="px-5 py-6" style={{
         opacity: fadeAnim,
         transform: [{
@@ -475,7 +475,7 @@ const ClientDashboardScreen: React.FC = () => {
         </ScrollView>
       </Animated.View>
 
-      { }
+      {}
       <View className="py-6">
         <View className="flex-row items-center justify-between px-5 mb-4">
           <View>
@@ -518,7 +518,7 @@ const ClientDashboardScreen: React.FC = () => {
         </ScrollView>
       </View>
 
-      { }
+      {}
       {(searchQuery.trim() || recommendedServices.length > 0) && <View className="px-5 py-6">
         <Text className="text-lg font-bold text-gray-900 mb-4">
           {searchQuery.trim() ? 'Search Results' : 'Recommended Services'}
@@ -569,10 +569,10 @@ const ClientDashboardScreen: React.FC = () => {
       </View>}
     </ScrollView>
 
-    { }
+    {}
     <ClientSidebar visible={sidebarVisible} onClose={() => setSidebarVisible(false)} userName={getUserDisplayName()} userEmail={userProfile?.user?.email || userProfile?.email || 'user@example.com'} />
 
-    { }
+    {}
     <FilterModal visible={filterModalVisible} onClose={() => setFilterModalVisible(false)} filters={filters} categories={categories.map(c => ({
       _id: c.id,
       name: c.name

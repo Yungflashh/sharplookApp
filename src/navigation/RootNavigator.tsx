@@ -145,30 +145,18 @@ const RootNavigator = () => {
         animation: 'slide_from_right'
       }} />
 
-      <Stack.Screen
-  name="MyOffers"
-  component={MyOffersScreen}
-  options={{
-        animation: 'slide_from_right'}}
-/>
-<Stack.Screen
-  name="OfferDetail"
-  component={OfferDetailScreen}
-  options={{
-        animation: 'slide_from_right'}}
-/>
-<Stack.Screen
-  name="AvailableOffers"
-  component={AvailableOffersScreen}
-  options={{
-        animation: 'slide_from_right' }}
-/>
-<Stack.Screen
-  name="VendorMyResponses"
-  component={VendorMyResponsesScreen}
-  options={{
-        animation: 'slide_from_right' }}
-/>
+      <Stack.Screen name="MyOffers" component={MyOffersScreen} options={{
+        animation: 'slide_from_right'
+      }} />
+      <Stack.Screen name="OfferDetail" component={OfferDetailScreen} options={{
+        animation: 'slide_from_right'
+      }} />
+      <Stack.Screen name="AvailableOffers" component={AvailableOffersScreen} options={{
+        animation: 'slide_from_right'
+      }} />
+      <Stack.Screen name="VendorMyResponses" component={VendorMyResponsesScreen} options={{
+        animation: 'slide_from_right'
+      }} />
 
           
         </>}

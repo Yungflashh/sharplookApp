@@ -1,20 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  ScrollView,
-  ActivityIndicator,
-  Alert,
-  Image,
-  TextInput,
-  Modal,
-} from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, ActivityIndicator, Alert, Image, TextInput, Modal } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { offerAPI, handleAPIError } from '@/api/api';
-
 interface OfferResponse {
   _id: string;
   vendor: {
@@ -33,7 +22,6 @@ interface OfferResponse {
   respondedAt: string;
   isAccepted: boolean;
 }
-
 interface Offer {
   _id: string;
   title: string;
@@ -56,28 +44,27 @@ interface Offer {
   preferredDate?: string;
   preferredTime?: string;
 }
-
 const OfferDetailScreen: React.FC = () => {
   const navigation = useNavigation();
   const route = useRoute();
-  const { offerId } = route.params as { offerId: string };
-
+  const {
+    offerId
+  } = route.params as {
+    offerId: string;
+  };
   const [loading, setLoading] = useState(true);
   const [offer, setOffer] = useState<Offer | null>(null);
   const [showCounterModal, setShowCounterModal] = useState(false);
   const [selectedResponse, setSelectedResponse] = useState<string | null>(null);
   const [counterPrice, setCounterPrice] = useState('');
   const [submitting, setSubmitting] = useState(false);
-
   useEffect(() => {
     fetchOfferDetail();
   }, []);
-
   const fetchOfferDetail = async () => {
     try {
       setLoading(true);
       const response = await offerAPI.getOfferById(offerId);
-
       if (response.success) {
         setOffer(response.data);
       }
@@ -89,67 +76,50 @@ const OfferDetailScreen: React.FC = () => {
       setLoading(false);
     }
   };
-
   const handleAcceptResponse = async (responseId: string) => {
-    Alert.alert(
-      'Accept Response',
-      'Are you sure you want to accept this response? A booking will be created.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Accept',
-          onPress: async () => {
-            try {
-              setSubmitting(true);
-              const response = await offerAPI.acceptResponse(offerId, responseId);
-
-              if (response.success) {
-                Alert.alert(
-                  'Success',
-                  'Response accepted! Your booking has been created.',
-                  [
-                    {
-                      text: 'View Booking',
-                      onPress: () => {
-                        navigation.navigate('BookingDetail', {
-                          bookingId: response.data.booking._id,
-                        });
-                      },
-                    },
-                  ]
-                );
+    Alert.alert('Accept Response', 'Are you sure you want to accept this response? A booking will be created.', [{
+      text: 'Cancel',
+      style: 'cancel'
+    }, {
+      text: 'Accept',
+      onPress: async () => {
+        try {
+          setSubmitting(true);
+          const response = await offerAPI.acceptResponse(offerId, responseId);
+          if (response.success) {
+            Alert.alert('Success', 'Response accepted! Your booking has been created.', [{
+              text: 'View Booking',
+              onPress: () => {
+                navigation.navigate('BookingDetail', {
+                  bookingId: response.data.booking._id
+                });
               }
-            } catch (error) {
-              const apiError = handleAPIError(error);
-              Alert.alert('Error', apiError.message);
-            } finally {
-              setSubmitting(false);
-            }
-          },
-        },
-      ]
-    );
+            }]);
+          }
+        } catch (error) {
+          const apiError = handleAPIError(error);
+          Alert.alert('Error', apiError.message);
+        } finally {
+          setSubmitting(false);
+        }
+      }
+    }]);
   };
-
   const handleCounterOffer = (responseId: string, currentPrice: number) => {
     setSelectedResponse(responseId);
     setCounterPrice(currentPrice.toString());
     setShowCounterModal(true);
   };
-
   const submitCounterOffer = async () => {
     if (!selectedResponse || !counterPrice) return;
-
     const price = parseFloat(counterPrice);
     if (price <= 0) {
       Alert.alert('Error', 'Please enter a valid price');
       return;
     }
-
     try {
       setSubmitting(true);
       const response = await offerAPI.counterOffer(offerId, selectedResponse, price);
-
       if (response.success) {
         Alert.alert('Success', 'Counter offer submitted successfully');
         setShowCounterModal(false);
@@ -162,54 +132,43 @@ const OfferDetailScreen: React.FC = () => {
       setSubmitting(false);
     }
   };
-
   const handleCloseOffer = async () => {
-    Alert.alert(
-      'Close Offer',
-      'Are you sure you want to close this offer? This cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Close',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              setSubmitting(true);
-              const response = await offerAPI.closeOffer(offerId);
-
-              if (response.success) {
-                Alert.alert('Success', 'Offer closed successfully', [
-                  {
-                    text: 'OK',
-                    onPress: () => navigation.goBack(),
-                  },
-                ]);
-              }
-            } catch (error) {
-              const apiError = handleAPIError(error);
-              Alert.alert('Error', apiError.message);
-            } finally {
-              setSubmitting(false);
-            }
-          },
-        },
-      ]
-    );
+    Alert.alert('Close Offer', 'Are you sure you want to close this offer? This cannot be undone.', [{
+      text: 'Cancel',
+      style: 'cancel'
+    }, {
+      text: 'Close',
+      style: 'destructive',
+      onPress: async () => {
+        try {
+          setSubmitting(true);
+          const response = await offerAPI.closeOffer(offerId);
+          if (response.success) {
+            Alert.alert('Success', 'Offer closed successfully', [{
+              text: 'OK',
+              onPress: () => navigation.goBack()
+            }]);
+          }
+        } catch (error) {
+          const apiError = handleAPIError(error);
+          Alert.alert('Error', apiError.message);
+        } finally {
+          setSubmitting(false);
+        }
+      }
+    }]);
   };
-
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     return date.toLocaleDateString('en-US', {
       month: 'short',
       day: 'numeric',
-      year: 'numeric',
+      year: 'numeric'
     });
   };
-
   const formatPrice = (price: number) => {
     return `₦${price.toLocaleString()}`;
   };
-
   const getStatusColor = (status: string) => {
     switch (status.toLowerCase()) {
       case 'open':
@@ -224,36 +183,29 @@ const OfferDetailScreen: React.FC = () => {
         return 'bg-gray-100 text-gray-800';
     }
   };
-
   if (loading || !offer) {
-    return (
-      <SafeAreaView className="flex-1 bg-gray-50">
+    return <SafeAreaView className="flex-1 bg-gray-50">
         <View className="flex-1 items-center justify-center">
           <ActivityIndicator size="large" color="#9333ea" />
         </View>
-      </SafeAreaView>
-    );
+      </SafeAreaView>;
   }
-
-  return (
-    <SafeAreaView className="flex-1 bg-gray-50">
-      {/* Header */}
+  return <SafeAreaView className="flex-1 bg-gray-50">
+      {}
       <View className="bg-white px-5 py-4 border-b border-gray-100">
         <View className="flex-row items-center justify-between">
           <TouchableOpacity onPress={() => navigation.goBack()}>
             <Ionicons name="arrow-back" size={24} color="#1f2937" />
           </TouchableOpacity>
           <Text className="text-lg font-semibold text-gray-900">Offer Details</Text>
-          {offer.status === 'open' && (
-            <TouchableOpacity onPress={handleCloseOffer} disabled={submitting}>
+          {offer.status === 'open' && <TouchableOpacity onPress={handleCloseOffer} disabled={submitting}>
               <Ionicons name="close-circle-outline" size={24} color="#dc2626" />
-            </TouchableOpacity>
-          )}
+            </TouchableOpacity>}
         </View>
       </View>
 
       <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
-        {/* Offer Info */}
+        {}
         <View className="bg-white p-5 mb-2">
           <View className="flex-row items-start justify-between mb-3">
             <View className="flex-1">
@@ -271,21 +223,14 @@ const OfferDetailScreen: React.FC = () => {
 
           <Text className="text-base text-gray-700 leading-6 mb-4">{offer.description}</Text>
 
-          {/* Images */}
-          {offer.images && offer.images.length > 0 && (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mb-4">
-              {offer.images.map((image, index) => (
-                <Image
-                  key={index}
-                  source={{ uri: image }}
-                  className="w-32 h-32 rounded-xl mr-2"
-                  resizeMode="cover"
-                />
-              ))}
-            </ScrollView>
-          )}
+          {}
+          {offer.images && offer.images.length > 0 && <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mb-4">
+              {offer.images.map((image, index) => <Image key={index} source={{
+            uri: image
+          }} className="w-32 h-32 rounded-xl mr-2" resizeMode="cover" />)}
+            </ScrollView>}
 
-          {/* Details */}
+          {}
           <View className="gap-3">
             <View className="flex-row items-center">
               <Ionicons name="cash-outline" size={20} color="#9333ea" />
@@ -318,35 +263,26 @@ const OfferDetailScreen: React.FC = () => {
           </View>
         </View>
 
-        {/* Responses */}
+        {}
         <View className="bg-white p-5">
           <Text className="text-lg font-bold text-gray-900 mb-4">
             Responses ({offer.responses.length})
           </Text>
 
-          {offer.responses.length === 0 ? (
-            <View className="items-center py-8">
+          {offer.responses.length === 0 ? <View className="items-center py-8">
               <Ionicons name="chatbox-ellipses-outline" size={48} color="#d1d5db" />
               <Text className="text-gray-500 mt-3">No responses yet</Text>
               <Text className="text-sm text-gray-400 text-center mt-1">
                 Vendors will respond to your offer soon
               </Text>
-            </View>
-          ) : (
-            offer.responses.map((response) => (
-              <View
-                key={response._id}
-                className="border border-gray-200 rounded-xl p-4 mb-3"
-                style={{
-                  backgroundColor: response.isAccepted ? '#f0fdf4' : '#fff',
-                }}
-              >
-                {/* Vendor Info */}
+            </View> : offer.responses.map(response => <View key={response._id} className="border border-gray-200 rounded-xl p-4 mb-3" style={{
+          backgroundColor: response.isAccepted ? '#f0fdf4' : '#fff'
+        }}>
+                {}
                 <View className="flex-row items-center justify-between mb-3">
                   <View className="flex-1">
                     <Text className="text-base font-bold text-gray-900">
-                      {response.vendor.vendorProfile.businessName ||
-                        `${response.vendor.firstName} ${response.vendor.lastName}`}
+                      {response.vendor.vendorProfile.businessName || `${response.vendor.firstName} ${response.vendor.lastName}`}
                     </Text>
                     <View className="flex-row items-center mt-1">
                       <Ionicons name="star" size={14} color="#fbbf24" />
@@ -356,14 +292,12 @@ const OfferDetailScreen: React.FC = () => {
                     </View>
                   </View>
 
-                  {response.isAccepted && (
-                    <View className="bg-green-500 px-3 py-1 rounded-full">
+                  {response.isAccepted && <View className="bg-green-500 px-3 py-1 rounded-full">
                       <Text className="text-xs font-bold text-white">Accepted</Text>
-                    </View>
-                  )}
+                    </View>}
                 </View>
 
-                {/* Proposal Details */}
+                {}
                 <View className="bg-gray-50 rounded-lg p-3 mb-3">
                   <View className="flex-row items-center justify-between mb-2">
                     <Text className="text-sm text-gray-600">Proposed Price:</Text>
@@ -372,68 +306,46 @@ const OfferDetailScreen: React.FC = () => {
                     </Text>
                   </View>
 
-                  {response.counterOffer && (
-                    <View className="flex-row items-center justify-between mb-2">
+                  {response.counterOffer && <View className="flex-row items-center justify-between mb-2">
                       <Text className="text-sm text-gray-600">Your Counter:</Text>
                       <Text className="text-base font-semibold text-orange-600">
                         {formatPrice(response.counterOffer)}
                       </Text>
-                    </View>
-                  )}
+                    </View>}
 
-                  {response.estimatedDuration && (
-                    <View className="flex-row items-center justify-between">
+                  {response.estimatedDuration && <View className="flex-row items-center justify-between">
                       <Text className="text-sm text-gray-600">Duration:</Text>
                       <Text className="text-sm font-medium text-gray-700">
                         {response.estimatedDuration} mins
                       </Text>
-                    </View>
-                  )}
+                    </View>}
                 </View>
 
-                {/* Message */}
-                {response.message && (
-                  <View className="mb-3">
+                {}
+                {response.message && <View className="mb-3">
                     <Text className="text-sm text-gray-600 italic">`&quot{response.message}`</Text>
-                  </View>
-                )}
+                  </View>}
 
-                {/* Response Date */}
+                {}
                 <Text className="text-xs text-gray-400 mb-3">
                   Responded {formatDate(response.respondedAt)}
                 </Text>
 
-                {/* Actions */}
-                {offer.status === 'open' && !response.isAccepted && (
-                  <View className="flex-row gap-2">
-                    <TouchableOpacity
-                      className="flex-1 bg-purple-600 py-3 rounded-xl items-center"
-                      onPress={() => handleAcceptResponse(response._id)}
-                      disabled={submitting}
-                    >
-                      {submitting ? (
-                        <ActivityIndicator color="#fff" />
-                      ) : (
-                        <Text className="text-white font-semibold">Accept</Text>
-                      )}
+                {}
+                {offer.status === 'open' && !response.isAccepted && <View className="flex-row gap-2">
+                    <TouchableOpacity className="flex-1 bg-purple-600 py-3 rounded-xl items-center" onPress={() => handleAcceptResponse(response._id)} disabled={submitting}>
+                      {submitting ? <ActivityIndicator color="#fff" /> : <Text className="text-white font-semibold">Accept</Text>}
                     </TouchableOpacity>
 
-                    <TouchableOpacity
-                      className="flex-1 border border-purple-600 py-3 rounded-xl items-center"
-                      onPress={() => handleCounterOffer(response._id, response.proposedPrice)}
-                      disabled={submitting}
-                    >
+                    <TouchableOpacity className="flex-1 border border-purple-600 py-3 rounded-xl items-center" onPress={() => handleCounterOffer(response._id, response.proposedPrice)} disabled={submitting}>
                       <Text className="text-purple-600 font-semibold">Counter Offer</Text>
                     </TouchableOpacity>
-                  </View>
-                )}
-              </View>
-            ))
-          )}
+                  </View>}
+              </View>)}
         </View>
       </ScrollView>
 
-      {/* Counter Offer Modal */}
+      {}
       <Modal visible={showCounterModal} transparent animationType="slide">
         <View className="flex-1 bg-black/50 justify-end">
           <View className="bg-white rounded-t-3xl p-6">
@@ -450,41 +362,21 @@ const OfferDetailScreen: React.FC = () => {
 
             <View className="flex-row items-center border border-gray-300 rounded-xl px-4 mb-6">
               <Ionicons name="cash-outline" size={20} color="#9333ea" />
-              <TextInput
-                className="flex-1 py-3.5 px-3 text-base text-gray-900"
-                placeholder="Enter amount"
-                value={counterPrice}
-                onChangeText={(text) => setCounterPrice(text.replace(/[^0-9]/g, ''))}
-                keyboardType="numeric"
-              />
+              <TextInput className="flex-1 py-3.5 px-3 text-base text-gray-900" placeholder="Enter amount" value={counterPrice} onChangeText={text => setCounterPrice(text.replace(/[^0-9]/g, ''))} keyboardType="numeric" />
             </View>
 
             <View className="flex-row gap-3">
-              <TouchableOpacity
-                className="flex-1 bg-gray-100 py-4 rounded-xl items-center"
-                onPress={() => setShowCounterModal(false)}
-                disabled={submitting}
-              >
+              <TouchableOpacity className="flex-1 bg-gray-100 py-4 rounded-xl items-center" onPress={() => setShowCounterModal(false)} disabled={submitting}>
                 <Text className="text-gray-700 font-semibold">Cancel</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity
-                className="flex-1 bg-purple-600 py-4 rounded-xl items-center"
-                onPress={submitCounterOffer}
-                disabled={submitting}
-              >
-                {submitting ? (
-                  <ActivityIndicator color="#fff" />
-                ) : (
-                  <Text className="text-white font-semibold">Submit</Text>
-                )}
+              <TouchableOpacity className="flex-1 bg-purple-600 py-4 rounded-xl items-center" onPress={submitCounterOffer} disabled={submitting}>
+                {submitting ? <ActivityIndicator color="#fff" /> : <Text className="text-white font-semibold">Submit</Text>}
               </TouchableOpacity>
             </View>
           </View>
         </View>
       </Modal>
-    </SafeAreaView>
-  );
+    </SafeAreaView>;
 };
-
 export default OfferDetailScreen;
