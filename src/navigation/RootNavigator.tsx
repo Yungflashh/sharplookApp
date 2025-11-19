@@ -7,7 +7,7 @@ import MessageScreen from '@/screens/vendor/MessageScreen';
 import MainNavigator from '@/navigation/MainNavigator';
 import ChatScreen from '../components/clientComponent/ChatScreen';
 import CartScreen from '../components/clientComponent/CartScreen';
-import ChatDetailScreen from '@/components/clientComponent/ChatDetailScreen';
+// import ChatDetailScreen from '@/components/clientComponent/ChatDetailScreen';
 import AllVendorsScreen from '@/screens/client/AllVendorsScreen';
 import VendorDetailScreen from '@/screens/client/VendorDetailsScreen';
 import type { RootStackParamList } from '@/types/navigation.types';
@@ -31,6 +31,9 @@ import MyOffersScreen from '@/components/clientComponent/MyOffersScreen';
 import OfferDetailScreen from '@/components/clientComponent/OfferDetailScreen';
 import AvailableOffersScreen from '@/components/vendorComponent/AvailableOffersScreen';
 import VendorMyResponsesScreen from '@/components/vendorComponent/VendorMyResponsesScreen';
+import SetWithdrawalPinScreen from '@/components/clientComponent/ProfleSettings/SetWithdrawalPinScreen';
+import ChatDetailScreen from '@/components/ChatDetailScreen';
+import ChatListScreen from '@/components/ChatListScreen';
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const RootNavigator = () => {
   useDeepLinking();
@@ -89,7 +92,7 @@ const RootNavigator = () => {
           <Stack.Screen name="Message" component={MessageScreen} />
           <Stack.Screen name="Chat" component={ChatScreen} />
           <Stack.Screen name="Cart" component={CartScreen} />
-          <Stack.Screen name="ChatDetail" component={ChatDetailScreen} />
+          {/* <Stack.Screen name="ChatDetail" component={ChatDetailScreen} /> */}
           
           {}
           <Stack.Screen name="AllVendors" component={AllVendorsScreen} options={{
@@ -154,10 +157,16 @@ const RootNavigator = () => {
       <Stack.Screen name="AvailableOffers" component={AvailableOffersScreen} options={{
         animation: 'slide_from_right'
       }} />
-      <Stack.Screen name="VendorMyResponses" component={VendorMyResponsesScreen} options={{
+
+      <Stack.Screen name="SetWithdrawalPin" component={SetWithdrawalPinScreen} options={{
         animation: 'slide_from_right'
       }} />
-
+      <Stack.Screen name="ChatDetail" component={ChatDetailScreen} options={{
+        animation: 'slide_from_right'
+      }} />
+      <Stack.Screen name="ChatList" component={ChatListScreen} options={{
+        animation: 'slide_from_right'
+      }} />
           
         </>}
     </Stack.Navigator>;

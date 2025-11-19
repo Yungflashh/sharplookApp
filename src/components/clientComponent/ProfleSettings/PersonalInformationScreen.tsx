@@ -71,52 +71,50 @@ const PersonalInformationScreen: React.FC = () => {
       Alert.alert('Error', 'Failed to pick image');
     }
   };
-  const uploadProfileImage = async (imageUri: string) => {
-    setUploadingImage(true);
-    try {
-      const formData = new FormData();
-      const filename = imageUri.split('/').pop() || 'profile.jpg';
-      const match = /\.(\w+)$/.exec(filename);
-      const type = match ? `image/${match[1]}` : 'image/jpeg';
-      formData.append('avatar', {
-        uri: imageUri,
-        name: filename,
-        type: type
-      } as any);
-      console.log('📤 Uploading profile image...');
-      const token = await AsyncStorage.getItem('accessToken');
-      const response = await fetch('https://sharplook-be.onrender.com/api/v1/users/profile', {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'multipart/form-data'
-        },
-        body: formData
-      });
-      const result = await response.json();
-      console.log('📥 Upload response:', result);
-      if (response.ok && result.success) {
-        setFormData(prev => ({
-          ...prev,
-          avatar: result.data.avatar
-        }));
-        const userData = await getStoredUser();
-        if (userData) {
-          userData.avatar = result.data.avatar;
-          await updateStoredUser(userData);
-        }
-        Alert.alert('Success', 'Profile picture updated successfully');
-      } else {
-        throw new Error(result.message || 'Failed to upload image');
+ // Updated uploadProfileImage using the API helper
+// Updated uploadProfileImage using the API helper with required fields
+const uploadProfileImage = async (imageUri: string) => {
+  setUploadingImage(true);
+  try {
+    console.log('📤 Starting avatar upload...');
+    
+    // ✅ Pass all required fields along with image
+    const response = await userAPI.uploadAvatar(imageUri, {
+      firstName: formData.firstName,
+      lastName: formData.lastName,
+      phone: formData.phone,
+    });
+
+    console.log('📥 Upload successful:', response);
+
+    if (response.success) {
+      // Update local state
+      const avatarUrl = response.data.user.avatar;
+      
+      setFormData((prev) => ({
+        ...prev,
+        avatar: avatarUrl,
+      }));
+
+      // Update stored user data
+      const userData = await getStoredUser();
+      if (userData) {
+        userData.avatar = avatarUrl;
+        await updateStoredUser(userData);
       }
-    } catch (error) {
-      console.error('Error uploading image:', error);
-      const apiError = handleAPIError(error);
-      Alert.alert('Error', apiError.message);
-    } finally {
-      setUploadingImage(false);
+
+      Alert.alert('Success', 'Profile picture updated successfully');
+    } else {
+      throw new Error(response.message || 'Failed to upload image');
     }
-  };
+  } catch (error) {
+    console.error('❌ Upload error:', error);
+    const apiError = handleAPIError(error);
+    Alert.alert('Error', apiError.message);
+  } finally {
+    setUploadingImage(false);
+  }
+};
   const handleUpdate = async () => {
     if (!formData.firstName.trim() || !formData.lastName.trim()) {
       Alert.alert('Error', 'Please fill in all required fields');

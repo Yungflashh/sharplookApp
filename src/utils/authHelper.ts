@@ -236,3 +236,14 @@ export const getStoredUser = async (): Promise<User | null> => {
     return null;
   }
 };
+// Add this function to your authHelper.ts file
+
+export const getStoredToken = async (): Promise<string | null> => {
+  try {
+    const accessToken = await AsyncStorage.getItem('accessToken');
+    return accessToken;
+  } catch (error) {
+    console.error('Error getting stored token:', error);
+    return null;
+  }
+};

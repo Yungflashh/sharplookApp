@@ -129,34 +129,83 @@ export const authAPI = {
     return response.data;
   }
 };
+//// Add this to your userAPI object in api.ts
+
 export const userAPI = {
   getProfile: async () => {
     const response = await api.get('/users/profile');
     return response.data;
   },
+
   updateProfile: async (userData: any) => {
     const response = await api.put('/users/profile', userData);
     return response.data;
   },
+
+  // ✅ UPDATED: Avatar upload with all required fields
+  uploadAvatar: async (imageUri: string, userData: {
+    firstName: string;
+    lastName: string;
+    phone: string;
+  }) => {
+    try {
+      const token = await AsyncStorage.getItem('accessToken');
+      const filename = imageUri.split('/').pop() || 'avatar.jpg';
+      const match = /\.(\w+)$/.exec(filename);
+      const type = match ? `image/${match[1]}` : 'image/jpeg';
+
+      const formData = new FormData();
+      
+      // ✅ Include all required fields
+      formData.append('firstName', userData.firstName.trim());
+      formData.append('lastName', userData.lastName.trim());
+      formData.append('phone', userData.phone.trim());
+      
+      // Add the image
+      formData.append('image', {
+        uri: imageUri,
+        name: filename,
+        type: type,
+      } as any);
+
+      console.log('📤 Uploading avatar with profile data to:', `${API_BASE_URL}/users/profile`);
+
+      const response = await fetch(`${API_BASE_URL}/users/profile`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          // Don't set Content-Type - let fetch handle it
+        },
+        body: formData,
+      });
+
+      const result = await response.json();
+      console.log('📥 Avatar upload response:', result);
+
+      if (!response.ok) {
+        throw new Error(result.message || 'Failed to upload avatar');
+      }
+
+      return result;
+    } catch (error) {
+      console.error('❌ Avatar upload error:', error);
+      throw error;
+    }
+  },
+
   updatePreferences: async (preferences: {
     notificationsEnabled?: boolean;
     emailNotifications?: boolean;
-    pushNotifications?: boolean;
-    bookingUpdates?: boolean;
-    newMessages?: boolean;
-    paymentAlerts?: boolean;
-    reminderNotifications?: boolean;
-    promotions?: boolean;
-    darkMode?: boolean;
-    fingerprintEnabled?: boolean;
+    // ... rest of your preferences
   }) => {
     const response = await api.put('/users/preferences', preferences);
     return response.data;
   },
+
   deleteAccount: async () => {
     const response = await api.delete('/users/account');
     return response.data;
-  }
+  },
 };
 export const vendorAPI = {
   setupProfile: async (setupData: {
@@ -677,7 +726,194 @@ export const walletAPI = {
   getWithdrawalById: async (withdrawalId: string) => {
     const response = await api.get(`/wallet/withdrawals/${withdrawalId}`);
     return response.data;
-  }
+  },
+  setWithdrawalPin: async (pin: string, confirmPin: string) => {
+  const response = await api.post('/users/withdrawal-pin', {
+    pin,
+    confirmPin,
+  });
+  return response.data;
+},
+
+verifyWithdrawalPin: async (pin: string) => {
+  const response = await api.post('/users/verify-withdrawal-pin', {
+    pin,
+  });
+  return response.data;
+},
+
+changeWithdrawalPin: async (
+  currentPin: string,
+  newPin: string,
+  confirmNewPin: string
+) => {
+  const response = await api.put('/users/withdrawal-pin', {
+    currentPin,
+    newPin,
+    confirmNewPin,
+  });
+  return response.data;
+},
+};
+
+// Add this to your api.ts file, after the notificationAPI section
+
+export const messageAPI = {
+  /**
+   * Get all conversations
+   */
+  getConversations: async (params?: {
+    page?: number;
+    limit?: number;
+  }) => {
+    const response = await api.get('/messages/conversations', { params });
+    return response.data;
+  },
+
+  /**
+   * Get or create conversation with a user
+   */
+  getOrCreateConversation: async (otherUserId: string) => {
+    const response = await api.get(`/messages/conversations/${otherUserId}`);
+    return response.data;
+  },
+
+  /**
+   * Get conversation by ID
+   */
+  getConversationById: async (conversationId: string) => {
+    const response = await api.get(`/messages/conversation/${conversationId}`);
+    return response.data;
+  },
+
+  /**
+   * Send a message
+   */
+  sendMessage: async (messageData: {
+    receiverId: string;
+    messageType: 'text' | 'image' | 'file' | 'audio' | 'video';
+    text?: string;
+    attachments?: Array<{
+      url: string;
+      type: 'image' | 'file' | 'audio' | 'video';
+      name?: string;
+      size?: number;
+    }>;
+    replyTo?: string;
+  }) => {
+    const response = await api.post('/messages/send', messageData);
+    return response.data;
+  },
+
+  /**
+   * Get messages in a conversation
+   */
+  getMessages: async (conversationId: string, params?: {
+    page?: number;
+    limit?: number;
+  }) => {
+    const response = await api.get(`/messages/${conversationId}`, { params });
+    return response.data;
+  },
+
+  /**
+   * Mark message as read
+   */
+  markAsRead: async (messageId: string) => {
+    const response = await api.put(`/messages/${messageId}/read`);
+    return response.data;
+  },
+
+  /**
+   * Mark all messages in conversation as read
+   */
+  markConversationAsRead: async (conversationId: string) => {
+    const response = await api.put(`/messages/conversation/${conversationId}/read`);
+    return response.data;
+  },
+
+  /**
+   * Toggle reaction on a message
+   */
+  toggleReaction: async (messageId: string, emoji: string) => {
+    const response = await api.post(`/messages/${messageId}/reaction`, { emoji });
+    return response.data;
+  },
+
+  /**
+   * Delete a message
+   */
+  deleteMessage: async (messageId: string) => {
+    const response = await api.delete(`/messages/${messageId}`);
+    return response.data;
+  },
+
+  /**
+   * Delete conversation
+   */
+  deleteConversation: async (conversationId: string) => {
+    const response = await api.delete(`/messages/conversation/${conversationId}`);
+    return response.data;
+  },
+
+  /**
+   * Get unread messages count
+   */
+  getUnreadCount: async () => {
+    const response = await api.get('/messages/unread/count');
+    return response.data;
+  },
+
+  /**
+   * Search messages
+   */
+  searchMessages: async (query: string, params?: {
+    page?: number;
+    limit?: number;
+  }) => {
+    const response = await api.get('/messages/search', { 
+      params: { query, ...params } 
+    });
+    return response.data;
+  },
+
+  /**
+   * Upload message attachment
+   */
+  uploadAttachment: async (file: any) => {
+    try {
+      const token = await AsyncStorage.getItem('accessToken');
+      const filename = file.uri.split('/').pop() || 'attachment';
+      const match = /\.(\w+)$/.exec(filename);
+      const type = match ? `image/${match[1]}` : 'image/jpeg';
+
+      const formData = new FormData();
+      formData.append('file', {
+        uri: file.uri,
+        name: filename,
+        type: type,
+      } as any);
+
+      const response = await fetch(`${API_BASE_URL}/messages/upload`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+        body: formData,
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.message || 'Failed to upload attachment');
+      }
+
+      return result;
+    } catch (error) {
+      console.error('❌ Attachment upload error:', error);
+      throw error;
+    }
+  },
 };
 export const servicesAPI = {
   createService: async (serviceData: {
