@@ -284,12 +284,12 @@ const VendorDashboardScreen: React.FC = () => {
           <Text className="text-lg font-bold text-gray-800">Dashboard</Text>
           
           <View className="flex-row items-center gap-3">
-            <TouchableOpacity className="relative w-10 h-10 items-center justify-center" activeOpacity={0.7} onPress={() => navigation.navigate('Message')}>
+            <TouchableOpacity className="relative w-10 h-10 items-center justify-center" activeOpacity={0.7} onPress={() => navigation.navigate('ChatList')}>
               <Ionicons name="chatbubble-ellipses-outline" size={24} color="#eb278d" />
               <View className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white" />
             </TouchableOpacity>
             
-            <TouchableOpacity className="relative w-10 h-10 items-center justify-center" activeOpacity={0.7} onPress={() => navigation.navigate('Notification')}>
+            <TouchableOpacity className="relative w-10 h-10 items-center justify-center" activeOpacity={0.7} onPress={() => navigation.navigate('Notifications')}>
               <Ionicons name="notifications-outline" size={26} color="#eb278d" />
               <View className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white" />
             </TouchableOpacity>

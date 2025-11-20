@@ -110,7 +110,7 @@ const VendorProfileScreen: React.FC = () => {
           title: 'Order History',
           subtitle: 'Track your orders',
           iconFamily: 'ionicons',
-          onPress: () => navigation.navigate("OrderHistory"),
+          onPress: () => navigation.navigate("MyOrders"),
         },
         
       ],
