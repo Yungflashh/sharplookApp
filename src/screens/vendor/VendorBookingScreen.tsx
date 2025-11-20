@@ -24,11 +24,13 @@ type VendorBookingsNavigationProp = NativeStackNavigationProp<RootStackParamList
 interface VendorBooking {
   _id: string;
   bookingNumber?: string;
-  service: {
+  bookingType: 'standard' | 'offer_based';
+  service?: {
     _id: string;
     name: string;
     images?: string[];
   };
+  offer?: string; 
   client: {
     _id: string;
     firstName: string;
@@ -363,6 +365,14 @@ const VendorBookingsScreen: React.FC = () => {
       .join(' ');
   };
 
+  
+  const getBookingTitle = (booking: VendorBooking): string => {
+    if (booking.bookingType === 'offer_based') {
+      return 'Custom Offer Booking';
+    }
+    return booking.service?.name || 'Service Booking';
+  };
+
   const getActionButtons = (booking: VendorBooking) => {
     const isLoading = actionLoading === booking._id;
 
@@ -506,10 +516,19 @@ const VendorBookingsScreen: React.FC = () => {
           }),
         }}
       >
-        {/* Header */}
+        {}
         <View className="flex-row items-start justify-between mb-4">
           <View className="flex-1 mr-3">
-            <Text className="text-lg font-bold text-gray-900 mb-1.5">{booking.service.name}</Text>
+            <Text className="text-lg font-bold text-gray-900 mb-1.5">
+              {getBookingTitle(booking)}
+            </Text>
+            {booking.bookingType === 'offer_based' && (
+              <View className="mb-2">
+                <View className="px-2 py-1 bg-purple-100 rounded-lg self-start">
+                  <Text className="text-xs text-purple-700 font-bold">Offer Based</Text>
+                </View>
+              </View>
+            )}
             <View className="flex-row items-center">
               <View className="w-8 h-8 rounded-full bg-pink-100 items-center justify-center mr-2">
                 <Ionicons name="person" size={16} color="#eb278d" />
@@ -540,7 +559,7 @@ const VendorBookingsScreen: React.FC = () => {
           </View>
         </View>
 
-        {/* Details */}
+        {}
         <View className="bg-gray-50 rounded-2xl p-4 mb-4" style={{ gap: 12 }}>
           <View className="flex-row items-center">
             <View className="w-9 h-9 rounded-xl bg-blue-100 items-center justify-center mr-3">
@@ -615,10 +634,10 @@ const VendorBookingsScreen: React.FC = () => {
           )}
         </View>
 
-        {/* Action Buttons */}
+        {}
         {getActionButtons(booking)}
 
-        {/* View Details */}
+        {}
         <TouchableOpacity
           onPress={() => navigation.navigate('BookingDetail', { bookingId: booking._id })}
           className="mt-3 pt-4 border-t border-gray-100"
@@ -684,7 +703,7 @@ const VendorBookingsScreen: React.FC = () => {
         }}
         scrollEventThrottle={400}
       >
-        {/* Collapsible Header Content */}
+        {}
         <LinearGradient
           colors={['#eb278d', '#eb278d']}
           start={{ x: 0, y: 0 }}
@@ -701,7 +720,7 @@ const VendorBookingsScreen: React.FC = () => {
                 </Text>
               </View>
 
-              {/* Action Icons */}
+              {}
               <View className="flex-row gap-2">
                 <TouchableOpacity
                   onPress={() => navigation.navigate('VendorMyResponses')}
@@ -723,7 +742,7 @@ const VendorBookingsScreen: React.FC = () => {
               </View>
             </View>
 
-            {/* Quick Action Cards */}
+            {}
             <View className="flex-row mb-4" style={{ gap: 8 }}>
               <TouchableOpacity
                 onPress={() => navigation.navigate('AvailableOffers')}
@@ -756,7 +775,7 @@ const VendorBookingsScreen: React.FC = () => {
               </TouchableOpacity>
             </View>
 
-            {/* Stats Cards */}
+            {}
             {stats && (
               <View className="flex-row mb-4" style={{ gap: 12 }}>
                 <View className="flex-1 bg-white/10 rounded-2xl p-4">
@@ -786,14 +805,14 @@ const VendorBookingsScreen: React.FC = () => {
           </View>
         </LinearGradient>
 
-        {/* Sticky Search Bar and Filters */}
+        {}
         <LinearGradient
           colors={['#eb278d', '#eb278d']}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
         >
           <View className="px-5 pb-4">
-            {/* Search Bar */}
+            {}
             <View className="flex-row items-center bg-white/20 rounded-2xl px-4 py-3 mb-4">
               <Ionicons name="search" size={20} color="#fff" />
               <TextInput
@@ -810,7 +829,7 @@ const VendorBookingsScreen: React.FC = () => {
               )}
             </View>
 
-            {/* Filter Tabs */}
+            {}
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
@@ -839,7 +858,7 @@ const VendorBookingsScreen: React.FC = () => {
           </View>
         </LinearGradient>
 
-        {/* Bookings List */}
+        {}
         <View className="px-5 py-4">
           {filteredBookings.length > 0 ? (
             <>

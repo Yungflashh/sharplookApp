@@ -21,7 +21,7 @@ import { RootStackParamList } from '@/types/navigation.types';
 import { productAPI, handleAPIError } from '@/api/api';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const CARD_WIDTH = (SCREEN_WIDTH - 60) / 2; // 2 items per row: 40px padding + 20px gap
+const CARD_WIDTH = (SCREEN_WIDTH - 60) / 2; 
 
 type VendorProductManagementNavigationProp = NativeStackNavigationProp<
   RootStackParamList,
@@ -261,7 +261,7 @@ const VendorProductManagementScreen: React.FC = () => {
         }),
       }}
     >
-      {/* Product Image */}
+      {}
       <View className="relative">
         {product.images && product.images.length > 0 ? (
           <Image
@@ -278,7 +278,7 @@ const VendorProductManagementScreen: React.FC = () => {
           </View>
         )}
 
-        {/* Status Badge */}
+        {}
         <View className="absolute top-2 left-2">
           <View
             className={`px-2 py-1 rounded-full border ${getStatusColor(product.approvalStatus)}`}
@@ -300,7 +300,7 @@ const VendorProductManagementScreen: React.FC = () => {
           </View>
         </View>
 
-        {/* Quick Actions */}
+        {}
         <TouchableOpacity
           onPress={() => {
             Alert.alert('Product Options', '', [
@@ -326,19 +326,19 @@ const VendorProductManagementScreen: React.FC = () => {
         </TouchableOpacity>
       </View>
 
-      {/* Product Details */}
+      {}
       <View className="p-3">
-        {/* Category */}
+        {}
         <Text className="text-gray-500 text-xs mb-1" numberOfLines={1}>
           {product.category?.name || 'No Category'}
         </Text>
 
-        {/* Product Name */}
+        {}
         <Text className="text-gray-900 text-sm font-bold mb-2" numberOfLines={2}>
           {product.name}
         </Text>
 
-        {/* Price & Stock */}
+        {}
         <View className="flex-row items-center justify-between mb-2">
           <Text className="text-pink-600 text-base font-bold">
             {formatPrice(product.finalPrice || product.price)}
@@ -367,7 +367,7 @@ const VendorProductManagementScreen: React.FC = () => {
           </View>
         </View>
 
-        {/* Stats */}
+        {}
         {(product.totalOrders || product.totalSales || product.totalRatings) && (
           <View className="flex-row items-center justify-between pt-2 border-t border-gray-100">
             {product.totalOrders !== undefined && (
@@ -391,7 +391,7 @@ const VendorProductManagementScreen: React.FC = () => {
         )}
       </View>
 
-      {/* Rejection Reason */}
+      {}
       {product.approvalStatus === 'rejected' && product.rejectionReason && (
         <View className="bg-red-50 px-3 py-2 border-t border-red-100">
           <View className="flex-row items-start">
@@ -469,7 +469,7 @@ const VendorProductManagementScreen: React.FC = () => {
 
   return (
     <SafeAreaView className="flex-1 bg-gray-50" edges={['top']}>
-      {/* Header */}
+      {}
       <LinearGradient
         colors={['#eb278d', '#f472b6']}
         start={{ x: 0, y: 0 }}
@@ -499,7 +499,7 @@ const VendorProductManagementScreen: React.FC = () => {
             </TouchableOpacity>
           </View>
 
-          {/* Search Bar */}
+          {}
           <View className="flex-row items-center bg-white/20 rounded-2xl px-4 py-3 mb-4">
             <Ionicons name="search" size={20} color="#fff" />
             <TextInput
@@ -516,7 +516,7 @@ const VendorProductManagementScreen: React.FC = () => {
             )}
           </View>
 
-          {/* Filter Chips */}
+          {}
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -543,7 +543,7 @@ const VendorProductManagementScreen: React.FC = () => {
         </View>
       </LinearGradient>
 
-      {/* Product Grid - 2x2 Layout */}
+      {}
       <ScrollView
         className="flex-1"
         showsVerticalScrollIndicator={false}
@@ -568,7 +568,7 @@ const VendorProductManagementScreen: React.FC = () => {
         </View>
       </ScrollView>
 
-      {/* Floating Action Button */}
+      {}
       <TouchableOpacity
         onPress={handleAddProduct}
         className="absolute bottom-6 right-6 w-16 h-16 rounded-full bg-pink-500 items-center justify-center"

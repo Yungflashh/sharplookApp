@@ -330,7 +330,7 @@ const VendorProductManagementScreen: React.FC = () => {
           {}
           <View className="flex-row items-center justify-between">
             <Text className="text-pink-600 text-base font-bold">{formatPrice(product.finalPrice || product.price)}</Text>
-            {/* jjj */}
+            {}
             <View
               className={`px-2 py-1 rounded-lg ${
                 product.stock === 0
