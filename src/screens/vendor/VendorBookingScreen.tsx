@@ -23,11 +23,13 @@ type VendorBookingsNavigationProp = NativeStackNavigationProp<RootStackParamList
 interface VendorBooking {
   _id: string;
   bookingNumber?: string;
-  service: {
+  bookingType: 'standard' | 'offer_based';
+  service?: {
     _id: string;
     name: string;
     images?: string[];
   };
+  offer?: string; // Offer ID for offer-based bookings
   client: {
     _id: string;
     firstName: string;
@@ -362,6 +364,14 @@ const VendorBookingsScreen: React.FC = () => {
       .join(' ');
   };
 
+  // Helper function to get booking title
+  const getBookingTitle = (booking: VendorBooking): string => {
+    if (booking.bookingType === 'offer_based') {
+      return 'Custom Offer Booking';
+    }
+    return booking.service?.name || 'Service Booking';
+  };
+
   const getActionButtons = (booking: VendorBooking) => {
     const isLoading = actionLoading === booking._id;
 
@@ -548,7 +558,16 @@ const VendorBookingsScreen: React.FC = () => {
         {/* Header */}
         <View className="flex-row items-start justify-between mb-4">
           <View className="flex-1 mr-3">
-            <Text className="text-lg font-bold text-gray-900 mb-2">{booking.service.name}</Text>
+            <Text className="text-lg font-bold text-gray-900 mb-2">
+              {getBookingTitle(booking)}
+            </Text>
+            {booking.bookingType === 'offer_based' && (
+              <View className="mb-2">
+                <View className="px-2 py-1 bg-purple-100 rounded-lg self-start">
+                  <Text className="text-xs text-purple-700 font-bold">Offer Based</Text>
+                </View>
+              </View>
+            )}
             <View className="flex-row items-center">
               <LinearGradient
                 colors={['#eb278d', '#f472b6']}
