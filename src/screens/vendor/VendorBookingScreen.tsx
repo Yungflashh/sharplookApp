@@ -101,48 +101,33 @@ const VendorBookingsScreen: React.FC = () => {
   const calculateStatsFromBookings = useCallback((bookingsData: VendorBooking[]) => {
     const completedBookings = bookingsData.filter((b) => b.status.toLowerCase() === 'completed');
     const inProgressBookings = bookingsData.filter((b) => b.status.toLowerCase() === 'in_progress');
-    const completedBookings = bookingsData.filter((b) => b.status.toLowerCase() === 'completed');
-    const inProgressBookings = bookingsData.filter((b) => b.status.toLowerCase() === 'in_progress');
     const totalEarnings = completedBookings.reduce((sum, booking) => sum + (booking.totalAmount || 0), 0);
-
 
     const calculatedStats: VendorStats = {
       totalBookings: bookingsData.length,
-      pendingBookings: bookingsData.filter((b) => b.status.toLowerCase() === 'pending').length,
       pendingBookings: bookingsData.filter((b) => b.status.toLowerCase() === 'pending').length,
       activeBookings: inProgressBookings.length,
       completedBookings: completedBookings.length,
       totalEarnings: totalEarnings,
       pendingPayments: bookingsData.filter((b) => b.paymentStatus === 'pending').length,
-      pendingPayments: bookingsData.filter((b) => b.paymentStatus === 'pending').length,
     };
-
 
     setStats(calculatedStats);
   }, []);
-
 
   const fetchBookings = async (pageNum: number = 1, append: boolean = false) => {
     try {
       if (pageNum === 1) setLoading(true);
 
-
       const response = await bookingAPI.getMyBookings({
         role: 'vendor',
         page: pageNum,
         limit: 20,
-        limit: 20,
       });
-
 
       console.log('Vendor bookings response:', response);
 
-
       if (response.success) {
-        const newBookings = Array.isArray(response.data)
-          ? response.data
-          : response.data.bookings || [];
-
         const newBookings = Array.isArray(response.data)
           ? response.data
           : response.data.bookings || [];
@@ -156,9 +141,7 @@ const VendorBookingsScreen: React.FC = () => {
           setBookings(newBookings);
         }
 
-
         calculateStatsFromBookings(updatedBookings);
-
 
         const hasNext = response.meta?.pagination?.hasNextPage ?? newBookings.length === 20;
         setHasMore(hasNext);
@@ -172,7 +155,6 @@ const VendorBookingsScreen: React.FC = () => {
       setLoading(false);
     }
   };
-
 
   const fetchStats = async () => {
     try {
@@ -188,7 +170,6 @@ const VendorBookingsScreen: React.FC = () => {
     }
   };
 
-
   useEffect(() => {
     fetchBookings();
     fetchStats();
@@ -201,23 +182,12 @@ const VendorBookingsScreen: React.FC = () => {
     }, [])
   );
 
-
-  useFocusEffect(
-    useCallback(() => {
-      fetchBookings(1, false);
-      fetchStats();
-    }, [])
-  );
-
   useEffect(() => {
     let filtered = bookings;
 
-
     if (activeFilter !== 'all') {
       filtered = filtered.filter((booking) => booking.status.toLowerCase() === activeFilter);
-      filtered = filtered.filter((booking) => booking.status.toLowerCase() === activeFilter);
     }
-
 
     if (searchQuery) {
       filtered = filtered.filter((booking) => {
@@ -236,19 +206,16 @@ const VendorBookingsScreen: React.FC = () => {
     setFilteredBookings(filtered);
   }, [bookings, activeFilter, searchQuery]);
 
-
   const onRefresh = useCallback(() => {
     setRefreshing(true);
     Promise.all([fetchBookings(1, false), fetchStats()]).finally(() => setRefreshing(false));
   }, []);
-
 
   const loadMore = () => {
     if (!loading && hasMore) {
       fetchBookings(page + 1, true);
     }
   };
-
 
   const handleAcceptBooking = (bookingId: string) => {
     Alert.alert('Accept Booking', 'Do you want to accept this booking request?', [
@@ -274,7 +241,6 @@ const VendorBookingsScreen: React.FC = () => {
       },
     ]);
   };
-
 
   const handleRejectBooking = (bookingId: string) => {
     Alert.prompt(
@@ -312,7 +278,6 @@ const VendorBookingsScreen: React.FC = () => {
     );
   };
 
-
   const handleStartService = (bookingId: string) => {
     Alert.alert('Start Service', 'Mark this booking as in progress?', [
       { text: 'Cancel', style: 'cancel' },
@@ -337,7 +302,6 @@ const VendorBookingsScreen: React.FC = () => {
       },
     ]);
   };
-
 
   const handleCompleteService = (bookingId: string) => {
     Alert.alert('Complete Service', 'Mark this service as completed?', [
@@ -364,22 +328,18 @@ const VendorBookingsScreen: React.FC = () => {
     ]);
   };
 
-
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     return date.toLocaleDateString('en-US', {
       month: 'short',
       day: 'numeric',
       year: 'numeric',
-      year: 'numeric',
     });
   };
-
 
   const formatPrice = (price: number) => {
     return `₦${price.toLocaleString()}`;
   };
-
 
   const getStatusColor = (status: string) => {
     switch (status.toLowerCase()) {
@@ -398,7 +358,6 @@ const VendorBookingsScreen: React.FC = () => {
     }
   };
 
-
   const getStatusIcon = (status: string) => {
     switch (status.toLowerCase()) {
       case 'pending':
@@ -416,22 +375,15 @@ const VendorBookingsScreen: React.FC = () => {
     }
   };
 
-
   const formatStatus = (status: string) => {
-    return status
-      .split('_')
-      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-      .join(' ');
     return status
       .split('_')
       .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
       .join(' ');
   };
 
-
   const getActionButtons = (booking: VendorBooking) => {
     const isLoading = actionLoading === booking._id;
-
 
     if (booking.status === 'pending') {
       return (
@@ -477,10 +429,7 @@ const VendorBookingsScreen: React.FC = () => {
           </TouchableOpacity>
         </View>
       );
-        </View>
-      );
     }
-
 
     if (booking.status === 'accepted') {
       return (
@@ -506,7 +455,6 @@ const VendorBookingsScreen: React.FC = () => {
       );
     }
 
-
     if (booking.status === 'in_progress') {
       return (
         <TouchableOpacity
@@ -531,10 +479,8 @@ const VendorBookingsScreen: React.FC = () => {
       );
     }
 
-
     return null;
   };
-
 
   const getBookingCounts = () => {
     return {
@@ -544,14 +490,8 @@ const VendorBookingsScreen: React.FC = () => {
       in_progress: bookings.filter((b) => b.status === 'in_progress').length,
       completed: bookings.filter((b) => b.status === 'completed').length,
       cancelled: bookings.filter((b) => b.status === 'cancelled').length,
-      pending: bookings.filter((b) => b.status === 'pending').length,
-      accepted: bookings.filter((b) => b.status === 'accepted').length,
-      in_progress: bookings.filter((b) => b.status === 'in_progress').length,
-      completed: bookings.filter((b) => b.status === 'completed').length,
-      cancelled: bookings.filter((b) => b.status === 'cancelled').length,
     };
   };
-
 
   const counts = getBookingCounts();
 
@@ -728,27 +668,17 @@ const VendorBookingsScreen: React.FC = () => {
         {activeFilter !== 'all'
           ? `You don't have any ${formatStatus(activeFilter).toLowerCase()} bookings`
           : "You don't have any bookings yet. They'll appear here once clients book your services."}
-        {activeFilter !== 'all'
-          ? `You don't have any ${formatStatus(activeFilter).toLowerCase()} bookings`
-          : "You don't have any bookings yet. They'll appear here once clients book your services."}
       </Text>
-    </View>
-  );
-
     </View>
   );
 
   if (loading && page === 1) {
     return (
       <SafeAreaView className="flex-1 bg-gray-50">
-    return (
-      <SafeAreaView className="flex-1 bg-gray-50">
         <View className="flex-1 items-center justify-center">
           <ActivityIndicator size="large" color="#eb278d" />
           <Text className="text-gray-500 text-sm mt-4 font-medium">Loading bookings...</Text>
         </View>
-      </SafeAreaView>
-    );
       </SafeAreaView>
     );
   }
@@ -928,27 +858,13 @@ const VendorBookingsScreen: React.FC = () => {
           {filteredBookings.length > 0 ? (
             <>
               {filteredBookings.map((booking) => renderBookingCard(booking))}
-          {filteredBookings.length > 0 ? (
-            <>
-              {filteredBookings.map((booking) => renderBookingCard(booking))}
 
-              {loading && page > 1 && (
-                <View className="py-4">
               {loading && page > 1 && (
                 <View className="py-4">
                   <ActivityIndicator size="small" color="#eb278d" />
                 </View>
               )}
-                </View>
-              )}
 
-              {!hasMore && filteredBookings.length > 10 && (
-                <Text className="text-center text-gray-400 text-sm py-4">No more bookings</Text>
-              )}
-            </>
-          ) : (
-            renderEmptyState()
-          )}
               {!hasMore && filteredBookings.length > 10 && (
                 <Text className="text-center text-gray-400 text-sm py-4">No more bookings</Text>
               )}
@@ -960,9 +876,6 @@ const VendorBookingsScreen: React.FC = () => {
       </ScrollView>
     </SafeAreaView>
   );
-    </SafeAreaView>
-  );
 };
-
 
 export default VendorBookingsScreen;
