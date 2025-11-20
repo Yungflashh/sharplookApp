@@ -87,7 +87,7 @@ const VendorDashboardScreen: React.FC = () => {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
   const scaleAnim = useRef(new Animated.Value(0.95)).current;
-  const balanceOpacity = useRef(new Animated.Value(0)).current;
+
   const fetchDashboardData = async () => {
     try {
       setLoading(true);
@@ -204,13 +204,7 @@ const VendorDashboardScreen: React.FC = () => {
       useNativeDriver: true
     })]).start();
   }, []);
-  useEffect(() => {
-    Animated.timing(balanceOpacity, {
-      toValue: showBalance ? 1 : 0,
-      duration: 300,
-      useNativeDriver: true
-    }).start();
-  }, [showBalance]);
+
   const onRefresh = useCallback(() => {
     setRefreshing(true);
     fetchDashboardData().finally(() => {
@@ -277,10 +271,10 @@ const VendorDashboardScreen: React.FC = () => {
     if (hour < 18) return 'Good afternoon! 👋';
     return 'Good evening! 👋';
   };
-  return <SafeAreaView className="flex-1 bg-gray-50">
+  return <SafeAreaView className="flex-1 bg-gray-50 p-0 m-0">
       <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
       
-      {}
+
       <View className="bg-white shadow-sm">
         <View className="flex-row items-center justify-between px-5 py-4">
           <TouchableOpacity className="w-10 h-10 items-center justify-center" activeOpacity={0.7} onPress={() => setSidebarVisible(true)}>
@@ -303,8 +297,8 @@ const VendorDashboardScreen: React.FC = () => {
         </View>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{
-      paddingBottom: 100
+      <ScrollView className='flex-1 h-full' showsVerticalScrollIndicator={false} contentContainerStyle={{
+      paddingBottom: 150
     }} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#eb278d" colors={['#eb278d']} />}>
         {}
         <Animated.View className="bg-white px-5 py-6" style={{
@@ -335,78 +329,54 @@ const VendorDashboardScreen: React.FC = () => {
               </View>
             </View>
             
-            {}
-            <TouchableOpacity activeOpacity={0.7}>
-              <LinearGradient colors={['#eb278d', '#f472b6']} start={{
-              x: 0,
-              y: 0
-            }} end={{
-              x: 1,
-              y: 1
-            }} className="w-16 h-16 rounded-full p-0.5">
-                <View className="w-full h-full rounded-full bg-white items-center justify-center">
-                  <Ionicons name="person" size={32} color="#eb278d" />
-                </View>
-              </LinearGradient>
-            </TouchableOpacity>
           </View>
         </Animated.View>
 
         {}
-        <View className="px-5 py-4">
-          <Animated.View style={{
-          transform: [{
-            scale: scaleAnim
-          }],
-          opacity: fadeAnim
-        }}>
-            <LinearGradient colors={['#eb278d', '#f472b6']} start={{
-            x: 0,
-            y: 0
-          }} end={{
-            x: 1,
-            y: 1
-          }} className="rounded-3xl p-6 overflow-hidden" style={{
-            shadowColor: '#eb278d',
-            shadowOffset: {
-              width: 0,
-              height: 8
-            },
-            shadowOpacity: 0.3,
-            shadowRadius: 16,
-            elevation: 12
-          }}>
-              {}
-              <View className="absolute top-0 right-0 w-40 h-40 rounded-full opacity-10 bg-white" style={{
-              transform: [{
-                translateX: 20
-              }, {
-                translateY: -60
-              }]
-            }} />
-              
-              {}
-              <View className="flex-row items-center justify-between mb-6">
+        <View className="px-5 py-4" >
+            <LinearGradient 
+              colors={['#eb278d', '#f472b6']} 
+              start={{ x: 0, y: 0 }} 
+              end={{ x: 1, y: 1 }} 
+              style={{
+                padding: 20,
+                borderRadius: 24,
+                overflow: 'hidden',
+                shadowColor: '#eb278d',
+                shadowOffset: { width: 0, height: 8 },
+                shadowOpacity: 0.3,
+                shadowRadius: 16,
+                elevation: 12
+              }}
+            >
+              <View className="flex-row items-center justify-between mb-4">
                 <View className="flex-row items-center gap-2">
                   <Text className="text-white/90 text-sm font-medium">
                     Total Balance
                   </Text>
-                  <TouchableOpacity onPress={() => setShowBalance(!showBalance)} className="w-8 h-8 items-center justify-center rounded-full" style={{
-                  backgroundColor: 'rgba(255, 255, 255, 0.2)'
-                }} activeOpacity={0.7}>
+                  <TouchableOpacity 
+                    onPress={() => setShowBalance(!showBalance)} 
+                    className="w-8 h-8 items-center justify-center rounded-full" 
+                    style={{ backgroundColor: 'rgba(255, 255, 255, 0.2)' }} 
+                    activeOpacity={0.7}
+                  >
                     <Ionicons name={showBalance ? "eye-outline" : "eye-off-outline"} size={16} color="#fff" />
                   </TouchableOpacity>
                 </View>
                 
-                <TouchableOpacity className="flex-row items-center gap-1 bg-white/20 px-3 py-1.5 rounded-full" activeOpacity={0.7} onPress={async () => {
-                try {
-                  const transactions = await walletAPI.getTransactions();
-                  console.log('Transactions:', transactions);
-                } catch (error) {
-                  const apiError = handleAPIError(error);
-                  Alert.alert('Error', apiError.message);
-                }
-              }}>
+                <TouchableOpacity 
+                  className="flex-row items-center gap-1 bg-white/20 px-3 py-1.5 rounded-full" 
+                  activeOpacity={0.7} 
+                  onPress={async () => {
+                    try {
+                      const transactions = await walletAPI.getTransactions();
+                      console.log('Transactions:', transactions);
+                    } catch (error) {
+                      const apiError = handleAPIError(error);
+                      Alert.alert('Error', apiError.message);
+                    }
+                  }}
+                >
                   <Text className="text-white text-xs font-semibold">
                     History
                   </Text>
@@ -414,11 +384,9 @@ const VendorDashboardScreen: React.FC = () => {
                 </TouchableOpacity>
               </View>
 
-              {}
-              <View className="mb-8">
-                {showBalance ? <Animated.View style={{
-                opacity: balanceOpacity
-              }}>
+              <View className="mb-6">
+                {showBalance ? (
+                  <View>
                     <Text className="text-white text-4xl font-bold tracking-tight mb-2">
                       {formatBalance(walletData.balance)}
                     </Text>
@@ -437,28 +405,38 @@ const VendorDashboardScreen: React.FC = () => {
                         </Text>
                       </View>
                     </View>
-                  </Animated.View> : <View>
+                  </View>
+                ) : (
+                  <View>
                     <Text className="text-white text-4xl font-bold tracking-widest mb-2">
                       ••••••
                     </Text>
                     <Text className="text-white/70 text-sm">Tap eye to view balance</Text>
-                  </View>}
+                  </View>
+                )}
               </View>
 
-              {}
               <View className="flex-row gap-4">
-                <TouchableOpacity className="flex-1 bg-white/20 rounded-2xl py-3 items-center flex-row justify-center gap-2" activeOpacity={0.7} onPress={() => {
-                console.log('Fund Wallet');
-              }}>
+                <TouchableOpacity 
+                  className="flex-1 bg-white/20 rounded-2xl py-3 items-center flex-row justify-center gap-2" 
+                  activeOpacity={0.7} 
+                  onPress={() => {
+                    console.log('Fund Wallet');
+                  }}
+                >
                   <View className="w-10 h-10 rounded-full bg-white/30 items-center justify-center">
                     <Ionicons name="add" size={20} color="#fff" />
                   </View>
                   <Text className="text-white text-sm font-semibold">Fund Wallet</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity className="flex-1 bg-white rounded-2xl py-3 items-center flex-row justify-center gap-2" activeOpacity={0.7} onPress={() => {
-                console.log('Withdraw');
-              }}>
+                <TouchableOpacity 
+                  className="flex-1 bg-white rounded-2xl py-3 items-center flex-row justify-center gap-2" 
+                  activeOpacity={0.7} 
+                  onPress={() => {
+                    console.log('Withdraw');
+                  }}
+                >
                   <View className="w-10 h-10 rounded-full bg-pink-100 items-center justify-center">
                     <Ionicons name="arrow-up" size={20} color="#eb278d" />
                   </View>
@@ -466,7 +444,6 @@ const VendorDashboardScreen: React.FC = () => {
                 </TouchableOpacity>
               </View>
             </LinearGradient>
-          </Animated.View>
         </View>
 
         {}
@@ -616,8 +593,6 @@ const VendorDashboardScreen: React.FC = () => {
             </View>}
         </View>
       </ScrollView>
-
-      {}
       <VendorSidebar visible={sidebarVisible} onClose={() => setSidebarVisible(false)} userName={vendorProfile?.businessName || 'Vendor'} userEmail="vendor@example.com" />
     </SafeAreaView>;
 };
