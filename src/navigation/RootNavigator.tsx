@@ -40,6 +40,7 @@ import MarketplaceScreen from '@/screens/client/MarketPlaceScreen';
 import ProductDetailScreen from '@/components/ProductDetailScreen';
 import CheckoutScreen from '@/components/Checkoutscreen';
 import AddEditProductScreen from '@/components/vendorComponent/Addeditproductscreen';
+import VendorAnalyticsScreen from '@/components/vendorComponent/VendorAnalyticsScreen';
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const RootNavigator = () => {
   useDeepLinking();
@@ -188,6 +189,9 @@ const RootNavigator = () => {
         animation: 'slide_from_right'
       }} />
       <Stack.Screen name="Checkout" component={CheckoutScreen} options={{
+        animation: 'slide_from_right'
+      }} />
+      <Stack.Screen name="Analytics" component={VendorAnalyticsScreen} options={{
         animation: 'slide_from_right'
       }} />
           

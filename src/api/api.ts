@@ -756,6 +756,32 @@ changeWithdrawalPin: async (
 },
 };
 
+// Add this to your existing api.ts file
+// In your React Native api.ts file - ONLY add these analytics endpoints
+
+export const analyticsAPI = {
+  /**
+   * Get comprehensive vendor analytics
+   * GET /api/v1/analytics/vendor
+   */
+  getVendorAnalytics: async (params?: {
+    startDate?: string;
+    endDate?: string;
+  }) => {
+    const response = await api.get('/vendorAnalytics/vendor', { params });
+    return response.data;
+  },
+
+  /**
+   * Get quick stats for vendor dashboard
+   * GET /api/v1/analytics/vendor/quick-stats
+   */
+  getVendorQuickStats: async () => {
+    const response = await api.get('/vendorAnalytics/vendor/quick-stats');
+    return response.data;
+  },
+};
+
 
 
 export const messageAPI = {
