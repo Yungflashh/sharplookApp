@@ -10,6 +10,7 @@ import {
   RefreshControl,
   Platform,
   TextInput,
+  Dimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -18,6 +19,9 @@ import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '@/types/navigation.types';
 import { productAPI, handleAPIError } from '@/api/api';
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const CARD_WIDTH = (SCREEN_WIDTH - 60) / 2; 
 
 type VendorProductManagementNavigationProp = NativeStackNavigationProp<
   RootStackParamList,
@@ -241,10 +245,11 @@ const VendorProductManagementScreen: React.FC = () => {
   const renderProductCard = (product: Product) => (
     <TouchableOpacity
       key={product._id}
-      onPress={() => navigation.navigate('ProductDetail', { productId: product._id })}
+      // onPress={() => navigation.navigate('ProductDetail', { productId: product._id })}
       activeOpacity={0.9}
-      className="bg-white rounded-2xl mb-4"
+      className="bg-white rounded-2xl overflow-hidden"
       style={{
+        width: CARD_WIDTH,
         ...Platform.select({
           ios: {
             shadowColor: '#000',
@@ -256,148 +261,146 @@ const VendorProductManagementScreen: React.FC = () => {
         }),
       }}
     >
-      <View className="flex-row p-4">
-        {}
+      {}
+      <View className="relative">
         {product.images && product.images.length > 0 ? (
           <Image
             source={{ uri: product.images[0] }}
-            className="w-24 h-24 rounded-xl"
+            style={{ width: '100%', height: 140 }}
             resizeMode="cover"
           />
         ) : (
-          <View className="w-24 h-24 rounded-xl bg-gray-200 items-center justify-center">
+          <View 
+            style={{ width: '100%', height: 140 }}
+            className="bg-gray-200 items-center justify-center"
+          >
             <Ionicons name="image-outline" size={32} color="#9ca3af" />
           </View>
         )}
 
         {}
-        <View className="flex-1 ml-3">
-          {}
-          <View className="flex-row items-center justify-between mb-2">
-            <View
-              className={`px-3 py-1 rounded-full border-2 ${getStatusColor(product.approvalStatus)}`}
-            >
-              <View className="flex-row items-center" style={{ gap: 4 }}>
-                <Ionicons
-                  name={getStatusIcon(product.approvalStatus) as any}
-                  size={12}
-                  color={
-                    product.approvalStatus === 'approved'
-                      ? '#15803d'
-                      : product.approvalStatus === 'rejected'
-                      ? '#dc2626'
-                      : '#ca8a04'
-                  }
-                />
-                <Text className="text-xs font-bold capitalize">{product.approvalStatus}</Text>
-              </View>
-            </View>
-
-            {}
-            <TouchableOpacity
-              onPress={() => {
-                Alert.alert('Product Options', '', [
-                  {
-                    text: 'Edit',
-                    onPress: () => handleEditProduct(product._id),
-                  },
-                  {
-                    text: 'Update Stock',
-                    onPress: () => handleUpdateStock(product),
-                  },
-                  {
-                    text: 'Delete',
-                    style: 'destructive',
-                    onPress: () => handleDeleteProduct(product._id),
-                  },
-                  { text: 'Cancel', style: 'cancel' },
-                ]);
-              }}
-              className="w-8 h-8 rounded-full bg-gray-100 items-center justify-center"
-            >
-              <Ionicons name="ellipsis-vertical" size={16} color="#6b7280" />
-            </TouchableOpacity>
-          </View>
-
-          {}
-          <Text className="text-gray-900 text-sm font-bold mb-1" numberOfLines={2}>
-            {product.name}
-          </Text>
-
-          {}
-          <Text className="text-gray-500 text-xs mb-2">{product.category?.name || 'No Category'}</Text>
-
-          {}
-          <View className="flex-row items-center justify-between">
-            <Text className="text-pink-600 text-base font-bold">{formatPrice(product.finalPrice || product.price)}</Text>
-            {}
-            <View
-              className={`px-2 py-1 rounded-lg ${
-                product.stock === 0
-                  ? 'bg-red-100'
-                  : product.stock < 10
-                  ? 'bg-orange-100'
-                  : 'bg-green-100'
-              }`}
-            >
-              <Text
-                className={`text-xs font-bold ${
-                  product.stock === 0
-                    ? 'text-red-700'
-                    : product.stock < 10
-                    ? 'text-orange-700'
-                    : 'text-green-700'
-                }`}
-              >
-                Stock: {product.stock}
-              </Text>
+        <View className="absolute top-2 left-2">
+          <View
+            className={`px-2 py-1 rounded-full border ${getStatusColor(product.approvalStatus)}`}
+          >
+            <View className="flex-row items-center" style={{ gap: 4 }}>
+              <Ionicons
+                name={getStatusIcon(product.approvalStatus) as any}
+                size={10}
+                color={
+                  product.approvalStatus === 'approved'
+                    ? '#15803d'
+                    : product.approvalStatus === 'rejected'
+                    ? '#dc2626'
+                    : '#ca8a04'
+                }
+              />
+              <Text className="text-xs font-bold capitalize">{product.approvalStatus}</Text>
             </View>
           </View>
         </View>
+
+        {}
+        <TouchableOpacity
+          onPress={() => {
+            Alert.alert('Product Options', '', [
+              {
+                text: 'Edit',
+                onPress: () => handleEditProduct(product._id),
+              },
+              {
+                text: 'Update Stock',
+                onPress: () => handleUpdateStock(product),
+              },
+              {
+                text: 'Delete',
+                style: 'destructive',
+                onPress: () => handleDeleteProduct(product._id),
+              },
+              { text: 'Cancel', style: 'cancel' },
+            ]);
+          }}
+          className="absolute top-2 right-2 w-7 h-7 rounded-full bg-white/90 items-center justify-center"
+        >
+          <Ionicons name="ellipsis-vertical" size={14} color="#6b7280" />
+        </TouchableOpacity>
       </View>
 
       {}
-      {(product.totalOrders || product.totalSales || product.totalRatings) && (
-        <View className="border-t border-gray-100 px-4 py-3">
-          <View className="flex-row items-center justify-between">
+      <View className="p-3">
+        {}
+        <Text className="text-gray-500 text-xs mb-1" numberOfLines={1}>
+          {product.category?.name || 'No Category'}
+        </Text>
+
+        {}
+        <Text className="text-gray-900 text-sm font-bold mb-2" numberOfLines={2}>
+          {product.name}
+        </Text>
+
+        {}
+        <View className="flex-row items-center justify-between mb-2">
+          <Text className="text-pink-600 text-base font-bold">
+            {formatPrice(product.finalPrice || product.price)}
+          </Text>
+          
+          <View
+            className={`px-2 py-1 rounded ${
+              product.stock === 0
+                ? 'bg-red-100'
+                : product.stock < 10
+                ? 'bg-orange-100'
+                : 'bg-green-100'
+            }`}
+          >
+            <Text
+              className={`text-xs font-bold ${
+                product.stock === 0
+                  ? 'text-red-700'
+                  : product.stock < 10
+                  ? 'text-orange-700'
+                  : 'text-green-700'
+              }`}
+            >
+              {product.stock}
+            </Text>
+          </View>
+        </View>
+
+        {}
+        {(product.totalOrders || product.totalSales || product.totalRatings) && (
+          <View className="flex-row items-center justify-between pt-2 border-t border-gray-100">
             {product.totalOrders !== undefined && (
               <View className="flex-row items-center">
-                <Ionicons name="cart" size={14} color="#9ca3af" />
+                <Ionicons name="cart" size={12} color="#9ca3af" />
                 <Text className="text-gray-600 text-xs ml-1">
-                  {product.totalOrders || 0} orders
-                </Text>
-              </View>
-            )}
-
-            {product.totalSales !== undefined && (
-              <View className="flex-row items-center">
-                <Ionicons name="cash" size={14} color="#9ca3af" />
-                <Text className="text-gray-600 text-xs ml-1">
-                  {formatPrice(product.totalSales || 0)} sales
+                  {product.totalOrders || 0}
                 </Text>
               </View>
             )}
 
             {product.totalRatings && product.totalRatings > 0 && (
               <View className="flex-row items-center">
-                <Ionicons name="star" size={14} color="#fbbf24" />
+                <Ionicons name="star" size={12} color="#fbbf24" />
                 <Text className="text-gray-600 text-xs ml-1">
-                  {product.rating?.toFixed(1) || 0} ({product.totalRatings})
+                  {product.rating?.toFixed(1) || 0}
                 </Text>
               </View>
             )}
           </View>
-        </View>
-      )}
+        )}
+      </View>
 
       {}
       {product.approvalStatus === 'rejected' && product.rejectionReason && (
-        <View className="bg-red-50 px-4 py-3 border-t border-red-100">
+        <View className="bg-red-50 px-3 py-2 border-t border-red-100">
           <View className="flex-row items-start">
-            <Ionicons name="alert-circle" size={16} color="#dc2626" />
+            <Ionicons name="alert-circle" size={14} color="#dc2626" />
             <View className="flex-1 ml-2">
-              <Text className="text-red-900 text-xs font-semibold mb-1">Rejection Reason:</Text>
-              <Text className="text-red-700 text-xs">{product.rejectionReason}</Text>
+              <Text className="text-red-900 text-xs font-semibold mb-0.5">Rejection:</Text>
+              <Text className="text-red-700 text-xs" numberOfLines={2}>
+                {product.rejectionReason}
+              </Text>
             </View>
           </View>
         </View>
@@ -476,11 +479,11 @@ const VendorProductManagementScreen: React.FC = () => {
         <View className="px-5 pt-4">
           <View className="flex-row items-center justify-between mb-4">
             <TouchableOpacity
-          onPress={() => navigation.goBack()}
-          className="w-10 h-10 rounded-full bg-white/20 items-center justify-center mr-3"
-        >
-          <Ionicons name="arrow-back" size={24} color="#fff" />
-        </TouchableOpacity>
+              onPress={() => navigation.goBack()}
+              className="w-10 h-10 rounded-full bg-white/20 items-center justify-center mr-3"
+            >
+              <Ionicons name="arrow-back" size={24} color="#fff" />
+            </TouchableOpacity>
             <View>
               <Text className="text-white text-2xl font-bold mb-1">My Products</Text>
               <Text className="text-white/80 text-sm">
@@ -548,9 +551,17 @@ const VendorProductManagementScreen: React.FC = () => {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#eb278d" />
         }
       >
-        <View className="px-5 py-4">
+        <View style={{ paddingHorizontal: 20, paddingVertical: 16 }}>
           {filteredProducts.length > 0 ? (
-            filteredProducts.map(renderProductCard)
+            <View 
+              style={{ 
+                flexDirection: 'row', 
+                flexWrap: 'wrap',
+                gap: 20,
+              }}
+            >
+              {filteredProducts.map(renderProductCard)}
+            </View>
           ) : (
             renderEmptyState()
           )}
