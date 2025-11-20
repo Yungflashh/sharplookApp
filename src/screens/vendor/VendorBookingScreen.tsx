@@ -9,7 +9,6 @@ import {
   Alert,
   TextInput,
   Platform,
-  Animated,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -372,41 +371,61 @@ const VendorBookingsScreen: React.FC = () => {
           <TouchableOpacity
             onPress={() => handleRejectBooking(booking._id)}
             disabled={isLoading}
-            className="flex-1 bg-red-500 py-3 rounded-xl"
-            style={{
-              shadowColor: '#ef4444',
-              shadowOffset: { width: 0, height: 2 },
-              shadowOpacity: 0.2,
-              shadowRadius: 4,
-              elevation: 2,
-            }}
+            className="flex-1 rounded-xl overflow-hidden"
             activeOpacity={0.8}
           >
-            {isLoading ? (
-              <ActivityIndicator size="small" color="#fff" />
-            ) : (
-              <Text className="text-white text-center font-bold text-sm">Reject</Text>
-            )}
+            <LinearGradient
+              colors={['#ef4444', '#dc2626']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              className="py-3"
+              style={{
+                shadowColor: '#ef4444',
+                shadowOffset: { width: 0, height: 4 },
+                shadowOpacity: 0.3,
+                shadowRadius: 6,
+                elevation: 4,
+              }}
+            >
+              {isLoading ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <View className="flex-row items-center justify-center">
+                  <Ionicons name="close-circle" size={18} color="#fff" />
+                  <Text className="text-white text-center font-bold text-sm ml-1.5">Reject</Text>
+                </View>
+              )}
+            </LinearGradient>
           </TouchableOpacity>
 
           <TouchableOpacity
             onPress={() => handleAcceptBooking(booking._id)}
             disabled={isLoading}
-            className="flex-1 bg-green-500 py-3 rounded-xl"
-            style={{
-              shadowColor: '#10b981',
-              shadowOffset: { width: 0, height: 2 },
-              shadowOpacity: 0.2,
-              shadowRadius: 4,
-              elevation: 2,
-            }}
+            className="flex-1 rounded-xl overflow-hidden"
             activeOpacity={0.8}
           >
-            {isLoading ? (
-              <ActivityIndicator size="small" color="#fff" />
-            ) : (
-              <Text className="text-white text-center font-bold text-sm">Accept</Text>
-            )}
+            <LinearGradient
+              colors={['#10b981', '#059669']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              className="py-3"
+              style={{
+                shadowColor: '#10b981',
+                shadowOffset: { width: 0, height: 4 },
+                shadowOpacity: 0.3,
+                shadowRadius: 6,
+                elevation: 4,
+              }}
+            >
+              {isLoading ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <View className="flex-row items-center justify-center">
+                  <Ionicons name="checkmark-circle" size={18} color="#fff" />
+                  <Text className="text-white text-center font-bold text-sm ml-1.5">Accept</Text>
+                </View>
+              )}
+            </LinearGradient>
           </TouchableOpacity>
         </View>
       );
@@ -417,21 +436,31 @@ const VendorBookingsScreen: React.FC = () => {
         <TouchableOpacity
           onPress={() => handleStartService(booking._id)}
           disabled={isLoading}
-          className="bg-purple-500 py-3 rounded-xl"
-          style={{
-            shadowColor: '#a855f7',
-            shadowOffset: { width: 0, height: 2 },
-            shadowOpacity: 0.2,
-            shadowRadius: 4,
-            elevation: 2,
-          }}
+          className="rounded-xl overflow-hidden"
           activeOpacity={0.8}
         >
-          {isLoading ? (
-            <ActivityIndicator size="small" color="#fff" />
-          ) : (
-            <Text className="text-white text-center font-bold text-sm">Start Service</Text>
-          )}
+          <LinearGradient
+            colors={['#a855f7', '#9333ea']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            className="py-3"
+            style={{
+              shadowColor: '#a855f7',
+              shadowOffset: { width: 0, height: 4 },
+              shadowOpacity: 0.3,
+              shadowRadius: 6,
+              elevation: 4,
+            }}
+          >
+            {isLoading ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <View className="flex-row items-center justify-center">
+                <Ionicons name="play-circle" size={20} color="#fff" />
+                <Text className="text-white text-center font-bold text-sm ml-2">Start Service</Text>
+              </View>
+            )}
+          </LinearGradient>
         </TouchableOpacity>
       );
     }
@@ -441,21 +470,31 @@ const VendorBookingsScreen: React.FC = () => {
         <TouchableOpacity
           onPress={() => handleCompleteService(booking._id)}
           disabled={isLoading}
-          className="bg-green-500 py-3 rounded-xl"
-          style={{
-            shadowColor: '#10b981',
-            shadowOffset: { width: 0, height: 2 },
-            shadowOpacity: 0.2,
-            shadowRadius: 4,
-            elevation: 2,
-          }}
+          className="rounded-xl overflow-hidden"
           activeOpacity={0.8}
         >
-          {isLoading ? (
-            <ActivityIndicator size="small" color="#fff" />
-          ) : (
-            <Text className="text-white text-center font-bold text-sm">Mark Complete</Text>
-          )}
+          <LinearGradient
+            colors={['#10b981', '#059669']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            className="py-3"
+            style={{
+              shadowColor: '#10b981',
+              shadowOffset: { width: 0, height: 4 },
+              shadowOpacity: 0.3,
+              shadowRadius: 6,
+              elevation: 4,
+            }}
+          >
+            {isLoading ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <View className="flex-row items-center justify-center">
+                <Ionicons name="checkmark-done-circle" size={20} color="#fff" />
+                <Text className="text-white text-center font-bold text-sm ml-2">Mark Complete</Text>
+              </View>
+            )}
+          </LinearGradient>
         </TouchableOpacity>
       );
     }
@@ -491,17 +530,17 @@ const VendorBookingsScreen: React.FC = () => {
       activeOpacity={0.95}
     >
       <View
-        className="bg-white rounded-3xl p-5 mb-4"
+        className="bg-white rounded-3xl p-5 mb-4 border border-gray-100"
         style={{
           ...Platform.select({
             ios: {
               shadowColor: '#000',
-              shadowOffset: { width: 0, height: 2 },
-              shadowOpacity: 0.08,
-              shadowRadius: 12,
+              shadowOffset: { width: 0, height: 4 },
+              shadowOpacity: 0.1,
+              shadowRadius: 16,
             },
             android: {
-              elevation: 4,
+              elevation: 5,
             },
           }),
         }}
@@ -509,18 +548,26 @@ const VendorBookingsScreen: React.FC = () => {
         {/* Header */}
         <View className="flex-row items-start justify-between mb-4">
           <View className="flex-1 mr-3">
-            <Text className="text-lg font-bold text-gray-900 mb-1.5">{booking.service.name}</Text>
+            <Text className="text-lg font-bold text-gray-900 mb-2">{booking.service.name}</Text>
             <View className="flex-row items-center">
-              <View className="w-8 h-8 rounded-full bg-pink-100 items-center justify-center mr-2">
-                <Ionicons name="person" size={16} color="#eb278d" />
-              </View>
-              <Text className="text-sm text-gray-600 font-medium">
+              <LinearGradient
+                colors={['#eb278d', '#f472b6']}
+                className="w-8 h-8 rounded-full items-center justify-center mr-2"
+              >
+                <Ionicons name="person" size={16} color="#fff" />
+              </LinearGradient>
+              <Text className="text-sm text-gray-700 font-semibold">
                 {booking.client.firstName} {booking.client.lastName}
               </Text>
             </View>
           </View>
 
-          <View className={`px-3 py-1.5 rounded-full border-2 ${getStatusColor(booking.status)}`}>
+          <View
+            className={`px-3 py-2 rounded-full ${getStatusColor(booking.status)}`}
+            style={{
+              borderWidth: 1.5,
+            }}
+          >
             <View className="flex-row items-center" style={{ gap: 4 }}>
               <Ionicons
                 name={getStatusIcon(booking.status) as any}
@@ -532,7 +579,9 @@ const VendorBookingsScreen: React.FC = () => {
                     ? '#dc2626'
                     : booking.status === 'pending'
                     ? '#ca8a04'
-                    : '#2563eb'
+                    : booking.status === 'accepted'
+                    ? '#2563eb'
+                    : '#7c3aed'
                 }
               />
               <Text className="text-xs font-bold">{formatStatus(booking.status)}</Text>
@@ -540,15 +589,18 @@ const VendorBookingsScreen: React.FC = () => {
           </View>
         </View>
 
-        {/* Details */}
-        <View className="bg-gray-50 rounded-2xl p-4 mb-4" style={{ gap: 12 }}>
+        {/* Details with Gradient Icons */}
+        <View className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-2xl p-4 mb-4" style={{ gap: 14 }}>
           <View className="flex-row items-center">
-            <View className="w-9 h-9 rounded-xl bg-blue-100 items-center justify-center mr-3">
-              <Ionicons name="calendar" size={18} color="#3b82f6" />
-            </View>
+            <LinearGradient
+              colors={['#3b82f6', '#2563eb']}
+              className="w-10 h-10 rounded-xl items-center justify-center mr-3"
+            >
+              <Ionicons name="calendar" size={20} color="#fff" />
+            </LinearGradient>
             <View className="flex-1">
-              <Text className="text-xs text-gray-500 mb-0.5">Date & Time</Text>
-              <Text className="text-sm font-semibold text-gray-900">
+              <Text className="text-xs text-gray-500 mb-0.5 font-medium">Date & Time</Text>
+              <Text className="text-sm font-bold text-gray-900">
                 {formatDate(booking.scheduledDate)}
                 {booking.scheduledTime && ` • ${booking.scheduledTime}`}
               </Text>
@@ -557,12 +609,15 @@ const VendorBookingsScreen: React.FC = () => {
 
           {booking.location && (
             <View className="flex-row items-center">
-              <View className="w-9 h-9 rounded-xl bg-green-100 items-center justify-center mr-3">
-                <Ionicons name="location" size={18} color="#10b981" />
-              </View>
+              <LinearGradient
+                colors={['#10b981', '#059669']}
+                className="w-10 h-10 rounded-xl items-center justify-center mr-3"
+              >
+                <Ionicons name="location" size={20} color="#fff" />
+              </LinearGradient>
               <View className="flex-1">
-                <Text className="text-xs text-gray-500 mb-0.5">Location</Text>
-                <Text className="text-sm font-semibold text-gray-900" numberOfLines={1}>
+                <Text className="text-xs text-gray-500 mb-0.5 font-medium">Location</Text>
+                <Text className="text-sm font-bold text-gray-900" numberOfLines={1}>
                   {booking.location.address}
                 </Text>
               </View>
@@ -571,11 +626,14 @@ const VendorBookingsScreen: React.FC = () => {
 
           <View className="flex-row items-center justify-between">
             <View className="flex-row items-center flex-1">
-              <View className="w-9 h-9 rounded-xl bg-purple-100 items-center justify-center mr-3">
-                <Ionicons name="cash" size={18} color="#a855f7" />
-              </View>
+              <LinearGradient
+                colors={['#a855f7', '#9333ea']}
+                className="w-10 h-10 rounded-xl items-center justify-center mr-3"
+              >
+                <Ionicons name="cash" size={20} color="#fff" />
+              </LinearGradient>
               <View className="flex-1">
-                <Text className="text-xs text-gray-500 mb-0.5">Amount</Text>
+                <Text className="text-xs text-gray-500 mb-0.5 font-medium">Amount</Text>
                 <Text className="text-lg font-bold text-pink-600">
                   {formatPrice(booking.totalAmount)}
                 </Text>
@@ -583,13 +641,22 @@ const VendorBookingsScreen: React.FC = () => {
             </View>
 
             <View
-              className={`px-3 py-1.5 rounded-xl ${
+              className={`px-3 py-2 rounded-xl ${
                 booking.paymentStatus === 'escrowed'
                   ? 'bg-blue-100'
                   : booking.paymentStatus === 'released'
                   ? 'bg-green-100'
                   : 'bg-yellow-100'
               }`}
+              style={{
+                borderWidth: 1.5,
+                borderColor:
+                  booking.paymentStatus === 'escrowed'
+                    ? '#3b82f6'
+                    : booking.paymentStatus === 'released'
+                    ? '#10b981'
+                    : '#f59e0b',
+              }}
             >
               <Text
                 className={`text-xs font-bold ${
@@ -608,7 +675,7 @@ const VendorBookingsScreen: React.FC = () => {
           {booking.bookingNumber && (
             <View className="flex-row items-center pt-3 border-t border-gray-200">
               <Ionicons name="receipt" size={14} color="#9ca3af" />
-              <Text className="text-xs text-gray-500 ml-2 font-medium">
+              <Text className="text-xs text-gray-500 ml-2 font-semibold">
                 {booking.bookingNumber}
               </Text>
             </View>
@@ -618,14 +685,27 @@ const VendorBookingsScreen: React.FC = () => {
         {/* Action Buttons */}
         {getActionButtons(booking)}
 
-        {/* View Details */}
+        {/* View Details with Gradient */}
         <TouchableOpacity
           onPress={() => navigation.navigate('BookingDetail', { bookingId: booking._id })}
           className="mt-3 pt-4 border-t border-gray-100"
         >
           <View className="flex-row items-center justify-center">
-            <Text className="text-sm text-pink-600 font-bold mr-1">View Full Details</Text>
-            <Ionicons name="chevron-forward" size={18} color="#eb278d" />
+            <LinearGradient
+              colors={['#eb278d', '#f472b6']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={{
+                paddingHorizontal: 16,
+                paddingVertical: 8,
+                borderRadius: 20,
+              }}
+            >
+              <View className="flex-row items-center">
+                <Text className="text-white font-bold text-sm mr-1">View Full Details</Text>
+                <Ionicons name="arrow-forward-circle" size={18} color="#fff" />
+              </View>
+            </LinearGradient>
           </View>
         </TouchableOpacity>
       </View>
