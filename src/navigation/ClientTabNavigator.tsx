@@ -5,6 +5,7 @@ import type { ClientTabParamList } from '@/types/navigation.types';
 import ClientDashboardScreen from '@/screens/client/ClientDashboardScreen';
 import ClientProfileScreen from '@/screens/client/ClientProfileScreen';
 import BookingsScreen from '@/screens/client/BookingScreen';
+import MarketplaceScreen from '@/screens/client/MarketPlaceScreen';
 const Tab = createBottomTabNavigator<ClientTabParamList>();
 const ClientTabNavigator = () => {
   return <Tab.Navigator screenOptions={{
@@ -40,6 +41,12 @@ const ClientTabNavigator = () => {
     }} />
       
       <Tab.Screen name="Bookings" component={BookingsScreen} options={{
+      tabBarIcon: ({
+        color,
+        size
+      }) => <Ionicons name="calendar" size={size} color={color} />
+    }} />
+      <Tab.Screen name="MarketPlace" component={MarketplaceScreen} options={{
       tabBarIcon: ({
         color,
         size

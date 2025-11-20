@@ -6,6 +6,8 @@ import VendorDashboardScreen from '@/screens/vendor/VendorDashboardScreen';
 import VendorProfileScreen from '@/screens/vendor/VendoreProfileScreen';
 import VendorBooking from '@/screens/vendor/VendorBookingScreen';
 import VendorServicesScreen from '@/screens/vendor/VendorServicesScreen';
+import AddEditProductScreen from '@/screens/vendor/Addeditproductscreen';
+import VendorProductManagementScreen from '@/screens/vendor/Vendorproductmanagementscreen';
 const Tab = createBottomTabNavigator<VendorTabParamList>();
 const VendorTabNavigator = () => {
   return <Tab.Navigator screenOptions={{
@@ -53,6 +55,14 @@ const VendorTabNavigator = () => {
       }) => <Ionicons name={focused ? "calendar" : "calendar-outline"} size={size} color={color} />
     }} />
       
+      
+      <Tab.Screen name="My Products" component={VendorProductManagementScreen} options={{
+      tabBarIcon: ({
+        color,
+        size,
+        focused
+      }) => <Ionicons name={focused ? "briefcase" : "briefcase-outline"} size={size} color={color} />
+    }} />
       <Tab.Screen name="Services" component={VendorServicesScreen} options={{
       tabBarIcon: ({
         color,

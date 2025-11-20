@@ -1146,6 +1146,619 @@ export const servicesAPI = {
     return response.data;
   }
 };
+
+// ==================== PRODUCT API ====================
+export const productAPI = {
+  /**
+   * Get all products (public - approved products only)
+   */
+  getAllProducts: async (params?: {
+    page?: number;
+    limit?: number;
+    category?: string;
+    subCategory?: string;
+    seller?: string;
+    minPrice?: number;
+    maxPrice?: number;
+    condition?: 'new' | 'refurbished' | 'used';
+    brand?: string;
+    tags?: string;
+    search?: string;
+    isFeatured?: boolean;
+    isSponsored?: boolean;
+    sortBy?: 'createdAt' | 'price' | 'rating' | 'orders' | 'views';
+    sortOrder?: 'asc' | 'desc';
+  }) => {
+    const response = await api.get('/products', { params });
+    return response.data;
+  },
+
+  /**
+   * Get product by ID
+   */
+  getProductById: async (productId: string, incrementView: boolean = true) => {
+    const response = await api.get(`/products/${productId}`, {
+      params: { incrementView }
+    });
+    return response.data;
+  },
+
+  /**
+   * Get featured products
+   */
+  getFeaturedProducts: async (limit: number = 10) => {
+    const response = await api.get('/products/featured', {
+      params: { limit }
+    });
+    return response.data;
+  },
+
+  /**
+   * Get sponsored products
+   */
+  getSponsoredProducts: async (limit: number = 10) => {
+    const response = await api.get('/products/sponsored', {
+      params: { limit }
+    });
+    return response.data;
+  },
+
+  /**
+   * Create product (Vendor/Admin)
+   */
+  createProduct: async (productData: {
+    name: string;
+    description: string;
+    shortDescription?: string;
+    category: string;
+    subCategory?: string;
+    tags?: string[];
+    price: number;
+    compareAtPrice?: number;
+    costPrice?: number;
+    stock: number;
+    lowStockThreshold?: number;
+    sku?: string;
+    condition?: 'new' | 'refurbished' | 'used';
+    brand?: string;
+    weight?: number;
+    deliveryOptions: {
+      homeDelivery?: boolean;
+      pickup?: boolean;
+      deliveryFee?: number;
+      estimatedDeliveryDays?: number;
+    };
+    variants?: Array<{
+      name: string;
+      options: string[];
+      priceModifier?: number;
+    }>;
+    dimensions?: {
+      length?: number;
+      width?: number;
+      height?: number;
+      unit?: string;
+    };
+    discount?: {
+      type?: 'percentage' | 'fixed';
+      value?: number;
+      startDate?: string;
+      endDate?: string;
+    };
+  }, images: any[]) => {
+    try {
+      const token = await AsyncStorage.getItem('accessToken');
+
+      if (!images || images.length === 0) {
+        throw new Error('At least one product image is required');
+      }
+
+      const formData = new FormData();
+
+      // Add all product data
+      formData.append('name', productData.name);
+      formData.append('description', productData.description);
+      if (productData.shortDescription) {
+        formData.append('shortDescription', productData.shortDescription);
+      }
+      formData.append('category', productData.category);
+      if (productData.subCategory) {
+        formData.append('subCategory', productData.subCategory);
+      }
+      
+      if (productData.tags && productData.tags.length > 0) {
+        formData.append('tags', JSON.stringify(productData.tags));
+      }
+
+      formData.append('price', String(productData.price));
+      if (productData.compareAtPrice) {
+        formData.append('compareAtPrice', String(productData.compareAtPrice));
+      }
+      if (productData.costPrice) {
+        formData.append('costPrice', String(productData.costPrice));
+      }
+
+      formData.append('stock', String(productData.stock));
+      if (productData.lowStockThreshold) {
+        formData.append('lowStockThreshold', String(productData.lowStockThreshold));
+      }
+
+      if (productData.sku) {
+        formData.append('sku', productData.sku);
+      }
+      if (productData.condition) {
+        formData.append('condition', productData.condition);
+      }
+      if (productData.brand) {
+        formData.append('brand', productData.brand);
+      }
+      if (productData.weight) {
+        formData.append('weight', String(productData.weight));
+      }
+
+      formData.append('deliveryOptions', JSON.stringify(productData.deliveryOptions));
+
+      if (productData.variants && productData.variants.length > 0) {
+        formData.append('variants', JSON.stringify(productData.variants));
+      }
+
+      if (productData.dimensions) {
+        formData.append('dimensions', JSON.stringify(productData.dimensions));
+      }
+
+      if (productData.discount) {
+        formData.append('discount', JSON.stringify(productData.discount));
+      }
+
+      // Add images
+      for (let i = 0; i < images.length; i++) {
+        const image = images[i];
+        if (image.uri && !image.uri.startsWith('http')) {
+          formData.append('images', {
+            uri: image.uri,
+            type: image.type || 'image/jpeg',
+            name: image.name || `product_${i}.jpg`
+          } as any);
+        }
+      }
+
+      console.log('📤 Creating product...');
+
+      const response = await fetch(`${API_BASE_URL}/products`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+        body: formData,
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.message || 'Failed to create product');
+      }
+
+      return result;
+    } catch (error) {
+      console.error('❌ Create product error:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Update product (Vendor/Admin)
+   */
+  updateProduct: async (productId: string, productData: any, newImages?: any[]) => {
+    try {
+      const token = await AsyncStorage.getItem('accessToken');
+
+      const formData = new FormData();
+
+      // Add all fields
+      Object.keys(productData).forEach(key => {
+        const value = productData[key];
+        if (value !== undefined && value !== null) {
+          if (typeof value === 'object' && !Array.isArray(value)) {
+            formData.append(key, JSON.stringify(value));
+          } else if (Array.isArray(value)) {
+            formData.append(key, JSON.stringify(value));
+          } else {
+            formData.append(key, String(value));
+          }
+        }
+      });
+
+      // Add new images if any
+      if (newImages && newImages.length > 0) {
+        for (let i = 0; i < newImages.length; i++) {
+          const image = newImages[i];
+          if (image.uri && !image.uri.startsWith('http')) {
+            formData.append('images', {
+              uri: image.uri,
+              type: image.type || 'image/jpeg',
+              name: image.name || `product_${i}.jpg`
+            } as any);
+          }
+        }
+      }
+
+      const response = await fetch(`${API_BASE_URL}/products/${productId}`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+        body: formData,
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.message || 'Failed to update product');
+      }
+
+      return result;
+    } catch (error) {
+      console.error('❌ Update product error:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Delete product (Vendor/Admin)
+   */
+  deleteProduct: async (productId: string) => {
+    const response = await api.delete(`/products/${productId}`);
+    return response.data;
+  },
+
+  /**
+   * Get seller's products (Vendor/Admin)
+   */
+  getMyProducts: async (params?: {
+    page?: number;
+    limit?: number;
+  }) => {
+    const response = await api.get('/products/seller/my-products', { params });
+    return response.data;
+  },
+
+  /**
+   * Update stock (Vendor/Admin)
+   */
+  updateStock: async (productId: string, quantity: number) => {
+    const response = await api.patch(`/products/${productId}/stock`, { quantity });
+    return response.data;
+  },
+
+  // ==================== ADMIN ONLY ====================
+
+  /**
+   * Get pending products (Admin)
+   */
+  getPendingProducts: async (params?: {
+    page?: number;
+    limit?: number;
+  }) => {
+    const response = await api.get('/products/admin/pending', { params });
+    return response.data;
+  },
+
+  /**
+   * Approve product (Admin)
+   */
+  approveProduct: async (productId: string) => {
+    const response = await api.post(`/products/${productId}/approve`);
+    return response.data;
+  },
+
+  /**
+   * Reject product (Admin)
+   */
+  rejectProduct: async (productId: string, reason: string) => {
+    const response = await api.post(`/products/${productId}/reject`, { reason });
+    return response.data;
+  },
+
+  /**
+   * Feature product (Admin)
+   */
+  featureProduct: async (productId: string, featuredUntil: string) => {
+    const response = await api.post(`/products/${productId}/feature`, { featuredUntil });
+    return response.data;
+  },
+
+  /**
+   * Sponsor product (Admin)
+   */
+  sponsorProduct: async (productId: string, sponsoredUntil: string, amount: number) => {
+    const response = await api.post(`/products/${productId}/sponsor`, { 
+      sponsoredUntil, 
+      amount 
+    });
+    return response.data;
+  },
+};
+
+// ==================== ORDER API ====================
+export const orderAPI = {
+  /**
+   * Create order (Customer)
+   */
+  createOrder: async (orderData: {
+    items: Array<{
+      product: string;
+      quantity: number;
+      selectedVariant?: {
+        name: string;
+        option: string;
+      };
+    }>;
+    deliveryType: 'home_delivery' | 'pickup';
+    deliveryAddress?: {
+      fullName: string;
+      phone: string;
+      address: string;
+      city: string;
+      state: string;
+      country: string;
+      additionalInfo?: string;
+    };
+    paymentMethod: 'card' | 'bank_transfer' | 'wallet' | 'ussd';
+    customerNotes?: string;
+  }) => {
+    const response = await api.post('/orders', orderData);
+    return response.data;
+  },
+
+  /**
+   * Get order by ID
+   */
+  getOrderById: async (orderId: string) => {
+    const response = await api.get(`/orders/${orderId}`);
+    return response.data;
+  },
+
+  /**
+   * Get customer's orders
+   */
+  getMyOrders: async (params?: {
+    page?: number;
+    limit?: number;
+    status?: string;
+  }) => {
+    const response = await api.get('/orders/customer/my-orders', { params });
+    return response.data;
+  },
+
+  /**
+   * Get customer order statistics
+   */
+  getCustomerOrderStats: async () => {
+    const response = await api.get('/orders/customer/stats');
+    return response.data;
+  },
+
+  /**
+   * Confirm delivery (Customer or Seller)
+   */
+  confirmDelivery: async (orderId: string, role: 'customer' | 'seller') => {
+    const response = await api.post(`/orders/${orderId}/confirm-delivery`, { role });
+    return response.data;
+  },
+
+  /**
+   * Cancel order
+   */
+  cancelOrder: async (orderId: string, reason: string) => {
+    const response = await api.post(`/orders/${orderId}/cancel`, { reason });
+    return response.data;
+  },
+
+  // ==================== SELLER ROUTES ====================
+
+  /**
+   * Get seller's orders
+   */
+  getMySellerOrders: async (params?: {
+    page?: number;
+    limit?: number;
+    status?: string;
+  }) => {
+    const response = await api.get('/orders/seller/my-orders', { params });
+    return response.data;
+  },
+
+  /**
+   * Get seller order statistics
+   */
+  getSellerOrderStats: async () => {
+    const response = await api.get('/orders/seller/stats');
+    return response.data;
+  },
+
+  /**
+   * Update order status (Seller)
+   */
+  updateOrderStatus: async (orderId: string, status: string, note?: string) => {
+    const response = await api.patch(`/orders/${orderId}/status`, { status, note });
+    return response.data;
+  },
+
+  /**
+   * Add tracking information (Seller)
+   */
+  addTrackingInfo: async (orderId: string, trackingNumber: string, courierService: string) => {
+    const response = await api.post(`/orders/${orderId}/tracking`, { 
+      trackingNumber, 
+      courierService 
+    });
+    return response.data;
+  },
+
+  // ==================== ADMIN ROUTES ====================
+
+  /**
+   * Get all orders (Admin)
+   */
+  getAllOrders: async (params?: {
+    page?: number;
+    limit?: number;
+    status?: string;
+    seller?: string;
+    customer?: string;
+    startDate?: string;
+    endDate?: string;
+  }) => {
+    const response = await api.get('/orders', { params });
+    return response.data;
+  },
+};
+
+// ==================== CART (Local Storage) ====================
+export const cartAPI = {
+  /**
+   * Get cart from local storage
+   */
+  getCart: async (): Promise<any[]> => {
+    try {
+      const cart = await AsyncStorage.getItem('cart');
+      return cart ? JSON.parse(cart) : [];
+    } catch (error) {
+      console.error('Error getting cart:', error);
+      return [];
+    }
+  },
+
+  /**
+   * Add item to cart
+   */
+  addToCart: async (item: {
+    product: any;
+    quantity: number;
+    selectedVariant?: {
+      name: string;
+      option: string;
+    };
+  }) => {
+    try {
+      const cart = await cartAPI.getCart();
+      
+      // Check if item already exists
+      const existingIndex = cart.findIndex(
+        (cartItem: any) => 
+          cartItem.product._id === item.product._id &&
+          JSON.stringify(cartItem.selectedVariant) === JSON.stringify(item.selectedVariant)
+      );
+
+      if (existingIndex > -1) {
+        // Update quantity
+        cart[existingIndex].quantity += item.quantity;
+      } else {
+        // Add new item
+        cart.push(item);
+      }
+
+      await AsyncStorage.setItem('cart', JSON.stringify(cart));
+      return cart;
+    } catch (error) {
+      console.error('Error adding to cart:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Update cart item quantity
+   */
+  updateCartItem: async (productId: string, quantity: number, variant?: any) => {
+    try {
+      const cart = await cartAPI.getCart();
+      
+      const itemIndex = cart.findIndex(
+        (item: any) => 
+          item.product._id === productId &&
+          JSON.stringify(item.selectedVariant) === JSON.stringify(variant)
+      );
+
+      if (itemIndex > -1) {
+        if (quantity <= 0) {
+          cart.splice(itemIndex, 1);
+        } else {
+          cart[itemIndex].quantity = quantity;
+        }
+      }
+
+      await AsyncStorage.setItem('cart', JSON.stringify(cart));
+      return cart;
+    } catch (error) {
+      console.error('Error updating cart:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Remove item from cart
+   */
+  removeFromCart: async (productId: string, variant?: any) => {
+    try {
+      const cart = await cartAPI.getCart();
+      
+      const filtered = cart.filter(
+        (item: any) => 
+          !(item.product._id === productId &&
+          JSON.stringify(item.selectedVariant) === JSON.stringify(variant))
+      );
+
+      await AsyncStorage.setItem('cart', JSON.stringify(filtered));
+      return filtered;
+    } catch (error) {
+      console.error('Error removing from cart:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Clear cart
+   */
+  clearCart: async () => {
+    try {
+      await AsyncStorage.removeItem('cart');
+      return [];
+    } catch (error) {
+      console.error('Error clearing cart:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Get cart item count
+   */
+  getCartCount: async (): Promise<number> => {
+    try {
+      const cart = await cartAPI.getCart();
+      return cart.reduce((total: number, item: any) => total + item.quantity, 0);
+    } catch (error) {
+      console.error('Error getting cart count:', error);
+      return 0;
+    }
+  },
+
+  /**
+   * Get cart total
+   */
+  getCartTotal: async (): Promise<number> => {
+    try {
+      const cart = await cartAPI.getCart();
+      return cart.reduce((total: number, item: any) => {
+        const price = item.product.finalPrice || item.product.price;
+        return total + (price * item.quantity);
+      }, 0);
+    } catch (error) {
+      console.error('Error getting cart total:', error);
+      return 0;
+    }
+  },
+};
+
 export const offerAPI = {
   createOffer: async (offerData: {
     title: string;

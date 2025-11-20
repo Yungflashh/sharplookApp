@@ -34,6 +34,12 @@ import VendorMyResponsesScreen from '@/components/vendorComponent/VendorMyRespon
 import SetWithdrawalPinScreen from '@/components/clientComponent/ProfleSettings/SetWithdrawalPinScreen';
 import ChatDetailScreen from '@/components/ChatDetailScreen';
 import ChatListScreen from '@/components/ChatListScreen';
+import IncomingCallScreen from '@/components/Incomingcallscreen';
+import OngoingCallScreen from '@/components/Ongoingcallscreen';
+import MarketplaceScreen from '@/screens/client/MarketPlaceScreen';
+import ProductDetailScreen from '@/components/ProductDetailScreen';
+import CheckoutScreen from '@/components/Checkoutscreen';
+import AddEditProductScreen from '@/components/vendorComponent/Addeditproductscreen';
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const RootNavigator = () => {
   useDeepLinking();
@@ -165,6 +171,28 @@ const RootNavigator = () => {
         animation: 'slide_from_right'
       }} />
       <Stack.Screen name="ChatList" component={ChatListScreen} options={{
+        animation: 'slide_from_right'
+      }} />
+      {/* <Stack.Screen name="IncomingCall" component={IncomingCallScreen} options={{
+        animation: 'slide_from_right'
+      }} />
+      <Stack.Screen name="OngoingCall" component={OngoingCallScreen} options={{
+        animation: 'slide_from_right'
+      }} /> */}
+
+      <Stack.Screen name="Marketplace" component={MarketplaceScreen} options={{
+        animation: 'slide_from_right'
+      }} />
+      <Stack.Screen name="AddProduct" component={AddEditProductScreen} options={{
+        animation: 'slide_from_right'
+      }} />
+      <Stack.Screen name="EditProduct" component={AddEditProductScreen} options={{
+        animation: 'slide_from_right'
+      }} />
+      <Stack.Screen name="ProductDetail" component={ProductDetailScreen} options={{
+        animation: 'slide_from_right'
+      }} />
+      <Stack.Screen name="Checkout" component={CheckoutScreen} options={{
         animation: 'slide_from_right'
       }} />
           
