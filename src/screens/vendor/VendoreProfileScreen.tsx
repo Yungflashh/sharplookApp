@@ -96,30 +96,10 @@ const VendorProfileScreen: React.FC = () => {
           title: 'Store Settings',
           subtitle: 'Manage your store details',
           iconFamily: 'material',
-          onPress: () => console.log('Store Settings'), 
+            onPress: () => navigation.navigate('VendorStoreSettings'), 
+
         },
-        {
-          icon: 'cube-outline',
-          title: 'My Products',
-          subtitle: 'View and manage products',
-          iconFamily: 'ionicons',
-          badge: '24',
-          onPress: () => console.log('My Products'),
-        },
-        {
-          icon: 'briefcase-outline',
-          title: 'My Services',
-          subtitle: 'Manage your services',
-          iconFamily: 'ionicons',
-          onPress: () => console.log('My Services'),
-        },
-        {
-          icon: 'pricetag-outline',
-          title: 'Promotions',
-          subtitle: 'Active discounts and offers',
-          iconFamily: 'ionicons',
-          onPress: () => console.log('Promotions'),
-        },
+       
       ],
     },
     {
@@ -132,13 +112,7 @@ const VendorProfileScreen: React.FC = () => {
           iconFamily: 'ionicons',
           onPress: () => navigation.navigate("OrderHistory"),
         },
-        {
-          icon: 'heart-outline',
-          title: 'My Favorites',
-          subtitle: 'Saved vendors and services',
-          iconFamily: 'ionicons',
-          onPress: () => navigation.navigate("Favourites"),
-        },
+        
       ],
     },
     
@@ -159,13 +133,7 @@ const VendorProfileScreen: React.FC = () => {
           iconFamily: 'ionicons',
           onPress: () => console.log('Wallet'),
         },
-        {
-          icon: 'card-outline',
-          title: 'Payment Methods',
-          subtitle: 'Manage bank accounts',
-          iconFamily: 'ionicons',
-          onPress: () => console.log('Payment Methods'),
-        },
+        
         {
           icon: 'shield-checkmark-outline',
           title: 'Privacy & Security',
@@ -184,14 +152,7 @@ const VendorProfileScreen: React.FC = () => {
           subtitle: 'Manage notification settings',
           iconFamily: 'ionicons',
           onPress: () => navigation.navigate("NotificationsSetting"),
-        },
-        {
-          icon: 'language-outline',
-          title: 'Language',
-          subtitle: 'English',
-          iconFamily: 'material',
-          onPress: () => console.log('Language'),
-        },
+        }
       ],
     },
     {
