@@ -51,6 +51,18 @@ export type RootStackParamList = {
     bookingId: string;
     amount: number;
   };
+  CreateReview: {
+    bookingId: string;
+    vendorName: string;
+    serviceName: string;
+  };
+  DisputeDetail: {
+    disputeId: string;
+  };
+  Disputes: undefined;
+  CreateDispute: {
+    bookingId: string;
+  };
 };
 export type AuthStackParamList = {
   Login: undefined;

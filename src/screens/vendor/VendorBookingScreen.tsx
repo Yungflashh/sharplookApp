@@ -23,11 +23,12 @@ type VendorBookingsNavigationProp = NativeStackNavigationProp<RootStackParamList
 interface VendorBooking {
   _id: string;
   bookingNumber?: string;
-  service: {
+  service?: {
     _id: string;
     name: string;
     images?: string[];
   };
+  bookingType?: string;
   client: {
     _id: string;
     firstName: string;
@@ -548,7 +549,9 @@ const VendorBookingsScreen: React.FC = () => {
         {/* Header */}
         <View className="flex-row items-start justify-between mb-4">
           <View className="flex-1 mr-3">
-            <Text className="text-lg font-bold text-gray-900 mb-2">{booking.service.name}</Text>
+            <Text className="text-lg font-bold text-gray-900 mb-2">
+              {booking.service?.name || (booking.bookingType === 'offer_based' ? 'Custom Offer' : 'Service')}
+            </Text>
             <View className="flex-row items-center">
               <LinearGradient
                 colors={['#eb278d', '#f472b6']}
