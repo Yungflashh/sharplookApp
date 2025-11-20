@@ -492,10 +492,10 @@ const VendorProductManagementScreen: React.FC = () => {
             </View>
 
             <TouchableOpacity
-              onPress={handleAddProduct}
-              className="w-12 h-12 rounded-full bg-white/20 items-center justify-center"
+              // onPress={handleAddProduct}
+              // className="w-12 h-12 rounded-full bg-white/20 items-center justify-center"
             >
-              <Ionicons name="add" size={28} color="#fff" />
+              {/* <Ionicons name="add" size={28} color="#fff" /> */}
             </TouchableOpacity>
           </View>
 
