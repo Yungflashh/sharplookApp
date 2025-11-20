@@ -39,6 +39,9 @@ const VendorStoreSettingsScreen: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [loadingCategories, setLoadingCategories] = useState(false);
   
+  // Edit Mode State
+  const [isEditMode, setIsEditMode] = useState(false);
+  
   // Profile State
   const [businessName, setBusinessName] = useState('');
   const [businessDescription, setBusinessDescription] = useState('');
@@ -295,6 +298,9 @@ const VendorStoreSettingsScreen: React.FC = () => {
           await AsyncStorage.setItem('userData', JSON.stringify(updatedUser));
         }
 
+        // Exit edit mode after saving
+        setIsEditMode(false);
+
         Alert.alert('Success', 'Store settings updated successfully', [
           {
             text: 'OK',
@@ -315,6 +321,7 @@ const VendorStoreSettingsScreen: React.FC = () => {
   };
 
   const toggleCategory = (categoryId: string) => {
+    if (!isEditMode) return;
     setSelectedCategories((prev) => {
       if (prev.includes(categoryId)) {
         return prev.filter((id) => id !== categoryId);
@@ -325,6 +332,7 @@ const VendorStoreSettingsScreen: React.FC = () => {
   };
 
   const toggleDay = (day: string) => {
+    if (!isEditMode) return;
     setAvailability((prev) => ({
       ...prev,
       [day]: {
@@ -336,6 +344,10 @@ const VendorStoreSettingsScreen: React.FC = () => {
 
   const toggleSection = (section: string) => {
     setExpandedSection(expandedSection === section ? null : section);
+  };
+
+  const toggleEditMode = () => {
+    setIsEditMode(!isEditMode);
   };
 
   if (loading) {
@@ -361,8 +373,34 @@ const VendorStoreSettingsScreen: React.FC = () => {
             <Ionicons name="chevron-back" size={28} color="#1f2937" />
           </TouchableOpacity>
           <Text className="text-lg font-semibold text-gray-900">Store Settings</Text>
-          <View className="w-10" />
+          
+          {/* Edit Mode Toggle Button */}
+          <TouchableOpacity
+            onPress={toggleEditMode}
+            className={`w-10 h-10 rounded-full items-center justify-center ${
+              isEditMode ? 'bg-pink-100' : 'bg-gray-100'
+            }`}
+            activeOpacity={0.7}
+          >
+            <Ionicons 
+              name={isEditMode ? "checkmark" : "pencil"} 
+              size={20} 
+              color={isEditMode ? "#ec4899" : "#6b7280"} 
+            />
+          </TouchableOpacity>
         </View>
+        
+        {/* Edit Mode Indicator */}
+        {isEditMode && (
+          <View className="bg-pink-50 px-5 py-2 border-t border-pink-100">
+            <View className="flex-row items-center">
+              <Ionicons name="pencil" size={14} color="#ec4899" />
+              <Text className="text-pink-600 text-xs font-semibold ml-2">
+                Edit Mode Active - You can now make changes
+              </Text>
+            </View>
+          </View>
+        )}
       </View>
 
       <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
@@ -395,13 +433,25 @@ const VendorStoreSettingsScreen: React.FC = () => {
                   <Text className="text-sm font-medium text-gray-700 mb-2">
                     Business Name *
                   </Text>
-                  <TextInput
-                    value={businessName}
-                    onChangeText={setBusinessName}
-                    placeholder="Enter your business name"
-                    className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-gray-900"
-                    placeholderTextColor="#9ca3af"
-                  />
+                  <View className="relative">
+                    <TextInput
+                      value={businessName}
+                      onChangeText={setBusinessName}
+                      placeholder="Enter your business name"
+                      editable={isEditMode}
+                      className={`border rounded-xl px-4 py-3 text-gray-900 ${
+                        isEditMode 
+                          ? 'bg-white border-pink-200' 
+                          : 'bg-gray-50 border-gray-200'
+                      }`}
+                      placeholderTextColor="#9ca3af"
+                    />
+                    {!isEditMode && (
+                      <View className="absolute right-3 top-3">
+                        <Ionicons name="lock-closed" size={16} color="#9ca3af" />
+                      </View>
+                    )}
+                  </View>
                 </View>
 
                 {/* Business Description */}
@@ -409,16 +459,28 @@ const VendorStoreSettingsScreen: React.FC = () => {
                   <Text className="text-sm font-medium text-gray-700 mb-2">
                     Business Description *
                   </Text>
-                  <TextInput
-                    value={businessDescription}
-                    onChangeText={setBusinessDescription}
-                    placeholder="Describe your business..."
-                    multiline
-                    numberOfLines={4}
-                    textAlignVertical="top"
-                    className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-gray-900 min-h-[100px]"
-                    placeholderTextColor="#9ca3af"
-                  />
+                  <View className="relative">
+                    <TextInput
+                      value={businessDescription}
+                      onChangeText={setBusinessDescription}
+                      placeholder="Describe your business..."
+                      multiline
+                      numberOfLines={4}
+                      textAlignVertical="top"
+                      editable={isEditMode}
+                      className={`border rounded-xl px-4 py-3 text-gray-900 min-h-[100px] ${
+                        isEditMode 
+                          ? 'bg-white border-pink-200' 
+                          : 'bg-gray-50 border-gray-200'
+                      }`}
+                      placeholderTextColor="#9ca3af"
+                    />
+                    {!isEditMode && (
+                      <View className="absolute right-3 top-3">
+                        <Ionicons name="lock-closed" size={16} color="#9ca3af" />
+                      </View>
+                    )}
+                  </View>
                 </View>
 
                 {/* Vendor Type */}
@@ -428,11 +490,14 @@ const VendorStoreSettingsScreen: React.FC = () => {
                   </Text>
                   <View className="flex-row gap-2">
                     <TouchableOpacity
-                      onPress={() => setVendorType('home_service')}
+                      onPress={() => isEditMode && setVendorType('home_service')}
+                      disabled={!isEditMode}
                       className={`flex-1 p-3 rounded-xl border-2 ${
                         vendorType === 'home_service'
                           ? 'border-pink-500 bg-pink-50'
-                          : 'border-gray-200 bg-white'
+                          : isEditMode 
+                          ? 'border-gray-200 bg-white'
+                          : 'border-gray-200 bg-gray-50'
                       }`}
                     >
                       <Text
@@ -445,11 +510,14 @@ const VendorStoreSettingsScreen: React.FC = () => {
                     </TouchableOpacity>
 
                     <TouchableOpacity
-                      onPress={() => setVendorType('in_shop')}
+                      onPress={() => isEditMode && setVendorType('in_shop')}
+                      disabled={!isEditMode}
                       className={`flex-1 p-3 rounded-xl border-2 ${
                         vendorType === 'in_shop'
                           ? 'border-pink-500 bg-pink-50'
-                          : 'border-gray-200 bg-white'
+                          : isEditMode 
+                          ? 'border-gray-200 bg-white'
+                          : 'border-gray-200 bg-gray-50'
                       }`}
                     >
                       <Text
@@ -462,11 +530,14 @@ const VendorStoreSettingsScreen: React.FC = () => {
                     </TouchableOpacity>
 
                     <TouchableOpacity
-                      onPress={() => setVendorType('both')}
+                      onPress={() => isEditMode && setVendorType('both')}
+                      disabled={!isEditMode}
                       className={`flex-1 p-3 rounded-xl border-2 ${
                         vendorType === 'both'
                           ? 'border-pink-500 bg-pink-50'
-                          : 'border-gray-200 bg-white'
+                          : isEditMode 
+                          ? 'border-gray-200 bg-white'
+                          : 'border-gray-200 bg-gray-50'
                       }`}
                     >
                       <Text
@@ -519,10 +590,13 @@ const VendorStoreSettingsScreen: React.FC = () => {
                       <TouchableOpacity
                         key={category._id}
                         onPress={() => toggleCategory(category._id)}
+                        disabled={!isEditMode}
                         className={`px-4 py-2.5 rounded-full border-2 ${
                           selectedCategories.includes(category._id)
                             ? 'border-pink-500 bg-pink-50'
-                            : 'border-gray-200 bg-white'
+                            : isEditMode
+                            ? 'border-gray-200 bg-white'
+                            : 'border-gray-200 bg-gray-50'
                         }`}
                         activeOpacity={0.7}
                       >
@@ -578,20 +652,22 @@ const VendorStoreSettingsScreen: React.FC = () => {
                     <Text className="text-gray-600 text-xs mb-3">
                       {location.city}, {location.state}, {location.country}
                     </Text>
-                    <TouchableOpacity
-                      onPress={() => setLocation(null)}
-                      className="mt-2"
-                      activeOpacity={0.7}
-                    >
-                      <Text className="text-red-600 text-sm font-semibold">Change Location</Text>
-                    </TouchableOpacity>
+                    {isEditMode && (
+                      <TouchableOpacity
+                        onPress={() => setLocation(null)}
+                        className="mt-2"
+                        activeOpacity={0.7}
+                      >
+                        <Text className="text-red-600 text-sm font-semibold">Change Location</Text>
+                      </TouchableOpacity>
+                    )}
                   </View>
                 ) : (
                   <TouchableOpacity
                     onPress={getCurrentLocation}
-                    disabled={locationLoading || saving}
+                    disabled={locationLoading || saving || !isEditMode}
                     className={`bg-pink-50 border border-pink-200 rounded-xl p-4 flex-row items-center justify-center mb-4 ${
-                      locationLoading || saving ? 'opacity-50' : ''
+                      locationLoading || saving || !isEditMode ? 'opacity-50' : ''
                     }`}
                     activeOpacity={0.7}
                   >
@@ -618,14 +694,26 @@ const VendorStoreSettingsScreen: React.FC = () => {
                   <Text className="text-sm font-medium text-gray-700 mb-2">
                     Service Radius (km)
                   </Text>
-                  <TextInput
-                    value={serviceRadius}
-                    onChangeText={setServiceRadius}
-                    placeholder="10"
-                    keyboardType="numeric"
-                    className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-gray-900"
-                    placeholderTextColor="#9ca3af"
-                  />
+                  <View className="relative">
+                    <TextInput
+                      value={serviceRadius}
+                      onChangeText={setServiceRadius}
+                      placeholder="10"
+                      keyboardType="numeric"
+                      editable={isEditMode}
+                      className={`border rounded-xl px-4 py-3 text-gray-900 ${
+                        isEditMode 
+                          ? 'bg-white border-pink-200' 
+                          : 'bg-gray-50 border-gray-200'
+                      }`}
+                      placeholderTextColor="#9ca3af"
+                    />
+                    {!isEditMode && (
+                      <View className="absolute right-3 top-3">
+                        <Ionicons name="lock-closed" size={16} color="#9ca3af" />
+                      </View>
+                    )}
+                  </View>
                   <Text className="text-gray-500 text-xs mt-2">
                     Maximum distance you're willing to travel for home services
                   </Text>
@@ -670,6 +758,7 @@ const VendorStoreSettingsScreen: React.FC = () => {
                       <Switch
                         value={availability[day as keyof typeof availability].isAvailable}
                         onValueChange={() => toggleDay(day)}
+                        disabled={!isEditMode}
                         trackColor={{ false: '#e5e7eb', true: '#fce7f3' }}
                         thumbColor={
                           availability[day as keyof typeof availability].isAvailable
@@ -698,23 +787,25 @@ const VendorStoreSettingsScreen: React.FC = () => {
         </View>
       </ScrollView>
 
-      {/* Save Button */}
-      <View className="bg-white border-t border-gray-200 p-5">
-        <TouchableOpacity
-          onPress={handleSave}
-          disabled={saving}
-          className={`bg-pink-500 rounded-xl py-4 items-center ${
-            saving ? 'opacity-50' : ''
-          }`}
-          activeOpacity={0.8}
-        >
-          {saving ? (
-            <ActivityIndicator color="#ffffff" />
-          ) : (
-            <Text className="text-white font-semibold text-base">Save Changes</Text>
-          )}
-        </TouchableOpacity>
-      </View>
+      {/* Save Button - Only show when in edit mode */}
+      {isEditMode && (
+        <View className="bg-white border-t border-gray-200 p-5">
+          <TouchableOpacity
+            onPress={handleSave}
+            disabled={saving}
+            className={`bg-pink-500 rounded-xl py-4 items-center ${
+              saving ? 'opacity-50' : ''
+            }`}
+            activeOpacity={0.8}
+          >
+            {saving ? (
+              <ActivityIndicator color="#ffffff" />
+            ) : (
+              <Text className="text-white font-semibold text-base">Save Changes</Text>
+            )}
+          </TouchableOpacity>
+        </View>
+      )}
     </SafeAreaView>
   );
 };
