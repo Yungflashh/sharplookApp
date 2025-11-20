@@ -63,17 +63,17 @@ const ChatListScreen: React.FC = () => {
     }
   }, [currentUserId]);
 
-  // Auto-refresh when screen is focused
+  
   useFocusEffect(
     useCallback(() => {
       if (currentUserId) {
         loadConversations();
       }
 
-      // Refresh every 30 seconds
+      
       const interval = setInterval(() => {
         if (currentUserId) {
-          loadConversations(true); // Silent refresh
+          loadConversations(true); 
         }
       }, 30000);
 
@@ -107,7 +107,7 @@ const ChatListScreen: React.FC = () => {
         const convos = response.data.conversations || response.data || [];
         setConversations(convos);
 
-        // Calculate total unread count
+        
         const unreadTotal = convos.reduce(
           (sum: number, conv: Conversation) => sum + (conv.unreadCount || 0),
           0
@@ -200,7 +200,7 @@ const ChatListScreen: React.FC = () => {
         activeOpacity={0.7}
       >
         <View className="flex-row items-center">
-          {/* Avatar */}
+          {}
           <View className="relative mr-3">
             <View
               className="w-14 h-14 rounded-full bg-gray-200 items-center justify-center overflow-hidden"
@@ -220,13 +220,13 @@ const ChatListScreen: React.FC = () => {
               )}
             </View>
 
-            {/* Online Indicator */}
+            {}
             {otherUser.isOnline && (
               <View className="absolute bottom-0 right-0 w-4 h-4 bg-green-500 rounded-full border-2 border-white" />
             )}
           </View>
 
-          {/* Conversation Info */}
+          {}
           <View className="flex-1">
             <View className="flex-row items-center justify-between mb-1">
               <Text
@@ -259,7 +259,7 @@ const ChatListScreen: React.FC = () => {
                 {formatMessagePreview(item)}
               </Text>
 
-              {/* Unread Badge */}
+              {}
               {hasUnread && (
                 <View className="ml-2 min-w-[22px] h-[22px] bg-pink-500 rounded-full items-center justify-center px-1.5">
                   <Text className="text-white text-xs font-bold">
@@ -287,7 +287,7 @@ const ChatListScreen: React.FC = () => {
 
   return (
     <SafeAreaView className="flex-1 bg-gray-50" edges={['top']}>
-      {/* Header */}
+      {}
       <LinearGradient
         colors={['#eb278d', '#f472b6']}
         start={{ x: 0, y: 0 }}
@@ -313,7 +313,7 @@ const ChatListScreen: React.FC = () => {
         </View>
       </LinearGradient>
 
-      {/* Conversations List */}
+      {}
       <FlatList
         data={conversations}
         renderItem={renderConversationItem}

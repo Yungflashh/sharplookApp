@@ -385,7 +385,7 @@ const VendorProductOrdersScreen: React.FC = () => {
         }),
       }}
     >
-      {/* Header */}
+      {}
       <View className="flex-row items-start justify-between mb-4">
         <View className="flex-1 mr-3">
           <Text className="text-lg font-bold text-gray-900 mb-1">Order #{order.orderNumber}</Text>
@@ -419,7 +419,7 @@ const VendorProductOrdersScreen: React.FC = () => {
         </View>
       </View>
 
-      {/* Items */}
+      {}
       <View className="bg-gray-50 rounded-2xl p-4 mb-4">
         {order.items.map((item, index) => (
           <View
@@ -451,7 +451,7 @@ const VendorProductOrdersScreen: React.FC = () => {
         ))}
       </View>
 
-      {/* Details */}
+      {}
       <View className="bg-gray-50 rounded-2xl p-4 mb-4" style={{ gap: 12 }}>
         <View className="flex-row items-center">
           <View className="w-9 h-9 rounded-xl bg-blue-100 items-center justify-center mr-3">
@@ -555,7 +555,7 @@ const VendorProductOrdersScreen: React.FC = () => {
         )}
       </View>
 
-      {/* Delivery Confirmation Status */}
+      {}
       {order.status === 'delivered' && (
         <View className="bg-blue-50 rounded-2xl p-3 mb-4">
           <View className="flex-row items-center justify-between">
@@ -579,10 +579,10 @@ const VendorProductOrdersScreen: React.FC = () => {
         </View>
       )}
 
-      {/* Action Buttons */}
+      {}
       {getActionButtons(order)}
 
-      {/* View Details Link */}
+      {}
       <TouchableOpacity
         onPress={() => navigation.navigate('OrderDetail', { orderId: order._id, userType: 'vendor' })}
         className="mt-3 pt-4 border-t border-gray-100"
@@ -647,7 +647,7 @@ const VendorProductOrdersScreen: React.FC = () => {
 
   return (
     <SafeAreaView className="flex-1 bg-gray-50" edges={['top']}>
-      {/* Header */}
+      {}
       <LinearGradient
         colors={['#eb278d', '#f472b6']}
         start={{ x: 0, y: 0 }}
@@ -664,7 +664,7 @@ const VendorProductOrdersScreen: React.FC = () => {
             </View>
           </View>
 
-          {/* Search Bar */}
+          {}
           <View className="flex-row items-center bg-white/20 rounded-2xl px-4 py-3 mb-4">
             <Ionicons name="search" size={20} color="#fff" />
             <TextInput
@@ -681,7 +681,7 @@ const VendorProductOrdersScreen: React.FC = () => {
             )}
           </View>
 
-          {/* Filter Tabs */}
+          {}
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -709,7 +709,7 @@ const VendorProductOrdersScreen: React.FC = () => {
         </View>
       </LinearGradient>
 
-      {/* Orders List */}
+      {}
       <ScrollView
         className="flex-1"
         showsVerticalScrollIndicator={false}

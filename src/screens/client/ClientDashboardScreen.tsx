@@ -81,33 +81,33 @@ const ClientDashboardScreen: React.FC = () => {
     others: 'ellipsis-horizontal',
   };
 
-  // ==================== SOCKET.IO SETUP ====================
+  
 
   useEffect(() => {
-    // Connect to Socket.IO
+    
     console.log('🔌 Connecting to Socket.IO...');
     socketService.connect();
 
-    // Listen for new messages
+    
     socketService.onNewMessage((data) => {
       console.log('📩 New message received via socket:', data);
       
-      // Increment unread count
+      
       setUnreadMessagesCount((prev) => prev + 1);
       
-      // Optional: Show notification banner
-      // You can add a toast/notification here
+      
+      
     });
 
-    // Cleanup on unmount
+    
     return () => {
       console.log('🧹 Cleaning up socket listeners');
       socketService.removeListener('message:new');
-      // Don't disconnect - keep socket alive for other screens
+      
     };
   }, []);
 
-  // ==================== FETCH FUNCTIONS ====================
+  
 
   const fetchUnreadNotificationCount = async () => {
     try {
@@ -327,13 +327,13 @@ const ClientDashboardScreen: React.FC = () => {
     }
   };
 
-  // ==================== LIFECYCLE ====================
+  
 
   useEffect(() => {
     fetchDashboardData();
   }, []);
 
-  // Refresh counts when screen is focused
+  
   useFocusEffect(
     useCallback(() => {
       console.log('🔄 Dashboard focused - refreshing counts');
@@ -341,13 +341,13 @@ const ClientDashboardScreen: React.FC = () => {
       fetchUnreadNotificationCount();
       fetchUnreadMessagesCount();
 
-      // Reconnect socket if disconnected
+      
       if (!socketService.isSocketConnected()) {
         console.log('🔌 Reconnecting socket...');
         socketService.connect();
       }
 
-      // Auto-refresh every 30 seconds (backup for socket)
+      
       const interval = setInterval(() => {
         fetchUnreadNotificationCount();
         fetchUnreadMessagesCount();
@@ -387,7 +387,7 @@ const ClientDashboardScreen: React.FC = () => {
     return () => clearTimeout(delayDebounce);
   }, [searchQuery]);
 
-  // ==================== HANDLERS ====================
+  
 
   const handleCategorySelect = (categoryId: string) => {
     setSelectedCategory(categoryId);
@@ -482,11 +482,11 @@ const ClientDashboardScreen: React.FC = () => {
     return 'User';
   };
 
-  // ==================== RENDER ====================
+  
 
   return (
     <SafeAreaView className="flex-1 bg-gray-50" edges={['top']}>
-      {/* Header */}
+      {}
       <View className="bg-white px-5 pt-4 pb-3">
         <View className="flex-row items-center justify-between mb-4">
           <View className="flex-1">
@@ -497,7 +497,7 @@ const ClientDashboardScreen: React.FC = () => {
           </View>
 
           <View className="flex-row items-center gap-3">
-            {/* Notification Button */}
+            {}
             <TouchableOpacity
               className="relative w-11 h-11 items-center justify-center"
               activeOpacity={0.7}
@@ -522,7 +522,7 @@ const ClientDashboardScreen: React.FC = () => {
               )}
             </TouchableOpacity>
 
-            {/* Chat Button */}
+            {}
             <TouchableOpacity
               className="relative w-11 h-11 items-center justify-center"
               activeOpacity={0.7}
@@ -530,7 +530,7 @@ const ClientDashboardScreen: React.FC = () => {
             >
               <Ionicons name="chatbubble-ellipses-outline" size={24} color="#eb278d" />
 
-              {/* Show badge if unread > 0, otherwise show dot */}
+              {}
               {unreadMessagesCount > 0 ? (
                 <View
                   className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] bg-pink-500 rounded-full items-center justify-center px-1"
@@ -551,7 +551,7 @@ const ClientDashboardScreen: React.FC = () => {
               )}
             </TouchableOpacity>
 
-            {/* Cart Button */}
+            {}
             <TouchableOpacity
               className="relative w-11 h-11 items-center justify-center"
               activeOpacity={0.7}
@@ -576,7 +576,7 @@ const ClientDashboardScreen: React.FC = () => {
               )}
             </TouchableOpacity>
 
-            {/* Menu Button */}
+            {}
             <TouchableOpacity
               className="w-11 h-11 items-center justify-center"
               activeOpacity={0.7}
@@ -587,7 +587,7 @@ const ClientDashboardScreen: React.FC = () => {
           </View>
         </View>
 
-        {/* Search Bar */}
+        {}
         <View className="flex-row items-center gap-3">
           <View className="flex-1 flex-row items-center bg-gray-100 rounded-2xl px-4 py-3">
             <Ionicons name="search" size={20} color="#9ca3af" />
@@ -622,7 +622,7 @@ const ClientDashboardScreen: React.FC = () => {
         </View>
       </View>
 
-      {/* Content */}
+      {}
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: 100 }}
@@ -635,7 +635,7 @@ const ClientDashboardScreen: React.FC = () => {
           />
         }
       >
-        {/* Categories */}
+        {}
         <Animated.View
           className="px-5 py-6"
           style={{
@@ -688,7 +688,7 @@ const ClientDashboardScreen: React.FC = () => {
           </ScrollView>
         </Animated.View>
 
-        {/* Top Vendors */}
+        {}
         <View className="py-6">
           <View className="flex-row items-center justify-between px-5 mb-4">
             <View>
@@ -754,7 +754,7 @@ const ClientDashboardScreen: React.FC = () => {
           </ScrollView>
         </View>
 
-        {/* Recommended Services */}
+        {}
         {(searchQuery.trim() || recommendedServices.length > 0) && (
           <View className="px-5 py-6">
             <Text className="text-lg font-bold text-gray-900 mb-4">
@@ -817,7 +817,7 @@ const ClientDashboardScreen: React.FC = () => {
         )}
       </ScrollView>
 
-      {/* Sidebar */}
+      {}
       <ClientSidebar
         visible={sidebarVisible}
         onClose={() => setSidebarVisible(false)}
@@ -825,7 +825,7 @@ const ClientDashboardScreen: React.FC = () => {
         userEmail={userProfile?.user?.email || userProfile?.email || 'user@example.com'}
       />
 
-      {/* Filter Modal */}
+      {}
       <FilterModal
         visible={filterModalVisible}
         onClose={() => setFilterModalVisible(false)}

@@ -46,7 +46,7 @@ const AddEditProductScreen: React.FC = () => {
   const [loadingProduct, setLoadingProduct] = useState(isEdit);
   const [categories, setCategories] = useState<Category[]>([]);
 
-  // Form state
+  
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [shortDescription, setShortDescription] = useState('');
@@ -123,8 +123,8 @@ const AddEditProductScreen: React.FC = () => {
     }
   };
 
-  // FINAL FIX: The issue is the image type from ImagePicker
-// Replace the pickImages function in your AddEditProductScreen.tsx
+  
+
 
 const pickImages = async () => {
   try {
@@ -138,14 +138,14 @@ const pickImages = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsMultipleSelection: true,
-      quality: 0.7,  // Reduced quality
+      quality: 0.7,  
       selectionLimit: 10 - images.length - existingImages.length,
     });
 
     if (!result.canceled) {
       const newImages = result.assets.map((asset, index) => {
-        // FIX: Properly determine the mime type
-        let mimeType = 'image/jpeg'; // Default
+        
+        let mimeType = 'image/jpeg'; 
         
         if (asset.uri) {
           const extension = asset.uri.split('.').pop()?.toLowerCase();
@@ -162,7 +162,7 @@ const pickImages = async () => {
 
         return {
           uri: asset.uri,
-          type: mimeType,  // Use proper mime type
+          type: mimeType,  
           name: asset.fileName || `product_${Date.now()}_${index}.jpg`,
         };
       });
@@ -278,7 +278,7 @@ const pickImages = async () => {
 
       const formData = new FormData();
 
-      // Add all text fields
+      
       console.log('📝 Adding text fields to FormData...');
       formData.append('name', productData.name);
       formData.append('description', productData.description);
@@ -314,13 +314,13 @@ const pickImages = async () => {
 
       console.log('✅ Text fields added');
 
-      // Add existing images for edit
+      
       if (isEdit && existingImages.length > 0) {
         console.log('📋 Adding existing images list...');
         formData.append('existingImages', JSON.stringify(existingImages));
       }
 
-      // Add new images
+      
       if (images.length > 0) {
         console.log('🖼️ Adding new images...');
         for (let i = 0; i < images.length; i++) {
@@ -330,7 +330,7 @@ const pickImages = async () => {
           console.log(`  Type: ${image.type}`);
           console.log(`  Name: ${image.name}`);
 
-          // Clean URI for iOS
+          
           let imageUri = image.uri;
           if (Platform.OS === 'ios' && imageUri.startsWith('file://')) {
             imageUri = imageUri.replace('file://', '');
@@ -349,7 +349,7 @@ const pickImages = async () => {
 
       console.log('✅ All data added to FormData');
 
-      // Determine endpoint and method
+      
       const endpoint = isEdit 
         ? `${API_BASE_URL}/products/${productId}` 
         : `${API_BASE_URL}/products`;
@@ -362,7 +362,7 @@ const pickImages = async () => {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Accept': 'application/json',
-          // Don't set Content-Type - let fetch handle it for FormData
+          
         },
         body: formData,
       });
@@ -457,7 +457,7 @@ const pickImages = async () => {
 
   return (
     <SafeAreaView className="flex-1 bg-gray-50" edges={['top']}>
-      {/* Header */}
+      {}
       <LinearGradient
         colors={['#eb278d', '#f472b6']}
         start={{ x: 0, y: 0 }}
@@ -482,12 +482,12 @@ const pickImages = async () => {
       </LinearGradient>
 
       <ScrollView className="flex-1 px-5 pt-5" showsVerticalScrollIndicator={false}>
-        {/* Images Section */}
+        {}
         <View className="mb-6">
           <Text className="text-gray-900 text-lg font-bold mb-3">Product Images *</Text>
           
           <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mb-3">
-            {/* Existing Images */}
+            {}
             {existingImages.map((uri, index) => (
               <View key={`existing-${index}`} className="mr-3 relative">
                 <Image
@@ -511,7 +511,7 @@ const pickImages = async () => {
               </View>
             ))}
 
-            {/* New Images */}
+            {}
             {images.map((image, index) => (
               <View key={`new-${index}`} className="mr-3 relative">
                 <Image
@@ -535,7 +535,7 @@ const pickImages = async () => {
               </View>
             ))}
 
-            {/* Add Image Button */}
+            {}
             {(images.length + existingImages.length) < 10 && (
               <TouchableOpacity
                 onPress={pickImages}
@@ -552,7 +552,7 @@ const pickImages = async () => {
           </Text>
         </View>
 
-        {/* Basic Information */}
+        {}
         <View className="bg-white rounded-2xl p-4 mb-4">
           <Text className="text-gray-900 text-base font-bold mb-4">Basic Information</Text>
 
@@ -670,7 +670,7 @@ const pickImages = async () => {
           </View>
         </View>
 
-        {/* Pricing & Stock */}
+        {}
         <View className="bg-white rounded-2xl p-4 mb-4">
           <Text className="text-gray-900 text-base font-bold mb-4">Pricing & Stock</Text>
 
@@ -723,7 +723,7 @@ const pickImages = async () => {
           </View>
         </View>
 
-        {/* Delivery Options */}
+        {}
         <View className="bg-white rounded-2xl p-4 mb-4">
           <Text className="text-gray-900 text-base font-bold mb-4">Delivery Options *</Text>
 
@@ -793,7 +793,7 @@ const pickImages = async () => {
         <View className="h-24" />
       </ScrollView>
 
-      {/* Save Button */}
+      {}
       <View
         className="bg-white px-5 py-4 border-t border-gray-100"
         style={{

@@ -1,4 +1,4 @@
-// frontend/src/services/call.service.ts
+
 
 import socketService from './socket.service';
 import { RTCPeerConnection, RTCSessionDescription, RTCIceCandidate, mediaDevices } from 'react-native-webrtc';
@@ -21,7 +21,7 @@ class CallService {
   private callData: CallData | null = null;
   private callStatus: CallStatus = 'idle';
 
-  // WebRTC configuration
+  
   private configuration = {
     iceServers: [
       { urls: 'stun:stun.l.google.com:19302' },
@@ -30,26 +30,22 @@ class CallService {
     ],
   };
 
-  /**
-   * Initialize call service
-   */
+  
   public initialize() {
     this.setupSocketListeners();
     console.log('📞 Call service initialized');
   }
 
-  /**
-   * Setup socket listeners for call events
-   */
+  
   private setupSocketListeners() {
-    // Call initiated
+    
     socketService.on('call:initiated', (data: any) => {
       console.log('📞 Call initiated:', data);
       this.callData = data.call;
       this.callStatus = 'calling';
     });
 
-    // Incoming call
+    
     socketService.on('call:incoming', (data: any) => {
       console.log('📞 Incoming call:', data);
       this.callData = {
@@ -62,58 +58,56 @@ class CallService {
       this.callStatus = 'incoming';
     });
 
-    // Call accepted
+    
     socketService.on('call:accepted', (data: any) => {
       console.log('📞 Call accepted:', data);
       this.callStatus = 'connected';
     });
 
-    // Call rejected
+    
     socketService.on('call:rejected', (data: any) => {
       console.log('📞 Call rejected:', data);
       this.endCall();
     });
 
-    // Call ended
+    
     socketService.on('call:ended', (data: any) => {
       console.log('📞 Call ended:', data);
       this.endCall();
     });
 
-    // Call cancelled
+    
     socketService.on('call:cancelled', (data: any) => {
       console.log('📞 Call cancelled:', data);
       this.endCall();
     });
 
-    // Call busy
+    
     socketService.on('call:busy', (data: any) => {
       console.log('📞 User busy:', data);
       this.endCall();
     });
 
-    // WebRTC signaling - Offer
+    
     socketService.on('call:signal:offer', async (data: any) => {
       console.log('📞 Received offer:', data);
       await this.handleOffer(data.offer, data.callId);
     });
 
-    // WebRTC signaling - Answer
+    
     socketService.on('call:signal:answer', async (data: any) => {
       console.log('📞 Received answer:', data);
       await this.handleAnswer(data.answer);
     });
 
-    // WebRTC signaling - ICE candidate
+    
     socketService.on('call:signal:ice', async (data: any) => {
       console.log('📞 Received ICE candidate:', data);
       await this.handleIceCandidate(data.candidate);
     });
   }
 
-  /**
-   * Initiate a call
-   */
+  
   public async initiateCall(
     receiverId: string,
     type: CallType,
@@ -122,10 +116,10 @@ class CallService {
     try {
       console.log('📞 Initiating call:', { receiverId, type });
 
-      // Request media permissions
+      
       await this.getLocalStream(type);
 
-      // Emit call initiate event
+      
       socketService.emit('call:initiate', {
         receiverId,
         type,
@@ -139,20 +133,18 @@ class CallService {
     }
   }
 
-  /**
-   * Accept incoming call
-   */
+  
   public async acceptCall(callId: string, type: CallType) {
     try {
       console.log('📞 Accepting call:', callId);
 
-      // Request media permissions
+      
       await this.getLocalStream(type);
 
-      // Emit call accept event
+      
       socketService.emit('call:accept', { callId });
 
-      // Setup peer connection
+      
       await this.setupPeerConnection();
 
       this.callStatus = 'connected';
@@ -162,18 +154,14 @@ class CallService {
     }
   }
 
-  /**
-   * Reject incoming call
-   */
+  
   public rejectCall(callId: string) {
     console.log('📞 Rejecting call:', callId);
     socketService.emit('call:reject', { callId });
     this.endCall();
   }
 
-  /**
-   * End ongoing call
-   */
+  
   public endCall() {
     console.log('📞 Ending call');
 
@@ -181,36 +169,32 @@ class CallService {
       socketService.emit('call:end', { callId: this.callData.callId });
     }
 
-    // Close peer connection
+    
     if (this.peerConnection) {
       this.peerConnection.close();
       this.peerConnection = null;
     }
 
-    // Stop local stream
+    
     if (this.localStream) {
       this.localStream.getTracks().forEach((track: any) => track.stop());
       this.localStream = null;
     }
 
-    // Clear remote stream
+    
     this.remoteStream = null;
     this.callData = null;
     this.callStatus = 'idle';
   }
 
-  /**
-   * Cancel outgoing call
-   */
+  
   public cancelCall(callId: string) {
     console.log('📞 Cancelling call:', callId);
     socketService.emit('call:cancel', { callId });
     this.endCall();
   }
 
-  /**
-   * Get local media stream
-   */
+  
   private async getLocalStream(type: CallType) {
     try {
       const isFront = true;
@@ -240,21 +224,19 @@ class CallService {
     }
   }
 
-  /**
-   * Setup WebRTC peer connection
-   */
+  
   private async setupPeerConnection() {
     try {
       this.peerConnection = new RTCPeerConnection(this.configuration);
 
-      // Add local stream tracks to peer connection
+      
       if (this.localStream) {
         this.localStream.getTracks().forEach((track: any) => {
           this.peerConnection!.addTrack(track, this.localStream);
         });
       }
 
-      // Handle remote stream
+      
       this.peerConnection.ontrack = (event: any) => {
         console.log('📞 Received remote track:', event);
         if (event.streams && event.streams[0]) {
@@ -262,7 +244,7 @@ class CallService {
         }
       };
 
-      // Handle ICE candidates
+      
       this.peerConnection.onicecandidate = (event: any) => {
         if (event.candidate && this.callData) {
           console.log('📞 Sending ICE candidate');
@@ -274,12 +256,12 @@ class CallService {
         }
       };
 
-      // Handle connection state changes
+      
       this.peerConnection.onconnectionstatechange = () => {
         console.log('📞 Connection state:', this.peerConnection?.connectionState);
       };
 
-      // Create and send offer if caller
+      
       if (this.callStatus === 'calling') {
         await this.createOffer();
       }
@@ -291,9 +273,7 @@ class CallService {
     }
   }
 
-  /**
-   * Create WebRTC offer
-   */
+  
   private async createOffer() {
     try {
       if (!this.peerConnection || !this.callData) return;
@@ -317,9 +297,7 @@ class CallService {
     }
   }
 
-  /**
-   * Handle WebRTC offer
-   */
+  
   private async handleOffer(offer: any, callId: string) {
     try {
       if (!this.peerConnection) {
@@ -345,9 +323,7 @@ class CallService {
     }
   }
 
-  /**
-   * Handle WebRTC answer
-   */
+  
   private async handleAnswer(answer: any) {
     try {
       if (!this.peerConnection) return;
@@ -363,9 +339,7 @@ class CallService {
     }
   }
 
-  /**
-   * Handle ICE candidate
-   */
+  
   private async handleIceCandidate(candidate: any) {
     try {
       if (!this.peerConnection) return;
@@ -379,9 +353,7 @@ class CallService {
     }
   }
 
-  /**
-   * Toggle mute
-   */
+  
   public toggleMute() {
     if (this.localStream) {
       const audioTrack = this.localStream.getAudioTracks()[0];
@@ -393,9 +365,7 @@ class CallService {
     return false;
   }
 
-  /**
-   * Toggle camera (for video calls)
-   */
+  
   public toggleCamera() {
     if (this.localStream) {
       const videoTrack = this.localStream.getVideoTracks()[0];
@@ -407,9 +377,7 @@ class CallService {
     return false;
   }
 
-  /**
-   * Switch camera (front/back)
-   */
+  
   public async switchCamera() {
     if (this.localStream) {
       const videoTrack = this.localStream.getVideoTracks()[0];
@@ -419,16 +387,12 @@ class CallService {
     }
   }
 
-  /**
-   * Get current call data
-   */
+  
   public getCurrentCall(): CallData | null {
     return this.callData;
   }
 
-  /**
-   * Get call status
-   */
+  
   public getCallStatus(): CallStatus {
     return this.callStatus;
   }
@@ -436,9 +400,7 @@ class CallService {
   
  
 
-  /**
-   * Get remote stream
-   */
+  
   public getRemoteStream() {
     return this.remoteStream;
   }

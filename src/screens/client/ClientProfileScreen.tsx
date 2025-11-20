@@ -30,7 +30,7 @@ const ClientProfileScreen: React.FC = () => {
   useEffect(() => {
     loadUserData();
     
-    // ✅ Listen for navigation focus to reload user data when returning from edit screen
+    
     const unsubscribe = navigation.addListener('focus', () => {
       loadUserData();
     });
@@ -162,9 +162,9 @@ const ClientProfileScreen: React.FC = () => {
   return (
     <SafeAreaView className="flex-1 bg-gray-50" edges={['top']}>
       <ScrollView showsVerticalScrollIndicator={false} bounces={false}>
-        {/* Header Section */}
+        {}
         <View className="pb-6 rounded-b-[50px] bg-[#eb278d]">
-          {/* Top Bar */}
+          {}
           <View className="flex-row items-center justify-between px-5 py-4">
             <TouchableOpacity className="w-10 h-10 items-center justify-center">
               <Ionicons name="chevron-back" size={28} color="#FFFFFF" />
@@ -178,9 +178,9 @@ const ClientProfileScreen: React.FC = () => {
             </TouchableOpacity>
           </View>
 
-          {/* Profile Info */}
+          {}
           <View className="items-center pb-5 px-5">
-            {/* ✅ FIXED: Avatar Display - NOT TOUCHABLE */}
+            {}
             <View className="relative mb-4">
               <View className="w-[104px] h-[104px] rounded-full p-0.5">
                 <View className="w-[100px] h-[100px] rounded-full bg-white items-center justify-center overflow-hidden">
@@ -196,7 +196,7 @@ const ClientProfileScreen: React.FC = () => {
                 </View>
               </View>
               
-              {/* ✅ REMOVED: Camera button - avatar is NOT uploadable here */}
+              {}
             </View>
 
             <Text className="text-2xl font-bold text-white mb-1">
@@ -206,7 +206,7 @@ const ClientProfileScreen: React.FC = () => {
               {user?.email || 'kayskidadenusi@gmail.com'}
             </Text>
 
-            {/* Verification Badge */}
+            {}
             <View className="flex-row items-center bg-white/20 px-3 py-1.5 rounded-full">
               <Ionicons name="checkmark-circle" size={16} color="#10b981" />
               <Text className="text-xs text-white ml-1 font-semibold">Verified Account</Text>
@@ -214,7 +214,7 @@ const ClientProfileScreen: React.FC = () => {
           </View>
         </View>
 
-        {/* Menu Sections */}
+        {}
         <View className="pt-5 pb-20">
           {menuSections.map((section, sectionIndex) => (
             <View key={sectionIndex} className="mb-5 px-5">
@@ -262,7 +262,7 @@ const ClientProfileScreen: React.FC = () => {
             </View>
           ))}
 
-          {/* Account Actions */}
+          {}
           <View className="mb-5 px-5">
             <Text className="text-[13px] font-semibold text-gray-500 uppercase tracking-wider mb-2 ml-1">
               Account Actions
@@ -315,7 +315,7 @@ const ClientProfileScreen: React.FC = () => {
             </View>
           </View>
 
-          {/* Footer */}
+          {}
           <View className="items-center py-5 mt-2">
             <Text className="text-xs text-gray-400 mb-1">Version 1.0.0</Text>
             <Text className="text-[11px] text-gray-400">© 2024 Sharplook</Text>
@@ -323,7 +323,7 @@ const ClientProfileScreen: React.FC = () => {
         </View>
       </ScrollView>
 
-      {/* Modals */}
+      {}
       <ConfirmationModal
         visible={showLogoutModal}
         title="Logout"

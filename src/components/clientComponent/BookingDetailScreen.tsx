@@ -23,7 +23,7 @@ type BookingDetailNavigationProp = NativeStackNavigationProp<RootStackParamList,
 type BookingDetailRouteProp = RouteProp<RootStackParamList, 'BookingDetail'>;
 
 
-// New interfaces for OtherParty
+
 interface VendorPartyInfo {
   type: 'vendor';
   data: BookingDetail['vendor'];
@@ -157,7 +157,7 @@ const BookingDetailScreen: React.FC = () => {
     fetchBookingDetails();
   }, [bookingId]);
 
-  // Helper function to get service/offer details
+  
   const getServiceInfo = () => {
     if (!booking) return null;
 
@@ -177,7 +177,7 @@ const BookingDetailScreen: React.FC = () => {
       };
     }
 
-    // Fallback for offer-based booking without full offer details
+    
     return {
       name: 'Custom Service Offer',
       description: 'Service details from accepted offer',
@@ -317,7 +317,7 @@ const BookingDetailScreen: React.FC = () => {
       return;
     }
 
-    // Navigate to ChatDetail screen
+    
     navigation.navigate('ChatDetail', {
       otherUserId: otherParty.data._id,
       otherUserName: otherParty.type === 'vendor'
@@ -396,7 +396,7 @@ const BookingDetailScreen: React.FC = () => {
 
     return (
       <View style={{ gap: 12 }}>
-        {/* Complete Payment Button */}
+        {}
         {status === 'pending' && booking.paymentStatus !== 'escrowed' && !isVendor && (
           <TouchableOpacity
             onPress={() => navigation.navigate('Payment', { bookingId: booking._id })}
@@ -423,7 +423,7 @@ const BookingDetailScreen: React.FC = () => {
           </TouchableOpacity>
         )}
 
-        {/* Mark Complete Button */}
+        {}
         {['accepted', 'in_progress'].includes(status) && !isVendor && (
           <TouchableOpacity
             onPress={handleMarkComplete}
@@ -455,7 +455,7 @@ const BookingDetailScreen: React.FC = () => {
           </TouchableOpacity>
         )}
 
-        {/* Leave Review Button */}
+        {}
         {status === 'completed' && !booking.hasReview && !isVendor && (
           <TouchableOpacity
             onPress={() =>
@@ -482,7 +482,7 @@ const BookingDetailScreen: React.FC = () => {
           </TouchableOpacity>
         )}
 
-        {/* Review Submitted */}
+        {}
         {status === 'completed' && booking.hasReview && !isVendor && (
           <TouchableOpacity
             onPress={() => {
@@ -496,7 +496,7 @@ const BookingDetailScreen: React.FC = () => {
           </TouchableOpacity>
         )}
 
-        {/* Cancel Booking Button */}
+        {}
         {['pending', 'accepted'].includes(status) && (
           <TouchableOpacity
             onPress={handleCancelBooking}
@@ -519,7 +519,7 @@ const BookingDetailScreen: React.FC = () => {
           </TouchableOpacity>
         )}
 
-        {/* Dispute Buttons */}
+        {}
         {['accepted', 'in_progress', 'completed'].includes(status) && (
           <>
             {booking.hasDispute ? (
@@ -582,7 +582,7 @@ const BookingDetailScreen: React.FC = () => {
 
   return (
     <SafeAreaView className="flex-1 bg-gray-50" edges={['top']}>
-      {/* Header */}
+      {}
       <LinearGradient
         colors={['#eb278d', '#f472b6']}
         start={{ x: 0, y: 0 }}
@@ -603,7 +603,7 @@ const BookingDetailScreen: React.FC = () => {
             <View className="w-10" />
           </View>
 
-          {/* Status Badge */}
+          {}
           <View className="flex-row items-center justify-between">
             <View
               className="px-4 py-2 rounded-full"
@@ -629,7 +629,7 @@ const BookingDetailScreen: React.FC = () => {
 
       <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
         <View className="px-5 py-4" style={{ gap: 16 }}>
-          {/* Dispute Alert */}
+          {}
           {booking.hasDispute && (
             <TouchableOpacity
               onPress={handleViewDispute}
@@ -649,7 +649,7 @@ const BookingDetailScreen: React.FC = () => {
             </TouchableOpacity>
           )}
 
-          {/* Service Details */}
+          {}
           <View
             className="bg-white rounded-3xl overflow-hidden"
             style={{
@@ -703,7 +703,7 @@ const BookingDetailScreen: React.FC = () => {
             </View>
           </View>
 
-          {/* Other Party Information */}
+          {}
           {otherParty && (
             <View
               className="bg-white rounded-3xl p-5"
@@ -800,7 +800,7 @@ const BookingDetailScreen: React.FC = () => {
             </View>
           )}
 
-          {/* Schedule */}
+          {}
           <View
             className="bg-white rounded-3xl p-5"
             style={{
@@ -849,7 +849,7 @@ const BookingDetailScreen: React.FC = () => {
             </View>
           </View>
 
-          {/* Price Breakdown */}
+          {}
           <View
             className="bg-white rounded-3xl p-5"
             style={{
@@ -921,7 +921,7 @@ const BookingDetailScreen: React.FC = () => {
             </View>
           </View>
 
-          {/* Notes */}
+          {}
           {(booking.clientNotes || booking.vendorNotes) && (
             <View
               className="bg-white rounded-3xl p-5"
@@ -961,7 +961,7 @@ const BookingDetailScreen: React.FC = () => {
             </View>
           )}
 
-          {/* Action Buttons */}
+          {}
           {renderActionButtons()}
         </View>
       </ScrollView>

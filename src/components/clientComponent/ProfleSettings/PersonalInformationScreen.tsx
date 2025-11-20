@@ -71,14 +71,14 @@ const PersonalInformationScreen: React.FC = () => {
       Alert.alert('Error', 'Failed to pick image');
     }
   };
- // Updated uploadProfileImage using the API helper
-// Updated uploadProfileImage using the API helper with required fields
+ 
+
 const uploadProfileImage = async (imageUri: string) => {
   setUploadingImage(true);
   try {
     console.log('📤 Starting avatar upload...');
     
-    // ✅ Pass all required fields along with image
+    
     const response = await userAPI.uploadAvatar(imageUri, {
       firstName: formData.firstName,
       lastName: formData.lastName,
@@ -88,7 +88,7 @@ const uploadProfileImage = async (imageUri: string) => {
     console.log('📥 Upload successful:', response);
 
     if (response.success) {
-      // Update local state
+      
       const avatarUrl = response.data.user.avatar;
       
       setFormData((prev) => ({
@@ -96,7 +96,7 @@ const uploadProfileImage = async (imageUri: string) => {
         avatar: avatarUrl,
       }));
 
-      // Update stored user data
+      
       const userData = await getStoredUser();
       if (userData) {
         userData.avatar = avatarUrl;

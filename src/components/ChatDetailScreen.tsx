@@ -84,14 +84,14 @@ const ChatDetailScreen: React.FC = () => {
   const [loadingMore, setLoadingMore] = useState(false);
   const [otherUser, setOtherUser] = useState<any>(null);
   
-  // Enhanced features
+  
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
   const [showAttachmentMenu, setShowAttachmentMenu] = useState(false);
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [selectedMedia, setSelectedMedia] = useState<any>(null);
   
-  // Socket features - Enhanced
+  
   const [isOtherUserTyping, setIsOtherUserTyping] = useState(false);
   const [isOtherUserOnline, setIsOtherUserOnline] = useState(false);
   const [otherUserActivity, setOtherUserActivity] = useState<UserActivity>('offline');
@@ -99,28 +99,28 @@ const ChatDetailScreen: React.FC = () => {
   const flatListRef = useRef<FlatList>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // ==================== SOCKET.IO SETUP ====================
+  
 
   useEffect(() => {
     if (!conversationId || !currentUserId) return;
 
     console.log('🔌 Setting up socket for conversation:', conversationId);
 
-    // Join conversation room
+    
     socketService.joinConversation(conversationId);
 
-    // Listen for joined confirmation
+    
     socketService.onJoinedConversation((data) => {
       console.log('✅ Joined conversation room:', data.conversationId);
     });
 
-    // Listen for new messages - REAL-TIME MESSAGE UPDATES
+    
     socketService.onMessageReceived((data) => {
       console.log('📨 NEW MESSAGE RECEIVED:', data);
       
       const newMessage = data.message;
       
-      // Add message immediately to UI
+      
       setMessages((prev) => {
         const exists = prev.some(m => m._id === newMessage._id);
         if (exists) {
@@ -132,23 +132,23 @@ const ChatDetailScreen: React.FC = () => {
         return [...prev, newMessage];
       });
 
-      // Scroll to bottom
+      
       setTimeout(() => {
         flatListRef.current?.scrollToEnd({ animated: true });
       }, 100);
 
-      // ✅ CORRECT: Only mark as DELIVERED when receiving message
-      // Message is delivered to device, but NOT yet read by user
+      
+      
       if (newMessage.sender._id !== currentUserId) {
         socketService.markMessageAsDelivered(newMessage._id);
         console.log('✓ Marked as delivered (user online, received message)');
         
-        // Note: We do NOT mark as read here automatically
-        // Read status will be set when user actively views this chat
+        
+        
       }
     });
 
-    // Listen for message status updates (read receipts)
+    
     socketService.onMessageStatus((data) => {
       console.log('📊 Message status update:', data);
       
@@ -166,14 +166,14 @@ const ChatDetailScreen: React.FC = () => {
       );
     });
 
-    // Listen for typing indicators
+    
     socketService.onTypingStart((data) => {
       if (data.conversationId === conversationId && data.userId !== currentUserId) {
         console.log('⌨️ Other user started typing');
         setIsOtherUserTyping(true);
         setOtherUserActivity('typing');
         
-        // Auto-clear after 5 seconds
+        
         setTimeout(() => {
           setIsOtherUserTyping(false);
           setOtherUserActivity(isOtherUserOnline ? 'online' : 'offline');
@@ -189,7 +189,7 @@ const ChatDetailScreen: React.FC = () => {
       }
     });
 
-    // Listen for recording indicators (NEW)
+    
     socketService.on('recording:start', (data: any) => {
       if (data.conversationId === conversationId && data.userId !== currentUserId) {
         console.log('🎤 Other user started recording');
@@ -204,7 +204,7 @@ const ChatDetailScreen: React.FC = () => {
       }
     });
 
-    // Listen for uploading indicators (NEW)
+    
     socketService.on('uploading:start', (data: any) => {
       if (data.conversationId === conversationId && data.userId !== currentUserId) {
         console.log('📤 Other user started uploading');
@@ -219,7 +219,7 @@ const ChatDetailScreen: React.FC = () => {
       }
     });
 
-    // Listen for message reactions
+    
     socketService.onMessageReaction((data) => {
       setMessages((prev) =>
         prev.map((msg) =>
@@ -230,14 +230,14 @@ const ChatDetailScreen: React.FC = () => {
       );
     });
 
-    // Listen for message deletions
+    
     socketService.onMessageDeleted((data) => {
       setMessages((prev) =>
         prev.filter((msg) => msg._id !== data.messageId)
       );
     });
 
-    // Listen for conversation read updates
+    
     socketService.onConversationRead((data) => {
       if (data.conversationId === conversationId && data.readBy !== currentUserId) {
         setMessages((prev) =>
@@ -250,7 +250,7 @@ const ChatDetailScreen: React.FC = () => {
       }
     });
 
-    // Cleanup on unmount
+    
     return () => {
       console.log('🚪 Leaving conversation and cleaning up');
       socketService.leaveConversation(conversationId);
@@ -269,7 +269,7 @@ const ChatDetailScreen: React.FC = () => {
     };
   }, [conversationId, currentUserId, isOtherUserOnline]);
 
-  // Listen for user online/offline status
+  
   useEffect(() => {
     if (!otherUserId) return;
 
@@ -297,30 +297,30 @@ const ChatDetailScreen: React.FC = () => {
     };
   }, [otherUserId]);
 
-  // ==================== RECONNECT SOCKET ON FOCUS ====================
+  
   
   useFocusEffect(
     useCallback(() => {
       console.log('🔄 Chat screen focused - ensuring socket connected');
       
-      // Reconnect socket if needed
+      
       if (!socketService.isSocketConnected()) {
         console.log('🔌 Reconnecting socket...');
         socketService.connect();
       }
 
-      // Rejoin conversation room if needed
+      
       if (conversationId) {
         socketService.joinConversation(conversationId);
         
-        // ✅ CORRECT: Mark incoming messages as READ when I view the chat
-        // This tells the OTHER person that I read THEIR messages
+        
+        
         console.log('👁️ Marking received messages as read');
         
-        // Mark all unread messages from OTHER user as read
+        
         messages.forEach((message) => {
           if (
-            message.sender._id !== currentUserId && // Message from other user
+            message.sender._id !== currentUserId && 
             message.status !== 'read'
           ) {
             console.log('  📖 Marking message as read:', message._id);
@@ -328,7 +328,7 @@ const ChatDetailScreen: React.FC = () => {
           }
         });
         
-        // Mark conversation as read
+        
         socketService.markConversationAsRead(conversationId);
         console.log('✅ Conversation marked as read');
       }
@@ -339,7 +339,7 @@ const ChatDetailScreen: React.FC = () => {
     }, [conversationId, messages, currentUserId])
   );
 
-  // ==================== LIFECYCLE ====================
+  
 
   useEffect(() => {
     loadCurrentUser();
@@ -467,7 +467,7 @@ const ChatDetailScreen: React.FC = () => {
     setInputText('');
     Keyboard.dismiss();
 
-    // Stop typing indicator
+    
     if (conversationId) {
       socketService.stopTyping(conversationId);
     }
@@ -479,7 +479,7 @@ const ChatDetailScreen: React.FC = () => {
     try {
       setSending(true);
 
-      // Emit uploading indicator if sending media
+      
       if (mediaUri) {
         console.log('📤 Emitting uploading:start');
         socketService.emit('uploading:start', conversationId);
@@ -514,7 +514,7 @@ const ChatDetailScreen: React.FC = () => {
           }];
         }
 
-        // Stop uploading indicator
+        
         console.log('✅ Emitting uploading:stop');
         socketService.emit('uploading:stop', conversationId);
       }
@@ -524,16 +524,16 @@ const ChatDetailScreen: React.FC = () => {
       if (response.success) {
         console.log('✅ Message sent successfully');
         
-        // Message will be received via socket 'message:received' event
-        // So we don't need to add it manually here anymore
-        // The socket will handle real-time updates for both sender and receiver
+        
+        
+        
       }
     } catch (error) {
       const apiError = handleAPIError(error);
       console.error('Send message error:', apiError);
       Alert.alert('Error', apiError.message || 'Failed to send message');
       
-      // Stop uploading indicator on error
+      
       if (mediaUri && conversationId) {
         socketService.emit('uploading:stop', conversationId);
       }
@@ -611,7 +611,7 @@ const ChatDetailScreen: React.FC = () => {
 
   const startRecording = async () => {
     try {
-      // Emit recording indicator
+      
       if (conversationId) {
         console.log('🎤 Emitting recording:start');
         socketService.emit('recording:start', conversationId);
@@ -631,7 +631,7 @@ const ChatDetailScreen: React.FC = () => {
     } catch (error) {
       console.error('Start recording error:', error);
       
-      // Stop recording indicator on error
+      
       if (conversationId) {
         socketService.emit('recording:stop', conversationId);
       }
@@ -646,7 +646,7 @@ const ChatDetailScreen: React.FC = () => {
       await recording.stopAndUnloadAsync();
       const uri = recording.getURI();
       
-      // Stop recording indicator
+      
       if (conversationId) {
         console.log('🛑 Emitting recording:stop');
         socketService.emit('recording:stop', conversationId);
@@ -669,7 +669,7 @@ const ChatDetailScreen: React.FC = () => {
         setRecording(null);
         setIsRecording(false);
         
-        // Stop recording indicator
+        
         if (conversationId) {
           socketService.emit('recording:stop', conversationId);
         }
@@ -780,7 +780,7 @@ const ChatDetailScreen: React.FC = () => {
     );
   };
 
-  // Enhanced status renderer with all activities
+  
   const renderUserStatus = () => {
     switch (otherUserActivity) {
       case 'typing':
@@ -844,7 +844,7 @@ const ChatDetailScreen: React.FC = () => {
 
   return (
     <SafeAreaView className="flex-1 bg-white" edges={['top']}>
-      {/* Enhanced Header with All Status Indicators */}
+      {}
       <LinearGradient
         colors={['#eb278d', '#f472b6']}
         start={{ x: 0, y: 0 }}
@@ -871,7 +871,7 @@ const ChatDetailScreen: React.FC = () => {
                 <Ionicons name="person" size={20} color="#fff" />
               )}
               
-              {/* Online indicator dot on avatar */}
+              {}
               {isOtherUserOnline && (
                 <View className="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-green-400 border-2 border-white" />
               )}
@@ -884,7 +884,7 @@ const ChatDetailScreen: React.FC = () => {
                   : otherUserName || 'User'}
               </Text>
               
-              {/* Dynamic Status: Recording > Uploading > Typing > Online > Offline */}
+              {}
               {renderUserStatus()}
             </View>
           </View>
@@ -898,7 +898,7 @@ const ChatDetailScreen: React.FC = () => {
         </View>
       </LinearGradient>
 
-      {/* Messages List */}
+      {}
       <FlatList
         ref={flatListRef}
         data={messages}
@@ -931,13 +931,13 @@ const ChatDetailScreen: React.FC = () => {
         }
       />
 
-      {/* Reply Preview */}
+      {}
       {renderReplyPreview()}
 
-      {/* Media Preview */}
+      {}
       {renderMediaPreview()}
 
-      {/* Voice Recording Indicator */}
+      {}
       {isRecording && (
         <View className="px-4 py-3 bg-red-50 border-t border-red-200">
           <View className="flex-row items-center justify-between">
@@ -965,7 +965,7 @@ const ChatDetailScreen: React.FC = () => {
         </View>
       )}
 
-      {/* Input Area */}
+      {}
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
@@ -1052,7 +1052,7 @@ const ChatDetailScreen: React.FC = () => {
         </View>
       </KeyboardAvoidingView>
 
-      {/* Attachment Menu Modal */}
+      {}
       <AttachmentMenuModal
         visible={showAttachmentMenu}
         onClose={() => setShowAttachmentMenu(false)}
@@ -1065,7 +1065,7 @@ const ChatDetailScreen: React.FC = () => {
   );
 };
 
-// Swipeable Message Component (unchanged)
+
 const SwipeableMessage: React.FC<{
   message: Message;
   isMyMessage: boolean;
@@ -1195,8 +1195,8 @@ const SwipeableMessage: React.FC<{
             {isMyMessage && (
               <View className="ml-1">
                 {(message.status === 'sent' || !message.status) && (
-                  // Single checkmark - Message sent (gray)
-                  // Show for 'sent' status or if status is undefined (default)
+                  
+                  
                   <Ionicons
                     name="checkmark"
                     size={14}
@@ -1204,7 +1204,7 @@ const SwipeableMessage: React.FC<{
                   />
                 )}
                 {message.status === 'delivered' && (
-                  // Double checkmark - Message delivered (gray)
+                  
                   <Ionicons
                     name="checkmark-done"
                     size={14}
@@ -1212,7 +1212,7 @@ const SwipeableMessage: React.FC<{
                   />
                 )}
                 {message.status === 'read' && (
-                  // Double checkmark - Message read (blue)
+                  
                   <Ionicons
                     name="checkmark-done"
                     size={14}
@@ -1228,7 +1228,7 @@ const SwipeableMessage: React.FC<{
   );
 };
 
-// Attachment Menu Modal (unchanged)
+
 const AttachmentMenuModal: React.FC<{
   visible: boolean;
   onClose: () => void;

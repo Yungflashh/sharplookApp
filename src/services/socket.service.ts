@@ -7,9 +7,7 @@ class SocketService {
   private socket: Socket | null = null;
   private isConnected: boolean = false;
 
-  /**
-   * Connect to Socket.IO server
-   */
+  
   async connect(): Promise<void> {
     try {
       if (this.socket?.connected) {
@@ -41,13 +39,11 @@ class SocketService {
     }
   }
 
-  /**
-   * Setup socket event listeners
-   */
+  
   private setupEventListeners(): void {
     if (!this.socket) return;
 
-    // Connection events
+    
     this.socket.on('connect', () => {
       this.isConnected = true;
       console.log('✅ Socket connected successfully');
@@ -67,15 +63,13 @@ class SocketService {
       console.error('❌ Socket error:', error);
     });
 
-    // Auth success
+    
     this.socket.on('authenticated', () => {
       console.log('🔐 Socket authenticated successfully');
     });
   }
 
-  /**
-   * Disconnect from socket
-   */
+  
   disconnect(): void {
     if (this.socket) {
       console.log('🔴 Disconnecting socket...');
@@ -85,20 +79,16 @@ class SocketService {
     }
   }
 
-  /**
-   * Check if socket is connected
-   */
+  
   isSocketConnected(): boolean {
     const connected = this.socket?.connected || false;
     console.log('🔍 Socket connection check:', connected ? '✅ CONNECTED' : '❌ DISCONNECTED');
     return connected;
   }
 
-  // ==================== CONVERSATION EVENTS ====================
+  
 
-  /**
-   * Join a conversation room
-   */
+  
   joinConversation(conversationId: string): void {
     if (!this.socket) {
       console.error('❌ Cannot join conversation - socket not initialized');
@@ -109,9 +99,7 @@ class SocketService {
     this.socket.emit('join:conversation', conversationId);
   }
 
-  /**
-   * Leave a conversation room
-   */
+  
   leaveConversation(conversationId: string): void {
     if (!this.socket) {
       console.error('❌ Cannot leave conversation - socket not initialized');
@@ -122,9 +110,7 @@ class SocketService {
     this.socket.emit('leave:conversation', conversationId);
   }
 
-  /**
-   * Listen for joined conversation confirmation
-   */
+  
   onJoinedConversation(callback: (data: { conversationId: string }) => void): void {
     if (!this.socket) {
       console.error('❌ Cannot listen for joined:conversation - socket not initialized');
@@ -138,11 +124,9 @@ class SocketService {
     });
   }
 
-  // ==================== MESSAGE EVENTS ====================
+  
 
-  /**
-   * Listen for new messages
-   */
+  
   onMessageReceived(callback: (data: any) => void): void {
     if (!this.socket) {
       console.error('❌ Cannot listen for messages - socket not initialized');
@@ -156,9 +140,7 @@ class SocketService {
     });
   }
 
-  /**
-   * Listen for message:new (alternative event)
-   */
+  
   onNewMessage(callback: (data: any) => void): void {
     if (!this.socket) {
       console.error('❌ Cannot listen for new messages - socket not initialized');
@@ -172,9 +154,7 @@ class SocketService {
     });
   }
 
-  /**
-   * Listen for message status updates
-   */
+  
   onMessageStatus(callback: (data: any) => void): void {
     if (!this.socket) {
       console.error('❌ Cannot listen for message status - socket not initialized');
@@ -188,9 +168,7 @@ class SocketService {
     });
   }
 
-  /**
-   * Mark message as delivered
-   */
+  
   markMessageAsDelivered(messageId: string): void {
     if (!this.socket) {
       console.error('❌ Cannot mark as delivered - socket not initialized');
@@ -201,9 +179,7 @@ class SocketService {
     this.socket.emit('message:delivered', messageId);
   }
 
-  /**
-   * Mark message as read
-   */
+  
   markMessageAsRead(messageId: string): void {
     if (!this.socket) {
       console.error('❌ Cannot mark as read - socket not initialized');
@@ -214,9 +190,7 @@ class SocketService {
     this.socket.emit('message:read', messageId);
   }
 
-  /**
-   * Mark conversation as read
-   */
+  
   markConversationAsRead(conversationId: string): void {
     if (!this.socket) {
       console.error('❌ Cannot mark conversation as read - socket not initialized');
@@ -227,9 +201,7 @@ class SocketService {
     this.socket.emit('conversation:read', conversationId);
   }
 
-  /**
-   * Listen for conversation read events
-   */
+  
   onConversationRead(callback: (data: any) => void): void {
     if (!this.socket) {
       console.error('❌ Cannot listen for conversation read - socket not initialized');
@@ -243,11 +215,9 @@ class SocketService {
     });
   }
 
-  // ==================== TYPING INDICATORS ====================
+  
 
-  /**
-   * Emit typing start
-   */
+  
   startTyping(conversationId: string): void {
     if (!this.socket) {
       console.error('❌ Cannot emit typing start - socket not initialized');
@@ -258,9 +228,7 @@ class SocketService {
     this.socket.emit('typing:start', conversationId);
   }
 
-  /**
-   * Emit typing stop
-   */
+  
   stopTyping(conversationId: string): void {
     if (!this.socket) {
       console.error('❌ Cannot emit typing stop - socket not initialized');
@@ -271,9 +239,7 @@ class SocketService {
     this.socket.emit('typing:stop', conversationId);
   }
 
-  /**
-   * Listen for typing start
-   */
+  
   onTypingStart(callback: (data: { conversationId: string; userId: string }) => void): void {
     if (!this.socket) {
       console.error('❌ Cannot listen for typing start - socket not initialized');
@@ -287,9 +253,7 @@ class SocketService {
     });
   }
 
-  /**
-   * Listen for typing stop
-   */
+  
   onTypingStop(callback: (data: { conversationId: string; userId: string }) => void): void {
     if (!this.socket) {
       console.error('❌ Cannot listen for typing stop - socket not initialized');
@@ -303,11 +267,9 @@ class SocketService {
     });
   }
 
-  // ==================== USER STATUS ====================
+  
 
-  /**
-   * Request user online status
-   */
+  
   requestUserStatus(userIds: string[]): void {
     if (!this.socket) {
       console.error('❌ Cannot request user status - socket not initialized');
@@ -318,9 +280,7 @@ class SocketService {
     this.socket.emit('user:status:request', userIds);
   }
 
-  /**
-   * Listen for user status response
-   */
+  
   onUserStatusResponse(callback: (statuses: Array<{ userId: string; isOnline: boolean }>) => void): void {
     if (!this.socket) {
       console.error('❌ Cannot listen for user status response - socket not initialized');
@@ -334,9 +294,7 @@ class SocketService {
     });
   }
 
-  /**
-   * Listen for user status updates
-   */
+  
   onUserStatus(callback: (data: { userId: string; isOnline: boolean }) => void): void {
     if (!this.socket) {
       console.error('❌ Cannot listen for user status - socket not initialized');
@@ -350,11 +308,9 @@ class SocketService {
     });
   }
 
-  // ==================== MESSAGE REACTIONS ====================
+  
 
-  /**
-   * Add reaction to message
-   */
+  
   addReaction(messageId: string, emoji: string): void {
     if (!this.socket) {
       console.error('❌ Cannot add reaction - socket not initialized');
@@ -365,9 +321,7 @@ class SocketService {
     this.socket.emit('message:reaction:add', { messageId, emoji });
   }
 
-  /**
-   * Remove reaction from message
-   */
+  
   removeReaction(messageId: string, emoji: string): void {
     if (!this.socket) {
       console.error('❌ Cannot remove reaction - socket not initialized');
@@ -378,9 +332,7 @@ class SocketService {
     this.socket.emit('message:reaction:remove', { messageId, emoji });
   }
 
-  /**
-   * Listen for message reactions
-   */
+  
   onMessageReaction(callback: (data: any) => void): void {
     if (!this.socket) {
       console.error('❌ Cannot listen for message reactions - socket not initialized');
@@ -394,11 +346,9 @@ class SocketService {
     });
   }
 
-  // ==================== MESSAGE DELETION ====================
+  
 
-  /**
-   * Delete message
-   */
+  
   deleteMessage(messageId: string): void {
     if (!this.socket) {
       console.error('❌ Cannot delete message - socket not initialized');
@@ -409,9 +359,7 @@ class SocketService {
     this.socket.emit('message:delete', messageId);
   }
 
-  /**
-   * Listen for message deletions
-   */
+  
   onMessageDeleted(callback: (data: { messageId: string; conversationId: string }) => void): void {
     if (!this.socket) {
       console.error('❌ Cannot listen for message deletions - socket not initialized');
@@ -425,11 +373,9 @@ class SocketService {
     });
   }
 
-  // ==================== UTILITY ====================
+  
 
-  /**
-   * Remove a specific event listener
-   */
+  
   removeListener(event: string): void {
     if (!this.socket) {
       console.warn('⚠️ Cannot remove listener - socket not initialized');
@@ -440,16 +386,12 @@ class SocketService {
     this.socket.off(event);
   }
 
-  /**
-   * Get socket instance (for advanced usage)
-   */
+  
   getSocket(): Socket | null {
     return this.socket;
   }
 
-  /**
-   * Emit custom event
-   */
+  
   emit(event: string, data?: any): void {
     if (!this.socket) {
       console.error('❌ Cannot emit - socket not initialized');
@@ -460,9 +402,7 @@ class SocketService {
     this.socket.emit(event, data);
   }
 
-  /**
-   * Listen for custom event
-   */
+  
   on(event: string, callback: (data: any) => void): void {
     if (!this.socket) {
       console.error('❌ Cannot listen - socket not initialized');

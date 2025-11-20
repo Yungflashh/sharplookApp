@@ -23,7 +23,7 @@ const ChangeWithdrawalPinScreen: React.FC = () => {
   const [showPins, setShowPins] = useState(false);
 
   const handleChangePin = async () => {
-    // Validation
+    
     if (!currentPin || !newPin || !confirmNewPin) {
       Alert.alert('Error', 'Please fill in all fields');
       return;
@@ -49,7 +49,7 @@ const ChangeWithdrawalPinScreen: React.FC = () => {
       return;
     }
 
-    // Check for weak PINs
+    
     const weakPins = ['0000', '1111', '2222', '3333', '4444', '5555', '6666', '7777', '8888', '9999', '1234', '4321'];
     if (weakPins.includes(newPin)) {
       Alert.alert(
@@ -99,7 +99,7 @@ const ChangeWithdrawalPinScreen: React.FC = () => {
 
   return (
     <SafeAreaView className="flex-1 bg-gray-50" edges={['top']}>
-      {/* Header */}
+      {}
       <View className="bg-white px-5 py-4 border-b border-gray-100">
         <View className="flex-row items-center justify-between">
           <TouchableOpacity
@@ -120,7 +120,7 @@ const ChangeWithdrawalPinScreen: React.FC = () => {
         className="flex-1"
       >
         <View className="flex-1 px-5 pt-8">
-          {/* Icon */}
+          {}
           <View className="items-center mb-8">
             <View className="w-20 h-20 rounded-full bg-pink-100 items-center justify-center mb-4">
               <Ionicons name="key" size={40} color="#eb278d" />
@@ -133,7 +133,7 @@ const ChangeWithdrawalPinScreen: React.FC = () => {
             </Text>
           </View>
 
-          {/* Current PIN */}
+          {}
           <View className="mb-6">
             <Text className="text-sm font-semibold text-gray-700 mb-3">
               Current PIN
@@ -166,7 +166,7 @@ const ChangeWithdrawalPinScreen: React.FC = () => {
             </View>
           </View>
 
-          {/* New PIN */}
+          {}
           <View className="mb-6">
             <Text className="text-sm font-semibold text-gray-700 mb-3">
               New PIN
@@ -199,7 +199,7 @@ const ChangeWithdrawalPinScreen: React.FC = () => {
             </View>
           </View>
 
-          {/* Confirm New PIN */}
+          {}
           <View className="mb-6">
             <Text className="text-sm font-semibold text-gray-700 mb-3">
               Confirm New PIN
@@ -232,7 +232,7 @@ const ChangeWithdrawalPinScreen: React.FC = () => {
             </View>
           </View>
 
-          {/* Show PIN Toggle */}
+          {}
           <TouchableOpacity
             onPress={() => setShowPins(!showPins)}
             className="flex-row items-center justify-center mb-8"
@@ -247,7 +247,7 @@ const ChangeWithdrawalPinScreen: React.FC = () => {
             </Text>
           </TouchableOpacity>
 
-          {/* Info Box */}
+          {}
           <View className="bg-blue-50 rounded-xl p-4 flex-row mb-8">
             <Ionicons name="information-circle" size={20} color="#3b82f6" />
             <View className="flex-1 ml-3">
@@ -259,7 +259,7 @@ const ChangeWithdrawalPinScreen: React.FC = () => {
             </View>
           </View>
 
-          {/* Submit Button */}
+          {}
           <TouchableOpacity
             onPress={handleChangePin}
             disabled={loading || !currentPin || !newPin || !confirmNewPin}
@@ -278,7 +278,7 @@ const ChangeWithdrawalPinScreen: React.FC = () => {
             )}
           </TouchableOpacity>
 
-          {/* Forgot PIN Link */}
+          {}
           <TouchableOpacity className="mt-6 items-center">
             <Text className="text-sm text-pink-500 font-medium">
               Forgot Your PIN?

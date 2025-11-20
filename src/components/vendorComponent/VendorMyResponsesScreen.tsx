@@ -225,7 +225,7 @@ const VendorMyResponsesScreen: React.FC = () => {
           }),
         }}
       >
-        {/* Header */}
+        {}
         <View className="flex-row items-start justify-between mb-4">
           <View className="flex-1 mr-3">
             <Text className="text-lg font-bold text-gray-900 mb-2">{offer.title}</Text>
@@ -254,12 +254,12 @@ const VendorMyResponsesScreen: React.FC = () => {
           </View>
         </View>
 
-        {/* Description */}
+        {}
         <Text className="text-sm text-gray-700 mb-4 leading-5" numberOfLines={2}>
           {offer.description}
         </Text>
 
-        {/* Price Comparison */}
+        {}
         <View className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-2xl p-4 mb-4">
           <View className="flex-row items-center justify-between mb-3">
             <View className="flex-row items-center flex-1">
@@ -308,7 +308,7 @@ const VendorMyResponsesScreen: React.FC = () => {
           )}
         </View>
 
-        {/* Details */}
+        {}
         <View style={{ gap: 10 }} className="mb-4">
           {myResponse.estimatedDuration && (
             <View className="flex-row items-center">
@@ -342,7 +342,7 @@ const VendorMyResponsesScreen: React.FC = () => {
           </View>
         </View>
 
-        {/* Counter Offer Actions */}
+        {}
         {hasClientCounter && canNegotiate && (
           <View className="bg-orange-50 border-2 border-orange-200 rounded-2xl p-4 mb-4">
             <View className="flex-row items-center mb-4">
@@ -420,7 +420,7 @@ const VendorMyResponsesScreen: React.FC = () => {
           </View>
         )}
 
-        {/* Status Messages */}
+        {}
         {myResponse.isAccepted && (
           <View className="bg-green-50 border-2 border-green-200 rounded-2xl p-4 flex-row items-start">
             <View className="w-10 h-10 rounded-full bg-green-100 items-center justify-center mr-3">

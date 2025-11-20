@@ -7,7 +7,7 @@ import MessageScreen from '@/screens/vendor/MessageScreen';
 import MainNavigator from '@/navigation/MainNavigator';
 import ChatScreen from '../components/clientComponent/ChatScreen';
 import CartScreen from '../components/clientComponent/CartScreen';
-// import ChatDetailScreen from '@/components/clientComponent/ChatDetailScreen';
+
 import AllVendorsScreen from '@/screens/client/AllVendorsScreen';
 import VendorDetailScreen from '@/screens/client/VendorDetailsScreen';
 import type { RootStackParamList } from '@/types/navigation.types';
@@ -98,7 +98,7 @@ const RootNavigator = () => {
           <Stack.Screen name="Message" component={MessageScreen} />
           <Stack.Screen name="Chat" component={ChatScreen} />
           <Stack.Screen name="Cart" component={CartScreen} />
-          {/* <Stack.Screen name="ChatDetail" component={ChatDetailScreen} /> */}
+          {}
           
           {}
           <Stack.Screen name="AllVendors" component={AllVendorsScreen} options={{
@@ -173,12 +173,7 @@ const RootNavigator = () => {
       <Stack.Screen name="ChatList" component={ChatListScreen} options={{
         animation: 'slide_from_right'
       }} />
-      {/* <Stack.Screen name="IncomingCall" component={IncomingCallScreen} options={{
-        animation: 'slide_from_right'
-      }} />
-      <Stack.Screen name="OngoingCall" component={OngoingCallScreen} options={{
-        animation: 'slide_from_right'
-      }} /> */}
+      {}
 
       <Stack.Screen name="Marketplace" component={MarketplaceScreen} options={{
         animation: 'slide_from_right'

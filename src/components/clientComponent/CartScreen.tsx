@@ -130,7 +130,7 @@ const CartScreen: React.FC = () => {
 
   const calculateTotal = () => {
     const subtotal = calculateSubtotal();
-    // Add delivery fee, tax, etc. here if needed
+    
     return subtotal;
   };
 
@@ -144,7 +144,7 @@ const CartScreen: React.FC = () => {
       return;
     }
 
-    // Group items by seller
+    
     const itemsBySeller = cart.reduce((acc, item) => {
       const sellerId = item.product.seller._id;
       if (!acc[sellerId]) {
@@ -154,7 +154,7 @@ const CartScreen: React.FC = () => {
       return acc;
     }, {} as Record<string, CartItem[]>);
 
-    // Navigate to checkout
+    
     navigation.navigate('Checkout', { 
       cartItems: cart,
       itemsBySeller: Object.keys(itemsBySeller).length
@@ -183,7 +183,7 @@ const CartScreen: React.FC = () => {
         }}
       >
         <View className="flex-row">
-          {/* Image */}
+          {}
           <TouchableOpacity
             onPress={() => navigation.navigate('ProductDetail', { productId: product._id })}
           >
@@ -194,7 +194,7 @@ const CartScreen: React.FC = () => {
             />
           </TouchableOpacity>
 
-          {/* Details */}
+          {}
           <View className="flex-1 ml-3">
             <TouchableOpacity
               onPress={() => navigation.navigate('ProductDetail', { productId: product._id })}
@@ -223,7 +223,7 @@ const CartScreen: React.FC = () => {
               )}
             </View>
 
-            {/* Quantity Controls */}
+            {}
             <View className="flex-row items-center justify-between">
               <View className="flex-row items-center bg-gray-100 rounded-xl">
                 <TouchableOpacity
@@ -263,7 +263,7 @@ const CartScreen: React.FC = () => {
                 </TouchableOpacity>
               </View>
 
-              {/* Remove Button */}
+              {}
               <TouchableOpacity
                 onPress={() => handleRemoveItem(product._id, selectedVariant)}
                 className="w-8 h-8 rounded-full bg-red-100 items-center justify-center"
@@ -274,7 +274,7 @@ const CartScreen: React.FC = () => {
           </View>
         </View>
 
-        {/* Stock Warning */}
+        {}
         {product.stock < 10 && quantity < product.stock && (
           <View className="mt-3 bg-orange-50 p-2 rounded-lg flex-row items-center">
             <Ionicons name="alert-circle" size={16} color="#f97316" />
@@ -284,7 +284,7 @@ const CartScreen: React.FC = () => {
           </View>
         )}
 
-        {/* Item Total */}
+        {}
         <View className="mt-3 pt-3 border-t border-gray-100 flex-row justify-between items-center">
           <Text className="text-gray-500 text-sm">Item Total:</Text>
           <Text className="text-gray-900 text-base font-bold">{formatPrice(itemTotal)}</Text>
@@ -397,7 +397,7 @@ const CartScreen: React.FC = () => {
             <View className="h-32" />
           </ScrollView>
 
-          {/* Bottom Summary */}
+          {}
           <View
             className="bg-white px-5 py-4"
             style={{
@@ -412,7 +412,7 @@ const CartScreen: React.FC = () => {
               }),
             }}
           >
-            {/* Summary */}
+            {}
             <View className="mb-4">
               <View className="flex-row justify-between mb-2">
                 <Text className="text-gray-600 text-sm">Subtotal</Text>
@@ -432,7 +432,7 @@ const CartScreen: React.FC = () => {
               </View>
             </View>
 
-            {/* Checkout Button */}
+            {}
             <TouchableOpacity
               onPress={handleCheckout}
               activeOpacity={0.8}

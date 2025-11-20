@@ -85,7 +85,7 @@ const VendorBookingsScreen: React.FC = () => {
   const [hasMore, setHasMore] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
-  // Helper function to safely get service/offer name
+  
   const getServiceName = (booking: VendorBooking): string => {
     if (booking.service?.name) {
       return booking.service.name;
@@ -526,7 +526,7 @@ const VendorBookingsScreen: React.FC = () => {
             }),
           }}
         >
-          {/* Header */}
+          {}
           <View className="flex-row items-start justify-between mb-4">
             <View className="flex-1 mr-3">
               <Text className="text-lg font-bold text-gray-900 mb-1.5">
@@ -564,7 +564,7 @@ const VendorBookingsScreen: React.FC = () => {
             </View>
           </View>
 
-          {/* Details */}
+          {}
           <View className="bg-gray-50 rounded-2xl p-4 mb-4" style={{ gap: 12 }}>
             <View className="flex-row items-center">
               <View className="w-9 h-9 rounded-xl bg-blue-100 items-center justify-center mr-3">
@@ -639,10 +639,10 @@ const VendorBookingsScreen: React.FC = () => {
             )}
           </View>
 
-          {/* Action Buttons */}
+          {}
           {getActionButtons(booking)}
 
-          {/* View Details Link */}
+          {}
           <TouchableOpacity
             onPress={() => navigation.navigate('BookingDetail', { bookingId: booking._id })}
             className="mt-3 pt-4 border-t border-gray-100"
@@ -687,7 +687,7 @@ const VendorBookingsScreen: React.FC = () => {
 
   return (
     <SafeAreaView className="flex-1 bg-gray-50" edges={['top']}>
-      {/* Header with Gradient */}
+      {}
       <LinearGradient
         colors={['#eb278d', '#f472b6']}
         start={{ x: 0, y: 0 }}
@@ -703,7 +703,7 @@ const VendorBookingsScreen: React.FC = () => {
               </Text>
             </View>
 
-            {/* Quick Action Buttons */}
+            {}
             <View className="flex-row gap-2">
               <TouchableOpacity
                 onPress={() => navigation.navigate('VendorMyResponses')}
@@ -725,7 +725,7 @@ const VendorBookingsScreen: React.FC = () => {
             </View>
           </View>
 
-          {/* Quick Access Cards */}
+          {}
           <View className="flex-row mb-4" style={{ gap: 8 }}>
             <TouchableOpacity
               onPress={() => navigation.navigate('AvailableOffers')}
@@ -758,7 +758,7 @@ const VendorBookingsScreen: React.FC = () => {
             </TouchableOpacity>
           </View>
 
-          {/* Stats Cards */}
+          {}
           {stats && (
             <View className="flex-row mb-4" style={{ gap: 12 }}>
               <View className="flex-1 bg-white/20 rounded-2xl p-4">
@@ -786,7 +786,7 @@ const VendorBookingsScreen: React.FC = () => {
             </View>
           )}
 
-          {/* Search Bar */}
+          {}
           <View className="flex-row items-center bg-white/20 rounded-2xl px-4 py-3">
             <Ionicons name="search" size={20} color="#fff" />
             <TextInput
@@ -804,7 +804,7 @@ const VendorBookingsScreen: React.FC = () => {
           </View>
         </View>
 
-        {/* Filter Tabs */}
+        {}
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -833,7 +833,7 @@ const VendorBookingsScreen: React.FC = () => {
         </ScrollView>
       </LinearGradient>
 
-      {/* Bookings List */}
+      {}
       <ScrollView
         className="flex-1"
         showsVerticalScrollIndicator={false}

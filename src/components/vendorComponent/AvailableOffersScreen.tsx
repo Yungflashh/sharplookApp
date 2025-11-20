@@ -179,7 +179,7 @@ const AvailableOffersScreen: React.FC = () => {
       }}
       activeOpacity={0.95}
     >
-      {/* Header */}
+      {}
       <View className="flex-row items-start justify-between mb-4">
         <View className="flex-1 mr-3">
           <Text className="text-lg font-bold text-gray-900 mb-2">{offer.title}</Text>
@@ -194,12 +194,12 @@ const AvailableOffersScreen: React.FC = () => {
         </View>
       </View>
 
-      {/* Description */}
+      {}
       <Text className="text-sm text-gray-700 mb-4 leading-5" numberOfLines={3}>
         {offer.description}
       </Text>
 
-      {/* Details Section */}
+      {}
       <View className="bg-gray-50 rounded-2xl p-4 mb-4" style={{ gap: 12 }}>
         <View className="flex-row items-center">
           <LinearGradient
@@ -260,7 +260,7 @@ const AvailableOffersScreen: React.FC = () => {
         </View>
       </View>
 
-      {/* Footer */}
+      {}
       <View className="flex-row items-center justify-between pt-4 border-t border-gray-100">
         <Text className="text-xs text-gray-400 font-medium">
           Posted {formatDate(offer.createdAt)}
@@ -307,7 +307,7 @@ const AvailableOffersScreen: React.FC = () => {
 
   return (
     <SafeAreaView className="flex-1 bg-gray-50" edges={['top']}>
-      {/* Enhanced Header */}
+      {}
       <LinearGradient
         colors={['#eb278d', '#f472b6']}
         start={{ x: 0, y: 0 }}
@@ -339,7 +339,7 @@ const AvailableOffersScreen: React.FC = () => {
             </TouchableOpacity>
           </View>
 
-          {/* Stats Card */}
+          {}
           <View className="bg-white/20 rounded-2xl p-4">
             <View className="flex-row items-center justify-between">
               <View className="flex-1">
@@ -366,7 +366,7 @@ const AvailableOffersScreen: React.FC = () => {
         }
       >
         <View className="px-5 py-4">
-          {/* Info Banner */}
+          {}
           <View className="bg-blue-50 border border-blue-200 rounded-2xl p-4 mb-4 flex-row">
             <View className="w-10 h-10 rounded-full bg-blue-100 items-center justify-center mr-3">
               <Ionicons name="information-circle" size={24} color="#3b82f6" />
@@ -398,11 +398,11 @@ const AvailableOffersScreen: React.FC = () => {
         </View>
       </ScrollView>
 
-      {/* Enhanced Modal */}
+      {}
       <Modal visible={showRespondModal} transparent animationType="slide">
         <View className="flex-1 bg-black/50 justify-end">
           <View className="bg-white rounded-t-3xl" style={{ maxHeight: '85%' }}>
-            {/* Modal Header */}
+            {}
             <LinearGradient
               colors={['#eb278d', '#f472b6']}
               start={{ x: 0, y: 0 }}
@@ -442,7 +442,7 @@ const AvailableOffersScreen: React.FC = () => {
                 </View>
               )}
 
-              {/* Your Price */}
+              {}
               <View className="mb-5">
                 <Text className="text-sm font-bold text-gray-900 mb-2">
                   Your Price (₦) <Text className="text-pink-600">*</Text>
@@ -467,7 +467,7 @@ const AvailableOffersScreen: React.FC = () => {
                 </View>
               </View>
 
-              {/* Estimated Duration */}
+              {}
               <View className="mb-5">
                 <Text className="text-sm font-bold text-gray-900 mb-2">
                   Estimated Duration (minutes)
@@ -492,7 +492,7 @@ const AvailableOffersScreen: React.FC = () => {
                 </View>
               </View>
 
-              {/* Message */}
+              {}
               <View className="mb-6">
                 <Text className="text-sm font-bold text-gray-900 mb-2">
                   Message <Text className="text-gray-400">(Optional)</Text>
@@ -517,7 +517,7 @@ const AvailableOffersScreen: React.FC = () => {
               </View>
             </ScrollView>
 
-            {/* Action Buttons */}
+            {}
             <View className="px-6 pb-6 pt-4 border-t border-gray-100" style={{ gap: 12 }}>
               <TouchableOpacity
                 className="bg-gray-100 py-4 rounded-xl items-center"

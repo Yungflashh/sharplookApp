@@ -213,7 +213,7 @@ const OrderDetailScreen: React.FC = () => {
 
   return (
     <SafeAreaView className="flex-1 bg-gray-50" edges={['top']}>
-      {/* Header */}
+      {}
       <View className="flex-row items-center px-5 py-4 bg-white border-b border-gray-100">
         <TouchableOpacity
           onPress={() => navigation.goBack()}
@@ -229,7 +229,7 @@ const OrderDetailScreen: React.FC = () => {
 
       <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
         <View className="p-5">
-          {/* Order Status */}
+          {}
           <View className="bg-white rounded-2xl p-5 mb-4">
             <View className="flex-row items-center justify-between mb-4">
               <Text className="text-gray-900 text-lg font-bold">Order Status</Text>
@@ -246,7 +246,7 @@ const OrderDetailScreen: React.FC = () => {
               </View>
             </View>
 
-            {/* Timeline */}
+            {}
             <View style={{ gap: 12 }}>
               {order.timeline.map((event, index) => (
                 <View key={index} className="flex-row">
@@ -275,7 +275,7 @@ const OrderDetailScreen: React.FC = () => {
             </View>
           </View>
 
-          {/* Items */}
+          {}
           <View className="bg-white rounded-2xl p-5 mb-4">
             <Text className="text-gray-900 text-lg font-bold mb-4">Order Items</Text>
             {order.items.map((item, index) => (
@@ -310,7 +310,7 @@ const OrderDetailScreen: React.FC = () => {
             ))}
           </View>
 
-          {/* Customer/Seller Info */}
+          {}
           <View className="bg-white rounded-2xl p-5 mb-4">
             <Text className="text-gray-900 text-lg font-bold mb-4">
               {userType === 'vendor' ? 'Customer' : 'Seller'} Information
@@ -340,7 +340,7 @@ const OrderDetailScreen: React.FC = () => {
             )}
           </View>
 
-          {/* Delivery Info */}
+          {}
           <View className="bg-white rounded-2xl p-5 mb-4">
             <Text className="text-gray-900 text-lg font-bold mb-4">Delivery Information</Text>
 
@@ -385,7 +385,7 @@ const OrderDetailScreen: React.FC = () => {
             )}
           </View>
 
-          {/* Payment Info */}
+          {}
           <View className="bg-white rounded-2xl p-5 mb-4">
             <Text className="text-gray-900 text-lg font-bold mb-4">Payment Summary</Text>
 
@@ -424,7 +424,7 @@ const OrderDetailScreen: React.FC = () => {
             </View>
           </View>
 
-          {/* Notes */}
+          {}
           {(order.customerNotes || order.sellerNotes) && (
             <View className="bg-white rounded-2xl p-5 mb-4">
               <Text className="text-gray-900 text-lg font-bold mb-4">Notes</Text>
@@ -445,7 +445,7 @@ const OrderDetailScreen: React.FC = () => {
             </View>
           )}
 
-          {/* Dispute Info */}
+          {}
           {order.dispute && (
             <View className="bg-orange-50 border-2 border-orange-200 rounded-2xl p-5 mb-4">
               <View className="flex-row items-center mb-3">
@@ -467,7 +467,7 @@ const OrderDetailScreen: React.FC = () => {
             </View>
           )}
 
-          {/* Create Dispute */}
+          {}
           {!order.dispute &&
             (order.status === 'delivered' || order.status === 'completed') &&
             !showDisputeForm && (
@@ -482,7 +482,7 @@ const OrderDetailScreen: React.FC = () => {
               </TouchableOpacity>
             )}
 
-          {/* Dispute Form */}
+          {}
           {showDisputeForm && (
             <View className="bg-white rounded-2xl p-5 mb-4">
               <Text className="text-gray-900 text-lg font-bold mb-4">Create Dispute</Text>

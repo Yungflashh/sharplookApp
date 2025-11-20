@@ -70,23 +70,23 @@ const VendorProductManagementScreen: React.FC = () => {
       console.log('📊 Response data:', response.data);
 
       if (response.success) {
-        // Try multiple possible data structures
+        
         let productList: Product[] = [];
         
         if (response.data.products) {
-          // Structure 1: response.data.products
+          
           productList = response.data.products;
           console.log('📦 Found products in response.data.products');
         } else if (Array.isArray(response.data)) {
-          // Structure 2: response.data is array
+          
           productList = response.data;
           console.log('📦 Found products in response.data (array)');
         } else if (response.data.data && response.data.data.products) {
-          // Structure 3: response.data.data.products
+          
           productList = response.data.data.products;
           console.log('📦 Found products in response.data.data.products');
         } else if (response.data.data && Array.isArray(response.data.data)) {
-          // Structure 4: response.data.data is array
+          
           productList = response.data.data;
           console.log('📦 Found products in response.data.data (array)');
         } else {
@@ -123,12 +123,12 @@ const VendorProductManagementScreen: React.FC = () => {
   React.useEffect(() => {
     let filtered = products;
 
-    // Filter by status
+    
     if (activeFilter !== 'all') {
       filtered = filtered.filter((product) => product.approvalStatus === activeFilter);
     }
 
-    // Filter by search
+    
     if (searchQuery) {
       filtered = filtered.filter((product) =>
         product.name.toLowerCase().includes(searchQuery.toLowerCase())
@@ -257,7 +257,7 @@ const VendorProductManagementScreen: React.FC = () => {
       }}
     >
       <View className="flex-row p-4">
-        {/* Product Image */}
+        {}
         {product.images && product.images.length > 0 ? (
           <Image
             source={{ uri: product.images[0] }}
@@ -270,9 +270,9 @@ const VendorProductManagementScreen: React.FC = () => {
           </View>
         )}
 
-        {/* Product Info */}
+        {}
         <View className="flex-1 ml-3">
-          {/* Status Badge */}
+          {}
           <View className="flex-row items-center justify-between mb-2">
             <View
               className={`px-3 py-1 rounded-full border-2 ${getStatusColor(product.approvalStatus)}`}
@@ -293,7 +293,7 @@ const VendorProductManagementScreen: React.FC = () => {
               </View>
             </View>
 
-            {/* Menu */}
+            {}
             <TouchableOpacity
               onPress={() => {
                 Alert.alert('Product Options', '', [
@@ -319,15 +319,15 @@ const VendorProductManagementScreen: React.FC = () => {
             </TouchableOpacity>
           </View>
 
-          {/* Name */}
+          {}
           <Text className="text-gray-900 text-sm font-bold mb-1" numberOfLines={2}>
             {product.name}
           </Text>
 
-          {/* Category */}
+          {}
           <Text className="text-gray-500 text-xs mb-2">{product.category?.name || 'No Category'}</Text>
 
-          {/* Price & Stock */}
+          {}
           <View className="flex-row items-center justify-between">
             <Text className="text-pink-600 text-base font-bold">{formatPrice(product.finalPrice || product.price)}</Text>
             
@@ -356,7 +356,7 @@ const VendorProductManagementScreen: React.FC = () => {
         </View>
       </View>
 
-      {/* Stats */}
+      {}
       {(product.totalOrders || product.totalSales || product.totalRatings) && (
         <View className="border-t border-gray-100 px-4 py-3">
           <View className="flex-row items-center justify-between">
@@ -390,7 +390,7 @@ const VendorProductManagementScreen: React.FC = () => {
         </View>
       )}
 
-      {/* Rejection Reason */}
+      {}
       {product.approvalStatus === 'rejected' && product.rejectionReason && (
         <View className="bg-red-50 px-4 py-3 border-t border-red-100">
           <View className="flex-row items-start">
@@ -466,7 +466,7 @@ const VendorProductManagementScreen: React.FC = () => {
 
   return (
     <SafeAreaView className="flex-1 bg-gray-50" edges={['top']}>
-      {/* Header */}
+      {}
       <LinearGradient
         colors={['#eb278d', '#f472b6']}
         start={{ x: 0, y: 0 }}
@@ -490,7 +490,7 @@ const VendorProductManagementScreen: React.FC = () => {
             </TouchableOpacity>
           </View>
 
-          {/* Search Bar */}
+          {}
           <View className="flex-row items-center bg-white/20 rounded-2xl px-4 py-3 mb-4">
             <Ionicons name="search" size={20} color="#fff" />
             <TextInput
@@ -507,7 +507,7 @@ const VendorProductManagementScreen: React.FC = () => {
             )}
           </View>
 
-          {/* Filter Tabs */}
+          {}
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -534,7 +534,7 @@ const VendorProductManagementScreen: React.FC = () => {
         </View>
       </LinearGradient>
 
-      {/* Products List */}
+      {}
       <ScrollView
         className="flex-1"
         showsVerticalScrollIndicator={false}
@@ -551,7 +551,7 @@ const VendorProductManagementScreen: React.FC = () => {
         </View>
       </ScrollView>
 
-      {/* FAB */}
+      {}
       <TouchableOpacity
         onPress={handleAddProduct}
         className="absolute bottom-6 right-6 w-16 h-16 rounded-full bg-pink-500 items-center justify-center"

@@ -22,7 +22,7 @@ const SetWithdrawalPinScreen: React.FC = () => {
   const [showPin, setShowPin] = useState(false);
 
   const handleSetPin = async () => {
-    // Validation
+    
     if (!pin || !confirmPin) {
       Alert.alert('Error', 'Please enter and confirm your PIN');
       return;
@@ -43,7 +43,7 @@ const SetWithdrawalPinScreen: React.FC = () => {
       return;
     }
 
-    // Check for weak PINs
+    
     const weakPins = ['0000', '1111', '2222', '3333', '4444', '5555', '6666', '7777', '8888', '9999', '1234', '4321'];
     if (weakPins.includes(pin)) {
       Alert.alert(
@@ -65,10 +65,10 @@ const SetWithdrawalPinScreen: React.FC = () => {
           {
             text: 'OK',
             onPress: () => {
-              // Navigate back and potentially refresh the parent screen
+              
               navigation.goBack();
-              // If you're using navigation events, you can trigger a refresh
-              // navigation.navigate('PrivacySecurity', { refresh: true });
+              
+              
             },
           },
         ]
@@ -98,7 +98,7 @@ const SetWithdrawalPinScreen: React.FC = () => {
 
   return (
     <SafeAreaView className="flex-1 bg-gray-50" edges={['top']}>
-      {/* Header */}
+      {}
       <View className="bg-white px-5 py-4 border-b border-gray-100">
         <View className="flex-row items-center justify-between">
           <TouchableOpacity
@@ -119,7 +119,7 @@ const SetWithdrawalPinScreen: React.FC = () => {
         className="flex-1"
       >
         <View className="flex-1 px-5 pt-8">
-          {/* Icon */}
+          {}
           <View className="items-center mb-8">
             <View className="w-20 h-20 rounded-full bg-pink-100 items-center justify-center mb-4">
               <Ionicons name="keypad" size={40} color="#eb278d" />
@@ -132,7 +132,7 @@ const SetWithdrawalPinScreen: React.FC = () => {
             </Text>
           </View>
 
-          {/* Enter PIN */}
+          {}
           <View className="mb-6">
             <Text className="text-sm font-semibold text-gray-700 mb-3">
               Enter PIN
@@ -165,7 +165,7 @@ const SetWithdrawalPinScreen: React.FC = () => {
             </View>
           </View>
 
-          {/* Confirm PIN */}
+          {}
           <View className="mb-6">
             <Text className="text-sm font-semibold text-gray-700 mb-3">
               Confirm PIN
@@ -198,7 +198,7 @@ const SetWithdrawalPinScreen: React.FC = () => {
             </View>
           </View>
 
-          {/* Show PIN Toggle */}
+          {}
           <TouchableOpacity
             onPress={() => setShowPin(!showPin)}
             className="flex-row items-center justify-center mb-8"
@@ -213,7 +213,7 @@ const SetWithdrawalPinScreen: React.FC = () => {
             </Text>
           </TouchableOpacity>
 
-          {/* Info Box */}
+          {}
           <View className="bg-blue-50 rounded-xl p-4 flex-row mb-8">
             <Ionicons name="information-circle" size={20} color="#3b82f6" />
             <View className="flex-1 ml-3">

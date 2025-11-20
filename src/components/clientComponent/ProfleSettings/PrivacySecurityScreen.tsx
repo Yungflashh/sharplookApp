@@ -23,7 +23,7 @@ const PrivacySecurityScreen: React.FC = () => {
     loadUserPreferences();
   }, []);
 
-  // Reload preferences when screen comes into focus
+  
   useFocusEffect(
     React.useCallback(() => {
       loadUserPreferences();
@@ -67,7 +67,7 @@ const PrivacySecurityScreen: React.FC = () => {
         setBiometricsEnabled(userData.preferences.fingerprintEnabled || false);
       }
 
-      // Check if user has withdrawal PIN set
+      
       if (userData && userData.hasWithdrawalPin !== undefined) {
         setHasWithdrawalPin(userData.hasWithdrawalPin);
       }
@@ -96,9 +96,9 @@ const PrivacySecurityScreen: React.FC = () => {
               {
                 text: 'Open Settings',
                 onPress: () => {
-                  // Platform-specific settings navigation
+                  
                   if (Platform.OS === 'ios') {
-                    // Linking.openURL('app-settings:');
+                    
                   }
                 },
               },
@@ -164,12 +164,12 @@ const PrivacySecurityScreen: React.FC = () => {
   };
 
   const handleNavigateToSetPin = () => {
-    // Navigate to the SetWithdrawalPinScreen
+    
     navigation.navigate('SetWithdrawalPin' as never);
   };
 
   const handleNavigateToChangePin = () => {
-    // First check if user actually has a PIN set
+    
     if (!hasWithdrawalPin) {
       Alert.alert(
         'No PIN Set',
@@ -185,7 +185,7 @@ const PrivacySecurityScreen: React.FC = () => {
       return;
     }
     
-    // Navigate to ChangeWithdrawalPinScreen
+    
     navigation.navigate('ChangeWithdrawalPin' as never);
   };
 
@@ -240,7 +240,7 @@ const PrivacySecurityScreen: React.FC = () => {
 
   return (
     <SafeAreaView className="flex-1 bg-gray-50" edges={['top']}>
-      {/* Header */}
+      {}
       <View className="bg-white px-5 py-4 border-b border-gray-100">
         <View className="flex-row items-center justify-between">
           <TouchableOpacity
@@ -268,7 +268,7 @@ const PrivacySecurityScreen: React.FC = () => {
           </View>
         ) : (
           <>
-            {/* Security Settings */}
+            {}
             <View className="px-5 pt-5">
               <Text className="text-[13px] font-semibold text-gray-500 uppercase tracking-wider mb-2 ml-1">
                 Security Settings
@@ -316,7 +316,7 @@ const PrivacySecurityScreen: React.FC = () => {
               </View>
             </View>
 
-            {/* Privacy Section */}
+            {}
             <View className="px-5 pt-5">
               <Text className="text-[13px] font-semibold text-gray-500 uppercase tracking-wider mb-2 ml-1">
                 Privacy
@@ -354,7 +354,7 @@ const PrivacySecurityScreen: React.FC = () => {
               </View>
             </View>
 
-            {/* Info Box */}
+            {}
             <View className="mx-5 mt-5 bg-blue-50 rounded-xl px-4 py-3 flex-row">
               <Ionicons name="information-circle" size={20} color="#3b82f6" />
               <Text className="flex-1 ml-2 text-xs text-blue-600 leading-5">
@@ -367,7 +367,7 @@ const PrivacySecurityScreen: React.FC = () => {
         )}
       </ScrollView>
 
-      {/* Change Password Modal */}
+      {}
       <ConfirmPasswordModal
         visible={showPasswordModal}
         onClose={() => setShowPasswordModal(false)}

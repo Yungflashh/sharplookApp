@@ -46,7 +46,7 @@ const OngoingCallScreen: React.FC = () => {
   useEffect(() => {
     initializeCall();
 
-    // Listen for call events
+    
     const handleCallAccepted = () => {
       console.log('✅ Call accepted');
       setCallStatus('Connected');
@@ -69,7 +69,7 @@ const OngoingCallScreen: React.FC = () => {
     callService.on('call:rejected', handleCallRejected);
     callService.on('call:ended', handleCallEnded);
 
-    // Pulse animation for calling state
+    
     if (isOutgoing && !isConnected) {
       Animated.loop(
         Animated.sequence([
@@ -99,31 +99,31 @@ const OngoingCallScreen: React.FC = () => {
     try {
       console.log('🎬 Initializing call');
 
-      // Get local stream
+      
       const stream = await webrtcService.getLocalStream(callType === 'video');
       setLocalStream(stream);
 
-      // Initialize peer connection
+      
       await webrtcService.initializePeerConnection(
         (candidate) => {
-          // Send ICE candidate via socket
+          
           console.log('🧊 Sending ICE candidate');
-          // callService.sendIceCandidate(callId, candidate);
+          
         },
         (stream) => {
-          // Received remote stream
+          
           console.log('📹 Remote stream received');
           setRemoteStream(stream);
         }
       );
 
-      // Add local stream to peer connection
+      
       webrtcService.addLocalStreamToPeer();
 
       if (isOutgoing) {
-        // Create and send offer
+        
         const offer = await webrtcService.createOffer();
-        // callService.sendOffer(callId, offer);
+        
       }
 
       console.log('✅ Call initialized');
@@ -170,33 +170,33 @@ const OngoingCallScreen: React.FC = () => {
   };
 
   const toggleSpeaker = () => {
-    // TODO: Implement speaker toggle using InCallManager
+    
     setIsSpeakerOn(!isSpeakerOn);
   };
 
   const endCall = () => {
     console.log('📞 Ending call');
 
-    // Stop duration timer
+    
     if (durationInterval.current) {
       clearInterval(durationInterval.current);
     }
 
-    // End call via service
+    
     callService.endCall(callId);
 
-    // Cleanup
+    
     cleanup();
 
-    // Navigate back
+    
     navigation.goBack();
   };
 
   const cleanup = () => {
-    // Close WebRTC connection
+    
     webrtcService.close();
 
-    // Stop duration timer
+    
     if (durationInterval.current) {
       clearInterval(durationInterval.current);
     }
@@ -205,17 +205,17 @@ const OngoingCallScreen: React.FC = () => {
   return (
     <SafeAreaView className="flex-1 bg-gray-900" edges={['top', 'bottom']}>
       <View className="flex-1">
-        {/* Video Call View */}
+        {}
         {callType === 'video' && remoteStream && (
           <View className="flex-1">
-            {/* Remote Video (Full Screen) */}
+            {}
             <RTCView
               streamURL={remoteStream.toURL()}
               style={styles.remoteVideo}
               objectFit="cover"
             />
 
-            {/* Local Video (Picture-in-Picture) */}
+            {}
             {localStream && !isVideoOff && (
               <View style={styles.localVideoContainer}>
                 <RTCView
@@ -229,7 +229,7 @@ const OngoingCallScreen: React.FC = () => {
           </View>
         )}
 
-        {/* Voice Call View */}
+        {}
         {callType === 'voice' || !remoteStream || (callType === 'video' && !isConnected) && (
           <LinearGradient
             colors={['#1f2937', '#111827']}
@@ -242,7 +242,7 @@ const OngoingCallScreen: React.FC = () => {
                 }}
               >
                 <View className="relative">
-                  {/* Outer rings */}
+                  {}
                   {!isConnected && (
                     <>
                       <View
@@ -264,7 +264,7 @@ const OngoingCallScreen: React.FC = () => {
                     </>
                   )}
 
-                  {/* Avatar */}
+                  {}
                   <View className="w-48 h-48 rounded-full overflow-hidden bg-gray-700 items-center justify-center border-4 border-pink-500">
                     {otherUser.avatar ? (
                       <Image
@@ -289,7 +289,7 @@ const OngoingCallScreen: React.FC = () => {
           </LinearGradient>
         )}
 
-        {/* Top Bar (for video calls) */}
+        {}
         {callType === 'video' && isConnected && (
           <View className="absolute top-0 left-0 right-0 pt-12 px-6">
             <LinearGradient
@@ -317,14 +317,14 @@ const OngoingCallScreen: React.FC = () => {
           </View>
         )}
 
-        {/* Bottom Controls */}
+        {}
         <View className="absolute bottom-0 left-0 right-0 pb-8 px-6">
           <LinearGradient
             colors={['transparent', 'rgba(0,0,0,0.8)']}
             className="pt-12"
           >
             <View className="flex-row justify-around items-center">
-              {/* Mute Button */}
+              {}
               <TouchableOpacity
                 onPress={toggleMute}
                 className="items-center"
@@ -345,7 +345,7 @@ const OngoingCallScreen: React.FC = () => {
                 </Text>
               </TouchableOpacity>
 
-              {/* End Call Button */}
+              {}
               <TouchableOpacity
                 onPress={endCall}
                 className="items-center"
@@ -356,7 +356,7 @@ const OngoingCallScreen: React.FC = () => {
                 <Text className="text-white text-xs mt-2">End</Text>
               </TouchableOpacity>
 
-              {/* Video/Speaker Toggle Button */}
+              {}
               {callType === 'video' ? (
                 <TouchableOpacity
                   onPress={toggleVideo}

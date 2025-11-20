@@ -47,7 +47,7 @@ const ConfirmPasswordModal: React.FC<ConfirmPasswordModalProps> = ({
   };
 
   const handleChangePassword = async () => {
-    // Validation
+    
     if (!currentPassword || !newPassword || !confirmPassword) {
       Alert.alert('Error', 'Please fill in all fields');
       return;
@@ -68,7 +68,7 @@ const ConfirmPasswordModal: React.FC<ConfirmPasswordModalProps> = ({
       return;
     }
 
-    // Check password strength
+    
     const hasUpperCase = /[A-Z]/.test(newPassword);
     const hasLowerCase = /[a-z]/.test(newPassword);
     const hasNumbers = /\d/.test(newPassword);

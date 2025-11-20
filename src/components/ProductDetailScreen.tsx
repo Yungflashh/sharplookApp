@@ -112,7 +112,7 @@ const ProductDetailScreen: React.FC = () => {
   const handleAddToCart = async () => {
     if (!product) return;
 
-    // Validate variant selection
+    
     if (product.variants && product.variants.length > 0) {
       const allSelected = product.variants.every((variant) => selectedVariants[variant.name]);
 
@@ -122,7 +122,7 @@ const ProductDetailScreen: React.FC = () => {
       }
     }
 
-    // Check stock
+    
     if (quantity > product.stock) {
       Alert.alert('Out of Stock', `Only ${product.stock} items available`);
       return;
@@ -207,7 +207,7 @@ const ProductDetailScreen: React.FC = () => {
 
   return (
     <SafeAreaView className="flex-1 bg-white" edges={['top']}>
-      {/* Header */}
+      {}
       <View className="flex-row items-center justify-between px-5 py-4 bg-white border-b border-gray-100">
         <TouchableOpacity
           onPress={() => navigation.goBack()}
@@ -234,7 +234,7 @@ const ProductDetailScreen: React.FC = () => {
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false}>
-        {/* Image Gallery */}
+        {}
         <View>
           <ScrollView
             horizontal
@@ -256,7 +256,7 @@ const ProductDetailScreen: React.FC = () => {
             ))}
           </ScrollView>
 
-          {/* Image Indicators */}
+          {}
           <View className="absolute bottom-4 left-0 right-0 flex-row justify-center" style={{ gap: 6 }}>
             {product.images.map((_, index) => (
               <View
@@ -268,7 +268,7 @@ const ProductDetailScreen: React.FC = () => {
             ))}
           </View>
 
-          {/* Badges */}
+          {}
           <View className="absolute top-4 left-4 right-4 flex-row justify-between">
             {discount > 0 && (
               <View className="bg-red-500 px-3 py-1.5 rounded-xl">
@@ -283,9 +283,9 @@ const ProductDetailScreen: React.FC = () => {
           </View>
         </View>
 
-        {/* Product Info */}
+        {}
         <View className="px-5 py-6">
-          {/* Brand/Category */}
+          {}
           <View className="flex-row items-center mb-2">
             <Text className="text-gray-500 text-sm font-medium">
               {product.brand || product.category.name}
@@ -298,13 +298,13 @@ const ProductDetailScreen: React.FC = () => {
             )}
           </View>
 
-          {/* Name */}
+          {}
           <Text className="text-gray-900 text-2xl font-bold mb-3">{product.name}</Text>
 
-          {/* Rating & Reviews */}
+          {}
           {product.totalRatings > 0 && (
             <TouchableOpacity
-              onPress={() => {/* Navigate to reviews */}}
+              onPress={() => {}}
               className="flex-row items-center mb-4"
             >
               <View className="flex-row items-center mr-3">
@@ -323,7 +323,7 @@ const ProductDetailScreen: React.FC = () => {
             </TouchableOpacity>
           )}
 
-          {/* Price */}
+          {}
           <View className="bg-pink-50 p-4 rounded-2xl mb-4">
             <View className="flex-row items-baseline">
               <Text className="text-pink-600 text-3xl font-bold">
@@ -342,7 +342,7 @@ const ProductDetailScreen: React.FC = () => {
             )}
           </View>
 
-          {/* Stock Status */}
+          {}
           <View className="flex-row items-center mb-6">
             <View
               className={`w-3 h-3 rounded-full mr-2 ${
@@ -362,7 +362,7 @@ const ProductDetailScreen: React.FC = () => {
             </Text>
           </View>
 
-          {/* Variants */}
+          {}
           {product.variants && product.variants.length > 0 && (
             <View className="mb-6">
               {product.variants.map((variant) => (
@@ -404,7 +404,7 @@ const ProductDetailScreen: React.FC = () => {
             </View>
           )}
 
-          {/* Quantity */}
+          {}
           {product.stock > 0 && (
             <View className="mb-6">
               <Text className="text-gray-900 text-base font-bold mb-3">Quantity:</Text>
@@ -436,7 +436,7 @@ const ProductDetailScreen: React.FC = () => {
             </View>
           )}
 
-          {/* Delivery Info */}
+          {}
           <View className="bg-gray-50 p-4 rounded-2xl mb-6">
             <Text className="text-gray-900 text-base font-bold mb-3">Delivery Options:</Text>
             

@@ -129,7 +129,7 @@ export const authAPI = {
     return response.data;
   }
 };
-//// Add this to your userAPI object in api.ts
+
 
 export const userAPI = {
   getProfile: async () => {
@@ -142,7 +142,7 @@ export const userAPI = {
     return response.data;
   },
 
-  // ✅ UPDATED: Avatar upload with all required fields
+  
   uploadAvatar: async (imageUri: string, userData: {
     firstName: string;
     lastName: string;
@@ -156,12 +156,12 @@ export const userAPI = {
 
       const formData = new FormData();
       
-      // ✅ Include all required fields
+      
       formData.append('firstName', userData.firstName.trim());
       formData.append('lastName', userData.lastName.trim());
       formData.append('phone', userData.phone.trim());
       
-      // Add the image
+      
       formData.append('image', {
         uri: imageUri,
         name: filename,
@@ -174,7 +174,7 @@ export const userAPI = {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,
-          // Don't set Content-Type - let fetch handle it
+          
         },
         body: formData,
       });
@@ -196,7 +196,7 @@ export const userAPI = {
   updatePreferences: async (preferences: {
     notificationsEnabled?: boolean;
     emailNotifications?: boolean;
-    // ... rest of your preferences
+    
   }) => {
     const response = await api.put('/users/preferences', preferences);
     return response.data;
@@ -756,12 +756,10 @@ changeWithdrawalPin: async (
 },
 };
 
-// Add this to your api.ts file, after the notificationAPI section
+
 
 export const messageAPI = {
-  /**
-   * Get all conversations
-   */
+  
   getConversations: async (params?: {
     page?: number;
     limit?: number;
@@ -770,25 +768,19 @@ export const messageAPI = {
     return response.data;
   },
 
-  /**
-   * Get or create conversation with a user
-   */
+  
   getOrCreateConversation: async (otherUserId: string) => {
     const response = await api.get(`/messages/conversations/${otherUserId}`);
     return response.data;
   },
 
-  /**
-   * Get conversation by ID
-   */
+  
   getConversationById: async (conversationId: string) => {
     const response = await api.get(`/messages/conversation/${conversationId}`);
     return response.data;
   },
 
-  /**
-   * Send a message
-   */
+  
   sendMessage: async (messageData: {
     receiverId: string;
     messageType: 'text' | 'image' | 'file' | 'audio' | 'video';
@@ -805,9 +797,7 @@ export const messageAPI = {
     return response.data;
   },
 
-  /**
-   * Get messages in a conversation
-   */
+  
   getMessages: async (conversationId: string, params?: {
     page?: number;
     limit?: number;
@@ -816,57 +806,43 @@ export const messageAPI = {
     return response.data;
   },
 
-  /**
-   * Mark message as read
-   */
+  
   markAsRead: async (messageId: string) => {
     const response = await api.put(`/messages/${messageId}/read`);
     return response.data;
   },
 
-  /**
-   * Mark all messages in conversation as read
-   */
+  
   markConversationAsRead: async (conversationId: string) => {
     const response = await api.put(`/messages/conversation/${conversationId}/read`);
     return response.data;
   },
 
-  /**
-   * Toggle reaction on a message
-   */
+  
   toggleReaction: async (messageId: string, emoji: string) => {
     const response = await api.post(`/messages/${messageId}/reaction`, { emoji });
     return response.data;
   },
 
-  /**
-   * Delete a message
-   */
+  
   deleteMessage: async (messageId: string) => {
     const response = await api.delete(`/messages/${messageId}`);
     return response.data;
   },
 
-  /**
-   * Delete conversation
-   */
+  
   deleteConversation: async (conversationId: string) => {
     const response = await api.delete(`/messages/conversation/${conversationId}`);
     return response.data;
   },
 
-  /**
-   * Get unread messages count
-   */
+  
   getUnreadCount: async () => {
     const response = await api.get('/messages/unread/count');
     return response.data;
   },
 
-  /**
-   * Search messages
-   */
+  
   searchMessages: async (query: string, params?: {
     page?: number;
     limit?: number;
@@ -877,9 +853,7 @@ export const messageAPI = {
     return response.data;
   },
 
-  /**
-   * Upload message attachment
-   */
+  
   uploadAttachment: async (file: any) => {
     try {
       const token = await AsyncStorage.getItem('accessToken');
@@ -1147,11 +1121,9 @@ export const servicesAPI = {
   }
 };
 
-// ==================== PRODUCT API ====================
+
 export const productAPI = {
-  /**
-   * Get all products (public - approved products only)
-   */
+  
   getAllProducts: async (params?: {
     page?: number;
     limit?: number;
@@ -1173,9 +1145,7 @@ export const productAPI = {
     return response.data;
   },
 
-  /**
-   * Get product by ID
-   */
+  
   getProductById: async (productId: string, incrementView: boolean = true) => {
     const response = await api.get(`/products/${productId}`, {
       params: { incrementView }
@@ -1183,9 +1153,7 @@ export const productAPI = {
     return response.data;
   },
 
-  /**
-   * Get featured products
-   */
+  
   getFeaturedProducts: async (limit: number = 10) => {
     const response = await api.get('/products/featured', {
       params: { limit }
@@ -1193,9 +1161,7 @@ export const productAPI = {
     return response.data;
   },
 
-  /**
-   * Get sponsored products
-   */
+  
   getSponsoredProducts: async (limit: number = 10) => {
     const response = await api.get('/products/sponsored', {
       params: { limit }
@@ -1203,9 +1169,7 @@ export const productAPI = {
     return response.data;
   },
 
-  /**
-   * Create product (Vendor/Admin)
-   */
+  
   createProduct: async (productData: {
     name: string;
     description: string;
@@ -1255,7 +1219,7 @@ export const productAPI = {
 
       const formData = new FormData();
 
-      // Add all product data
+      
       formData.append('name', productData.name);
       formData.append('description', productData.description);
       if (productData.shortDescription) {
@@ -1310,7 +1274,7 @@ export const productAPI = {
         formData.append('discount', JSON.stringify(productData.discount));
       }
 
-      // Add images
+      
       for (let i = 0; i < images.length; i++) {
         const image = images[i];
         if (image.uri && !image.uri.startsWith('http')) {
@@ -1345,16 +1309,14 @@ export const productAPI = {
     }
   },
 
-  /**
-   * Update product (Vendor/Admin)
-   */
+  
   updateProduct: async (productId: string, productData: any, newImages?: any[]) => {
     try {
       const token = await AsyncStorage.getItem('accessToken');
 
       const formData = new FormData();
 
-      // Add all fields
+      
       Object.keys(productData).forEach(key => {
         const value = productData[key];
         if (value !== undefined && value !== null) {
@@ -1368,7 +1330,7 @@ export const productAPI = {
         }
       });
 
-      // Add new images if any
+      
       if (newImages && newImages.length > 0) {
         for (let i = 0; i < newImages.length; i++) {
           const image = newImages[i];
@@ -1403,17 +1365,13 @@ export const productAPI = {
     }
   },
 
-  /**
-   * Delete product (Vendor/Admin)
-   */
+  
   deleteProduct: async (productId: string) => {
     const response = await api.delete(`/products/${productId}`);
     return response.data;
   },
 
-  /**
-   * Get seller's products (Vendor/Admin)
-   */
+  
   getMyProducts: async (params?: {
     page?: number;
     limit?: number;
@@ -1422,19 +1380,15 @@ export const productAPI = {
     return response.data;
   },
 
-  /**
-   * Update stock (Vendor/Admin)
-   */
+  
   updateStock: async (productId: string, quantity: number) => {
     const response = await api.patch(`/products/${productId}/stock`, { quantity });
     return response.data;
   },
 
-  // ==================== ADMIN ONLY ====================
+  
 
-  /**
-   * Get pending products (Admin)
-   */
+  
   getPendingProducts: async (params?: {
     page?: number;
     limit?: number;
@@ -1443,33 +1397,25 @@ export const productAPI = {
     return response.data;
   },
 
-  /**
-   * Approve product (Admin)
-   */
+  
   approveProduct: async (productId: string) => {
     const response = await api.post(`/products/${productId}/approve`);
     return response.data;
   },
 
-  /**
-   * Reject product (Admin)
-   */
+  
   rejectProduct: async (productId: string, reason: string) => {
     const response = await api.post(`/products/${productId}/reject`, { reason });
     return response.data;
   },
 
-  /**
-   * Feature product (Admin)
-   */
+  
   featureProduct: async (productId: string, featuredUntil: string) => {
     const response = await api.post(`/products/${productId}/feature`, { featuredUntil });
     return response.data;
   },
 
-  /**
-   * Sponsor product (Admin)
-   */
+  
   sponsorProduct: async (productId: string, sponsoredUntil: string, amount: number) => {
     const response = await api.post(`/products/${productId}/sponsor`, { 
       sponsoredUntil, 
@@ -1479,11 +1425,9 @@ export const productAPI = {
   },
 };
 
-// ==================== ORDER API ====================
+
 export const orderAPI = {
-  /**
-   * Create order (Customer)
-   */
+  
   createOrder: async (orderData: {
     items: Array<{
       product: string;
@@ -1510,17 +1454,13 @@ export const orderAPI = {
     return response.data;
   },
 
-  /**
-   * Get order by ID
-   */
+  
   getOrderById: async (orderId: string) => {
     const response = await api.get(`/orders/${orderId}`);
     return response.data;
   },
 
-  /**
-   * Get customer's orders
-   */
+  
   getMyOrders: async (params?: {
     page?: number;
     limit?: number;
@@ -1530,35 +1470,27 @@ export const orderAPI = {
     return response.data;
   },
 
-  /**
-   * Get customer order statistics
-   */
+  
   getCustomerOrderStats: async () => {
     const response = await api.get('/orders/customer/stats');
     return response.data;
   },
 
-  /**
-   * Confirm delivery (Customer or Seller)
-   */
+  
   confirmDelivery: async (orderId: string, role: 'customer' | 'seller') => {
     const response = await api.post(`/orders/${orderId}/confirm-delivery`, { role });
     return response.data;
   },
 
-  /**
-   * Cancel order
-   */
+  
   cancelOrder: async (orderId: string, reason: string) => {
     const response = await api.post(`/orders/${orderId}/cancel`, { reason });
     return response.data;
   },
 
-  // ==================== SELLER ROUTES ====================
+  
 
-  /**
-   * Get seller's orders
-   */
+  
   getMySellerOrders: async (params?: {
     page?: number;
     limit?: number;
@@ -1568,25 +1500,19 @@ export const orderAPI = {
     return response.data;
   },
 
-  /**
-   * Get seller order statistics
-   */
+  
   getSellerOrderStats: async () => {
     const response = await api.get('/orders/seller/stats');
     return response.data;
   },
 
-  /**
-   * Update order status (Seller)
-   */
+  
   updateOrderStatus: async (orderId: string, status: string, note?: string) => {
     const response = await api.patch(`/orders/${orderId}/status`, { status, note });
     return response.data;
   },
 
-  /**
-   * Add tracking information (Seller)
-   */
+  
   addTrackingInfo: async (orderId: string, trackingNumber: string, courierService: string) => {
     const response = await api.post(`/orders/${orderId}/tracking`, { 
       trackingNumber, 
@@ -1595,11 +1521,9 @@ export const orderAPI = {
     return response.data;
   },
 
-  // ==================== ADMIN ROUTES ====================
+  
 
-  /**
-   * Get all orders (Admin)
-   */
+  
   getAllOrders: async (params?: {
     page?: number;
     limit?: number;
@@ -1614,11 +1538,9 @@ export const orderAPI = {
   },
 };
 
-// ==================== CART (Local Storage) ====================
+
 export const cartAPI = {
-  /**
-   * Get cart from local storage
-   */
+  
   getCart: async (): Promise<any[]> => {
     try {
       const cart = await AsyncStorage.getItem('cart');
@@ -1629,9 +1551,7 @@ export const cartAPI = {
     }
   },
 
-  /**
-   * Add item to cart
-   */
+  
   addToCart: async (item: {
     product: any;
     quantity: number;
@@ -1643,7 +1563,7 @@ export const cartAPI = {
     try {
       const cart = await cartAPI.getCart();
       
-      // Check if item already exists
+      
       const existingIndex = cart.findIndex(
         (cartItem: any) => 
           cartItem.product._id === item.product._id &&
@@ -1651,10 +1571,10 @@ export const cartAPI = {
       );
 
       if (existingIndex > -1) {
-        // Update quantity
+        
         cart[existingIndex].quantity += item.quantity;
       } else {
-        // Add new item
+        
         cart.push(item);
       }
 
@@ -1666,9 +1586,7 @@ export const cartAPI = {
     }
   },
 
-  /**
-   * Update cart item quantity
-   */
+  
   updateCartItem: async (productId: string, quantity: number, variant?: any) => {
     try {
       const cart = await cartAPI.getCart();
@@ -1695,9 +1613,7 @@ export const cartAPI = {
     }
   },
 
-  /**
-   * Remove item from cart
-   */
+  
   removeFromCart: async (productId: string, variant?: any) => {
     try {
       const cart = await cartAPI.getCart();
@@ -1716,9 +1632,7 @@ export const cartAPI = {
     }
   },
 
-  /**
-   * Clear cart
-   */
+  
   clearCart: async () => {
     try {
       await AsyncStorage.removeItem('cart');
@@ -1729,9 +1643,7 @@ export const cartAPI = {
     }
   },
 
-  /**
-   * Get cart item count
-   */
+  
   getCartCount: async (): Promise<number> => {
     try {
       const cart = await cartAPI.getCart();
@@ -1742,9 +1654,7 @@ export const cartAPI = {
     }
   },
 
-  /**
-   * Get cart total
-   */
+  
   getCartTotal: async (): Promise<number> => {
     try {
       const cart = await cartAPI.getCart();

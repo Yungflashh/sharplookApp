@@ -1,4 +1,4 @@
-// frontend/src/services/webrtc.service.ts
+
 
 import {
   RTCPeerConnection,
@@ -13,7 +13,7 @@ class WebRTCService {
   private localStream: MediaStream | null = null;
   private remoteStream: MediaStream | null = null;
 
-  // STUN/TURN servers configuration
+  
   private configuration = {
     iceServers: [
       { urls: 'stun:stun.l.google.com:19302' },
@@ -24,9 +24,7 @@ class WebRTCService {
     ],
   };
 
-  /**
-   * Initialize WebRTC peer connection
-   */
+  
   public async initializePeerConnection(
     onIceCandidate: (candidate: RTCIceCandidate) => void,
     onTrack: (stream: MediaStream) => void
@@ -35,7 +33,7 @@ class WebRTCService {
 
     this.peerConnection = new RTCPeerConnection(this.configuration);
 
-    // Handle ICE candidates
+    
     this.peerConnection.onicecandidate = (event) => {
       if (event.candidate) {
         console.log('🧊 ICE candidate generated');
@@ -43,7 +41,7 @@ class WebRTCService {
       }
     };
 
-    // Handle remote stream
+    
     this.peerConnection.ontrack = (event) => {
       console.log('📹 Remote track received');
       if (event.streams && event.streams[0]) {
@@ -52,12 +50,12 @@ class WebRTCService {
       }
     };
 
-    // Handle connection state changes
+    
     this.peerConnection.onconnectionstatechange = () => {
       console.log('🔄 Connection state:', this.peerConnection?.connectionState);
     };
 
-    // Handle ICE connection state
+    
     this.peerConnection.oniceconnectionstatechange = () => {
       console.log('🧊 ICE connection state:', this.peerConnection?.iceConnectionState);
     };
@@ -67,9 +65,7 @@ class WebRTCService {
     return this.peerConnection;
   }
 
-  /**
-   * Get local media stream
-   */
+  
   public async getLocalStream(
     isVideoCall: boolean = false
   ): Promise<MediaStream> {
@@ -107,9 +103,7 @@ class WebRTCService {
     }
   }
 
-  /**
-   * Add local stream to peer connection
-   */
+  
   public addLocalStreamToPeer(): void {
     if (!this.localStream || !this.peerConnection) {
       console.error('❌ Local stream or peer connection not initialized');
@@ -124,9 +118,7 @@ class WebRTCService {
     });
   }
 
-  /**
-   * Create WebRTC offer
-   */
+  
   public async createOffer(): Promise<RTCSessionDescription> {
     if (!this.peerConnection) {
       throw new Error('Peer connection not initialized');
@@ -146,9 +138,7 @@ class WebRTCService {
     return offer;
   }
 
-  /**
-   * Create WebRTC answer
-   */
+  
   public async createAnswer(): Promise<RTCSessionDescription> {
     if (!this.peerConnection) {
       throw new Error('Peer connection not initialized');
@@ -165,9 +155,7 @@ class WebRTCService {
     return answer;
   }
 
-  /**
-   * Set remote description
-   */
+  
   public async setRemoteDescription(
     description: RTCSessionDescription
   ): Promise<void> {
@@ -185,9 +173,7 @@ class WebRTCService {
     console.log('✅ Remote description set');
   }
 
-  /**
-   * Add ICE candidate
-   */
+  
   public async addIceCandidate(candidate: RTCIceCandidate): Promise<void> {
     if (!this.peerConnection) {
       throw new Error('Peer connection not initialized');
@@ -200,9 +186,7 @@ class WebRTCService {
     console.log('✅ ICE candidate added');
   }
 
-  /**
-   * Toggle microphone mute
-   */
+  
   public toggleMute(): boolean {
     if (!this.localStream) {
       console.warn('⚠️ No local stream to mute');
@@ -213,15 +197,13 @@ class WebRTCService {
     if (audioTrack) {
       audioTrack.enabled = !audioTrack.enabled;
       console.log('🎤 Microphone:', audioTrack.enabled ? 'unmuted' : 'muted');
-      return !audioTrack.enabled; // Return true if muted
+      return !audioTrack.enabled; 
     }
 
     return false;
   }
 
-  /**
-   * Toggle video (for video calls)
-   */
+  
   public toggleVideo(): boolean {
     if (!this.localStream) {
       console.warn('⚠️ No local stream to toggle video');
@@ -232,15 +214,13 @@ class WebRTCService {
     if (videoTrack) {
       videoTrack.enabled = !videoTrack.enabled;
       console.log('📹 Video:', videoTrack.enabled ? 'enabled' : 'disabled');
-      return !videoTrack.enabled; // Return true if video off
+      return !videoTrack.enabled; 
     }
 
     return false;
   }
 
-  /**
-   * Switch camera (front/back)
-   */
+  
   public switchCamera(): void {
     if (!this.localStream) {
       console.warn('⚠️ No local stream to switch camera');
@@ -250,39 +230,31 @@ class WebRTCService {
     const videoTrack = this.localStream.getVideoTracks()[0];
     if (videoTrack) {
       console.log('🔄 Switching camera');
-      // @ts-ignore - _switchCamera is a React Native WebRTC specific method
+      
       videoTrack._switchCamera();
     }
   }
 
-  /**
-   * Get local stream
-   */
+  
   public getLocalStream(): MediaStream | null {
     return this.localStream;
   }
 
-  /**
-   * Get remote stream
-   */
+  
   public getRemoteStream(): MediaStream | null {
     return this.remoteStream;
   }
 
-  /**
-   * Get peer connection
-   */
+  
   public getPeerConnection(): RTCPeerConnection | null {
     return this.peerConnection;
   }
 
-  /**
-   * Close peer connection and stop streams
-   */
+  
   public close(): void {
     console.log('🛑 Closing WebRTC connection');
 
-    // Stop local stream
+    
     if (this.localStream) {
       this.localStream.getTracks().forEach((track) => {
         track.stop();
@@ -291,21 +263,19 @@ class WebRTCService {
       this.localStream = null;
     }
 
-    // Close peer connection
+    
     if (this.peerConnection) {
       this.peerConnection.close();
       this.peerConnection = null;
     }
 
-    // Clear remote stream
+    
     this.remoteStream = null;
 
     console.log('✅ WebRTC connection closed');
   }
 
-  /**
-   * Check if peer connection is connected
-   */
+  
   public isConnected(): boolean {
     return (
       this.peerConnection?.connectionState === 'connected' ||
@@ -313,9 +283,7 @@ class WebRTCService {
     );
   }
 
-  /**
-   * Get connection stats
-   */
+  
   public async getStats(): Promise<any> {
     if (!this.peerConnection) {
       return null;

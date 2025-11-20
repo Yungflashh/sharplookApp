@@ -59,7 +59,7 @@ const CheckoutScreen: React.FC = () => {
   const calculateDeliveryFee = () => {
     if (deliveryType === 'pickup') return 0;
     
-    // Calculate based on products
+    
     let totalFee = 0;
     cartItems.forEach((item: any) => {
       if (item.product.deliveryOptions?.deliveryFee) {
@@ -67,7 +67,7 @@ const CheckoutScreen: React.FC = () => {
       }
     });
     
-    return totalFee || 1500; // Default ₦1,500 if not specified
+    return totalFee || 1500; 
   };
 
   const calculateTotal = () => {
@@ -126,7 +126,7 @@ const CheckoutScreen: React.FC = () => {
       const response = await orderAPI.createOrder(orderData);
 
       if (response.success) {
-        // Clear cart
+        
         await cartAPI.clearCart();
 
         Alert.alert(
@@ -136,7 +136,7 @@ const CheckoutScreen: React.FC = () => {
             {
               text: 'OK',
               onPress: () => {
-                // Navigate to payment or order details
+                
                 navigation.navigate('CustomerOrders');
               },
             },
@@ -153,7 +153,7 @@ const CheckoutScreen: React.FC = () => {
 
   return (
     <SafeAreaView className="flex-1 bg-gray-50" edges={['top']}>
-      {/* Header */}
+      {}
       <View className="flex-row items-center px-5 py-4 bg-white border-b border-gray-100">
         <TouchableOpacity
           onPress={() => navigation.goBack()}
@@ -166,7 +166,7 @@ const CheckoutScreen: React.FC = () => {
 
       <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
         <View className="p-5">
-          {/* Delivery Type */}
+          {}
           <View className="mb-6">
             <Text className="text-gray-900 text-lg font-bold mb-3">Delivery Method</Text>
             
@@ -251,7 +251,7 @@ const CheckoutScreen: React.FC = () => {
             </TouchableOpacity>
           </View>
 
-          {/* Delivery Address */}
+          {}
           {deliveryType === 'home_delivery' && (
             <View className="mb-6">
               <Text className="text-gray-900 text-lg font-bold mb-3">Delivery Address</Text>
@@ -337,7 +337,7 @@ const CheckoutScreen: React.FC = () => {
             </View>
           )}
 
-          {/* Payment Method */}
+          {}
           <View className="mb-6">
             <Text className="text-gray-900 text-lg font-bold mb-3">Payment Method</Text>
             
@@ -392,7 +392,7 @@ const CheckoutScreen: React.FC = () => {
             ))}
           </View>
 
-          {/* Customer Notes */}
+          {}
           <View className="mb-6">
             <Text className="text-gray-900 text-lg font-bold mb-3">Order Notes (Optional)</Text>
             <TextInput
@@ -405,7 +405,7 @@ const CheckoutScreen: React.FC = () => {
             />
           </View>
 
-          {/* Order Summary */}
+          {}
           <View className="bg-white p-5 rounded-2xl mb-6">
             <Text className="text-gray-900 text-lg font-bold mb-4">Order Summary</Text>
             
@@ -435,7 +435,7 @@ const CheckoutScreen: React.FC = () => {
         </View>
       </ScrollView>
 
-      {/* Place Order Button */}
+      {}
       <View
         className="bg-white px-5 py-4 border-t border-gray-100"
         style={{

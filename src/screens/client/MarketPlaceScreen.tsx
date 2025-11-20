@@ -21,7 +21,7 @@ import { RootStackParamList } from '@/types/navigation.types';
 import { productAPI, cartAPI, categoriesAPI, handleAPIError } from '@/api/api';
 
 const { width } = Dimensions.get('window');
-const PRODUCT_CARD_WIDTH = (width - 48) / 2; // 2 columns with padding
+const PRODUCT_CARD_WIDTH = (width - 48) / 2; 
 
 type MarketplaceNavigationProp = NativeStackNavigationProp<RootStackParamList, 'Main'>;
 
@@ -80,7 +80,7 @@ const MarketplaceScreen: React.FC = () => {
   const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
 
-  // Fetch products
+  
   const fetchProducts = async (pageNum: number = 1, append: boolean = false) => {
     try {
       if (pageNum === 1) setLoading(true);
@@ -125,7 +125,7 @@ const MarketplaceScreen: React.FC = () => {
     }
   };
 
-  // Fetch featured products
+  
   const fetchFeaturedProducts = async () => {
     try {
       const response = await productAPI.getFeaturedProducts(10);
@@ -137,7 +137,7 @@ const MarketplaceScreen: React.FC = () => {
     }
   };
 
-  // Fetch categories
+  
   const fetchCategories = async () => {
     try {
       const response = await categoriesAPI.getActiveCategories();
@@ -149,7 +149,7 @@ const MarketplaceScreen: React.FC = () => {
     }
   };
 
-  // Update cart count
+  
   const updateCartCount = async () => {
     try {
       const count = await cartAPI.getCartCount();
@@ -176,7 +176,7 @@ const MarketplaceScreen: React.FC = () => {
     fetchProducts(1, false);
   }, [selectedCategory, sortBy, sortOrder]);
 
-  // Search with debounce
+  
   useEffect(() => {
     const timer = setTimeout(() => {
       if (searchQuery !== undefined) {
@@ -252,7 +252,7 @@ const MarketplaceScreen: React.FC = () => {
             }),
           }}
         >
-          {/* Image */}
+          {}
           <View className="relative">
             <Image
               source={{ uri: product.images[0] }}
@@ -260,7 +260,7 @@ const MarketplaceScreen: React.FC = () => {
               resizeMode="cover"
             />
 
-            {/* Badges */}
+            {}
             <View className="absolute top-2 left-2 right-2 flex-row justify-between">
               {product.isSponsored && (
                 <View className="bg-purple-500 px-2 py-1 rounded-lg">
@@ -275,15 +275,15 @@ const MarketplaceScreen: React.FC = () => {
               )}
             </View>
 
-            {/* Favorite */}
+            {}
             <TouchableOpacity
               className="absolute bottom-2 right-2 w-8 h-8 rounded-full bg-white/90 items-center justify-center"
-              onPress={() => {/* Add to wishlist */}}
+              onPress={() => {}}
             >
               <Ionicons name="heart-outline" size={18} color="#eb278d" />
             </TouchableOpacity>
 
-            {/* Stock badge */}
+            {}
             {product.stock < 10 && (
               <View className="absolute bottom-2 left-2">
                 <View className="bg-orange-500 px-2 py-1 rounded-lg">
@@ -295,19 +295,19 @@ const MarketplaceScreen: React.FC = () => {
             )}
           </View>
 
-          {/* Content */}
+          {}
           <View className="p-3">
-            {/* Brand/Category */}
+            {}
             <Text className="text-gray-500 text-[10px] font-medium mb-1" numberOfLines={1}>
               {product.brand || product.category.name}
             </Text>
 
-            {/* Name */}
+            {}
             <Text className="text-gray-900 text-sm font-bold mb-2" numberOfLines={2}>
               {product.name}
             </Text>
 
-            {/* Rating */}
+            {}
             {product.totalRatings > 0 && (
               <View className="flex-row items-center mb-2">
                 <Ionicons name="star" size={12} color="#fbbf24" />
@@ -320,7 +320,7 @@ const MarketplaceScreen: React.FC = () => {
               </View>
             )}
 
-            {/* Price */}
+            {}
             <View className="flex-row items-center justify-between mb-2">
               <View>
                 <Text className="text-pink-600 text-lg font-bold">
@@ -344,7 +344,7 @@ const MarketplaceScreen: React.FC = () => {
               )}
             </View>
 
-            {/* Condition */}
+            {}
             {product.condition && (
               <View className="flex-row items-center">
                 <View className="w-2 h-2 rounded-full bg-green-500 mr-1" />
@@ -436,7 +436,7 @@ const MarketplaceScreen: React.FC = () => {
 
   return (
     <SafeAreaView className="flex-1 bg-gray-50" edges={['top']}>
-      {/* Header */}
+      {}
       <LinearGradient
         colors={['#eb278d', '#f472b6']}
         start={{ x: 0, y: 0 }}
@@ -452,7 +452,7 @@ const MarketplaceScreen: React.FC = () => {
               </Text>
             </View>
 
-            {/* Cart Icon */}
+            {}
             <TouchableOpacity
               onPress={() => navigation.navigate('Cart')}
               className="relative"
@@ -470,7 +470,7 @@ const MarketplaceScreen: React.FC = () => {
             </TouchableOpacity>
           </View>
 
-          {/* Search Bar */}
+          {}
           <View className="flex-row items-center bg-white/20 rounded-2xl px-4 py-3 mb-4">
             <Ionicons name="search" size={20} color="#fff" />
             <TextInput
@@ -487,7 +487,7 @@ const MarketplaceScreen: React.FC = () => {
             )}
           </View>
 
-          {/* Categories */}
+          {}
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -545,7 +545,7 @@ const MarketplaceScreen: React.FC = () => {
         }}
         scrollEventThrottle={400}
       >
-        {/* Featured Products */}
+        {}
         {featuredProducts.length > 0 && (
           <View className="mt-5 mb-6">
             <View className="px-5 mb-3 flex-row items-center justify-between">
@@ -565,7 +565,7 @@ const MarketplaceScreen: React.FC = () => {
           </View>
         )}
 
-        {/* Sort Options */}
+        {}
         <View className="px-5 mb-4">
           <ScrollView
             horizontal
@@ -622,7 +622,7 @@ const MarketplaceScreen: React.FC = () => {
           </ScrollView>
         </View>
 
-        {/* Products Grid */}
+        {}
         <View className="px-5 pb-5">
           <View className="flex-row flex-wrap justify-between">
             {products.map(renderProductCard)}

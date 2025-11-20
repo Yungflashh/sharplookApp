@@ -52,7 +52,7 @@ const BookingsScreen: React.FC = () => {
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
 
-  // Helper function to safely get service/offer name
+  
   const getServiceName = (booking: Booking): string => {
     if (booking.service?.name) {
       return booking.service.name;
@@ -245,7 +245,7 @@ const BookingsScreen: React.FC = () => {
         onPress={() => navigation.navigate('BookingDetail', { bookingId: booking._id })}
         activeOpacity={0.7}
       >
-        {/* Header */}
+        {}
         <View className="flex-row items-start justify-between mb-3">
           <View className="flex-1">
             <Text className="text-base font-bold text-gray-900 mb-1">{serviceName}</Text>
@@ -278,7 +278,7 @@ const BookingsScreen: React.FC = () => {
           </View>
         </View>
 
-        {/* Details */}
+        {}
         <View className="gap-2 mb-3">
           <View className="flex-row items-center">
             <Ionicons name="calendar-outline" size={16} color="#6b7280" />
@@ -305,7 +305,7 @@ const BookingsScreen: React.FC = () => {
           )}
         </View>
 
-        {/* Footer */}
+        {}
         <View className="flex-row items-center justify-between pt-3 border-t border-gray-100">
           <Text className="text-xs text-gray-400">Booked {formatDate(booking.createdAt)}</Text>
 
@@ -358,13 +358,13 @@ const BookingsScreen: React.FC = () => {
 
   return (
     <SafeAreaView className="flex-1 bg-gray-50">
-      {/* Header */}
+      {}
       <View className="bg-white px-5 py-4 border-b border-gray-100">
         <View className="flex-row items-center justify-between mb-4">
           <Text className="text-2xl font-bold text-gray-900">My Bookings</Text>
 
           <View className="flex-row gap-2">
-            {/* My Offers Button */}
+            {}
             <TouchableOpacity
               onPress={() => navigation.navigate('MyOffers')}
               className="flex-row items-center px-3 py-2 rounded-xl bg-purple-100"
@@ -373,7 +373,7 @@ const BookingsScreen: React.FC = () => {
               <Text className="ml-1 text-purple-700 font-semibold text-sm">My Offers</Text>
             </TouchableOpacity>
 
-            {/* Create Offer Button */}
+            {}
             <TouchableOpacity
               onPress={() => navigation.navigate('CreateOffer')}
               className="w-10 h-10 rounded-full bg-purple-100 items-center justify-center"
@@ -381,7 +381,7 @@ const BookingsScreen: React.FC = () => {
               <Ionicons name="add" size={24} color="#9333ea" />
             </TouchableOpacity>
 
-            {/* Search Services Button */}
+            {}
             <TouchableOpacity
               onPress={() => navigation.navigate('AllVendors')}
               className="w-10 h-10 rounded-full bg-pink-100 items-center justify-center"
@@ -391,7 +391,7 @@ const BookingsScreen: React.FC = () => {
           </View>
         </View>
 
-        {/* Search Bar */}
+        {}
         <View className="flex-row items-center bg-gray-50 rounded-xl px-4 py-3 mb-4">
           <Ionicons name="search" size={20} color="#9ca3af" />
           <TextInput
@@ -408,7 +408,7 @@ const BookingsScreen: React.FC = () => {
           )}
         </View>
 
-        {/* Filter Tabs */}
+        {}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} className="flex-row gap-2">
           {filters.map((filter) => (
             <TouchableOpacity
@@ -431,7 +431,7 @@ const BookingsScreen: React.FC = () => {
         </ScrollView>
       </View>
 
-      {/* Bookings List */}
+      {}
       <ScrollView
         className="flex-1"
         showsVerticalScrollIndicator={false}

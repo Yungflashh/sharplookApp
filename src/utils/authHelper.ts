@@ -236,7 +236,7 @@ export const getStoredUser = async (): Promise<User | null> => {
     return null;
   }
 };
-// Add this function to your authHelper.ts file
+
 
 export const getStoredToken = async (): Promise<string | null> => {
   try {
