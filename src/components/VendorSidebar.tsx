@@ -61,20 +61,12 @@ const VendorSidebar: React.FC<VendorSidebarProps> = ({
     }
   }, [visible]);
   const menuSections: MenuSection[] = [{
-    items: [{
-      id: 'dashboard',
-      title: 'Dashboard',
-      icon: 'home',
-      onPress: () => {
-        console.log('Dashboard');
-        onClose();
-      }
-    }, {
+    items: [ {
       id: 'orders',
       title: 'Orders',
       icon: 'cart',
       onPress: () => {
-        console.log('Orders');
+        navigation.navigate("MyOrders");
         onClose();
       },
       badge: '12'
@@ -83,30 +75,13 @@ const VendorSidebar: React.FC<VendorSidebarProps> = ({
       title: 'My Products',
       icon: 'cube',
       onPress: () => {
-        console.log('Products');
+       navigation.navigate("MyProducts")
         onClose();
       }
     }]
   }, {
     title: 'MANAGEMENT',
-    items: [{
-      id: 'inventory',
-      title: 'Inventory',
-      icon: 'package-variant',
-      iconFamily: 'material',
-      onPress: () => {
-        console.log('Inventory');
-        onClose();
-      }
-    }, {
-      id: 'promotions',
-      title: 'Promotions',
-      icon: 'pricetag',
-      onPress: () => {
-        console.log('Promotions');
-        onClose();
-      }
-    }, {
+    items: [  {
       id: 'analytics',
       title: 'Analytics',
       icon: 'analytics',
@@ -133,14 +108,6 @@ const VendorSidebar: React.FC<VendorSidebarProps> = ({
         console.log('Reviews');
         onClose();
       }
-    }, {
-      id: 'customers',
-      title: 'Customers',
-      icon: 'people',
-      onPress: () => {
-        console.log('Customers');
-        onClose();
-      }
     }]
   }, {
     title: 'SUPPORT',
@@ -150,14 +117,6 @@ const VendorSidebar: React.FC<VendorSidebarProps> = ({
       icon: 'help-circle',
       onPress: () => {
         console.log('Help');
-        onClose();
-      }
-    }, {
-      id: 'settings',
-      title: 'Settings',
-      icon: 'settings',
-      onPress: () => {
-        console.log('Settings');
         onClose();
       }
     }]
@@ -245,20 +204,11 @@ const VendorSidebar: React.FC<VendorSidebarProps> = ({
 
                 {}
                 <View className="flex-row mt-6 pt-4 border-t border-white/20">
-                  <View className="flex-1 items-center">
-                    <Text className="text-white text-xl font-bold">124</Text>
-                    <Text className="text-white/80 text-xs mt-0.5">Orders</Text>
-                  </View>
+                  {}
                   <View className="w-px bg-white/20" />
-                  <View className="flex-1 items-center">
-                    <Text className="text-white text-xl font-bold">18</Text>
-                    <Text className="text-white/80 text-xs mt-0.5">Products</Text>
-                  </View>
+                  {}
                   <View className="w-px bg-white/20" />
-                  <View className="flex-1 items-center">
-                    <Text className="text-white text-xl font-bold">4.8</Text>
-                    <Text className="text-white/80 text-xs mt-0.5">Rating</Text>
-                  </View>
+                  {}
                 </View>
               </View>
             </LinearGradient>

@@ -475,6 +475,12 @@ const VendorProductManagementScreen: React.FC = () => {
       >
         <View className="px-5 pt-4">
           <View className="flex-row items-center justify-between mb-4">
+            <TouchableOpacity
+          onPress={() => navigation.goBack()}
+          className="w-10 h-10 rounded-full bg-white/20 items-center justify-center mr-3"
+        >
+          <Ionicons name="arrow-back" size={24} color="#fff" />
+        </TouchableOpacity>
             <View>
               <Text className="text-white text-2xl font-bold mb-1">My Products</Text>
               <Text className="text-white/80 text-sm">

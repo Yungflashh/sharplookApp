@@ -163,7 +163,7 @@ const VendorAnalyticsScreen: React.FC = () => {
     try {
       setLoading(true);
 
-      // Fetch quick stats
+      
       const statsResponse = await analyticsAPI.getVendorQuickStats();
       console.log('Quick stats response:', statsResponse);
       
@@ -171,7 +171,7 @@ const VendorAnalyticsScreen: React.FC = () => {
         setQuickStats(statsResponse.data);
       }
 
-      // Fetch comprehensive analytics
+      
       const { startDate, endDate } = getDateRange(selectedPeriod);
       const analyticsResponse = await analyticsAPI.getVendorAnalytics({
         startDate,
@@ -370,7 +370,7 @@ const VendorAnalyticsScreen: React.FC = () => {
 
     return (
       <View className="px-5" style={{ gap: 16 }}>
-        {/* Revenue Overview */}
+        {}
         <View
           className="bg-white rounded-3xl p-5"
           style={{
@@ -445,7 +445,7 @@ const VendorAnalyticsScreen: React.FC = () => {
           </View>
         </View>
 
-        {/* Bookings & Orders Summary */}
+        {}
         <View className="flex-row gap-3">
           <View
             className="flex-1 bg-white rounded-3xl p-5"
@@ -518,7 +518,7 @@ const VendorAnalyticsScreen: React.FC = () => {
           </View>
         </View>
 
-        {/* Products & Services */}
+        {}
         <View className="flex-row gap-3">
           <View
             className="flex-1 bg-white rounded-3xl p-5"
@@ -573,7 +573,7 @@ const VendorAnalyticsScreen: React.FC = () => {
           </View>
         </View>
 
-        {/* Reviews */}
+        {}
         <View
           className="bg-white rounded-3xl p-5"
           style={{
@@ -651,7 +651,7 @@ const VendorAnalyticsScreen: React.FC = () => {
           </View>
         </View>
 
-        {/* Customer Stats */}
+        {}
         <View
           className="bg-white rounded-3xl p-5"
           style={{
@@ -710,13 +710,13 @@ const VendorAnalyticsScreen: React.FC = () => {
   const renderRevenueTab = () => {
     if (!analytics) return null;
 
-    // Get last 7 days for display
+    
     const revenueData = analytics.revenue.byPeriod?.slice(-7) || [];
     const maxRevenue = Math.max(...revenueData.map(item => item.revenue || 0), 1);
 
     return (
       <View className="px-5" style={{ gap: 16 }}>
-        {/* Revenue Trend Bars */}
+        {}
         {revenueData.length > 0 && (
           <View
             className="bg-white rounded-3xl p-5"
@@ -774,7 +774,7 @@ const VendorAnalyticsScreen: React.FC = () => {
               })}
             </View>
 
-            {/* Total Revenue Display */}
+            {}
             <View className="mt-4 bg-pink-50 rounded-2xl p-4">
               <Text className="text-sm text-gray-600 mb-1">Total Revenue (Period)</Text>
               <Text className="text-3xl font-bold text-pink-600">
@@ -784,7 +784,7 @@ const VendorAnalyticsScreen: React.FC = () => {
           </View>
         )}
 
-        {/* Revenue Sources */}
+        {}
         <View
           className="bg-white rounded-3xl p-5"
           style={{
@@ -852,7 +852,7 @@ const VendorAnalyticsScreen: React.FC = () => {
           </View>
         </View>
 
-        {/* Top Services */}
+        {}
         {analytics.bookings.topServices && analytics.bookings.topServices.length > 0 && (
           <View
             className="bg-white rounded-3xl p-5"
@@ -906,7 +906,7 @@ const VendorAnalyticsScreen: React.FC = () => {
           </View>
         )}
 
-        {/* Top Products */}
+        {}
         {analytics.orders.topProducts && analytics.orders.topProducts.length > 0 && (
           <View
             className="bg-white rounded-3xl p-5"
@@ -960,7 +960,7 @@ const VendorAnalyticsScreen: React.FC = () => {
           </View>
         )}
 
-        {/* Average Order Value */}
+        {}
         {analytics.orders.averageOrderValue > 0 && (
           <View
             className="bg-white rounded-3xl p-5"
@@ -1092,7 +1092,7 @@ const VendorAnalyticsScreen: React.FC = () => {
           </View>
         ))}
 
-        {/* Booking Status Breakdown */}
+        {}
         {analytics.bookings.byStatus && analytics.bookings.byStatus.length > 0 && (
           <View
             className="bg-white rounded-3xl p-5"
@@ -1147,7 +1147,7 @@ const VendorAnalyticsScreen: React.FC = () => {
 
   return (
     <SafeAreaView className="flex-1 bg-gray-50" edges={['top']}>
-      {/* Header */}
+      {}
       <LinearGradient
         colors={['#eb278d', '#f472b6']}
         start={{ x: 0, y: 0 }}
@@ -1182,18 +1182,18 @@ const VendorAnalyticsScreen: React.FC = () => {
       </LinearGradient>
 
       <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
-        {/* Quick Stats Cards */}
+        {}
         <View className="py-4">
           {renderQuickStatsCards()}
         </View>
 
-        {/* Period Selector */}
+        {}
         {renderPeriodSelector()}
 
-        {/* Tab Selector */}
+        {}
         {renderTabSelector()}
 
-        {/* Tab Content */}
+        {}
         <View className="py-4 pb-8">
           {activeTab === 'overview' && renderOverviewTab()}
           {activeTab === 'revenue' && renderRevenueTab()}

@@ -82,17 +82,25 @@ export const authAPI = {
     return response.data;
   },
   register: async (userData: {
-    firstName: string;
-    lastName: string;
-    email: string;
-    phone: string;
-    password: string;
-    isVendor?: boolean;
-    referralId?: string;
-  }) => {
-    const response = await api.post('/auth/register', userData);
-    return response.data;
-  },
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
+  password: string;
+  isVendor?: boolean;
+  referralId?: string;
+  location?: {  
+    type: 'Point';
+    coordinates: [number, number];
+    address: string;
+    city: string;
+    state: string;
+    country: string;
+  };
+}) => {
+  const response = await api.post('/auth/register', userData);
+  return response.data;
+},
   logout: async () => {
     const response = await api.post('/auth/logout');
     return response.data;
@@ -206,6 +214,32 @@ export const userAPI = {
     const response = await api.delete('/users/account');
     return response.data;
   },
+
+  
+  updateLocation: async (location: {
+    type: 'Point';
+    coordinates: [number, number];
+    address: string;
+    city: string;
+    state: string;
+    country: string;
+  }) => {
+    const response = await api.put('/users/location', { location });
+    return response.data;
+  },
+
+  
+  getNearbyVendors: async (params: {
+    latitude: number;
+    longitude: number;
+    maxDistance?: number;
+    vendorType?: string;
+    category?: string;
+    minRating?: number;
+  }) => {
+    const response = await api.get('/users/nearby-vendors', { params });
+    return response.data;
+  },
 };
 export const vendorAPI = {
   setupProfile: async (setupData: {
@@ -221,26 +255,138 @@ export const vendorAPI = {
     const response = await api.post('/vendors/setup', setupData);
     return response.data;
   },
-  getProfile: async () => {
+ 
+  
+  getMyProfile: async () => {
     const response = await api.get('/vendors/profile');
     return response.data;
   },
-  updateProfile: async (vendorData: any) => {
-    const response = await api.put('/vendors/profile', vendorData);
+
+  
+  updateMyProfile: async (profileData: {
+    businessName?: string;
+    businessDescription?: string;
+    vendorType?: 'home_service' | 'in_shop' | 'both';
+    categories?: string[];
+    location?: {
+      type: 'Point';
+      coordinates: [number, number];
+      address: string;
+      city: string;
+      state: string;
+      country: string;
+    };
+    serviceRadius?: number;
+    availabilitySchedule?: {
+      monday?: { isAvailable: boolean; from?: string; to?: string };
+      tuesday?: { isAvailable: boolean; from?: string; to?: string };
+      wednesday?: { isAvailable: boolean; from?: string; to?: string };
+      thursday?: { isAvailable: boolean; from?: string; to?: string };
+      friday?: { isAvailable: boolean; from?: string; to?: string };
+      saturday?: { isAvailable: boolean; from?: string; to?: string };
+      sunday?: { isAvailable: boolean; from?: string; to?: string };
+    };
+    documents?: {
+      idCard?: string;
+      businessLicense?: string;
+      certification?: string[];
+    };
+  }) => {
+    const response = await api.put('/vendors/profile', profileData);
     return response.data;
   },
-  updateAvailability: async (schedule: any) => {
-    const response = await api.put('/vendors/availability', schedule);
+
+  
+  updateMyAvailability: async (schedule: {
+    monday?: { isAvailable: boolean; from?: string; to?: string };
+    tuesday?: { isAvailable: boolean; from?: string; to?: string };
+    wednesday?: { isAvailable: boolean; from?: string; to?: string };
+    thursday?: { isAvailable: boolean; from?: string; to?: string };
+    friday?: { isAvailable: boolean; from?: string; to?: string };
+    saturday?: { isAvailable: boolean; from?: string; to?: string };
+    sunday?: { isAvailable: boolean; from?: string; to?: string };
+  }) => {
+    const response = await api.put('/vendors/availability', { schedule });
     return response.data;
   },
-  uploadDocument: async (documentData: FormData) => {
-    const response = await api.post('/vendors/documents', documentData, {
-      headers: {
-        'Content-Type': 'multipart/form-data'
-      }
+
+  
+  updateMyLocation: async (
+    location: {
+      type: 'Point';
+      coordinates: [number, number];
+      address: string;
+      city: string;
+      state: string;
+      country: string;
+    },
+    serviceRadius?: number
+  ) => {
+    const response = await api.put('/vendors/location', {
+      location,
+      serviceRadius,
     });
     return response.data;
   },
+
+  
+  uploadMyDocument: async (
+    documentType: 'idCard' | 'businessLicense' | 'certification',
+    documentUrl: string
+  ) => {
+    const response = await api.post('/vendors/documents', {
+      documentType,
+      documentUrl,
+    });
+    return response.data;
+  },
+
+  
+  checkMyProfileCompletion: async () => {
+    const response = await api.get('/vendors/profile/completion');
+    return response.data;
+  },
+
+  
+  uploadDocumentFile: async (
+    documentType: 'idCard' | 'businessLicense' | 'certification',
+    file: any
+  ) => {
+    try {
+      const token = await AsyncStorage.getItem('accessToken');
+      const filename = file.uri.split('/').pop() || 'document';
+      const match = /\.(\w+)$/.exec(filename);
+      const type = match ? `image/${match[1]}` : 'image/jpeg';
+
+      const formData = new FormData();
+      formData.append('documentType', documentType);
+      formData.append('file', {
+        uri: file.uri,
+        name: filename,
+        type: type,
+      } as any);
+
+      const response = await fetch(`${API_BASE_URL}/vendors/documents/upload`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+        body: formData,
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.message || 'Failed to upload document');
+      }
+
+      return result;
+    } catch (error) {
+      console.error('❌ Document upload error:', error);
+      throw error;
+    }
+  },
+
   getBookings: async () => {
     const response = await api.get('/vendors/bookings');
     return response.data;
@@ -756,14 +902,11 @@ changeWithdrawalPin: async (
 },
 };
 
-// Add this to your existing api.ts file
-// In your React Native api.ts file - ONLY add these analytics endpoints
+
+
 
 export const analyticsAPI = {
-  /**
-   * Get comprehensive vendor analytics
-   * GET /api/v1/analytics/vendor
-   */
+  
   getVendorAnalytics: async (params?: {
     startDate?: string;
     endDate?: string;
@@ -772,10 +915,7 @@ export const analyticsAPI = {
     return response.data;
   },
 
-  /**
-   * Get quick stats for vendor dashboard
-   * GET /api/v1/analytics/vendor/quick-stats
-   */
+  
   getVendorQuickStats: async () => {
     const response = await api.get('/vendorAnalytics/vendor/quick-stats');
     return response.data;
