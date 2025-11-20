@@ -529,7 +529,9 @@ const VendorBookingsScreen: React.FC = () => {
           {/* Header */}
           <View className="flex-row items-start justify-between mb-4">
             <View className="flex-1 mr-3">
-              <Text className="text-lg font-bold text-gray-900 mb-1.5">{serviceName}</Text>
+              <Text className="text-lg font-bold text-gray-900 mb-1.5">
+                {serviceName || (booking.bookingType === 'offer_based' ? 'Custom Offer' : 'Service')}
+              </Text>
               <View className="flex-row items-center">
                 <View className="w-8 h-8 rounded-full bg-pink-100 items-center justify-center mr-2">
                   <Ionicons name="person" size={16} color="#eb278d" />

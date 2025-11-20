@@ -1,5 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, ActivityIndicator, Alert, Image, Linking, Platform } from 'react-native';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  ScrollView,
+  ActivityIndicator,
+  Alert,
+  Image,
+  Linking,
+  Platform,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -11,6 +21,22 @@ import { getStoredUser } from '@/utils/authHelper';
 
 type BookingDetailNavigationProp = NativeStackNavigationProp<RootStackParamList, 'BookingDetail'>;
 type BookingDetailRouteProp = RouteProp<RootStackParamList, 'BookingDetail'>;
+
+
+// New interfaces for OtherParty
+interface VendorPartyInfo {
+  type: 'vendor';
+  data: BookingDetail['vendor'];
+  label: 'Vendor';
+}
+
+interface ClientPartyInfo {
+  type: 'client';
+  data: BookingDetail['client'];
+  label: 'Client';
+}
+
+type OtherPartyResult = VendorPartyInfo | ClientPartyInfo | null;
 
 interface BookingDetail {
   _id: string;
@@ -159,7 +185,7 @@ const BookingDetailScreen: React.FC = () => {
     };
   };
 
-  const getOtherParty = () => {
+  const getOtherParty = (): OtherPartyResult => {
     if (!booking || !currentUserId) return null;
 
     if (booking.client._id === currentUserId) {
@@ -284,22 +310,23 @@ const BookingDetailScreen: React.FC = () => {
       .catch((err) => console.error('Error opening phone app:', err));
   };
 
-const handleMessage = () => {
-  if (!booking || !otherParty) {
-    Alert.alert('Error', 'Unable to start conversation');
-    return;
-  }
+  const handleMessage = () => {
+    const otherParty = getOtherParty();
+    if (!booking || !otherParty) {
+      Alert.alert('Error', 'Unable to start conversation');
+      return;
+    }
 
-  // Navigate to ChatDetail screen
-  navigation.navigate('ChatDetail', {
-    otherUserId: otherParty.data._id,
-    otherUserName: otherParty.type === 'vendor'
-      ? otherParty.data?.vendorProfile?.businessName ||
-        `${otherParty.data?.firstName} ${otherParty.data?.lastName}`
-      : `${otherParty.data?.firstName} ${otherParty.data?.lastName}`,
-    otherUserAvatar: otherParty.data?.avatar,
-  });
-};
+    // Navigate to ChatDetail screen
+    navigation.navigate('ChatDetail', {
+      otherUserId: otherParty.data._id,
+      otherUserName: otherParty.type === 'vendor'
+        ? otherParty.data?.vendorProfile?.businessName ||
+          `${otherParty.data?.firstName} ${otherParty.data?.lastName}`
+        : `${otherParty.data?.firstName} ${otherParty.data?.lastName}`,
+      otherUserAvatar: otherParty.data?.avatar,
+    });
+  };
 
   const handleCancelBooking = () => {
     Alert.prompt(
@@ -451,7 +478,7 @@ const handleMessage = () => {
             activeOpacity={0.8}
           >
             <Ionicons name="star" size={20} color="#fff" />
-            <Text className="text-white font-bold text-base ml-2">Leave a Review</Text>
+            <Text className="ml-2 text-base font-bold text-white">Leave a Review</Text>
           </TouchableOpacity>
         )}
 
@@ -461,11 +488,11 @@ const handleMessage = () => {
             onPress={() => {
               Alert.alert('Review Submitted', 'Thank you for your feedback!');
             }}
-            className="bg-green-500 py-4 rounded-2xl flex-row items-center justify-center"
+            className="flex-row items-center justify-center rounded-2xl bg-green-500 py-4"
             activeOpacity={0.8}
           >
             <Ionicons name="checkmark-circle" size={20} color="#fff" />
-            <Text className="text-white font-bold text-base ml-2">✓ Review Submitted</Text>
+            <Text className="ml-2 text-base font-bold text-white">✓ Review Submitted</Text>
           </TouchableOpacity>
         )}
 
@@ -509,16 +536,16 @@ const handleMessage = () => {
                 activeOpacity={0.8}
               >
                 <Ionicons name="alert-circle" size={20} color="#fff" />
-                <Text className="text-white font-bold text-base ml-2">View Active Dispute</Text>
+                <Text className="ml-2 text-base font-bold text-white">View Active Dispute</Text>
               </TouchableOpacity>
             ) : (
               <TouchableOpacity
                 onPress={handleCreateDispute}
-                className="bg-white border-2 border-red-500 py-4 rounded-2xl flex-row items-center justify-center"
+                className="flex-row items-center justify-center rounded-2xl border-2 border-red-500 bg-white py-4"
                 activeOpacity={0.8}
               >
                 <Ionicons name="alert-circle-outline" size={20} color="#ef4444" />
-                <Text className="text-red-500 font-bold text-base ml-2">Report Issue</Text>
+                <Text className="ml-2 text-base font-bold text-red-500">Report Issue</Text>
               </TouchableOpacity>
             )}
           </>
@@ -532,7 +559,7 @@ const handleMessage = () => {
       <SafeAreaView className="flex-1 bg-gray-50">
         <View className="flex-1 items-center justify-center">
           <ActivityIndicator size="large" color="#eb278d" />
-          <Text className="text-gray-500 text-sm mt-4 font-medium">Loading booking...</Text>
+          <Text className="mt-4 text-sm font-medium text-gray-500">Loading booking...</Text>
         </View>
       </SafeAreaView>
     );
@@ -543,7 +570,7 @@ const handleMessage = () => {
       <SafeAreaView className="flex-1 bg-gray-50">
         <View className="flex-1 items-center justify-center">
           <Ionicons name="document-text-outline" size={64} color="#d1d5db" />
-          <Text className="text-gray-900 text-lg font-bold mt-4">Booking not found</Text>
+          <Text className="mt-4 text-lg font-bold text-gray-900">Booking not found</Text>
         </View>
       </SafeAreaView>
     );
@@ -562,10 +589,10 @@ const handleMessage = () => {
         end={{ x: 1, y: 1 }}
       >
         <View className="px-5 py-4">
-          <View className="flex-row items-center justify-between mb-4">
+          <View className="mb-4 flex-row items-center justify-between">
             <TouchableOpacity
               onPress={() => navigation.goBack()}
-              className="w-10 h-10 rounded-full bg-white/20 items-center justify-center"
+              className="h-10 w-10 items-center justify-center rounded-full bg-white/20"
               activeOpacity={0.7}
             >
               <Ionicons name="arrow-back" size={24} color="#fff" />
@@ -592,8 +619,8 @@ const handleMessage = () => {
             </View>
 
             {booking.bookingNumber && (
-              <View className="bg-white/20 px-3 py-1.5 rounded-full">
-                <Text className="text-white text-xs font-bold">#{booking.bookingNumber}</Text>
+              <View className="rounded-full bg-white/20 px-3 py-1.5">
+                <Text className="text-xs font-bold text-white">#{booking.bookingNumber}</Text>
               </View>
             )}
           </View>
@@ -613,8 +640,8 @@ const handleMessage = () => {
                 <Ionicons name="alert-circle" size={24} color="#f97316" />
               </View>
               <View className="flex-1">
-                <Text className="text-orange-900 font-bold text-base mb-1">Active Dispute</Text>
-                <Text className="text-orange-700 text-sm">
+                <Text className="mb-1 text-base font-bold text-orange-900">Active Dispute</Text>
+                <Text className="text-sm text-orange-700">
                   There is an active dispute for this booking. Tap to view details.
                 </Text>
               </View>
@@ -646,29 +673,29 @@ const handleMessage = () => {
             )}
 
             <View className="p-5">
-              <Text className="text-xl font-bold text-gray-900 mb-2">
-                {serviceInfo?.name || 'Service'}
+              <Text className="mb-2 text-xl font-bold text-gray-900">
+                {serviceInfo?.name || 'Unknown Service'}
               </Text>
 
               {serviceInfo?.description && (
-                <Text className="text-gray-600 text-sm mb-4 leading-5">
+                <Text className="mb-4 text-sm leading-5 text-gray-600">
                   {serviceInfo.description}
                 </Text>
               )}
 
               <View className="flex-row" style={{ gap: 20 }}>
                 <View className="flex-row items-center">
-                  <View className="w-8 h-8 rounded-lg bg-blue-100 items-center justify-center mr-2">
+                  <View className="mr-2 h-8 w-8 items-center justify-center rounded-lg bg-blue-100">
                     <Ionicons name="time" size={16} color="#3b82f6" />
                   </View>
-                  <Text className="text-gray-700 font-medium">{booking.duration} mins</Text>
+                  <Text className="font-medium text-gray-700">{booking.duration} mins</Text>
                 </View>
 
                 <View className="flex-row items-center">
-                  <View className="w-8 h-8 rounded-lg bg-green-100 items-center justify-center mr-2">
+                  <View className="mr-2 h-8 w-8 items-center justify-center rounded-lg bg-green-100">
                     <Ionicons name="cash" size={16} color="#10b981" />
                   </View>
-                  <Text className="text-gray-700 font-medium">
+                  <Text className="font-medium text-gray-700">
                     {formatPrice(booking.servicePrice)}
                   </Text>
                 </View>
@@ -696,12 +723,12 @@ const handleMessage = () => {
                 {otherParty.label} Information
               </Text>
 
-              <View className="flex-row items-center mb-4">
-                <View className="w-16 h-16 rounded-full bg-gradient-to-br from-pink-400 to-pink-600 items-center justify-center mr-3 overflow-hidden">
+              <View className="mb-4 flex-row items-center">
+                <View className="mr-3 h-16 w-16 items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-pink-400 to-pink-600">
                   {otherParty.data?.avatar ? (
                     <Image
                       source={{ uri: otherParty.data.avatar }}
-                      className="w-16 h-16 rounded-full"
+                      className="h-16 w-16 rounded-full"
                     />
                   ) : (
                     <Ionicons name="person" size={32} color="#fff" />
@@ -717,9 +744,9 @@ const handleMessage = () => {
                   </Text>
 
                   {otherParty.type === 'vendor' && otherParty.data?.vendorProfile && (
-                    <View className="flex-row items-center mt-1">
+                    <View className="mt-1 flex-row items-center">
                       <Ionicons name="star" size={14} color="#fbbf24" />
-                      <Text className="text-sm text-gray-600 ml-1">
+                      <Text className="ml-1 text-sm text-gray-600">
                         {otherParty.data.vendorProfile.rating?.toFixed(1) || 'New'} •{' '}
                         {otherParty.data.vendorProfile.completedBookings || 0} jobs
                       </Text>
@@ -727,9 +754,9 @@ const handleMessage = () => {
                   )}
 
                   {otherParty.type === 'client' && (
-                    <View className="flex-row items-center mt-1">
+                    <View className="mt-1 flex-row items-center">
                       <Ionicons name="mail" size={14} color="#6b7280" />
-                      <Text className="text-sm text-gray-600 ml-1">
+                      <Text className="ml-1 text-sm text-gray-600">
                         {otherParty.data?.email || 'No email'}
                       </Text>
                     </View>
@@ -751,24 +778,24 @@ const handleMessage = () => {
                   activeOpacity={0.8}
                 >
                   <Ionicons name="call" size={18} color="#fff" />
-                  <Text className="text-white font-bold ml-2">Call</Text>
+                  <Text className="ml-2 font-bold text-white">Call</Text>
                 </TouchableOpacity>
 
-             <TouchableOpacity
-  onPress={handleMessage}  // ← Changed from handleMessage(phone)
-  className="flex-1 bg-blue-500 py-3 rounded-xl flex-row items-center justify-center"
-  style={{
-    shadowColor: '#3b82f6',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 2,
-  }}
-  activeOpacity={0.8}
->
-  <Ionicons name="chatbubble" size={18} color="#fff" />
-  <Text className="text-white font-bold ml-2">Message</Text>
-</TouchableOpacity>
+                <TouchableOpacity
+                  onPress={handleMessage}
+                  className="flex-1 bg-blue-500 py-3 rounded-xl flex-row items-center justify-center"
+                  style={{
+                    shadowColor: '#3b82f6',
+                    shadowOffset: { width: 0, height: 2 },
+                    shadowOpacity: 0.2,
+                    shadowRadius: 4,
+                    elevation: 2,
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <Ionicons name="chatbubble" size={18} color="#fff" />
+                  <Text className="text-white font-bold ml-2">Message</Text>
+                </TouchableOpacity>
               </View>
             </View>
           )}
@@ -792,29 +819,29 @@ const handleMessage = () => {
 
             <View style={{ gap: 16 }}>
               <View className="flex-row items-center">
-                <View className="w-10 h-10 rounded-xl bg-purple-100 items-center justify-center mr-3">
+                <View className="mr-3 h-10 w-10 items-center justify-center rounded-xl bg-purple-100">
                   <Ionicons name="calendar" size={20} color="#a855f7" />
                 </View>
-                <Text className="text-gray-700 flex-1 font-medium">
+                <Text className="flex-1 font-medium text-gray-700">
                   {formatDate(booking.scheduledDate)}
                 </Text>
               </View>
 
               {booking.scheduledTime && (
                 <View className="flex-row items-center">
-                  <View className="w-10 h-10 rounded-xl bg-blue-100 items-center justify-center mr-3">
+                  <View className="mr-3 h-10 w-10 items-center justify-center rounded-xl bg-blue-100">
                     <Ionicons name="time" size={20} color="#3b82f6" />
                   </View>
-                  <Text className="text-gray-700 font-medium">{booking.scheduledTime}</Text>
+                  <Text className="font-medium text-gray-700">{booking.scheduledTime}</Text>
                 </View>
               )}
 
               {booking.location && (
                 <View className="flex-row items-start">
-                  <View className="w-10 h-10 rounded-xl bg-green-100 items-center justify-center mr-3">
+                  <View className="mr-3 h-10 w-10 items-center justify-center rounded-xl bg-green-100">
                     <Ionicons name="location" size={20} color="#10b981" />
                   </View>
-                  <Text className="text-gray-700 flex-1 font-medium">
+                  <Text className="flex-1 font-medium text-gray-700">
                     {booking.location.address}, {booking.location.city}, {booking.location.state}
                   </Text>
                 </View>
@@ -848,17 +875,17 @@ const handleMessage = () => {
               </View>
 
               {booking.distanceCharge > 0 && (
-                <View className="flex-row justify-between items-center">
-                  <Text className="text-gray-600 font-medium">Distance Charge</Text>
-                  <Text className="text-gray-900 font-bold">
+                <View className="flex-row items-center justify-between">
+                  <Text className="font-medium text-gray-600">Distance Charge</Text>
+                  <Text className="font-bold text-gray-900">
                     {formatPrice(booking.distanceCharge)}
                   </Text>
                 </View>
               )}
 
-              <View className="border-t-2 border-gray-100 pt-3 flex-row justify-between items-center">
-                <Text className="text-gray-900 font-bold text-base">Total Amount</Text>
-                <Text className="text-pink-600 font-bold text-xl">
+              <View className="flex-row items-center justify-between border-t-2 border-gray-100 pt-3">
+                <Text className="text-base font-bold text-gray-900">Total Amount</Text>
+                <Text className="text-xl font-bold text-pink-600">
                   {formatPrice(booking.totalAmount)}
                 </Text>
               </View>
@@ -913,22 +940,22 @@ const handleMessage = () => {
               <Text className="text-lg font-bold text-gray-900 mb-4">Notes</Text>
 
               {booking.clientNotes && (
-                <View className="bg-blue-50 rounded-xl p-4 mb-3">
-                  <View className="flex-row items-center mb-2">
+                <View className="mb-3 rounded-xl bg-blue-50 p-4">
+                  <View className="mb-2 flex-row items-center">
                     <Ionicons name="person-circle" size={20} color="#3b82f6" />
-                    <Text className="text-sm font-bold text-blue-900 ml-2">Client Notes:</Text>
+                    <Text className="ml-2 text-sm font-bold text-blue-900">Client Notes:</Text>
                   </View>
-                  <Text className="text-gray-700 leading-5">{booking.clientNotes}</Text>
+                  <Text className="leading-5 text-gray-700">{booking.clientNotes}</Text>
                 </View>
               )}
 
               {booking.vendorNotes && (
-                <View className="bg-pink-50 rounded-xl p-4">
-                  <View className="flex-row items-center mb-2">
+                <View className="rounded-xl bg-pink-50 p-4">
+                  <View className="mb-2 flex-row items-center">
                     <Ionicons name="briefcase" size={20} color="#eb278d" />
-                    <Text className="text-sm font-bold text-pink-900 ml-2">Vendor Notes:</Text>
+                    <Text className="ml-2 text-sm font-bold text-pink-900">Vendor Notes:</Text>
                   </View>
-                  <Text className="text-gray-700 leading-5">{booking.vendorNotes}</Text>
+                  <Text className="leading-5 text-gray-700">{booking.vendorNotes}</Text>
                 </View>
               )}
             </View>
