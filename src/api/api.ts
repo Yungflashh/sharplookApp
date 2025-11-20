@@ -391,6 +391,10 @@ export const vendorAPI = {
     const response = await api.get('/vendors/bookings');
     return response.data;
   },
+  getStats: async () => {
+    const response = await api.get('/bookings/stats');
+    return response.data;
+  },
   getTopVendors: async () => {
     const response = await api.get('/users/top-vendors');
     return response.data;
