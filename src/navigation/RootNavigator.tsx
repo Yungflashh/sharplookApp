@@ -136,6 +136,9 @@ const RootNavigator = () => {
           <Stack.Screen name="Reviews" component={ReviewsScreen} options={{
         animation: 'slide_from_right'
       }} />
+          <Stack.Screen name="VendorMyResponses" component={VendorMyResponsesScreen} options={{
+        animation: 'slide_from_right'
+      }} />
           <Stack.Screen name="PersonalInformation" component={PersonalInformationScreen} options={{
         animation: 'slide_from_right'
       }} />
