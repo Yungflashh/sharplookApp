@@ -1,361 +1,467 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
   TouchableOpacity,
   ScrollView,
-  TextInput,
-  Platform,
+  Image,
   Alert,
   ActivityIndicator,
-  Switch,
+  RefreshControl,
+  Platform,
+  TextInput,
+  Dimensions,
 } from 'react-native';
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native';
+import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import * as Location from 'expo-location';
-import { vendorAPI, categoriesAPI } from '@/api/api';
-import { getStoredUser } from '@/utils/authHelper';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { RootStackParamList } from '@/types/navigation.types';
+import { productAPI, handleAPIError } from '@/api/api';
 
-interface Category {
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const CARD_WIDTH = (SCREEN_WIDTH - 60) / 2; // 2 items per row: 40px padding + 20px gap
+
+type VendorProductManagementNavigationProp = NativeStackNavigationProp<
+  RootStackParamList,
+  'VendorProductManagement'
+>;
+
+interface Product {
   _id: string;
   name: string;
-  icon?: string;
+  description: string;
+  images: string[];
+  price: number;
+  finalPrice: number;
+  stock: number;
+  approvalStatus: 'pending' | 'approved' | 'rejected';
+  isActive: boolean;
+  category: {
+    _id?: string;
+    name: string;
+  };
+  totalOrders?: number;
+  totalSales?: number;
+  rating?: number;
+  totalRatings?: number;
+  rejectionReason?: string;
+  createdAt: string;
 }
 
-interface LocationData {
-  type: 'Point';
-  coordinates: [number, number];
-  address: string;
-  city: string;
-  state: string;
-  country: string;
-}
+type FilterStatus = 'all' | 'pending' | 'approved' | 'rejected';
 
-const VendorStoreSettingsScreen: React.FC = () => {
-  const navigation = useNavigation();
+const VendorProductManagementScreen: React.FC = () => {
+  const navigation = useNavigation<VendorProductManagementNavigationProp>();
+
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [loadingCategories, setLoadingCategories] = useState(false);
-  
-  // Edit Mode State
-  const [isEditMode, setIsEditMode] = useState(false);
-  
-  // Profile State
-  const [businessName, setBusinessName] = useState('');
-  const [businessDescription, setBusinessDescription] = useState('');
-  const [vendorType, setVendorType] = useState<'home_service' | 'in_shop' | 'both'>('home_service');
-  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
-  const [availableCategories, setAvailableCategories] = useState<Category[]>([]);
-  
-  // Location State
-  const [location, setLocation] = useState<LocationData | null>(null);
-  const [locationLoading, setLocationLoading] = useState(false);
-  const [locationError, setLocationError] = useState('');
-  const [locationPermissionGranted, setLocationPermissionGranted] = useState(false);
-  const [serviceRadius, setServiceRadius] = useState('10');
-  
-  // Availability State
-  const [availability, setAvailability] = useState({
-    monday: { isAvailable: true, from: '09:00', to: '17:00' },
-    tuesday: { isAvailable: true, from: '09:00', to: '17:00' },
-    wednesday: { isAvailable: true, from: '09:00', to: '17:00' },
-    thursday: { isAvailable: true, from: '09:00', to: '17:00' },
-    friday: { isAvailable: true, from: '09:00', to: '17:00' },
-    saturday: { isAvailable: true, from: '09:00', to: '17:00' },
-    sunday: { isAvailable: false, from: '09:00', to: '17:00' },
-  });
+  const [refreshing, setRefreshing] = useState(false);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [activeFilter, setActiveFilter] = useState<FilterStatus>('all');
 
-  const [expandedSection, setExpandedSection] = useState<string | null>('business');
-
-  useEffect(() => {
-    loadData();
-    checkLocationPermission();
-  }, []);
-
-  const checkLocationPermission = async () => {
-    try {
-      const { status } = await Location.getForegroundPermissionsAsync();
-      setLocationPermissionGranted(status === 'granted');
-    } catch (error) {
-      console.error('Error checking location permission:', error);
-    }
-  };
-
-  const requestLocationPermission = async () => {
-    try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      setLocationPermissionGranted(status === 'granted');
-      return status === 'granted';
-    } catch (error) {
-      console.error('Error requesting location permission:', error);
-      return false;
-    }
-  };
-
-  const getCurrentLocation = async () => {
-    setLocationLoading(true);
-    setLocationError('');
-
-    try {
-      // Check permission
-      if (!locationPermissionGranted) {
-        const granted = await requestLocationPermission();
-        if (!granted) {
-          setLocationError('Location permission is required');
-          Alert.alert(
-            'Location Permission Required',
-            'Please enable location permissions in your device settings to use this feature.',
-            [{ text: 'OK' }]
-          );
-          setLocationLoading(false);
-          return;
-        }
-      }
-
-      // Get current position
-      const position = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.High,
-      });
-
-      const { latitude, longitude } = position.coords;
-
-      // Reverse geocode to get address
-      const geocode = await Location.reverseGeocodeAsync({
-        latitude,
-        longitude,
-      });
-
-      if (geocode && geocode.length > 0) {
-        const addressData = geocode[0];
-        
-        const locationData: LocationData = {
-          type: 'Point',
-          coordinates: [longitude, latitude],
-          address: `${addressData.street || ''} ${addressData.streetNumber || ''}`.trim() || 'Address not available',
-          city: addressData.city || addressData.subregion || 'Unknown City',
-          state: addressData.region || 'Unknown State',
-          country: addressData.country || 'Unknown Country',
-        };
-
-        setLocation(locationData);
-        Alert.alert('Success', 'Location captured successfully!');
-      } else {
-        throw new Error('Unable to get address details');
-      }
-    } catch (error: any) {
-      console.error('Location error:', error);
-      setLocationError('Failed to get location. Please try again.');
-      Alert.alert(
-        'Location Error',
-        'Unable to get your location. Please ensure location services are enabled and try again.',
-        [{ text: 'OK' }]
-      );
-    } finally {
-      setLocationLoading(false);
-    }
-  };
-
-  const loadData = async () => {
+  const fetchProducts = async () => {
     try {
       setLoading(true);
-      await Promise.all([loadVendorProfile(), loadCategories()]);
+      console.log('🔍 Fetching products...');
+      
+      const response = await productAPI.getMyProducts();
+      
+      console.log('📦 Full response:', JSON.stringify(response, null, 2));
+      console.log('✅ Response success:', response.success);
+      console.log('📊 Response data:', response.data);
+
+      if (response.success) {
+        
+        let productList: Product[] = [];
+        
+        if (response.data.products) {
+          
+          productList = response.data.products;
+          console.log('📦 Found products in response.data.products');
+        } else if (Array.isArray(response.data)) {
+          
+          productList = response.data;
+          console.log('📦 Found products in response.data (array)');
+        } else if (response.data.data && response.data.data.products) {
+          
+          productList = response.data.data.products;
+          console.log('📦 Found products in response.data.data.products');
+        } else if (response.data.data && Array.isArray(response.data.data)) {
+          
+          productList = response.data.data;
+          console.log('📦 Found products in response.data.data (array)');
+        } else {
+          console.error('❌ Unknown response structure:', response);
+        }
+
+        console.log('📦 Product count:', productList.length);
+        console.log('📦 First product:', productList[0]);
+
+        setProducts(productList);
+        
+        if (productList.length === 0) {
+          console.log('⚠️ No products found');
+        }
+      } else {
+        console.error('❌ Response not successful');
+        Alert.alert('Error', 'Failed to fetch products');
+      }
     } catch (error) {
-      console.error('❌ Error loading data:', error);
-      Alert.alert('Error', 'Failed to load store settings');
+      const apiError = handleAPIError(error);
+      console.error('❌ Fetch products error:', apiError);
+      Alert.alert('Error', apiError.message);
     } finally {
       setLoading(false);
     }
   };
 
-  const loadVendorProfile = async () => {
-    try {
-      console.log('📥 Loading vendor profile...');
-      const response = await vendorAPI.getMyProfile();
-      console.log('✅ Vendor profile response:', response);
-      
-      if (response.success && response.data.vendor) {
-        const vendor = response.data.vendor;
-        console.log('👤 Vendor data:', vendor);
-        console.log('🏪 Vendor profile:', vendor.vendorProfile);
-        
-        setBusinessName(vendor.vendorProfile?.businessName || '');
-        setBusinessDescription(vendor.vendorProfile?.businessDescription || '');
-        setVendorType(vendor.vendorProfile?.vendorType || 'home_service');
-        
-        // Set categories
-        if (vendor.vendorProfile?.categories) {
-          const categoryIds = vendor.vendorProfile.categories.map((cat: any) => {
-            console.log('📦 Category:', cat);
-            return typeof cat === 'string' ? cat : cat._id;
-          });
-          console.log('✅ Selected categories:', categoryIds);
-          setSelectedCategories(categoryIds);
-        }
-        
-        // Set location
-        if (vendor.vendorProfile?.location) {
-          const loc = vendor.vendorProfile.location;
-          setLocation({
-            type: 'Point',
-            coordinates: loc.coordinates,
-            address: loc.address || '',
-            city: loc.city || '',
-            state: loc.state || '',
-            country: loc.country || 'Nigeria',
-          });
-        }
-        
-        setServiceRadius(String(vendor.vendorProfile?.serviceRadius || 10));
-        
-        // Set availability
-        if (vendor.vendorProfile?.availabilitySchedule) {
-          setAvailability(vendor.vendorProfile.availabilitySchedule);
-        }
-      }
-    } catch (error: any) {
-      console.error('❌ Error loading vendor profile:', error);
-      console.error('❌ Error details:', error.response?.data);
-      throw error;
+  useFocusEffect(
+    useCallback(() => {
+      fetchProducts();
+    }, [])
+  );
+
+  React.useEffect(() => {
+    let filtered = products;
+
+    
+    if (activeFilter !== 'all') {
+      filtered = filtered.filter((product) => product.approvalStatus === activeFilter);
     }
-  };
 
-  const loadCategories = async () => {
-    try {
-      setLoadingCategories(true);
-      console.log('📥 Loading categories...');
-      const response = await categoriesAPI.getActiveCategories();
-      console.log('✅ Categories response:', response);
-      
-      if (response.success && response.data) {
-        const categories = Array.isArray(response.data) ? response.data : [];
-        console.log('📦 Extracted categories:', categories);
-        setAvailableCategories(categories);
-      }
-    } catch (error: any) {
-      console.error('❌ Error loading categories:', error);
-      console.error('❌ Error details:', error.response?.data);
-    } finally {
-      setLoadingCategories(false);
-    }
-  };
-
-  const handleSave = async () => {
-    try {
-      // Validate required fields
-      if (!businessName.trim()) {
-        Alert.alert('Error', 'Business name is required');
-        return;
-      }
-
-      if (!businessDescription.trim()) {
-        Alert.alert('Error', 'Business description is required');
-        return;
-      }
-
-      if (selectedCategories.length === 0) {
-        Alert.alert('Error', 'Please select at least one category');
-        return;
-      }
-
-      if (!location) {
-        Alert.alert('Error', 'Please add your business location');
-        return;
-      }
-
-      setSaving(true);
-
-      const updateData = {
-        businessName: businessName.trim(),
-        businessDescription: businessDescription.trim(),
-        vendorType,
-        categories: selectedCategories,
-        location: {
-          type: 'Point' as const,
-          coordinates: location.coordinates,
-          address: location.address,
-          city: location.city,
-          state: location.state,
-          country: location.country,
-        },
-        serviceRadius: parseFloat(serviceRadius),
-        availabilitySchedule: availability,
-      };
-
-      console.log('💾 Saving update data:', updateData);
-      const response = await vendorAPI.updateMyProfile(updateData);
-      console.log('✅ Update response:', response);
-
-      if (response.success) {
-        // Update stored user data
-        const currentUser = await getStoredUser();
-        if (currentUser) {
-          const updatedUser = {
-            ...currentUser,
-            vendorProfile: response.data.vendor.vendorProfile,
-          };
-          await AsyncStorage.setItem('userData', JSON.stringify(updatedUser));
-        }
-
-        // Exit edit mode after saving
-        setIsEditMode(false);
-
-        Alert.alert('Success', 'Store settings updated successfully', [
-          {
-            text: 'OK',
-            onPress: () => navigation.goBack(),
-          },
-        ]);
-      }
-    } catch (error: any) {
-      console.error('❌ Error saving store settings:', error);
-      console.error('❌ Error details:', error.response?.data);
-      Alert.alert(
-        'Error',
-        error.response?.data?.message || 'Failed to update store settings'
+    
+    if (searchQuery) {
+      filtered = filtered.filter((product) =>
+        product.name.toLowerCase().includes(searchQuery.toLowerCase())
       );
-    } finally {
-      setSaving(false);
+    }
+
+    console.log('🔍 Filtered products count:', filtered.length);
+    setFilteredProducts(filtered);
+  }, [products, activeFilter, searchQuery]);
+
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    fetchProducts().finally(() => setRefreshing(false));
+  }, []);
+
+  const handleAddProduct = () => {
+    navigation.navigate('AddProduct');
+  };
+
+  const handleEditProduct = (productId: string) => {
+    navigation.navigate('EditProduct', { productId });
+  };
+
+  const handleDeleteProduct = (productId: string) => {
+    Alert.alert(
+      'Delete Product',
+      'Are you sure you want to delete this product? This action cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await productAPI.deleteProduct(productId);
+              Alert.alert('Success', 'Product deleted successfully');
+              fetchProducts();
+            } catch (error) {
+              const apiError = handleAPIError(error);
+              Alert.alert('Error', apiError.message || 'Failed to delete product');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleUpdateStock = (product: Product) => {
+    Alert.prompt(
+      'Update Stock',
+      `Current stock: ${product.stock}`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Update',
+          onPress: async (value) => {
+            const quantity = parseInt(value || '0');
+            if (isNaN(quantity) || quantity < 0) {
+              Alert.alert('Invalid', 'Please enter a valid number');
+              return;
+            }
+
+            try {
+              await productAPI.updateStock(product._id, quantity);
+              Alert.alert('Success', 'Stock updated successfully');
+              fetchProducts();
+            } catch (error) {
+              const apiError = handleAPIError(error);
+              Alert.alert('Error', apiError.message || 'Failed to update stock');
+            }
+          },
+        },
+      ],
+      'plain-text',
+      product.stock.toString(),
+      'number-pad'
+    );
+  };
+
+  const formatPrice = (price: number) => {
+    return `₦${price.toLocaleString()}`;
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'pending':
+        return 'bg-yellow-100 text-yellow-800 border-yellow-200';
+      case 'approved':
+        return 'bg-green-100 text-green-800 border-green-200';
+      case 'rejected':
+        return 'bg-red-100 text-red-800 border-red-200';
+      default:
+        return 'bg-gray-100 text-gray-800 border-gray-200';
     }
   };
 
-  const toggleCategory = (categoryId: string) => {
-    if (!isEditMode) return;
-    setSelectedCategories((prev) => {
-      if (prev.includes(categoryId)) {
-        return prev.filter((id) => id !== categoryId);
-      } else {
-        return [...prev, categoryId];
-      }
-    });
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case 'pending':
+        return 'time';
+      case 'approved':
+        return 'checkmark-circle';
+      case 'rejected':
+        return 'close-circle';
+      default:
+        return 'help-circle';
+    }
   };
 
-  const toggleDay = (day: string) => {
-    if (!isEditMode) return;
-    setAvailability((prev) => ({
-      ...prev,
-      [day]: {
-        ...prev[day as keyof typeof prev],
-        isAvailable: !prev[day as keyof typeof prev].isAvailable,
-      },
-    }));
+  const renderProductCard = (product: Product) => (
+    <TouchableOpacity
+      key={product._id}
+      onPress={() => navigation.navigate('ProductDetail', { productId: product._id })}
+      activeOpacity={0.9}
+      className="bg-white rounded-2xl overflow-hidden"
+      style={{
+        width: CARD_WIDTH,
+        ...Platform.select({
+          ios: {
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: 0.08,
+            shadowRadius: 8,
+          },
+          android: { elevation: 3 },
+        }),
+      }}
+    >
+      {/* Product Image */}
+      <View className="relative">
+        {product.images && product.images.length > 0 ? (
+          <Image
+            source={{ uri: product.images[0] }}
+            style={{ width: '100%', height: 140 }}
+            resizeMode="cover"
+          />
+        ) : (
+          <View 
+            style={{ width: '100%', height: 140 }}
+            className="bg-gray-200 items-center justify-center"
+          >
+            <Ionicons name="image-outline" size={32} color="#9ca3af" />
+          </View>
+        )}
+
+        {/* Status Badge */}
+        <View className="absolute top-2 left-2">
+          <View
+            className={`px-2 py-1 rounded-full border ${getStatusColor(product.approvalStatus)}`}
+          >
+            <View className="flex-row items-center" style={{ gap: 4 }}>
+              <Ionicons
+                name={getStatusIcon(product.approvalStatus) as any}
+                size={10}
+                color={
+                  product.approvalStatus === 'approved'
+                    ? '#15803d'
+                    : product.approvalStatus === 'rejected'
+                    ? '#dc2626'
+                    : '#ca8a04'
+                }
+              />
+              <Text className="text-xs font-bold capitalize">{product.approvalStatus}</Text>
+            </View>
+          </View>
+        </View>
+
+        {/* Quick Actions */}
+        <TouchableOpacity
+          onPress={() => {
+            Alert.alert('Product Options', '', [
+              {
+                text: 'Edit',
+                onPress: () => handleEditProduct(product._id),
+              },
+              {
+                text: 'Update Stock',
+                onPress: () => handleUpdateStock(product),
+              },
+              {
+                text: 'Delete',
+                style: 'destructive',
+                onPress: () => handleDeleteProduct(product._id),
+              },
+              { text: 'Cancel', style: 'cancel' },
+            ]);
+          }}
+          className="absolute top-2 right-2 w-7 h-7 rounded-full bg-white/90 items-center justify-center"
+        >
+          <Ionicons name="ellipsis-vertical" size={14} color="#6b7280" />
+        </TouchableOpacity>
+      </View>
+
+      {/* Product Details */}
+      <View className="p-3">
+        {/* Category */}
+        <Text className="text-gray-500 text-xs mb-1" numberOfLines={1}>
+          {product.category?.name || 'No Category'}
+        </Text>
+
+        {/* Product Name */}
+        <Text className="text-gray-900 text-sm font-bold mb-2" numberOfLines={2}>
+          {product.name}
+        </Text>
+
+        {/* Price & Stock */}
+        <View className="flex-row items-center justify-between mb-2">
+          <Text className="text-pink-600 text-base font-bold">
+            {formatPrice(product.finalPrice || product.price)}
+          </Text>
+          
+          <View
+            className={`px-2 py-1 rounded ${
+              product.stock === 0
+                ? 'bg-red-100'
+                : product.stock < 10
+                ? 'bg-orange-100'
+                : 'bg-green-100'
+            }`}
+          >
+            <Text
+              className={`text-xs font-bold ${
+                product.stock === 0
+                  ? 'text-red-700'
+                  : product.stock < 10
+                  ? 'text-orange-700'
+                  : 'text-green-700'
+              }`}
+            >
+              {product.stock}
+            </Text>
+          </View>
+        </View>
+
+        {/* Stats */}
+        {(product.totalOrders || product.totalSales || product.totalRatings) && (
+          <View className="flex-row items-center justify-between pt-2 border-t border-gray-100">
+            {product.totalOrders !== undefined && (
+              <View className="flex-row items-center">
+                <Ionicons name="cart" size={12} color="#9ca3af" />
+                <Text className="text-gray-600 text-xs ml-1">
+                  {product.totalOrders || 0}
+                </Text>
+              </View>
+            )}
+
+            {product.totalRatings && product.totalRatings > 0 && (
+              <View className="flex-row items-center">
+                <Ionicons name="star" size={12} color="#fbbf24" />
+                <Text className="text-gray-600 text-xs ml-1">
+                  {product.rating?.toFixed(1) || 0}
+                </Text>
+              </View>
+            )}
+          </View>
+        )}
+      </View>
+
+      {/* Rejection Reason */}
+      {product.approvalStatus === 'rejected' && product.rejectionReason && (
+        <View className="bg-red-50 px-3 py-2 border-t border-red-100">
+          <View className="flex-row items-start">
+            <Ionicons name="alert-circle" size={14} color="#dc2626" />
+            <View className="flex-1 ml-2">
+              <Text className="text-red-900 text-xs font-semibold mb-0.5">Rejection:</Text>
+              <Text className="text-red-700 text-xs" numberOfLines={2}>
+                {product.rejectionReason}
+              </Text>
+            </View>
+          </View>
+        </View>
+      )}
+    </TouchableOpacity>
+  );
+
+  const renderEmptyState = () => (
+    <View className="flex-1 items-center justify-center py-20 px-8">
+      <LinearGradient
+        colors={['#fce7f3', '#fdf2f8']}
+        className="w-32 h-32 rounded-full items-center justify-center mb-6"
+      >
+        <Ionicons name="cube-outline" size={64} color="#eb278d" />
+      </LinearGradient>
+      <Text className="text-xl font-bold text-gray-900 mb-2 text-center">No Products Yet</Text>
+      <Text className="text-gray-600 text-center text-sm mb-6">
+        {activeFilter !== 'all' 
+          ? `No ${activeFilter} products found`
+          : "Start by adding your first product to sell on the marketplace"}
+      </Text>
+      <TouchableOpacity
+        onPress={handleAddProduct}
+        className="bg-pink-500 px-8 py-4 rounded-2xl"
+        style={{
+          shadowColor: '#eb278d',
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: 0.3,
+          shadowRadius: 8,
+          elevation: 4,
+        }}
+      >
+        <Text className="text-white text-base font-bold">Add Your First Product</Text>
+      </TouchableOpacity>
+    </View>
+  );
+
+  const getProductCounts = () => {
+    return {
+      all: products.length,
+      pending: products.filter((p) => p.approvalStatus === 'pending').length,
+      approved: products.filter((p) => p.approvalStatus === 'approved').length,
+      rejected: products.filter((p) => p.approvalStatus === 'rejected').length,
+    };
   };
 
-  const toggleSection = (section: string) => {
-    setExpandedSection(expandedSection === section ? null : section);
-  };
+  const counts = getProductCounts();
 
-  const toggleEditMode = () => {
-    setIsEditMode(!isEditMode);
-  };
+  const filters: { key: FilterStatus; label: string; count: number }[] = [
+    { key: 'all', label: 'All', count: counts.all },
+    { key: 'approved', label: 'Approved', count: counts.approved },
+    { key: 'pending', label: 'Pending', count: counts.pending },
+    { key: 'rejected', label: 'Rejected', count: counts.rejected },
+  ];
 
   if (loading) {
     return (
       <SafeAreaView className="flex-1 bg-gray-50">
         <View className="flex-1 items-center justify-center">
-          <ActivityIndicator size="large" color="#ec4899" />
-          <Text className="text-gray-600 mt-4">Loading store settings...</Text>
+          <ActivityIndicator size="large" color="#eb278d" />
+          <Text className="text-gray-500 text-sm mt-4">Loading products...</Text>
         </View>
       </SafeAreaView>
     );
@@ -364,450 +470,121 @@ const VendorStoreSettingsScreen: React.FC = () => {
   return (
     <SafeAreaView className="flex-1 bg-gray-50" edges={['top']}>
       {/* Header */}
-      <View className="bg-white border-b border-gray-200">
-        <View className="flex-row items-center justify-between px-5 py-4">
-          <TouchableOpacity
-            onPress={() => navigation.goBack()}
-            className="w-10 h-10 items-center justify-center"
-          >
-            <Ionicons name="chevron-back" size={28} color="#1f2937" />
-          </TouchableOpacity>
-          <Text className="text-lg font-semibold text-gray-900">Store Settings</Text>
-          
-          {/* Edit Mode Toggle Button */}
-          <TouchableOpacity
-            onPress={toggleEditMode}
-            className={`w-10 h-10 rounded-full items-center justify-center ${
-              isEditMode ? 'bg-pink-100' : 'bg-gray-100'
-            }`}
-            activeOpacity={0.7}
-          >
-            <Ionicons 
-              name={isEditMode ? "checkmark" : "pencil"} 
-              size={20} 
-              color={isEditMode ? "#ec4899" : "#6b7280"} 
-            />
-          </TouchableOpacity>
-        </View>
-        
-        {/* Edit Mode Indicator */}
-        {isEditMode && (
-          <View className="bg-pink-50 px-5 py-2 border-t border-pink-100">
-            <View className="flex-row items-center">
-              <Ionicons name="pencil" size={14} color="#ec4899" />
-              <Text className="text-pink-600 text-xs font-semibold ml-2">
-                Edit Mode Active - You can now make changes
+      <LinearGradient
+        colors={['#eb278d', '#f472b6']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        className="pb-4"
+      >
+        <View className="px-5 pt-4">
+          <View className="flex-row items-center justify-between mb-4">
+            <TouchableOpacity
+              onPress={() => navigation.goBack()}
+              className="w-10 h-10 rounded-full bg-white/20 items-center justify-center mr-3"
+            >
+              <Ionicons name="arrow-back" size={24} color="#fff" />
+            </TouchableOpacity>
+            <View>
+              <Text className="text-white text-2xl font-bold mb-1">My Products</Text>
+              <Text className="text-white/80 text-sm">
+                {filteredProducts.length} {filteredProducts.length === 1 ? 'product' : 'products'}
               </Text>
             </View>
-          </View>
-        )}
-      </View>
 
-      <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
-        <View className="p-5">
-          {/* Business Information */}
-          <View className="bg-white rounded-2xl p-4 mb-4">
             <TouchableOpacity
-              onPress={() => toggleSection('business')}
-              className="flex-row items-center justify-between mb-3"
+              onPress={handleAddProduct}
+              className="w-12 h-12 rounded-full bg-white/20 items-center justify-center"
             >
-              <View className="flex-row items-center">
-                <View className="w-10 h-10 rounded-xl bg-pink-50 items-center justify-center mr-3">
-                  <MaterialCommunityIcons name="store" size={22} color="#ec4899" />
-                </View>
-                <Text className="text-base font-semibold text-gray-900">
-                  Business Information
+              <Ionicons name="add" size={28} color="#fff" />
+            </TouchableOpacity>
+          </View>
+
+          {/* Search Bar */}
+          <View className="flex-row items-center bg-white/20 rounded-2xl px-4 py-3 mb-4">
+            <Ionicons name="search" size={20} color="#fff" />
+            <TextInput
+              className="flex-1 ml-2 text-base text-white"
+              placeholder="Search products..."
+              placeholderTextColor="rgba(255, 255, 255, 0.7)"
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+            />
+            {searchQuery.length > 0 && (
+              <TouchableOpacity onPress={() => setSearchQuery('')}>
+                <Ionicons name="close-circle" size={20} color="#fff" />
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {/* Filter Chips */}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ gap: 8 }}
+          >
+            {filters.map((filter) => (
+              <TouchableOpacity
+                key={filter.key}
+                onPress={() => setActiveFilter(filter.key)}
+                className={`px-5 py-2.5 rounded-full ${
+                  activeFilter === filter.key ? 'bg-white' : 'bg-white/20'
+                }`}
+              >
+                <Text
+                  className={`font-bold text-sm ${
+                    activeFilter === filter.key ? 'text-pink-600' : 'text-white'
+                  }`}
+                >
+                  {filter.label} ({filter.count})
                 </Text>
-              </View>
-              <Ionicons
-                name={expandedSection === 'business' ? 'chevron-up' : 'chevron-down'}
-                size={24}
-                color="#9ca3af"
-              />
-            </TouchableOpacity>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+      </LinearGradient>
 
-            {expandedSection === 'business' && (
-              <View className="pt-3 border-t border-gray-100">
-                {/* Business Name */}
-                <View className="mb-4">
-                  <Text className="text-sm font-medium text-gray-700 mb-2">
-                    Business Name *
-                  </Text>
-                  <View className="relative">
-                    <TextInput
-                      value={businessName}
-                      onChangeText={setBusinessName}
-                      placeholder="Enter your business name"
-                      editable={isEditMode}
-                      className={`border rounded-xl px-4 py-3 text-gray-900 ${
-                        isEditMode 
-                          ? 'bg-white border-pink-200' 
-                          : 'bg-gray-50 border-gray-200'
-                      }`}
-                      placeholderTextColor="#9ca3af"
-                    />
-                    {!isEditMode && (
-                      <View className="absolute right-3 top-3">
-                        <Ionicons name="lock-closed" size={16} color="#9ca3af" />
-                      </View>
-                    )}
-                  </View>
-                </View>
-
-                {/* Business Description */}
-                <View className="mb-4">
-                  <Text className="text-sm font-medium text-gray-700 mb-2">
-                    Business Description *
-                  </Text>
-                  <View className="relative">
-                    <TextInput
-                      value={businessDescription}
-                      onChangeText={setBusinessDescription}
-                      placeholder="Describe your business..."
-                      multiline
-                      numberOfLines={4}
-                      textAlignVertical="top"
-                      editable={isEditMode}
-                      className={`border rounded-xl px-4 py-3 text-gray-900 min-h-[100px] ${
-                        isEditMode 
-                          ? 'bg-white border-pink-200' 
-                          : 'bg-gray-50 border-gray-200'
-                      }`}
-                      placeholderTextColor="#9ca3af"
-                    />
-                    {!isEditMode && (
-                      <View className="absolute right-3 top-3">
-                        <Ionicons name="lock-closed" size={16} color="#9ca3af" />
-                      </View>
-                    )}
-                  </View>
-                </View>
-
-                {/* Vendor Type */}
-                <View className="mb-2">
-                  <Text className="text-sm font-medium text-gray-700 mb-2">
-                    Service Type *
-                  </Text>
-                  <View className="flex-row gap-2">
-                    <TouchableOpacity
-                      onPress={() => isEditMode && setVendorType('home_service')}
-                      disabled={!isEditMode}
-                      className={`flex-1 p-3 rounded-xl border-2 ${
-                        vendorType === 'home_service'
-                          ? 'border-pink-500 bg-pink-50'
-                          : isEditMode 
-                          ? 'border-gray-200 bg-white'
-                          : 'border-gray-200 bg-gray-50'
-                      }`}
-                    >
-                      <Text
-                        className={`text-center text-sm font-medium ${
-                          vendorType === 'home_service' ? 'text-pink-500' : 'text-gray-600'
-                        }`}
-                      >
-                        Home Service
-                      </Text>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                      onPress={() => isEditMode && setVendorType('in_shop')}
-                      disabled={!isEditMode}
-                      className={`flex-1 p-3 rounded-xl border-2 ${
-                        vendorType === 'in_shop'
-                          ? 'border-pink-500 bg-pink-50'
-                          : isEditMode 
-                          ? 'border-gray-200 bg-white'
-                          : 'border-gray-200 bg-gray-50'
-                      }`}
-                    >
-                      <Text
-                        className={`text-center text-sm font-medium ${
-                          vendorType === 'in_shop' ? 'text-pink-500' : 'text-gray-600'
-                        }`}
-                      >
-                        In-Shop
-                      </Text>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                      onPress={() => isEditMode && setVendorType('both')}
-                      disabled={!isEditMode}
-                      className={`flex-1 p-3 rounded-xl border-2 ${
-                        vendorType === 'both'
-                          ? 'border-pink-500 bg-pink-50'
-                          : isEditMode 
-                          ? 'border-gray-200 bg-white'
-                          : 'border-gray-200 bg-gray-50'
-                      }`}
-                    >
-                      <Text
-                        className={`text-center text-sm font-medium ${
-                          vendorType === 'both' ? 'text-pink-500' : 'text-gray-600'
-                        }`}
-                      >
-                        Both
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              </View>
-            )}
-          </View>
-
-          {/* Categories */}
-          <View className="bg-white rounded-2xl p-4 mb-4">
-            <TouchableOpacity
-              onPress={() => toggleSection('categories')}
-              className="flex-row items-center justify-between mb-3"
+      {/* Product Grid - 2x2 Layout */}
+      <ScrollView
+        className="flex-1"
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#eb278d" />
+        }
+      >
+        <View style={{ paddingHorizontal: 20, paddingVertical: 16 }}>
+          {filteredProducts.length > 0 ? (
+            <View 
+              style={{ 
+                flexDirection: 'row', 
+                flexWrap: 'wrap',
+                gap: 20,
+              }}
             >
-              <View className="flex-row items-center flex-1">
-                <View className="w-10 h-10 rounded-xl bg-pink-50 items-center justify-center mr-3">
-                  <Ionicons name="grid-outline" size={22} color="#ec4899" />
-                </View>
-                <View className="flex-1">
-                  <Text className="text-base font-semibold text-gray-900">Categories *</Text>
-                  <Text className="text-xs text-gray-500 mt-0.5">
-                    {selectedCategories.length} selected
-                  </Text>
-                </View>
-              </View>
-              <Ionicons
-                name={expandedSection === 'categories' ? 'chevron-up' : 'chevron-down'}
-                size={24}
-                color="#9ca3af"
-              />
-            </TouchableOpacity>
-
-            {expandedSection === 'categories' && (
-              <View className="pt-3 border-t border-gray-100">
-                {loadingCategories ? (
-                  <View className="py-4">
-                    <ActivityIndicator size="small" color="#ec4899" />
-                  </View>
-                ) : availableCategories.length > 0 ? (
-                  <View className="flex-row flex-wrap gap-2">
-                    {availableCategories.map((category) => (
-                      <TouchableOpacity
-                        key={category._id}
-                        onPress={() => toggleCategory(category._id)}
-                        disabled={!isEditMode}
-                        className={`px-4 py-2.5 rounded-full border-2 ${
-                          selectedCategories.includes(category._id)
-                            ? 'border-pink-500 bg-pink-50'
-                            : isEditMode
-                            ? 'border-gray-200 bg-white'
-                            : 'border-gray-200 bg-gray-50'
-                        }`}
-                        activeOpacity={0.7}
-                      >
-                        <Text
-                          className={`text-sm font-medium ${
-                            selectedCategories.includes(category._id)
-                              ? 'text-pink-500'
-                              : 'text-gray-600'
-                          }`}
-                        >
-                          {category.name}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                ) : (
-                  <Text className="text-gray-500 text-center py-4">No categories available</Text>
-                )}
-              </View>
-            )}
-          </View>
-
-          {/* Location with Map Integration */}
-          <View className="bg-white rounded-2xl p-4 mb-4">
-            <TouchableOpacity
-              onPress={() => toggleSection('location')}
-              className="flex-row items-center justify-between mb-3"
-            >
-              <View className="flex-row items-center">
-                <View className="w-10 h-10 rounded-xl bg-pink-50 items-center justify-center mr-3">
-                  <Ionicons name="location-outline" size={22} color="#ec4899" />
-                </View>
-                <Text className="text-base font-semibold text-gray-900">Business Location *</Text>
-              </View>
-              <Ionicons
-                name={expandedSection === 'location' ? 'chevron-up' : 'chevron-down'}
-                size={24}
-                color="#9ca3af"
-              />
-            </TouchableOpacity>
-
-            {expandedSection === 'location' && (
-              <View className="pt-3 border-t border-gray-100">
-                {location ? (
-                  <View className="bg-green-50 border border-green-200 rounded-xl p-4 mb-4">
-                    <View className="flex-row items-center mb-2">
-                      <Ionicons name="location" size={20} color="#059669" />
-                      <Text className="text-green-700 font-semibold ml-2">Location Added</Text>
-                    </View>
-                    <Text className="text-gray-700 text-sm mb-1">
-                      {location.address}
-                    </Text>
-                    <Text className="text-gray-600 text-xs mb-3">
-                      {location.city}, {location.state}, {location.country}
-                    </Text>
-                    {isEditMode && (
-                      <TouchableOpacity
-                        onPress={() => setLocation(null)}
-                        className="mt-2"
-                        activeOpacity={0.7}
-                      >
-                        <Text className="text-red-600 text-sm font-semibold">Change Location</Text>
-                      </TouchableOpacity>
-                    )}
-                  </View>
-                ) : (
-                  <TouchableOpacity
-                    onPress={getCurrentLocation}
-                    disabled={locationLoading || saving || !isEditMode}
-                    className={`bg-pink-50 border border-pink-200 rounded-xl p-4 flex-row items-center justify-center mb-4 ${
-                      locationLoading || saving || !isEditMode ? 'opacity-50' : ''
-                    }`}
-                    activeOpacity={0.7}
-                  >
-                    {locationLoading ? (
-                      <>
-                        <ActivityIndicator size="small" color="#EC4899" />
-                        <Text className="text-pink-600 font-semibold ml-3">Getting Location...</Text>
-                      </>
-                    ) : (
-                      <>
-                        <Ionicons name="location-outline" size={20} color="#EC4899" />
-                        <Text className="text-pink-600 font-semibold ml-2">Add Current Location</Text>
-                      </>
-                    )}
-                  </TouchableOpacity>
-                )}
-
-                {locationError ? (
-                  <Text className="text-red-600 text-xs mb-3">{locationError}</Text>
-                ) : null}
-
-                {/* Service Radius */}
-                <View className="mb-2">
-                  <Text className="text-sm font-medium text-gray-700 mb-2">
-                    Service Radius (km)
-                  </Text>
-                  <View className="relative">
-                    <TextInput
-                      value={serviceRadius}
-                      onChangeText={setServiceRadius}
-                      placeholder="10"
-                      keyboardType="numeric"
-                      editable={isEditMode}
-                      className={`border rounded-xl px-4 py-3 text-gray-900 ${
-                        isEditMode 
-                          ? 'bg-white border-pink-200' 
-                          : 'bg-gray-50 border-gray-200'
-                      }`}
-                      placeholderTextColor="#9ca3af"
-                    />
-                    {!isEditMode && (
-                      <View className="absolute right-3 top-3">
-                        <Ionicons name="lock-closed" size={16} color="#9ca3af" />
-                      </View>
-                    )}
-                  </View>
-                  <Text className="text-gray-500 text-xs mt-2">
-                    Maximum distance you're willing to travel for home services
-                  </Text>
-                </View>
-              </View>
-            )}
-          </View>
-
-          {/* Availability */}
-          <View className="bg-white rounded-2xl p-4 mb-4">
-            <TouchableOpacity
-              onPress={() => toggleSection('availability')}
-              className="flex-row items-center justify-between mb-3"
-            >
-              <View className="flex-row items-center">
-                <View className="w-10 h-10 rounded-xl bg-pink-50 items-center justify-center mr-3">
-                  <Ionicons name="time-outline" size={22} color="#ec4899" />
-                </View>
-                <Text className="text-base font-semibold text-gray-900">
-                  Availability Schedule
-                </Text>
-              </View>
-              <Ionicons
-                name={expandedSection === 'availability' ? 'chevron-up' : 'chevron-down'}
-                size={24}
-                color="#9ca3af"
-              />
-            </TouchableOpacity>
-
-            {expandedSection === 'availability' && (
-              <View className="pt-3 border-t border-gray-100">
-                {Object.keys(availability).map((day, index) => (
-                  <View
-                    key={day}
-                    className={`flex-row items-center justify-between py-3 ${
-                      index !== Object.keys(availability).length - 1
-                        ? 'border-b border-gray-100'
-                        : ''
-                    }`}
-                  >
-                    <View className="flex-row items-center flex-1">
-                      <Switch
-                        value={availability[day as keyof typeof availability].isAvailable}
-                        onValueChange={() => toggleDay(day)}
-                        disabled={!isEditMode}
-                        trackColor={{ false: '#e5e7eb', true: '#fce7f3' }}
-                        thumbColor={
-                          availability[day as keyof typeof availability].isAvailable
-                            ? '#ec4899'
-                            : '#9ca3af'
-                        }
-                        ios_backgroundColor="#e5e7eb"
-                      />
-                      <Text className="text-sm font-medium text-gray-900 ml-3 capitalize">
-                        {day}
-                      </Text>
-                    </View>
-                    {availability[day as keyof typeof availability].isAvailable && (
-                      <View className="flex-row items-center">
-                        <Text className="text-xs text-gray-600">
-                          {availability[day as keyof typeof availability].from} -{' '}
-                          {availability[day as keyof typeof availability].to}
-                        </Text>
-                      </View>
-                    )}
-                  </View>
-                ))}
-              </View>
-            )}
-          </View>
+              {filteredProducts.map(renderProductCard)}
+            </View>
+          ) : (
+            renderEmptyState()
+          )}
         </View>
       </ScrollView>
 
-      {/* Save Button - Only show when in edit mode */}
-      {isEditMode && (
-        <View className="bg-white border-t border-gray-200 p-5">
-          <TouchableOpacity
-            onPress={handleSave}
-            disabled={saving}
-            className={`bg-pink-500 rounded-xl py-4 items-center ${
-              saving ? 'opacity-50' : ''
-            }`}
-            activeOpacity={0.8}
-          >
-            {saving ? (
-              <ActivityIndicator color="#ffffff" />
-            ) : (
-              <Text className="text-white font-semibold text-base">Save Changes</Text>
-            )}
-          </TouchableOpacity>
-        </View>
-      )}
+      {/* Floating Action Button */}
+      <TouchableOpacity
+        onPress={handleAddProduct}
+        className="absolute bottom-6 right-6 w-16 h-16 rounded-full bg-pink-500 items-center justify-center"
+        style={{
+          shadowColor: '#eb278d',
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: 0.3,
+          shadowRadius: 8,
+          elevation: 6,
+        }}
+        activeOpacity={0.8}
+      >
+        <Ionicons name="add" size={32} color="#fff" />
+      </TouchableOpacity>
     </SafeAreaView>
   );
 };
 
-export default VendorStoreSettingsScreen;
+export default VendorProductManagementScreen;
