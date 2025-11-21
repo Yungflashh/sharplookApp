@@ -74,7 +74,7 @@ const VendorTabNavigator = () => {
         color,
         size,
         focused
-      }) => <Ionicons name={focused ? "briefcase" : "briefcase-outline"} size={size} color={color} />
+      }) => <Ionicons name={focused ? "flower" : "flower-outline"} size={size} color={color} />
     }} />
       
       <Tab.Screen name="Profile" component={VendorProfileScreen} options={{

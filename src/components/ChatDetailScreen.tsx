@@ -14,6 +14,7 @@ import {
   Modal,
   Animated,
   PanResponder,
+  ScrollView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -84,13 +85,13 @@ const ChatDetailScreen: React.FC = () => {
   const [loadingMore, setLoadingMore] = useState(false);
   const [otherUser, setOtherUser] = useState<any>(null);
   
-  
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
   const [showAttachmentMenu, setShowAttachmentMenu] = useState(false);
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [selectedMedia, setSelectedMedia] = useState<any>(null);
   
+  const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
   
   const [isOtherUserTyping, setIsOtherUserTyping] = useState(false);
   const [isOtherUserOnline, setIsOtherUserOnline] = useState(false);
@@ -98,28 +99,23 @@ const ChatDetailScreen: React.FC = () => {
 
   const flatListRef = useRef<FlatList>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-
-  
+  const shouldScrollToEnd = useRef(true);
 
   useEffect(() => {
     if (!conversationId || !currentUserId) return;
 
     console.log('🔌 Setting up socket for conversation:', conversationId);
 
-    
     socketService.joinConversation(conversationId);
 
-    
     socketService.onJoinedConversation((data) => {
       console.log('✅ Joined conversation room:', data.conversationId);
     });
 
-    
     socketService.onMessageReceived((data) => {
       console.log('📨 NEW MESSAGE RECEIVED:', data);
       
       const newMessage = data.message;
-      
       
       setMessages((prev) => {
         const exists = prev.some(m => m._id === newMessage._id);
@@ -132,23 +128,16 @@ const ChatDetailScreen: React.FC = () => {
         return [...prev, newMessage];
       });
 
-      
       setTimeout(() => {
         flatListRef.current?.scrollToEnd({ animated: true });
       }, 100);
 
-      
-      
       if (newMessage.sender._id !== currentUserId) {
         socketService.markMessageAsDelivered(newMessage._id);
         console.log('✓ Marked as delivered (user online, received message)');
-        
-        
-        
       }
     });
 
-    
     socketService.onMessageStatus((data) => {
       console.log('📊 Message status update:', data);
       
@@ -166,13 +155,11 @@ const ChatDetailScreen: React.FC = () => {
       );
     });
 
-    
     socketService.onTypingStart((data) => {
       if (data.conversationId === conversationId && data.userId !== currentUserId) {
         console.log('⌨️ Other user started typing');
         setIsOtherUserTyping(true);
         setOtherUserActivity('typing');
-        
         
         setTimeout(() => {
           setIsOtherUserTyping(false);
@@ -189,7 +176,6 @@ const ChatDetailScreen: React.FC = () => {
       }
     });
 
-    
     socketService.on('recording:start', (data: any) => {
       if (data.conversationId === conversationId && data.userId !== currentUserId) {
         console.log('🎤 Other user started recording');
@@ -204,7 +190,6 @@ const ChatDetailScreen: React.FC = () => {
       }
     });
 
-    
     socketService.on('uploading:start', (data: any) => {
       if (data.conversationId === conversationId && data.userId !== currentUserId) {
         console.log('📤 Other user started uploading');
@@ -219,7 +204,6 @@ const ChatDetailScreen: React.FC = () => {
       }
     });
 
-    
     socketService.onMessageReaction((data) => {
       setMessages((prev) =>
         prev.map((msg) =>
@@ -230,14 +214,12 @@ const ChatDetailScreen: React.FC = () => {
       );
     });
 
-    
     socketService.onMessageDeleted((data) => {
       setMessages((prev) =>
         prev.filter((msg) => msg._id !== data.messageId)
       );
     });
 
-    
     socketService.onConversationRead((data) => {
       if (data.conversationId === conversationId && data.readBy !== currentUserId) {
         setMessages((prev) =>
@@ -250,7 +232,6 @@ const ChatDetailScreen: React.FC = () => {
       }
     });
 
-    
     return () => {
       console.log('🚪 Leaving conversation and cleaning up');
       socketService.leaveConversation(conversationId);
@@ -269,7 +250,6 @@ const ChatDetailScreen: React.FC = () => {
     };
   }, [conversationId, currentUserId, isOtherUserOnline]);
 
-  
   useEffect(() => {
     if (!otherUserId) return;
 
@@ -297,26 +277,19 @@ const ChatDetailScreen: React.FC = () => {
     };
   }, [otherUserId]);
 
-  
-  
   useFocusEffect(
     useCallback(() => {
       console.log('🔄 Chat screen focused - ensuring socket connected');
-      
       
       if (!socketService.isSocketConnected()) {
         console.log('🔌 Reconnecting socket...');
         socketService.connect();
       }
 
-      
       if (conversationId) {
         socketService.joinConversation(conversationId);
         
-        
-        
         console.log('👁️ Marking received messages as read');
-        
         
         messages.forEach((message) => {
           if (
@@ -328,7 +301,6 @@ const ChatDetailScreen: React.FC = () => {
           }
         });
         
-        
         socketService.markConversationAsRead(conversationId);
         console.log('✅ Conversation marked as read');
       }
@@ -338,8 +310,6 @@ const ChatDetailScreen: React.FC = () => {
       };
     }, [conversationId, messages, currentUserId])
   );
-
-  
 
   useEffect(() => {
     loadCurrentUser();
@@ -351,6 +321,35 @@ const ChatDetailScreen: React.FC = () => {
       initializeConversation();
     }
   }, [currentUserId]);
+
+  // Scroll to bottom ONLY after initial messages load
+  const hasScrolledOnLoad = useRef(false);
+  
+  useEffect(() => {
+    if (messages.length > 0 && !loading && !hasScrolledOnLoad.current) {
+      // Multiple scroll attempts to ensure it works on first load only
+      const scrollToBottom = () => {
+        flatListRef.current?.scrollToEnd({ animated: false });
+      };
+
+      // Immediate scroll
+      scrollToBottom();
+
+      // Delayed scrolls for reliability
+      const timer1 = setTimeout(scrollToBottom, 100);
+      const timer2 = setTimeout(scrollToBottom, 300);
+      const timer3 = setTimeout(scrollToBottom, 500);
+      
+      // Mark that we've scrolled once
+      hasScrolledOnLoad.current = true;
+      
+      return () => {
+        clearTimeout(timer1);
+        clearTimeout(timer2);
+        clearTimeout(timer3);
+      };
+    }
+  }, [messages.length, loading]);
 
   const requestPermissions = async () => {
     await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -467,7 +466,6 @@ const ChatDetailScreen: React.FC = () => {
     setInputText('');
     Keyboard.dismiss();
 
-    
     if (conversationId) {
       socketService.stopTyping(conversationId);
     }
@@ -479,7 +477,6 @@ const ChatDetailScreen: React.FC = () => {
     try {
       setSending(true);
 
-      
       if (mediaUri) {
         console.log('📤 Emitting uploading:start');
         socketService.emit('uploading:start', conversationId);
@@ -514,7 +511,6 @@ const ChatDetailScreen: React.FC = () => {
           }];
         }
 
-        
         console.log('✅ Emitting uploading:stop');
         socketService.emit('uploading:stop', conversationId);
       }
@@ -523,16 +519,11 @@ const ChatDetailScreen: React.FC = () => {
 
       if (response.success) {
         console.log('✅ Message sent successfully');
-        
-        
-        
-        
       }
     } catch (error) {
       const apiError = handleAPIError(error);
       console.error('Send message error:', apiError);
       Alert.alert('Error', apiError.message || 'Failed to send message');
-      
       
       if (mediaUri && conversationId) {
         socketService.emit('uploading:stop', conversationId);
@@ -611,7 +602,6 @@ const ChatDetailScreen: React.FC = () => {
 
   const startRecording = async () => {
     try {
-      
       if (conversationId) {
         console.log('🎤 Emitting recording:start');
         socketService.emit('recording:start', conversationId);
@@ -631,7 +621,6 @@ const ChatDetailScreen: React.FC = () => {
     } catch (error) {
       console.error('Start recording error:', error);
       
-      
       if (conversationId) {
         socketService.emit('recording:stop', conversationId);
       }
@@ -645,7 +634,6 @@ const ChatDetailScreen: React.FC = () => {
       setIsRecording(false);
       await recording.stopAndUnloadAsync();
       const uri = recording.getURI();
-      
       
       if (conversationId) {
         console.log('🛑 Emitting recording:stop');
@@ -668,7 +656,6 @@ const ChatDetailScreen: React.FC = () => {
         await recording.stopAndUnloadAsync();
         setRecording(null);
         setIsRecording(false);
-        
         
         if (conversationId) {
           socketService.emit('recording:stop', conversationId);
@@ -705,14 +692,47 @@ const ChatDetailScreen: React.FC = () => {
     });
   };
 
+  const scrollToMessage = (messageId: string) => {
+    const messageIndex = messages.findIndex(msg => msg._id === messageId);
+    
+    if (messageIndex !== -1) {
+      try {
+        flatListRef.current?.scrollToIndex({
+          index: messageIndex,
+          animated: true,
+          viewPosition: 0.5, // Center the message on screen
+        });
+        
+        // Highlight the message briefly
+        setHighlightedMessageId(messageId);
+        setTimeout(() => {
+          setHighlightedMessageId(null);
+        }, 2000); // Remove highlight after 2 seconds
+      } catch (error) {
+        // Fallback: If scrollToIndex fails, scroll to offset
+        console.log('ScrollToIndex failed, trying alternative method');
+        flatListRef.current?.scrollToEnd({ animated: true });
+      }
+    } else {
+      // Message not found in current list (might be older, not loaded yet)
+      Alert.alert(
+        'Message Not Found',
+        'The original message might have been deleted or is not loaded yet.'
+      );
+    }
+  };
+
   const renderMessage = ({ item }: { item: Message }) => {
     const isMyMessage = item.sender._id === currentUserId;
+    const isHighlighted = item._id === highlightedMessageId;
 
     return (
       <SwipeableMessage
         message={item}
         isMyMessage={isMyMessage}
+        isHighlighted={isHighlighted}
         onReply={() => setReplyingTo(item)}
+        onScrollToReply={scrollToMessage}
         otherUser={otherUser}
         formatMessageTime={formatMessageTime}
       />
@@ -723,32 +743,39 @@ const ChatDetailScreen: React.FC = () => {
     if (!selectedMedia) return null;
 
     return (
-      <View className="px-4 py-3 bg-gray-100 border-t border-gray-200">
-        <View className="flex-row items-center justify-between">
-          <View className="flex-row items-center flex-1">
+      <View className="bg-white border-t border-gray-100" style={{
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: -2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 4,
+        elevation: 4,
+      }}>
+        <View className="px-4 py-3">
+          <View className="bg-gray-50 rounded-2xl p-3 flex-row items-center">
             {selectedMedia.uri && (
               <Image
                 source={{ uri: selectedMedia.uri }}
-                className="w-16 h-16 rounded-lg mr-3"
+                className="w-14 h-14 rounded-xl mr-3"
                 resizeMode="cover"
               />
             )}
             <View className="flex-1">
-              <Text className="text-gray-900 font-medium" numberOfLines={1}>
+              <Text className="text-gray-900 font-semibold text-sm" numberOfLines={1}>
                 {selectedMedia.name || 'Selected media'}
               </Text>
-              <Text className="text-gray-500 text-xs">
-                Tap send to share
+              <Text className="text-gray-400 text-xs mt-0.5">
+                Ready to send
               </Text>
             </View>
-          </View>
 
-          <TouchableOpacity
-            onPress={() => setSelectedMedia(null)}
-            className="w-8 h-8 rounded-full bg-red-500 items-center justify-center ml-2"
-          >
-            <Ionicons name="close" size={20} color="#fff" />
-          </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => setSelectedMedia(null)}
+              className="w-8 h-8 rounded-full bg-gray-200 items-center justify-center ml-2"
+              activeOpacity={0.7}
+            >
+              <Ionicons name="close" size={18} color="#6b7280" />
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
     );
@@ -757,76 +784,123 @@ const ChatDetailScreen: React.FC = () => {
   const renderReplyPreview = () => {
     if (!replyingTo) return null;
 
-    return (
-      <View className="px-4 py-2 bg-gray-100 border-t border-gray-200">
-        <View className="flex-row items-center justify-between">
-          <View className="flex-1 border-l-4 border-pink-500 pl-3">
-            <Text className="text-pink-600 font-bold text-xs mb-1">
-              Replying to {replyingTo.sender.firstName}
-            </Text>
-            <Text className="text-gray-600 text-sm" numberOfLines={1}>
-              {replyingTo.text}
-            </Text>
-          </View>
+    const isReplyingToMe = replyingTo.sender._id === currentUserId;
 
-          <TouchableOpacity
-            onPress={() => setReplyingTo(null)}
-            className="w-6 h-6 rounded-full bg-gray-300 items-center justify-center ml-2"
-          >
-            <Ionicons name="close" size={16} color="#666" />
-          </TouchableOpacity>
+    return (
+      <View className="bg-white border-t border-gray-100" style={{
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: -2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 4,
+        elevation: 4,
+      }}>
+        <View className="px-4 py-3">
+          <View className="bg-pink-50 rounded-2xl overflow-hidden">
+            <View className="flex-row items-center p-3">
+              {/* Left accent bar */}
+              <View className="w-1 h-full absolute left-0 bg-pink-500" />
+              
+              {/* Avatar */}
+              <View className="ml-3 w-10 h-10 rounded-full bg-white items-center justify-center overflow-hidden mr-3"
+                style={{
+                  shadowColor: '#000',
+                  shadowOffset: { width: 0, height: 1 },
+                  shadowOpacity: 0.1,
+                  shadowRadius: 2,
+                  elevation: 2,
+                }}
+              >
+                {isReplyingToMe ? (
+                  <Ionicons name="person" size={18} color="#eb278d" />
+                ) : replyingTo.sender.avatar ? (
+                  <Image
+                    source={{ uri: replyingTo.sender.avatar }}
+                    className="w-10 h-10"
+                    resizeMode="cover"
+                  />
+                ) : (
+                  <Ionicons name="person" size={18} color="#eb278d" />
+                )}
+              </View>
+
+              {/* Content */}
+              <View className="flex-1">
+                <View className="flex-row items-center mb-1">
+                  <Ionicons name="arrow-undo" size={12} color="#eb278d" />
+                  <Text className="text-pink-600 font-bold text-xs ml-1">
+                    Replying to {isReplyingToMe ? 'yourself' : replyingTo.sender.firstName}
+                  </Text>
+                </View>
+                <Text className="text-gray-700 text-sm font-medium" numberOfLines={2}>
+                  {replyingTo.text || '📎 Attachment'}
+                </Text>
+              </View>
+
+              {/* Close button */}
+              <TouchableOpacity
+                onPress={() => setReplyingTo(null)}
+                className="w-7 h-7 rounded-full bg-white items-center justify-center ml-3"
+                activeOpacity={0.7}
+                style={{
+                  shadowColor: '#000',
+                  shadowOffset: { width: 0, height: 1 },
+                  shadowOpacity: 0.1,
+                  shadowRadius: 2,
+                  elevation: 2,
+                }}
+              >
+                <Ionicons name="close" size={16} color="#6b7280" />
+              </TouchableOpacity>
+            </View>
+          </View>
         </View>
       </View>
     );
   };
 
-  
   const renderUserStatus = () => {
     switch (otherUserActivity) {
       case 'typing':
         return (
-          <View className="flex-row items-center mt-0.5">
-            <View className="flex-row items-center">
-              <View className="w-1.5 h-1.5 rounded-full bg-pink-400 mr-1" />
-              <View className="w-1.5 h-1.5 rounded-full bg-pink-400 mr-1" style={{ opacity: 0.7 }} />
-              <View className="w-1.5 h-1.5 rounded-full bg-pink-400 mr-2" style={{ opacity: 0.5 }} />
+          <View className="flex-row items-center mt-1">
+            <View className="flex-row items-center mr-1.5">
+              <View className="w-1.5 h-1.5 rounded-full bg-white/90 mr-0.5" />
+              <View className="w-1.5 h-1.5 rounded-full bg-white/70 mr-0.5" />
+              <View className="w-1.5 h-1.5 rounded-full bg-white/50" />
             </View>
-            <Text className="text-white/90 text-xs font-medium">typing...</Text>
+            <Text className="text-white/95 text-xs font-medium">typing...</Text>
           </View>
         );
 
       case 'recording':
         return (
-          <View className="flex-row items-center mt-0.5">
-            <View className="w-2 h-2 rounded-full bg-red-400 mr-1.5 animate-pulse" />
-            <Ionicons name="mic" size={12} color="rgba(255,255,255,0.9)" />
-            <Text className="text-white/90 text-xs font-medium ml-1">recording voice note...</Text>
+          <View className="flex-row items-center mt-1">
+            <View className="w-2 h-2 rounded-full bg-red-400 mr-1.5" />
+            <Ionicons name="mic" size={11} color="rgba(255,255,255,0.95)" />
+            <Text className="text-white/95 text-xs font-medium ml-1">recording...</Text>
           </View>
         );
 
       case 'uploading':
         return (
-          <View className="flex-row items-center mt-0.5">
-            <ActivityIndicator size="small" color="rgba(255,255,255,0.9)" />
-            <Text className="text-white/90 text-xs font-medium ml-1.5">sending media...</Text>
+          <View className="flex-row items-center mt-1">
+            <ActivityIndicator size="small" color="rgba(255,255,255,0.95)" />
+            <Text className="text-white/95 text-xs font-medium ml-1.5">sending...</Text>
           </View>
         );
 
       case 'online':
         return (
-          <View className="flex-row items-center mt-0.5">
+          <View className="flex-row items-center mt-1">
             <View className="w-2 h-2 rounded-full bg-green-400 mr-1.5" />
-            <Text className="text-white/80 text-xs">Online</Text>
+            <Text className="text-white/90 text-xs font-medium">Active now</Text>
           </View>
         );
 
       case 'offline':
       default:
         return (
-          <View className="flex-row items-center mt-0.5">
-            <View className="w-2 h-2 rounded-full bg-gray-400 mr-1.5" />
-            <Text className="text-white/70 text-xs">Offline</Text>
-          </View>
+          <Text className="text-white/75 text-xs mt-1">Tap to view info</Text>
         );
     }
   };
@@ -836,89 +910,137 @@ const ChatDetailScreen: React.FC = () => {
       <SafeAreaView className="flex-1 bg-white">
         <View className="flex-1 items-center justify-center">
           <ActivityIndicator size="large" color="#eb278d" />
-          <Text className="text-gray-500 text-sm mt-4">Loading chat...</Text>
+          <Text className="text-gray-500 text-sm mt-4 font-medium">Loading messages...</Text>
         </View>
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView className="flex-1 bg-white" edges={['top']}>
-      {}
-      <LinearGradient
-        colors={['#eb278d', '#f472b6']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
+    <SafeAreaView className="flex-1 bg-gray-50" edges={['top']}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        className="flex-1"
+        keyboardVerticalOffset={0}
       >
-        <View className="px-5 py-4 flex-row items-center justify-between">
-          <View className="flex-row items-center flex-1">
+        {/* Header */}
+        <LinearGradient
+          colors={['#eb278d', '#f472b6']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={{
+            shadowColor: '#eb278d',
+            shadowOffset: { width: 0, height: 4 },
+            shadowOpacity: 0.3,
+            shadowRadius: 8,
+            elevation: 8,
+          }}
+        >
+        <View className="px-4 py-3">
+          <View className="flex-row items-center">
             <TouchableOpacity
               onPress={() => navigation.goBack()}
               className="w-10 h-10 rounded-full bg-white/20 items-center justify-center mr-3"
               activeOpacity={0.7}
             >
-              <Ionicons name="arrow-back" size={24} color="#fff" />
+              <Ionicons name="chevron-back" size={24} color="#fff" />
             </TouchableOpacity>
 
-            <View className="w-10 h-10 rounded-full bg-white/30 items-center justify-center mr-3 overflow-hidden">
-              {(otherUser?.avatar || otherUserAvatar) ? (
-                <Image
-                  source={{ uri: otherUser?.avatar || otherUserAvatar }}
-                  className="w-10 h-10"
-                  resizeMode="cover"
-                />
-              ) : (
-                <Ionicons name="person" size={20} color="#fff" />
-              )}
-              
-              {}
-              {isOtherUserOnline && (
-                <View className="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-green-400 border-2 border-white" />
-              )}
-            </View>
+            <TouchableOpacity 
+              className="flex-row items-center flex-1"
+              activeOpacity={0.7}
+            >
+              <View className="relative mr-3">
+                <View className="w-11 h-11 rounded-full bg-white/30 items-center justify-center overflow-hidden"
+                  style={{
+                    shadowColor: '#000',
+                    shadowOffset: { width: 0, height: 2 },
+                    shadowOpacity: 0.2,
+                    shadowRadius: 3,
+                    elevation: 3,
+                  }}
+                >
+                  {(otherUser?.avatar || otherUserAvatar) ? (
+                    <Image
+                      source={{ uri: otherUser?.avatar || otherUserAvatar }}
+                      className="w-11 h-11"
+                      resizeMode="cover"
+                    />
+                  ) : (
+                    <Ionicons name="person" size={22} color="#fff" />
+                  )}
+                </View>
+                
+                {isOtherUserOnline && (
+                  <View className="absolute bottom-0 right-0 w-3.5 h-3.5 rounded-full bg-green-400 border-2 border-white" />
+                )}
+              </View>
 
-            <View className="flex-1">
-              <Text className="text-white font-bold text-base">
-                {otherUser?.firstName && otherUser?.lastName
-                  ? `${otherUser.firstName} ${otherUser.lastName}`
-                  : otherUserName || 'User'}
-              </Text>
-              
-              {}
-              {renderUserStatus()}
-            </View>
+              <View className="flex-1">
+                <Text className="text-white font-bold text-lg">
+                  {otherUser?.firstName && otherUser?.lastName
+                    ? `${otherUser.firstName} ${otherUser.lastName}`
+                    : otherUserName || 'User'}
+                </Text>
+                
+                {renderUserStatus()}
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              className="w-10 h-10 rounded-full bg-white/20 items-center justify-center ml-2"
+              activeOpacity={0.7}
+            >
+              <Ionicons name="videocam" size={22} color="#fff" />
+            </TouchableOpacity>
+            
+            <TouchableOpacity
+              className="w-10 h-10 rounded-full bg-white/20 items-center justify-center ml-2"
+              activeOpacity={0.7}
+            >
+              <Ionicons name="call" size={20} color="#fff" />
+            </TouchableOpacity>
           </View>
-
-          <TouchableOpacity
-            className="w-10 h-10 rounded-full bg-white/20 items-center justify-center"
-            activeOpacity={0.7}
-          >
-            <Ionicons name="ellipsis-vertical" size={20} color="#fff" />
-          </TouchableOpacity>
         </View>
       </LinearGradient>
 
-      {}
-      <FlatList
-        ref={flatListRef}
-        data={messages}
-        renderItem={renderMessage}
-        keyExtractor={(item) => item._id}
-        contentContainerStyle={{ paddingVertical: 16 }}
-        inverted={false}
-        onEndReached={handleLoadMore}
-        onEndReachedThreshold={0.1}
-        extraData={isOtherUserTyping}
-        ListEmptyComponent={
+        {/* Messages List */}
+        <FlatList
+          ref={flatListRef}
+          data={messages}
+          renderItem={renderMessage}
+          keyExtractor={(item) => item._id}
+          contentContainerStyle={{ 
+            paddingVertical: 12,
+            paddingHorizontal: 4,
+            flexGrow: 1,
+          }}
+          inverted={false}
+          onEndReached={handleLoadMore}
+          onEndReachedThreshold={0.1}
+          showsVerticalScrollIndicator={false}
+          extraData={`${isOtherUserTyping}-${highlightedMessageId}`}
+          onScrollToIndexFailed={(info) => {
+            // Handle scroll failure gracefully
+            const wait = new Promise(resolve => setTimeout(resolve, 500));
+            wait.then(() => {
+              flatListRef.current?.scrollToIndex({ 
+                index: info.index, 
+                animated: true,
+                viewPosition: 0.5 
+              });
+            });
+          }}
+          ListEmptyComponent={
           <View className="flex-1 items-center justify-center py-20">
-            <View className="w-20 h-20 rounded-full bg-gray-100 items-center justify-center mb-4">
-              <Ionicons name="chatbubbles" size={40} color="#d1d5db" />
+            <View className="w-24 h-24 rounded-full bg-pink-100 items-center justify-center mb-4">
+              <Ionicons name="chatbubbles" size={48} color="#eb278d" />
             </View>
-            <Text className="text-gray-900 font-bold text-lg mb-2">
-              No messages yet
+            <Text className="text-gray-900 font-bold text-xl mb-2">
+              Start the conversation
             </Text>
-            <Text className="text-gray-500 text-center px-12">
-              Start the conversation by sending a message
+            <Text className="text-gray-500 text-center px-12 text-sm">
+              Send a message to begin chatting with {otherUser?.firstName || 'this user'}
             </Text>
           </View>
         }
@@ -931,73 +1053,84 @@ const ChatDetailScreen: React.FC = () => {
         }
       />
 
-      {}
-      {renderReplyPreview()}
+        {/* Reply Preview */}
+        {renderReplyPreview()}
 
-      {}
-      {renderMediaPreview()}
+        {/* Media Preview */}
+        {renderMediaPreview()}
 
-      {}
-      {isRecording && (
-        <View className="px-4 py-3 bg-red-50 border-t border-red-200">
-          <View className="flex-row items-center justify-between">
-            <View className="flex-row items-center flex-1">
-              <View className="w-3 h-3 rounded-full bg-red-500 mr-2" />
-              <Text className="text-red-600 font-medium">Recording...</Text>
-            </View>
+        {/* Recording UI */}
+        {isRecording && (
+        <View className="bg-gradient-to-r from-red-50 to-pink-50 border-t border-red-100">
+          <View className="px-4 py-4">
+            <View className="flex-row items-center justify-between">
+              <View className="flex-row items-center flex-1">
+                <View className="w-12 h-12 rounded-full bg-red-500 items-center justify-center mr-3">
+                  <Ionicons name="mic" size={24} color="#fff" />
+                </View>
+                <View className="flex-1">
+                  <Text className="text-red-600 font-bold text-base">Recording...</Text>
+                  <Text className="text-red-400 text-xs mt-0.5">Release to send</Text>
+                </View>
+              </View>
 
-            <View className="flex-row" style={{ gap: 12 }}>
-              <TouchableOpacity
-                onPress={cancelRecording}
-                className="px-4 py-2 rounded-full bg-gray-200"
-              >
-                <Text className="text-gray-700 font-bold">Cancel</Text>
-              </TouchableOpacity>
+              <View className="flex-row" style={{ gap: 8 }}>
+                <TouchableOpacity
+                  onPress={cancelRecording}
+                  className="px-5 py-2.5 rounded-full bg-white border border-gray-200"
+                  activeOpacity={0.7}
+                >
+                  <Text className="text-gray-700 font-bold text-sm">Cancel</Text>
+                </TouchableOpacity>
 
-              <TouchableOpacity
-                onPress={stopRecording}
-                className="px-4 py-2 rounded-full bg-pink-500"
-              >
-                <Text className="text-white font-bold">Send</Text>
-              </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={stopRecording}
+                  activeOpacity={0.7}
+                >
+                  <LinearGradient
+                    colors={['#eb278d', '#f472b6']}
+                    className="px-6 py-2.5 rounded-full"
+                  >
+                    <Text className="text-white font-bold text-sm">Send</Text>
+                  </LinearGradient>
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
         </View>
-      )}
+        )}
 
-      {}
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
-      >
+        {/* Input Area */}
         <View
-          className="px-4 py-3 bg-white border-t border-gray-200"
-          style={{
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: -2 },
-            shadowOpacity: 0.05,
-            shadowRadius: 8,
-            elevation: 8,
-          }}
-        >
-          <View className="flex-row items-center">
+        className="bg-white border-t border-gray-100"
+        style={{
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: -4 },
+          shadowOpacity: 0.05,
+          shadowRadius: 12,
+          elevation: 12,
+        }}
+      >
+        <View className="px-4 py-3">
+          <View className="flex-row items-end">
             <TouchableOpacity
               onPress={() => setShowAttachmentMenu(true)}
-              className="w-10 h-10 rounded-full bg-gray-100 items-center justify-center mr-3"
+              className="w-11 h-11 rounded-full bg-gray-100 items-center justify-center mr-2"
               activeOpacity={0.7}
             >
-              <Ionicons name="add" size={24} color="#6b7280" />
+              <Ionicons name="add" size={26} color="#6b7280" />
             </TouchableOpacity>
 
-            <View className="flex-1 bg-gray-100 rounded-full px-4 py-3 flex-row items-center">
+            <View className="flex-1 bg-gray-100 rounded-3xl overflow-hidden">
               <TextInput
                 value={inputText}
                 onChangeText={handleTextChange}
-                placeholder="Type a message..."
+                placeholder="Message..."
                 placeholderTextColor="#9ca3af"
-                className="flex-1 text-gray-900 text-base"
+                className="px-5 py-3 text-gray-900 text-base"
                 multiline
                 maxLength={1000}
+                style={{ maxHeight: 100 }}
                 returnKeyType="send"
                 onSubmitEditing={() => handleSendMessage()}
                 blurOnSubmit={false}
@@ -1011,49 +1144,57 @@ const ChatDetailScreen: React.FC = () => {
                     handleSendMessage(selectedMedia.uri, selectedMedia.type || 'image');
                   } else {
                     handleSendMessage();
-                  }
-                }}
-                disabled={sending}
-                className="ml-3"
-                activeOpacity={0.7}
-              >
-                <LinearGradient
-                  colors={['#eb278d', '#f472b6']}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  className="w-12 h-12 rounded-full items-center justify-center"
-                  style={{
-                    shadowColor: '#eb278d',
-                    shadowOffset: { width: 0, height: 2 },
-                    shadowOpacity: 0.3,
-                    shadowRadius: 4,
-                    elevation: 4,
+                    }
                   }}
+                  disabled={sending}
+                  className="ml-2"
+                  activeOpacity={0.7}
                 >
-                  {sending ? (
-                    <ActivityIndicator size="small" color="#fff" />
-                  ) : (
-                    <Ionicons name="send" size={20} color="#fff" />
-                  )}
-                </LinearGradient>
-              </TouchableOpacity>
-            ) : (
-              <TouchableOpacity
-                onPress={startRecording}
-                className="ml-3"
-                activeOpacity={0.7}
-              >
-                <View className="w-12 h-12 rounded-full bg-pink-500 items-center justify-center">
-                  <Ionicons name="mic" size={24} color="#fff" />
-                </View>
-              </TouchableOpacity>
-            )}
+                  <LinearGradient
+                    colors={['#eb278d', '#f472b6']}
+                    className="w-11 h-11 rounded-full items-center justify-center"
+                    style={{
+                      shadowColor: '#eb278d',
+                      shadowOffset: { width: 0, height: 3 },
+                      shadowOpacity: 0.4,
+                      shadowRadius: 6,
+                      elevation: 6,
+                    }}
+                  >
+                    {sending ? (
+                      <ActivityIndicator size="small" color="#fff" />
+                    ) : (
+                      <Ionicons name="send" size={18} color="#fff" />
+                    )}
+                  </LinearGradient>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  onPress={startRecording}
+                  className="ml-2"
+                  activeOpacity={0.7}
+                >
+                  <LinearGradient
+                    colors={['#eb278d', '#f472b6']}
+                    className="w-11 h-11 rounded-full items-center justify-center"
+                    style={{
+                      shadowColor: '#eb278d',
+                      shadowOffset: { width: 0, height: 3 },
+                      shadowOpacity: 0.4,
+                      shadowRadius: 6,
+                      elevation: 6,
+                    }}
+                  >
+                    <Ionicons name="mic" size={22} color="#fff" />
+                  </LinearGradient>
+                </TouchableOpacity>
+              )}
+            </View>
           </View>
         </View>
-      </KeyboardAvoidingView>
 
-      {}
-      <AttachmentMenuModal
+        {/* Attachment Menu Modal */}
+        <AttachmentMenuModal
         visible={showAttachmentMenu}
         onClose={() => setShowAttachmentMenu(false)}
         onPickImage={handlePickImage}
@@ -1061,18 +1202,21 @@ const ChatDetailScreen: React.FC = () => {
         onPickVideo={handlePickVideo}
         onPickDocument={handlePickDocument}
       />
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 };
 
-
+// Swipeable Message Component
 const SwipeableMessage: React.FC<{
   message: Message;
   isMyMessage: boolean;
+  isHighlighted: boolean;
   onReply: () => void;
+  onScrollToReply: (messageId: string) => void;
   otherUser: any;
   formatMessageTime: (date: string) => string;
-}> = ({ message, isMyMessage, onReply, otherUser, formatMessageTime }) => {
+}> = ({ message, isMyMessage, isHighlighted, onReply, onScrollToReply, otherUser, formatMessageTime }) => {
   const translateX = useRef(new Animated.Value(0)).current;
 
   const panResponder = useRef(
@@ -1083,17 +1227,17 @@ const SwipeableMessage: React.FC<{
       },
       onPanResponderMove: (_, gestureState) => {
         if (isMyMessage) {
-          if (gestureState.dx < 0 && gestureState.dx > -100) {
+          if (gestureState.dx < 0 && gestureState.dx > -80) {
             translateX.setValue(gestureState.dx);
           }
         } else {
-          if (gestureState.dx > 0 && gestureState.dx < 100) {
+          if (gestureState.dx > 0 && gestureState.dx < 80) {
             translateX.setValue(gestureState.dx);
           }
         }
       },
       onPanResponderRelease: (_, gestureState) => {
-        const threshold = 50;
+        const threshold = 40;
         
         if (Math.abs(gestureState.dx) > threshold) {
           onReply();
@@ -1102,6 +1246,8 @@ const SwipeableMessage: React.FC<{
         Animated.spring(translateX, {
           toValue: 0,
           useNativeDriver: true,
+          tension: 100,
+          friction: 8,
         }).start();
       },
     })
@@ -1111,11 +1257,20 @@ const SwipeableMessage: React.FC<{
     <Animated.View
       {...panResponder.panHandlers}
       style={{ transform: [{ translateX }] }}
-      className={`mb-4 px-4 ${isMyMessage ? 'items-end' : 'items-start'}`}
+      className={`mb-3 px-3 ${isMyMessage ? 'items-end' : 'items-start'}`}
     >
-      <View className="flex-row items-end max-w-[80%]">
+      <View className="flex-row items-end max-w-[85%]">
         {!isMyMessage && (
-          <View className="w-8 h-8 rounded-full bg-gray-300 items-center justify-center mr-2 overflow-hidden">
+          <View 
+            className="w-8 h-8 rounded-full bg-pink-400 items-center justify-center mr-2 overflow-hidden"
+            style={{
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 1 },
+              shadowOpacity: 0.1,
+              shadowRadius: 2,
+              elevation: 2,
+            }}
+          >
             {otherUser?.avatar ? (
               <Image
                 source={{ uri: otherUser.avatar }}
@@ -1129,106 +1284,162 @@ const SwipeableMessage: React.FC<{
         )}
 
         <View
-          className={`rounded-2xl px-4 py-3 ${
-            isMyMessage ? 'bg-pink-500' : 'bg-gray-100'
-          }`}
+          className={`rounded-3xl overflow-hidden ${
+            isMyMessage ? 'rounded-br-md' : 'rounded-bl-md'
+          } ${isHighlighted ? 'bg-yellow-100' : ''}`}
+          style={
+            isMyMessage
+              ? {
+                  shadowColor: '#eb278d',
+                  shadowOffset: { width: 0, height: 2 },
+                  shadowOpacity: 0.15,
+                  shadowRadius: 4,
+                  elevation: 3,
+                  ...(isHighlighted && {
+                    shadowColor: '#fbbf24',
+                    shadowOpacity: 0.4,
+                    shadowRadius: 8,
+                    elevation: 8,
+                  })
+                }
+              : {
+                  shadowColor: '#000',
+                  shadowOffset: { width: 0, height: 1 },
+                  shadowOpacity: 0.08,
+                  shadowRadius: 3,
+                  elevation: 2,
+                  ...(isHighlighted && {
+                    shadowColor: '#fbbf24',
+                    shadowOpacity: 0.4,
+                    shadowRadius: 8,
+                    elevation: 8,
+                  })
+                }
+          }
         >
-          {message.replyTo && (
-            <View className="mb-2 pb-2 border-b border-white/20">
-              <Text
-                className={`text-xs ${
-                  isMyMessage ? 'text-white/70' : 'text-gray-500'
-                }`}
-              >
-                Replying to {message.replyTo.sender.firstName}
-              </Text>
-              <Text
-                className={`text-xs italic ${
-                  isMyMessage ? 'text-white/70' : 'text-gray-500'
-                }`}
-                numberOfLines={1}
-              >
-                {message.replyTo.text}
-              </Text>
-            </View>
-          )}
-
-          {message.attachments && message.attachments.length > 0 && (
-            <View className="mb-2">
-              {message.attachments[0].type === 'image' && (
-                <Image
-                  source={{ uri: message.attachments[0].url }}
-                  className="w-48 h-48 rounded-lg"
-                  resizeMode="cover"
-                />
-              )}
-              {message.attachments[0].type === 'audio' && (
-                <View className="flex-row items-center py-2">
-                  <Ionicons name="play-circle" size={32} color={isMyMessage ? '#fff' : '#eb278d'} />
-                  <Text className={`ml-2 ${isMyMessage ? 'text-white' : 'text-gray-900'}`}>
-                    Voice message
+          {isMyMessage ? (
+            <LinearGradient
+              colors={['#eb278d', '#f472b6']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              className="px-4 py-2.5"
+            >
+              {message.replyTo && (
+                <TouchableOpacity 
+                  onPress={() => onScrollToReply(message.replyTo!._id)}
+                  activeOpacity={0.7}
+                  className="mb-2 pb-2 border-b border-white/20"
+                >
+                  <Text className="text-white/80 text-xs font-medium mb-0.5">
+                    ↩ {message.replyTo.sender.firstName}
                   </Text>
+                  <Text className="text-white/70 text-xs italic" numberOfLines={1}>
+                    {message.replyTo.text}
+                  </Text>
+                </TouchableOpacity>
+              )}
+
+              {message.attachments && message.attachments.length > 0 && (
+                <View className="mb-2">
+                  {message.attachments[0].type === 'image' && (
+                    <Image
+                      source={{ uri: message.attachments[0].url }}
+                      className="w-52 h-52 rounded-2xl"
+                      resizeMode="cover"
+                    />
+                  )}
+                  {message.attachments[0].type === 'audio' && (
+                    <View className="flex-row items-center py-2 px-2">
+                      <Ionicons name="play-circle" size={36} color="#fff" />
+                      <View className="ml-2 flex-1">
+                        <Text className="text-white font-medium">Voice message</Text>
+                        <Text className="text-white/70 text-xs">Tap to play</Text>
+                      </View>
+                    </View>
+                  )}
                 </View>
               )}
+
+              {message.text && (
+                <Text className="text-white text-base leading-5">
+                  {message.text}
+                </Text>
+              )}
+
+              <View className="flex-row items-center justify-end mt-1.5">
+                <Text className="text-white/80 text-xs">
+                  {formatMessageTime(message.createdAt)}
+                </Text>
+
+                <View className="ml-1">
+                  {(message.status === 'sent' || !message.status) && (
+                    <Ionicons name="checkmark" size={14} color="rgba(255, 255, 255, 0.8)" />
+                  )}
+                  {message.status === 'delivered' && (
+                    <Ionicons name="checkmark-done" size={14} color="rgba(255, 255, 255, 0.8)" />
+                  )}
+                  {message.status === 'read' && (
+                    <Ionicons name="checkmark-done" size={14} color="#60a5fa" />
+                  )}
+                </View>
+              </View>
+            </LinearGradient>
+          ) : (
+            <View className="bg-white px-4 py-2.5">
+              {message.replyTo && (
+                <TouchableOpacity 
+                  onPress={() => onScrollToReply(message.replyTo!._id)}
+                  activeOpacity={0.7}
+                  className="mb-2 pb-2 border-b border-gray-200"
+                >
+                  <Text className="text-pink-600 text-xs font-medium mb-0.5">
+                    ↩ {message.replyTo.sender.firstName}
+                  </Text>
+                  <Text className="text-gray-500 text-xs italic" numberOfLines={1}>
+                    {message.replyTo.text}
+                  </Text>
+                </TouchableOpacity>
+              )}
+
+              {message.attachments && message.attachments.length > 0 && (
+                <View className="mb-2">
+                  {message.attachments[0].type === 'image' && (
+                    <Image
+                      source={{ uri: message.attachments[0].url }}
+                      className="w-52 h-52 rounded-2xl"
+                      resizeMode="cover"
+                    />
+                  )}
+                  {message.attachments[0].type === 'audio' && (
+                    <View className="flex-row items-center py-2 px-2">
+                      <Ionicons name="play-circle" size={36} color="#eb278d" />
+                      <View className="ml-2 flex-1">
+                        <Text className="text-gray-900 font-medium">Voice message</Text>
+                        <Text className="text-gray-500 text-xs">Tap to play</Text>
+                      </View>
+                    </View>
+                  )}
+                </View>
+              )}
+
+              {message.text && (
+                <Text className="text-gray-900 text-base leading-5">
+                  {message.text}
+                </Text>
+              )}
+
+              <Text className="text-gray-500 text-xs mt-1.5">
+                {formatMessageTime(message.createdAt)}
+              </Text>
             </View>
           )}
-
-          {message.text && (
-            <Text
-              className={`text-base ${
-                isMyMessage ? 'text-white' : 'text-gray-900'
-              }`}
-            >
-              {message.text}
-            </Text>
-          )}
-
-          <View className="flex-row items-center justify-end mt-1">
-            <Text
-              className={`text-xs ${
-                isMyMessage ? 'text-white/70' : 'text-gray-500'
-              }`}
-            >
-              {formatMessageTime(message.createdAt)}
-            </Text>
-
-            {isMyMessage && (
-              <View className="ml-1">
-                {(message.status === 'sent' || !message.status) && (
-                  
-                  
-                  <Ionicons
-                    name="checkmark"
-                    size={14}
-                    color="rgba(255, 255, 255, 0.7)"
-                  />
-                )}
-                {message.status === 'delivered' && (
-                  
-                  <Ionicons
-                    name="checkmark-done"
-                    size={14}
-                    color="rgba(255, 255, 255, 0.7)"
-                  />
-                )}
-                {message.status === 'read' && (
-                  
-                  <Ionicons
-                    name="checkmark-done"
-                    size={14}
-                    color="#60a5fa"
-                  />
-                )}
-              </View>
-            )}
-          </View>
         </View>
       </View>
     </Animated.View>
   );
 };
 
-
+// Attachment Menu Modal
 const AttachmentMenuModal: React.FC<{
   visible: boolean;
   onClose: () => void;
@@ -1247,77 +1458,134 @@ const AttachmentMenuModal: React.FC<{
       <TouchableOpacity
         activeOpacity={1}
         onPress={onClose}
-        className="flex-1 bg-black/50 justify-end"
+        className="flex-1 bg-black/60 justify-end"
       >
-        <TouchableOpacity activeOpacity={1} className="bg-white rounded-t-3xl p-6">
-          <View className="w-12 h-1 bg-gray-300 rounded-full self-center mb-6" />
+        <TouchableOpacity 
+          activeOpacity={1} 
+          className="bg-white rounded-t-3xl"
+          style={{
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: -4 },
+            shadowOpacity: 0.1,
+            shadowRadius: 12,
+            elevation: 12,
+          }}
+        >
+          <View className="p-6">
+            <View className="w-12 h-1.5 bg-gray-300 rounded-full self-center mb-6" />
 
-          <Text className="text-xl font-bold text-gray-900 mb-6">
-            Share
-          </Text>
+            <Text className="text-2xl font-bold text-gray-900 mb-6">
+              Share content
+            </Text>
 
-          <View className="flex-row flex-wrap gap-4">
+            <View className="flex-row flex-wrap gap-4 mb-4">
+              <TouchableOpacity
+                onPress={() => {
+                  onPickImage();
+                  onClose();
+                }}
+                className="items-center flex-1 min-w-[70px]"
+                activeOpacity={0.7}
+              >
+                <LinearGradient
+                  colors={['#ec4899', '#f472b6']}
+                  className="w-16 h-16 rounded-2xl items-center justify-center mb-2"
+                  style={{
+                    shadowColor: '#ec4899',
+                    shadowOffset: { width: 0, height: 2 },
+                    shadowOpacity: 0.3,
+                    shadowRadius: 4,
+                    elevation: 4,
+                  }}
+                >
+                  <Ionicons name="images" size={28} color="#fff" />
+                </LinearGradient>
+                <Text className="text-gray-700 text-sm font-semibold">Photos</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => {
+                  onTakePhoto();
+                  onClose();
+                }}
+                className="items-center flex-1 min-w-[70px]"
+                activeOpacity={0.7}
+              >
+                <LinearGradient
+                  colors={['#3b82f6', '#60a5fa']}
+                  className="w-16 h-16 rounded-2xl items-center justify-center mb-2"
+                  style={{
+                    shadowColor: '#3b82f6',
+                    shadowOffset: { width: 0, height: 2 },
+                    shadowOpacity: 0.3,
+                    shadowRadius: 4,
+                    elevation: 4,
+                  }}
+                >
+                  <Ionicons name="camera" size={28} color="#fff" />
+                </LinearGradient>
+                <Text className="text-gray-700 text-sm font-semibold">Camera</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => {
+                  onPickVideo();
+                  onClose();
+                }}
+                className="items-center flex-1 min-w-[70px]"
+                activeOpacity={0.7}
+              >
+                <LinearGradient
+                  colors={['#f97316', '#fb923c']}
+                  className="w-16 h-16 rounded-2xl items-center justify-center mb-2"
+                  style={{
+                    shadowColor: '#f97316',
+                    shadowOffset: { width: 0, height: 2 },
+                    shadowOpacity: 0.3,
+                    shadowRadius: 4,
+                    elevation: 4,
+                  }}
+                >
+                  <Ionicons name="videocam" size={28} color="#fff" />
+                </LinearGradient>
+                <Text className="text-gray-700 text-sm font-semibold">Video</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => {
+                  onPickDocument();
+                  onClose();
+                }}
+                className="items-center flex-1 min-w-[70px]"
+                activeOpacity={0.7}
+              >
+                <LinearGradient
+                  colors={['#10b981', '#34d399']}
+                  className="w-16 h-16 rounded-2xl items-center justify-center mb-2"
+                  style={{
+                    shadowColor: '#10b981',
+                    shadowOffset: { width: 0, height: 2 },
+                    shadowOpacity: 0.3,
+                    shadowRadius: 4,
+                    elevation: 4,
+                  }}
+                >
+                  <Ionicons name="document-text" size={28} color="#fff" />
+                </LinearGradient>
+                <Text className="text-gray-700 text-sm font-semibold">Files</Text>
+              </TouchableOpacity>
+            </View>
+
             <TouchableOpacity
-              onPress={() => {
-                onPickImage();
-                onClose();
-              }}
-              className="items-center flex-1 min-w-[80px]"
+              onPress={onClose}
+              className="mt-4 bg-gray-100 py-4 rounded-2xl"
+              activeOpacity={0.7}
             >
-              <View className="w-16 h-16 rounded-full bg-pink-100 items-center justify-center mb-2">
-                <Ionicons name="images" size={32} color="#eb278d" />
-              </View>
-              <Text className="text-gray-700 text-sm font-medium">Gallery</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              onPress={() => {
-                onTakePhoto();
-                onClose();
-              }}
-              className="items-center flex-1 min-w-[80px]"
-            >
-              <View className="w-16 h-16 rounded-full bg-blue-100 items-center justify-center mb-2">
-                <Ionicons name="camera" size={32} color="#3b82f6" />
-              </View>
-              <Text className="text-gray-700 text-sm font-medium">Camera</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              onPress={() => {
-                onPickVideo();
-                onClose();
-              }}
-              className="items-center flex-1 min-w-[80px]"
-            >
-              <View className="w-16 h-16 rounded-full bg-purple-100 items-center justify-center mb-2">
-                <Ionicons name="videocam" size={32} color="#a855f7" />
-              </View>
-              <Text className="text-gray-700 text-sm font-medium">Video</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              onPress={() => {
-                onPickDocument();
-                onClose();
-              }}
-              className="items-center flex-1 min-w-[80px]"
-            >
-              <View className="w-16 h-16 rounded-full bg-green-100 items-center justify-center mb-2">
-                <Ionicons name="document" size={32} color="#10b981" />
-              </View>
-              <Text className="text-gray-700 text-sm font-medium">Document</Text>
+              <Text className="text-center text-gray-700 font-bold text-base">
+                Cancel
+              </Text>
             </TouchableOpacity>
           </View>
-
-          <TouchableOpacity
-            onPress={onClose}
-            className="mt-6 bg-gray-100 py-4 rounded-2xl"
-          >
-            <Text className="text-center text-gray-700 font-bold text-base">
-              Cancel
-            </Text>
-          </TouchableOpacity>
         </TouchableOpacity>
       </TouchableOpacity>
     </Modal>
