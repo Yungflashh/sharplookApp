@@ -1597,6 +1597,22 @@ export const productAPI = {
 
 
 export const orderAPI = {
+
+   
+  calculateDeliveryFee: async (
+    productId: string,
+    latitude: number,
+    longitude: number
+  ) => {
+    const response = await api.get('/orders/delivery-fee-preview', {
+      params: {
+        productId,
+        latitude,
+        longitude,
+      },
+    });
+    return response.data;
+  },
   
   createOrder: async (orderData: {
     items: Array<{
@@ -1623,6 +1639,25 @@ export const orderAPI = {
     const response = await api.post('/orders', orderData);
     return response.data;
   },
+
+  
+  initializeOrderPayment: async (paymentData: {
+    orderId: string;
+    metadata?: any;
+  }) => {
+    const response = await api.post(
+      `/payments/orders/${paymentData.orderId}/initialize`,
+      { metadata: paymentData.metadata }
+    );
+    return response.data;
+  },
+
+  
+  verifyOrderPayment: async (orderId: string, reference: string) => {
+    const response = await api.get(`/payments/orders/${orderId}/verify/${reference}`);
+    return response.data;
+  },
+
 
   
   getOrderById: async (orderId: string) => {

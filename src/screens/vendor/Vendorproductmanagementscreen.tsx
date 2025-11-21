@@ -245,7 +245,7 @@ const VendorProductManagementScreen: React.FC = () => {
   const renderProductCard = (product: Product) => (
     <TouchableOpacity
       key={product._id}
-      // onPress={() => navigation.navigate('ProductDetail', { productId: product._id })}
+      
       activeOpacity={0.9}
       className="bg-white rounded-2xl overflow-hidden"
       style={{
@@ -492,10 +492,10 @@ const VendorProductManagementScreen: React.FC = () => {
             </View>
 
             <TouchableOpacity
-              // onPress={handleAddProduct}
-              // className="w-12 h-12 rounded-full bg-white/20 items-center justify-center"
+              
+              
             >
-              {/* <Ionicons name="add" size={28} color="#fff" /> */}
+              {}
             </TouchableOpacity>
           </View>
 

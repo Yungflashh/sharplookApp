@@ -104,20 +104,20 @@ const VendorDashboardScreen: React.FC = () => {
   const slideAnim = useRef(new Animated.Value(50)).current;
   const scaleAnim = useRef(new Animated.Value(0.95)).current;
 
-  // Socket.IO setup
+  
   useEffect(() => {
     console.log('🔌 Connecting to Socket.IO...');
     socketService.connect();
 
-    // Listen for new messages
+    
     socketService.onNewMessage((data) => {
       console.log('📩 New message received via socket:', data);
       
-      // Increment unread message count
+      
       setUnreadMessagesCount((prev) => prev + 1);
     });
 
-    // Cleanup
+    
     return () => {
       console.log('🧹 Cleaning up socket listeners');
       socketService.removeListener('message:new');
@@ -162,35 +162,35 @@ const VendorDashboardScreen: React.FC = () => {
     try {
       setLoading(true);
       
-      // Fetch profile first
+      
       const profileResponse = await userAPI.getProfile();
       console.log(profileResponse.data);
       if (profileResponse.success) {
         const userData = profileResponse.data.user || profileResponse.data;
         setVendorProfile(userData);
         
-        // Use wallet balance from profile
+        
         if (userData.walletBalance !== undefined) {
           setWalletData({
             balance: userData.walletBalance || 0,
-            pendingBalance: 0, // Not available in profile
-            totalEarnings: userData.walletBalance || 0, // Use current balance as total
+            pendingBalance: 0, 
+            totalEarnings: userData.walletBalance || 0, 
           });
         }
       }
 
-      // Fetch bookings stats
+      
       const bookingsResponse = await vendorAPI.getStats();
       if (bookingsResponse.success) {
         const statsData = bookingsResponse.data?.stats || bookingsResponse.data || {};
         console.log('Stats data:', statsData);
         
-        // Update stats from the stats endpoint
+        
         if (statsData.total !== undefined) {
           setStats(prevStats => {
             const newStats = [...prevStats];
             
-            // Total bookings
+            
             newStats[0] = {
               label: 'Total Bookings',
               value: statsData.total?.toString() || '0',
@@ -198,7 +198,7 @@ const VendorDashboardScreen: React.FC = () => {
               isPositive: true
             };
             
-            // Completed bookings
+            
             newStats[3] = {
               label: 'Completed',
               value: statsData.completed?.toString() || '0',
@@ -210,22 +210,22 @@ const VendorDashboardScreen: React.FC = () => {
           });
         }
         
-        // Store empty array for bookingsData since we're using stats
+        
         setBookingsData([]);
         setRecentActivities([]);
       }
 
-      // Fetch services
+      
       const servicesResponse = await servicesAPI.getMyServices();
       if (servicesResponse.success) {
-        // Services are nested in response.data.services
+        
         const servicesArray = servicesResponse.data?.services || servicesResponse.data || [];
         console.log('Services array:', servicesArray);
         setServicesData(Array.isArray(servicesArray) ? servicesArray : []);
         updateServicesStats(Array.isArray(servicesArray) ? servicesArray : []);
       }
 
-      // Fetch analytics data
+      
       try {
         const analyticsResponse = await analyticsAPI.getVendorAnalytics({
           startDate: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
@@ -240,7 +240,7 @@ const VendorDashboardScreen: React.FC = () => {
         console.log('Analytics fetch error (non-critical):', analyticsError);
       }
 
-      // Fetch notification and message counts
+      
       await fetchUnreadNotificationCount();
       await fetchUnreadMessagesCount();
     } catch (error) {
@@ -284,7 +284,7 @@ const VendorDashboardScreen: React.FC = () => {
     setStats(prevStats => {
       const newStats = [...prevStats];
       
-      // Update rating if available
+      
       if (analytics.reviews?.averageRating) {
         newStats[2] = {
           label: 'Avg. Rating',
@@ -294,7 +294,7 @@ const VendorDashboardScreen: React.FC = () => {
         };
       }
 
-      // Update response rate from performance
+      
       if (analytics.performance?.acceptanceRate !== undefined) {
         newStats[3] = {
           label: 'Acceptance Rate',
@@ -353,7 +353,7 @@ const VendorDashboardScreen: React.FC = () => {
     fetchDashboardData();
   }, []);
 
-  // Refresh counts when screen is focused
+  
   useFocusEffect(
     useCallback(() => {
       console.log('🔄 Dashboard focused - refreshing counts');
@@ -361,17 +361,17 @@ const VendorDashboardScreen: React.FC = () => {
       fetchUnreadNotificationCount();
       fetchUnreadMessagesCount();
 
-      // Reconnect socket if disconnected
+      
       if (!socketService.isSocketConnected()) {
         console.log('🔌 Reconnecting socket...');
         socketService.connect();
       }
 
-      // Set up polling interval for counts
+      
       const interval = setInterval(() => {
         fetchUnreadNotificationCount();
         fetchUnreadMessagesCount();
-      }, 30000); // Poll every 30 seconds
+      }, 30000); 
 
       return () => {
         console.log('🛑 Dashboard unfocused - clearing interval');
@@ -452,7 +452,7 @@ const VendorDashboardScreen: React.FC = () => {
     <SafeAreaView className="flex-1 bg-gray-50 p-0 m-0">
       <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
       
-      {/* Enhanced Header with Notification and Message Badges */}
+      {}
       <View className="bg-white shadow-sm">
         <View className="flex-row items-center justify-between px-5 py-4">
           <TouchableOpacity 
@@ -466,7 +466,7 @@ const VendorDashboardScreen: React.FC = () => {
           <Text className="text-lg font-bold text-gray-800">Dashboard</Text>
           
           <View className="flex-row items-center gap-3">
-            {/* Chat Icon with Badge */}
+            {}
             <TouchableOpacity 
               className="relative w-10 h-10 items-center justify-center" 
               activeOpacity={0.7} 
@@ -493,7 +493,7 @@ const VendorDashboardScreen: React.FC = () => {
               )}
             </TouchableOpacity>
             
-            {/* Notifications Icon with Badge */}
+            {}
             <TouchableOpacity 
               className="relative w-10 h-10 items-center justify-center" 
               activeOpacity={0.7} 
@@ -536,7 +536,7 @@ const VendorDashboardScreen: React.FC = () => {
           />
         }
       >
-        {/* Welcome Section */}
+        {}
         <Animated.View 
           className="bg-white px-5 py-6" 
           style={{
@@ -572,7 +572,7 @@ const VendorDashboardScreen: React.FC = () => {
           </View>
         </Animated.View>
 
-        {/* Wallet Card */}
+        {}
         <View className="px-5 py-4">
           <LinearGradient 
             colors={['#eb278d', '#f472b6']} 
@@ -684,7 +684,7 @@ const VendorDashboardScreen: React.FC = () => {
           </LinearGradient>
         </View>
 
-        {/* Quick Actions */}
+        {}
         <View className="px-5 py-4">
           <Text className="text-lg font-bold text-gray-900 mb-4">Quick Actions</Text>
           <View className="flex-row flex-wrap gap-4">
@@ -733,7 +733,7 @@ const VendorDashboardScreen: React.FC = () => {
           </View>
         </View>
 
-        {/* Performance Stats */}
+        {}
         <View className="px-5 py-4">
           <View className="flex-row items-center justify-between mb-4">
             <Text className="text-lg font-bold text-gray-900">Performance</Text>
@@ -789,58 +789,10 @@ const VendorDashboardScreen: React.FC = () => {
           </View>
         </View>
 
-        {/* Recent Activity */}
-        {/* <View className="px-5 py-4">
-          <View className="flex-row items-center justify-between mb-4">
-            <Text className="text-lg font-bold text-gray-900">Recent Activity</Text>
-            <TouchableOpacity activeOpacity={0.7}>
-              <Text className="text-pink-600 text-sm font-semibold">View all</Text>
-            </TouchableOpacity>
-          </View>
+        {}
+        {}
 
-          <View className="bg-white rounded-2xl overflow-hidden">
-            {recentActivities.length > 0 ? (
-              recentActivities.map((item, index) => (
-                <TouchableOpacity 
-                  key={index} 
-                  className="flex-row items-center p-4 border-b border-gray-100" 
-                  activeOpacity={0.7}
-                >
-                  <View 
-                    className="w-10 h-10 rounded-xl items-center justify-center mr-3" 
-                    style={{
-                      backgroundColor: `${item.color}20`
-                    }}
-                  >
-                    <Ionicons name={item.icon as any} size={20} color={item.color} />
-                  </View>
-                  <View className="flex-1">
-                    <Text className="text-gray-900 font-semibold text-sm">{item.title}</Text>
-                    <Text className="text-gray-500 text-xs mt-0.5">{item.subtitle}</Text>
-                  </View>
-                  <Text className="text-gray-400 text-xs">{item.time}</Text>
-                </TouchableOpacity>
-              ))
-            ) : (
-              <View className="p-8 items-center">
-                <Ionicons name="time-outline" size={48} color="#d1d5db" />
-                <Text className="text-gray-400 text-sm mt-2">No recent activity</Text>
-              </View>
-            )}
-            
-            {recentActivities.length > 0 && (
-              <TouchableOpacity 
-                className="flex-row items-center justify-center p-3 bg-gray-50" 
-                activeOpacity={0.7}
-              >
-                <Text className="text-pink-600 text-sm font-semibold mr-1">Load More</Text>
-                <Ionicons name="chevron-down" size={16} color="#eb278d" />
-              </TouchableOpacity>
-            )}
-          </View>
-        </View> */}
-
-        {/* Performance Dashboard */}
+        {}
         <View className="px-5 py-4 mb-4">
           <View className="flex-row items-center justify-between mb-4">
             <Text className="text-lg font-bold text-gray-900">Performance Dashboard</Text>
@@ -857,7 +809,7 @@ const VendorDashboardScreen: React.FC = () => {
 
           {analyticsData && analyticsData.performance ? (
             <View style={{ gap: 12 }}>
-              {/* Acceptance Rate */}
+              {}
               <View className="bg-white rounded-2xl p-4 border border-gray-100">
                 <View className="flex-row items-center justify-between mb-3">
                   <View className="flex-row items-center">
@@ -889,7 +841,7 @@ const VendorDashboardScreen: React.FC = () => {
                 </View>
               </View>
 
-              {/* Completion Rate */}
+              {}
               <View className="bg-white rounded-2xl p-4 border border-gray-100">
                 <View className="flex-row items-center justify-between mb-3">
                   <View className="flex-row items-center">
@@ -921,7 +873,7 @@ const VendorDashboardScreen: React.FC = () => {
                 </View>
               </View>
 
-              {/* Response Time */}
+              {}
               <View className="bg-white rounded-2xl p-4 border border-gray-100">
                 <View className="flex-row items-center justify-between mb-3">
                   <View className="flex-row items-center">
@@ -955,7 +907,7 @@ const VendorDashboardScreen: React.FC = () => {
                 </View>
               </View>
 
-              {/* Customer Satisfaction */}
+              {}
               <View className="bg-white rounded-2xl p-4 border border-gray-100">
                 <View className="flex-row items-center justify-between mb-3">
                   <View className="flex-row items-center">
@@ -987,7 +939,7 @@ const VendorDashboardScreen: React.FC = () => {
                 </View>
               </View>
 
-              {/* On-Time Delivery */}
+              {}
               <View className="bg-white rounded-2xl p-4 border border-gray-100">
                 <View className="flex-row items-center justify-between mb-3">
                   <View className="flex-row items-center">
@@ -1020,7 +972,7 @@ const VendorDashboardScreen: React.FC = () => {
               </View>
             </View>
           ) : (
-            /* Service Status - Fallback when analytics not available */
+            
             servicesData.length === 0 ? (
               <TouchableOpacity className="mt-4" activeOpacity={0.7}>
                 <LinearGradient 

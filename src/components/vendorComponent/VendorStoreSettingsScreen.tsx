@@ -39,24 +39,24 @@ const VendorStoreSettingsScreen: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [loadingCategories, setLoadingCategories] = useState(false);
   
-  // Edit Mode State
+  
   const [isEditMode, setIsEditMode] = useState(false);
   
-  // Profile State
+  
   const [businessName, setBusinessName] = useState('');
   const [businessDescription, setBusinessDescription] = useState('');
   const [vendorType, setVendorType] = useState<'home_service' | 'in_shop' | 'both'>('home_service');
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [availableCategories, setAvailableCategories] = useState<Category[]>([]);
   
-  // Location State
+  
   const [location, setLocation] = useState<LocationData | null>(null);
   const [locationLoading, setLocationLoading] = useState(false);
   const [locationError, setLocationError] = useState('');
   const [locationPermissionGranted, setLocationPermissionGranted] = useState(false);
   const [serviceRadius, setServiceRadius] = useState('10');
   
-  // Availability State
+  
   const [availability, setAvailability] = useState({
     monday: { isAvailable: true, from: '09:00', to: '17:00' },
     tuesday: { isAvailable: true, from: '09:00', to: '17:00' },
@@ -99,7 +99,7 @@ const VendorStoreSettingsScreen: React.FC = () => {
     setLocationError('');
 
     try {
-      // Check permission
+      
       if (!locationPermissionGranted) {
         const granted = await requestLocationPermission();
         if (!granted) {
@@ -114,14 +114,14 @@ const VendorStoreSettingsScreen: React.FC = () => {
         }
       }
 
-      // Get current position
+      
       const position = await Location.getCurrentPositionAsync({
         accuracy: Location.Accuracy.High,
       });
 
       const { latitude, longitude } = position.coords;
 
-      // Reverse geocode to get address
+      
       const geocode = await Location.reverseGeocodeAsync({
         latitude,
         longitude,
@@ -184,7 +184,7 @@ const VendorStoreSettingsScreen: React.FC = () => {
         setBusinessDescription(vendor.vendorProfile?.businessDescription || '');
         setVendorType(vendor.vendorProfile?.vendorType || 'home_service');
         
-        // Set categories
+        
         if (vendor.vendorProfile?.categories) {
           const categoryIds = vendor.vendorProfile.categories.map((cat: any) => {
             console.log('📦 Category:', cat);
@@ -194,7 +194,7 @@ const VendorStoreSettingsScreen: React.FC = () => {
           setSelectedCategories(categoryIds);
         }
         
-        // Set location
+        
         if (vendor.vendorProfile?.location) {
           const loc = vendor.vendorProfile.location;
           setLocation({
@@ -209,7 +209,7 @@ const VendorStoreSettingsScreen: React.FC = () => {
         
         setServiceRadius(String(vendor.vendorProfile?.serviceRadius || 10));
         
-        // Set availability
+        
         if (vendor.vendorProfile?.availabilitySchedule) {
           setAvailability(vendor.vendorProfile.availabilitySchedule);
         }
@@ -243,7 +243,7 @@ const VendorStoreSettingsScreen: React.FC = () => {
 
   const handleSave = async () => {
     try {
-      // Validate required fields
+      
       if (!businessName.trim()) {
         Alert.alert('Error', 'Business name is required');
         return;
@@ -288,7 +288,7 @@ const VendorStoreSettingsScreen: React.FC = () => {
       console.log('✅ Update response:', response);
 
       if (response.success) {
-        // Update stored user data
+        
         const currentUser = await getStoredUser();
         if (currentUser) {
           const updatedUser = {
@@ -298,7 +298,7 @@ const VendorStoreSettingsScreen: React.FC = () => {
           await AsyncStorage.setItem('userData', JSON.stringify(updatedUser));
         }
 
-        // Exit edit mode after saving
+        
         setIsEditMode(false);
 
         Alert.alert('Success', 'Store settings updated successfully', [
@@ -363,7 +363,7 @@ const VendorStoreSettingsScreen: React.FC = () => {
 
   return (
     <SafeAreaView className="flex-1 bg-gray-50" edges={['top']}>
-      {/* Header */}
+      {}
       <View className="bg-white border-b border-gray-200">
         <View className="flex-row items-center justify-between px-5 py-4">
           <TouchableOpacity
@@ -374,7 +374,7 @@ const VendorStoreSettingsScreen: React.FC = () => {
           </TouchableOpacity>
           <Text className="text-lg font-semibold text-gray-900">Store Settings</Text>
           
-          {/* Edit Mode Toggle Button */}
+          {}
           <TouchableOpacity
             onPress={toggleEditMode}
             className={`w-10 h-10 rounded-full items-center justify-center ${
@@ -390,7 +390,7 @@ const VendorStoreSettingsScreen: React.FC = () => {
           </TouchableOpacity>
         </View>
         
-        {/* Edit Mode Indicator */}
+        {}
         {isEditMode && (
           <View className="bg-pink-50 px-5 py-2 border-t border-pink-100">
             <View className="flex-row items-center">
@@ -405,7 +405,7 @@ const VendorStoreSettingsScreen: React.FC = () => {
 
       <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
         <View className="p-5">
-          {/* Business Information */}
+          {}
           <View className="bg-white rounded-2xl p-4 mb-4">
             <TouchableOpacity
               onPress={() => toggleSection('business')}
@@ -428,7 +428,7 @@ const VendorStoreSettingsScreen: React.FC = () => {
 
             {expandedSection === 'business' && (
               <View className="pt-3 border-t border-gray-100">
-                {/* Business Name */}
+                {}
                 <View className="mb-4">
                   <Text className="text-sm font-medium text-gray-700 mb-2">
                     Business Name *
@@ -454,7 +454,7 @@ const VendorStoreSettingsScreen: React.FC = () => {
                   </View>
                 </View>
 
-                {/* Business Description */}
+                {}
                 <View className="mb-4">
                   <Text className="text-sm font-medium text-gray-700 mb-2">
                     Business Description *
@@ -483,7 +483,7 @@ const VendorStoreSettingsScreen: React.FC = () => {
                   </View>
                 </View>
 
-                {/* Vendor Type */}
+                {}
                 <View className="mb-2">
                   <Text className="text-sm font-medium text-gray-700 mb-2">
                     Service Type *
@@ -554,7 +554,7 @@ const VendorStoreSettingsScreen: React.FC = () => {
             )}
           </View>
 
-          {/* Categories */}
+          {}
           <View className="bg-white rounded-2xl p-4 mb-4">
             <TouchableOpacity
               onPress={() => toggleSection('categories')}
@@ -619,7 +619,7 @@ const VendorStoreSettingsScreen: React.FC = () => {
             )}
           </View>
 
-          {/* Location with Map Integration */}
+          {}
           <View className="bg-white rounded-2xl p-4 mb-4">
             <TouchableOpacity
               onPress={() => toggleSection('location')}
@@ -689,7 +689,7 @@ const VendorStoreSettingsScreen: React.FC = () => {
                   <Text className="text-red-600 text-xs mb-3">{locationError}</Text>
                 ) : null}
 
-                {/* Service Radius */}
+                {}
                 <View className="mb-2">
                   <Text className="text-sm font-medium text-gray-700 mb-2">
                     Service Radius (km)

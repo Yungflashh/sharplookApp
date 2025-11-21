@@ -108,11 +108,76 @@ const OrderDetailScreen: React.FC = () => {
       setLoading(true);
       const response = await orderAPI.getOrderById(orderId);
 
+      
+      console.log('=== Order Detail Response Debug ===');
+      console.log('response.success:', response.success);
+      console.log('response.data type:', typeof response.data);
+      console.log('response.data keys:', Object.keys(response.data || {}));
+      
+      if (response.data?.data) {
+        console.log('response.data.data exists');
+        console.log('response.data.data keys:', Object.keys(response.data.data || {}));
+        
+        if (response.data.data.order) {
+          console.log('response.data.data.order exists!');
+          console.log('Order keys:', Object.keys(response.data.data.order || {}));
+        }
+      }
+
       if (response.success) {
-        setOrder(response.data.order);
+        
+        let orderData = null;
+        
+        
+        if (response.data?.data?.order) {
+          orderData = response.data.data.order;
+          console.log('✅ Found order at: response.data.data.order');
+        } else if (response.data?.order) {
+          orderData = response.data.order;
+          console.log('✅ Found order at: response.data.order');
+        } else if (response.data?.data && !response.data.data.order) {
+          orderData = response.data.data;
+          console.log('✅ Found order at: response.data.data (direct)');
+        }
+        
+        if (orderData) {
+          
+          const safeOrder = {
+            ...orderData,
+            items: Array.isArray(orderData.items) ? orderData.items : [],
+            timeline: Array.isArray(orderData.timeline) 
+              ? orderData.timeline 
+              : Array.isArray(orderData.statusHistory)
+              ? orderData.statusHistory.map((h: any) => ({
+                  status: h.status,
+                  timestamp: h.updatedAt || h.timestamp,
+                  note: h.note
+                }))
+              : [],
+            customer: orderData.customer || {
+              _id: '',
+              firstName: 'Unknown',
+              lastName: 'Customer',
+              email: '',
+            },
+            seller: orderData.seller || {
+              _id: '',
+              firstName: 'Unknown',
+              lastName: 'Seller',
+              email: '',
+            },
+          };
+          
+          console.log(`✅ Loaded order ${safeOrder.orderNumber} with ${safeOrder.items.length} items and ${safeOrder.timeline.length} timeline events`);
+          setOrder(safeOrder);
+        } else {
+          console.error('❌ Order data not found in any expected location');
+          throw new Error('Order data not found in response');
+        }
       }
     } catch (error) {
       const apiError = handleAPIError(error);
+      console.error('Fetch order error:', apiError);
       Alert.alert('Error', apiError.message);
       navigation.goBack();
     } finally {
@@ -182,6 +247,7 @@ const OrderDetailScreen: React.FC = () => {
     switch (status.toLowerCase()) {
       case 'pending':
         return '#fbbf24';
+      case 'confirmed':
       case 'processing':
         return '#3b82f6';
       case 'shipped':
@@ -211,6 +277,10 @@ const OrderDetailScreen: React.FC = () => {
     return null;
   }
 
+  
+  const orderItems = Array.isArray(order.items) ? order.items : [];
+  const orderTimeline = Array.isArray(order.timeline) ? order.timeline : [];
+
   return (
     <SafeAreaView className="flex-1 bg-gray-50" edges={['top']}>
       {}
@@ -223,7 +293,7 @@ const OrderDetailScreen: React.FC = () => {
         </TouchableOpacity>
         <View className="flex-1">
           <Text className="text-xl font-bold text-gray-900">Order Details</Text>
-          <Text className="text-sm text-gray-500">#{order.orderNumber}</Text>
+          <Text className="text-sm text-gray-500">#{order.orderNumber || 'N/A'}</Text>
         </View>
       </View>
 
@@ -247,68 +317,74 @@ const OrderDetailScreen: React.FC = () => {
             </View>
 
             {}
-            <View style={{ gap: 12 }}>
-              {order.timeline.map((event, index) => (
-                <View key={index} className="flex-row">
-                  <View className="items-center mr-3">
-                    <View
-                      className="w-3 h-3 rounded-full"
-                      style={{ backgroundColor: getStatusColor(event.status) }}
-                    />
-                    {index < order.timeline.length - 1 && (
-                      <View className="w-0.5 h-full bg-gray-200 mt-1" />
-                    )}
+            {orderTimeline.length > 0 && (
+              <View style={{ gap: 12 }}>
+                {orderTimeline.map((event, index) => (
+                  <View key={index} className="flex-row">
+                    <View className="items-center mr-3">
+                      <View
+                        className="w-3 h-3 rounded-full"
+                        style={{ backgroundColor: getStatusColor(event.status) }}
+                      />
+                      {index < orderTimeline.length - 1 && (
+                        <View className="w-0.5 h-full bg-gray-200 mt-1" />
+                      )}
+                    </View>
+                    <View className="flex-1 pb-4">
+                      <Text className="text-gray-900 text-sm font-semibold capitalize">
+                        {event.status.replace('_', ' ')}
+                      </Text>
+                      <Text className="text-gray-500 text-xs mt-1">
+                        {formatDate(event.timestamp)}
+                      </Text>
+                      {event.note && (
+                        <Text className="text-gray-600 text-xs mt-1">{event.note}</Text>
+                      )}
+                    </View>
                   </View>
-                  <View className="flex-1 pb-4">
-                    <Text className="text-gray-900 text-sm font-semibold capitalize">
-                      {event.status.replace('_', ' ')}
+                ))}
+              </View>
+            )}
+          </View>
+
+          {}
+          {orderItems.length > 0 && (
+            <View className="bg-white rounded-2xl p-5 mb-4">
+              <Text className="text-gray-900 text-lg font-bold mb-4">Order Items</Text>
+              {orderItems.map((item, index) => (
+                <View
+                  key={index}
+                  className={`flex-row items-center ${
+                    index < orderItems.length - 1 ? 'mb-4 pb-4 border-b border-gray-100' : ''
+                  }`}
+                >
+                  <Image
+                    source={{ 
+                      uri: item?.product?.images?.[0] || 'https://via.placeholder.com/150' 
+                    }}
+                    className="w-20 h-20 rounded-xl"
+                    resizeMode="cover"
+                  />
+                  <View className="flex-1 ml-3">
+                    <Text className="text-gray-900 text-sm font-bold mb-1">
+                      {item?.product?.name || 'Product'}
                     </Text>
-                    <Text className="text-gray-500 text-xs mt-1">
-                      {formatDate(event.timestamp)}
-                    </Text>
-                    {event.note && (
-                      <Text className="text-gray-600 text-xs mt-1">{event.note}</Text>
+                    {item?.selectedVariant && (
+                      <Text className="text-gray-500 text-xs mb-2">
+                        {item.selectedVariant.name}: {item.selectedVariant.option}
+                      </Text>
                     )}
+                    <View className="flex-row items-center justify-between">
+                      <Text className="text-gray-600 text-xs">Qty: {item?.quantity || 0}</Text>
+                      <Text className="text-pink-600 text-base font-bold">
+                        {formatPrice((item?.price || 0) * (item?.quantity || 0))}
+                      </Text>
+                    </View>
                   </View>
                 </View>
               ))}
             </View>
-          </View>
-
-          {}
-          <View className="bg-white rounded-2xl p-5 mb-4">
-            <Text className="text-gray-900 text-lg font-bold mb-4">Order Items</Text>
-            {order.items.map((item, index) => (
-              <View
-                key={index}
-                className={`flex-row items-center ${
-                  index < order.items.length - 1 ? 'mb-4 pb-4 border-b border-gray-100' : ''
-                }`}
-              >
-                <Image
-                  source={{ uri: item.product.images[0] }}
-                  className="w-20 h-20 rounded-xl"
-                  resizeMode="cover"
-                />
-                <View className="flex-1 ml-3">
-                  <Text className="text-gray-900 text-sm font-bold mb-1">
-                    {item.product.name}
-                  </Text>
-                  {item.selectedVariant && (
-                    <Text className="text-gray-500 text-xs mb-2">
-                      {item.selectedVariant.name}: {item.selectedVariant.option}
-                    </Text>
-                  )}
-                  <View className="flex-row items-center justify-between">
-                    <Text className="text-gray-600 text-xs">Qty: {item.quantity}</Text>
-                    <Text className="text-pink-600 text-base font-bold">
-                      {formatPrice(item.price * item.quantity)}
-                    </Text>
-                  </View>
-                </View>
-              </View>
-            ))}
-          </View>
+          )}
 
           {}
           <View className="bg-white rounded-2xl p-5 mb-4">
@@ -319,21 +395,21 @@ const OrderDetailScreen: React.FC = () => {
             {userType === 'vendor' ? (
               <View>
                 <Text className="text-gray-900 text-base font-semibold mb-1">
-                  {order.customer.firstName} {order.customer.lastName}
+                  {order.customer?.firstName || 'Unknown'} {order.customer?.lastName || 'Customer'}
                 </Text>
-                <Text className="text-gray-600 text-sm mb-1">{order.customer.email}</Text>
-                {order.customer.phone && (
+                <Text className="text-gray-600 text-sm mb-1">{order.customer?.email || 'N/A'}</Text>
+                {order.customer?.phone && (
                   <Text className="text-gray-600 text-sm">{order.customer.phone}</Text>
                 )}
               </View>
             ) : (
               <View>
                 <Text className="text-gray-900 text-base font-semibold mb-1">
-                  {order.seller.vendorProfile?.businessName ||
-                    `${order.seller.firstName} ${order.seller.lastName}`}
+                  {order.seller?.vendorProfile?.businessName ||
+                    `${order.seller?.firstName || 'Unknown'} ${order.seller?.lastName || 'Seller'}`}
                 </Text>
-                <Text className="text-gray-600 text-sm mb-1">{order.seller.email}</Text>
-                {order.seller.phone && (
+                <Text className="text-gray-600 text-sm mb-1">{order.seller?.email || 'N/A'}</Text>
+                {order.seller?.phone && (
                   <Text className="text-gray-600 text-sm">{order.seller.phone}</Text>
                 )}
               </View>
@@ -347,7 +423,7 @@ const OrderDetailScreen: React.FC = () => {
             <View className="mb-3">
               <Text className="text-gray-500 text-xs mb-1">Delivery Type</Text>
               <Text className="text-gray-900 text-sm font-semibold capitalize">
-                {order.deliveryType.replace('_', ' ')}
+                {order.deliveryType?.replace('_', ' ') || 'N/A'}
               </Text>
             </View>
 
@@ -394,7 +470,7 @@ const OrderDetailScreen: React.FC = () => {
                 <Text className="text-gray-600 text-sm">Subtotal</Text>
                 <Text className="text-gray-900 text-sm font-semibold">
                   {formatPrice(
-                    order.items.reduce((sum, item) => sum + item.price * item.quantity, 0)
+                    orderItems.reduce((sum, item) => sum + (item?.price || 0) * (item?.quantity || 0), 0)
                   )}
                 </Text>
               </View>
@@ -409,7 +485,7 @@ const OrderDetailScreen: React.FC = () => {
               <View className="flex-row justify-between items-center">
                 <Text className="text-gray-900 text-lg font-bold">Total</Text>
                 <Text className="text-pink-600 text-2xl font-bold">
-                  {formatPrice(order.totalAmount)}
+                  {formatPrice(order.totalAmount || 0)}
                 </Text>
               </View>
 
@@ -417,7 +493,7 @@ const OrderDetailScreen: React.FC = () => {
                 <View className="flex-row justify-between">
                   <Text className="text-gray-600 text-sm">Payment Status</Text>
                   <Text className="text-gray-900 text-sm font-bold capitalize">
-                    {order.paymentStatus}
+                    {order.paymentStatus || 'pending'}
                   </Text>
                 </View>
               </View>

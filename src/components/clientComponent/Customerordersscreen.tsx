@@ -88,9 +88,44 @@ const CustomerOrdersScreen: React.FC = () => {
         limit: 100,
       });
 
+      console.log('=== Customer Orders Response Debug ===');
+      console.log('response.success:', response.success);
+      console.log('typeof response.data:', typeof response.data);
+      console.log('response.data keys:', Object.keys(response.data || {}));
+      
+      if (response.data?.data) {
+        console.log('response.data.data exists');
+        console.log('Array.isArray(response.data.data):', Array.isArray(response.data.data));
+        console.log('response.data.data length:', response.data.data?.length);
+      }
+
       if (response.success) {
-        const orderList = response.data.orders || [];
-        setOrders(orderList);
+        
+        let orderList = [];
+        
+        if (Array.isArray(response.data.data)) {
+          orderList = response.data.data;
+          console.log('✅ Using response.data.data');
+        } else if (Array.isArray(response.data)) {
+          orderList = response.data;
+          console.log('✅ Using response.data');
+        } else if (Array.isArray(response.data.orders)) {
+          orderList = response.data.orders;
+          console.log('✅ Using response.data.orders');
+        } else {
+          console.log('❌ Could not find orders array');
+        }
+
+        console.log('Raw orderList length:', orderList.length);
+
+        
+        const safeOrders = orderList.map((order: any) => ({
+          ...order,
+          items: Array.isArray(order.items) ? order.items : [],
+        }));
+        
+        console.log(`✅ Fetched ${safeOrders.length} customer orders`);
+        setOrders(safeOrders);
       }
     } catch (error) {
       const apiError = handleAPIError(error);
@@ -118,9 +153,9 @@ const CustomerOrdersScreen: React.FC = () => {
       filtered = filtered.filter(
         (order) =>
           order.orderNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          order.items.some((item) =>
-            item.product.name.toLowerCase().includes(searchQuery.toLowerCase())
-          )
+          (Array.isArray(order.items) && order.items.some((item) =>
+            item?.product?.name?.toLowerCase().includes(searchQuery.toLowerCase())
+          ))
       );
     }
 
@@ -212,6 +247,7 @@ const CustomerOrdersScreen: React.FC = () => {
       case 'pending':
         return 'bg-yellow-100 text-yellow-800 border-yellow-200';
       case 'processing':
+      case 'confirmed': 
         return 'bg-blue-100 text-blue-800 border-blue-200';
       case 'shipped':
         return 'bg-purple-100 text-purple-800 border-purple-200';
@@ -231,6 +267,7 @@ const CustomerOrdersScreen: React.FC = () => {
       case 'pending':
         return 'time';
       case 'processing':
+      case 'confirmed': 
         return 'hourglass';
       case 'shipped':
         return 'airplane';
@@ -297,217 +334,227 @@ const CustomerOrdersScreen: React.FC = () => {
     return null;
   };
 
-  const renderOrderCard = (order: Order) => (
-    <TouchableOpacity
-      key={order._id}
-      onPress={() => navigation.navigate('OrderDetail', { orderId: order._id, userType: 'customer' })}
-      activeOpacity={0.95}
-      className="bg-white rounded-3xl p-5 mb-4"
-      style={{
-        ...Platform.select({
-          ios: {
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: 2 },
-            shadowOpacity: 0.08,
-            shadowRadius: 12,
-          },
-          android: { elevation: 4 },
-        }),
-      }}
-    >
-      {}
-      <View className="flex-row items-start justify-between mb-4">
-        <View className="flex-1 mr-3">
-          <Text className="text-lg font-bold text-gray-900 mb-1">Order #{order.orderNumber}</Text>
-          <View className="flex-row items-center">
-            <View className="w-8 h-8 rounded-full bg-pink-100 items-center justify-center mr-2">
-              <Ionicons name="storefront" size={16} color="#eb278d" />
-            </View>
-            <Text className="text-sm text-gray-600 font-medium">
-              {order.seller.vendorProfile?.businessName ||
-                `${order.seller.firstName} ${order.seller.lastName}`}
-            </Text>
-          </View>
-        </View>
-
-        <View className={`px-3 py-1.5 rounded-full border-2 ${getStatusColor(order.status)}`}>
-          <View className="flex-row items-center" style={{ gap: 4 }}>
-            <Ionicons
-              name={getStatusIcon(order.status) as any}
-              size={14}
-              color={
-                order.status === 'completed' || order.status === 'delivered'
-                  ? '#15803d'
-                  : order.status === 'cancelled'
-                  ? '#dc2626'
-                  : order.status === 'pending'
-                  ? '#ca8a04'
-                  : '#2563eb'
-              }
-            />
-            <Text className="text-xs font-bold capitalize">{order.status}</Text>
-          </View>
-        </View>
-      </View>
-
-      {}
-      <View className="bg-gray-50 rounded-2xl p-4 mb-4">
-        {order.items.map((item, index) => (
-          <View
-            key={index}
-            className={`flex-row items-center ${
-              index < order.items.length - 1 ? 'mb-3 pb-3 border-b border-gray-200' : ''
-            }`}
-          >
-            <Image
-              source={{ uri: item.product.images[0] }}
-              className="w-16 h-16 rounded-xl"
-              resizeMode="cover"
-            />
-            <View className="flex-1 ml-3">
-              <Text className="text-sm font-bold text-gray-900" numberOfLines={1}>
-                {item.product.name}
+  const renderOrderCard = (order: Order) => {
+    
+    const orderItems = Array.isArray(order.items) ? order.items : [];
+    
+    return (
+      <TouchableOpacity
+        key={order._id}
+        onPress={() => navigation.navigate('OrderDetail', { orderId: order._id, userType: 'customer' })}
+        activeOpacity={0.95}
+        className="bg-white rounded-3xl p-5 mb-4"
+        style={{
+          ...Platform.select({
+            ios: {
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 2 },
+              shadowOpacity: 0.08,
+              shadowRadius: 12,
+            },
+            android: { elevation: 4 },
+          }),
+        }}
+      >
+        {}
+        <View className="flex-row items-start justify-between mb-4">
+          <View className="flex-1 mr-3">
+            <Text className="text-lg font-bold text-gray-900 mb-1">Order #{order.orderNumber}</Text>
+            <View className="flex-row items-center">
+              <View className="w-8 h-8 rounded-full bg-pink-100 items-center justify-center mr-2">
+                <Ionicons name="storefront" size={16} color="#eb278d" />
+              </View>
+              <Text className="text-sm text-gray-600 font-medium">
+                {order.seller?.vendorProfile?.businessName ||
+                  `${order.seller?.firstName || ''} ${order.seller?.lastName || ''}`.trim() ||
+                  'Unknown Seller'}
               </Text>
-              {item.selectedVariant && (
-                <Text className="text-xs text-gray-500 mt-1">
-                  {item.selectedVariant.name}: {item.selectedVariant.option}
-                </Text>
-              )}
-              <View className="flex-row items-center justify-between mt-1">
-                <Text className="text-xs text-gray-500">Qty: {item.quantity}</Text>
-                <Text className="text-sm font-bold text-pink-600">
-                  {formatPrice(item.price * item.quantity)}
-                </Text>
+            </View>
+          </View>
+
+          <View className={`px-3 py-1.5 rounded-full border-2 ${getStatusColor(order.status)}`}>
+            <View className="flex-row items-center" style={{ gap: 4 }}>
+              <Ionicons
+                name={getStatusIcon(order.status) as any}
+                size={14}
+                color={
+                  order.status === 'completed' || order.status === 'delivered'
+                    ? '#15803d'
+                    : order.status === 'cancelled'
+                    ? '#dc2626'
+                    : order.status === 'pending'
+                    ? '#ca8a04'
+                    : '#2563eb'
+                }
+              />
+              <Text className="text-xs font-bold capitalize">{order.status}</Text>
+            </View>
+          </View>
+        </View>
+
+        {}
+        {orderItems.length > 0 && (
+          <View className="bg-gray-50 rounded-2xl p-4 mb-4">
+            {orderItems.map((item, index) => (
+              <View
+                key={index}
+                className={`flex-row items-center ${
+                  index < orderItems.length - 1 ? 'mb-3 pb-3 border-b border-gray-200' : ''
+                }`}
+              >
+                <Image
+                  source={{ 
+                    uri: item?.product?.images?.[0] || 'https://via.placeholder.com/150' 
+                  }}
+                  className="w-16 h-16 rounded-xl"
+                  resizeMode="cover"
+                />
+                <View className="flex-1 ml-3">
+                  <Text className="text-sm font-bold text-gray-900" numberOfLines={1}>
+                    {item?.product?.name || 'Product'}
+                  </Text>
+                  {item?.selectedVariant && (
+                    <Text className="text-xs text-gray-500 mt-1">
+                      {item.selectedVariant.name}: {item.selectedVariant.option}
+                    </Text>
+                  )}
+                  <View className="flex-row items-center justify-between mt-1">
+                    <Text className="text-xs text-gray-500">Qty: {item?.quantity || 0}</Text>
+                    <Text className="text-sm font-bold text-pink-600">
+                      {formatPrice((item?.price || 0) * (item?.quantity || 0))}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+            ))}
+          </View>
+        )}
+
+        {}
+        {order.trackingNumber && (
+          <View className="bg-purple-50 rounded-2xl p-4 mb-4">
+            <View className="flex-row items-center">
+              <Ionicons name="locate" size={20} color="#a855f7" />
+              <View className="flex-1 ml-3">
+                <Text className="text-purple-900 text-xs font-semibold mb-1">Tracking Number</Text>
+                <Text className="text-purple-700 text-sm font-bold">{order.trackingNumber}</Text>
+                {order.courierService && (
+                  <Text className="text-purple-600 text-xs mt-1">{order.courierService}</Text>
+                )}
               </View>
             </View>
           </View>
-        ))}
-      </View>
+        )}
 
-      {}
-      {order.trackingNumber && (
-        <View className="bg-purple-50 rounded-2xl p-4 mb-4">
+        {}
+        <View className="bg-gray-50 rounded-2xl p-4 mb-4" style={{ gap: 12 }}>
           <View className="flex-row items-center">
-            <Ionicons name="locate" size={20} color="#a855f7" />
-            <View className="flex-1 ml-3">
-              <Text className="text-purple-900 text-xs font-semibold mb-1">Tracking Number</Text>
-              <Text className="text-purple-700 text-sm font-bold">{order.trackingNumber}</Text>
-              {order.courierService && (
-                <Text className="text-purple-600 text-xs mt-1">{order.courierService}</Text>
-              )}
-            </View>
-          </View>
-        </View>
-      )}
-
-      {}
-      <View className="bg-gray-50 rounded-2xl p-4 mb-4" style={{ gap: 12 }}>
-        <View className="flex-row items-center">
-          <View className="w-9 h-9 rounded-xl bg-blue-100 items-center justify-center mr-3">
-            <Ionicons name="calendar" size={18} color="#3b82f6" />
-          </View>
-          <View className="flex-1">
-            <Text className="text-xs text-gray-500 mb-0.5">Order Date</Text>
-            <Text className="text-sm font-semibold text-gray-900">{formatDate(order.createdAt)}</Text>
-          </View>
-        </View>
-
-        <View className="flex-row items-center">
-          <View className="w-9 h-9 rounded-xl bg-green-100 items-center justify-center mr-3">
-            <Ionicons
-              name={order.deliveryType === 'home_delivery' ? 'home' : 'storefront'}
-              size={18}
-              color="#10b981"
-            />
-          </View>
-          <View className="flex-1">
-            <Text className="text-xs text-gray-500 mb-0.5">Delivery</Text>
-            <Text className="text-sm font-semibold text-gray-900 capitalize">
-              {order.deliveryType.replace('_', ' ')}
-            </Text>
-          </View>
-        </View>
-
-        <View className="flex-row items-center justify-between">
-          <View className="flex-row items-center flex-1">
-            <View className="w-9 h-9 rounded-xl bg-pink-100 items-center justify-center mr-3">
-              <Ionicons name="cash" size={18} color="#eb278d" />
+            <View className="w-9 h-9 rounded-xl bg-blue-100 items-center justify-center mr-3">
+              <Ionicons name="calendar" size={18} color="#3b82f6" />
             </View>
             <View className="flex-1">
-              <Text className="text-xs text-gray-500 mb-0.5">Total Amount</Text>
-              <Text className="text-lg font-bold text-pink-600">
-                {formatPrice(order.totalAmount)}
+              <Text className="text-xs text-gray-500 mb-0.5">Order Date</Text>
+              <Text className="text-sm font-semibold text-gray-900">{formatDate(order.createdAt)}</Text>
+            </View>
+          </View>
+
+          <View className="flex-row items-center">
+            <View className="w-9 h-9 rounded-xl bg-green-100 items-center justify-center mr-3">
+              <Ionicons
+                name={order.deliveryType === 'home_delivery' ? 'home' : 'storefront'}
+                size={18}
+                color="#10b981"
+              />
+            </View>
+            <View className="flex-1">
+              <Text className="text-xs text-gray-500 mb-0.5">Delivery</Text>
+              <Text className="text-sm font-semibold text-gray-900 capitalize">
+                {order.deliveryType.replace('_', ' ')}
               </Text>
             </View>
           </View>
 
-          <View
-            className={`px-3 py-1.5 rounded-xl ${
-              order.paymentStatus === 'escrowed'
-                ? 'bg-blue-100'
-                : order.paymentStatus === 'released'
-                ? 'bg-green-100'
-                : order.paymentStatus === 'refunded'
-                ? 'bg-orange-100'
-                : 'bg-yellow-100'
-            }`}
-          >
-            <Text
-              className={`text-xs font-bold capitalize ${
+          <View className="flex-row items-center justify-between">
+            <View className="flex-row items-center flex-1">
+              <View className="w-9 h-9 rounded-xl bg-pink-100 items-center justify-center mr-3">
+                <Ionicons name="cash" size={18} color="#eb278d" />
+              </View>
+              <View className="flex-1">
+                <Text className="text-xs text-gray-500 mb-0.5">Total Amount</Text>
+                <Text className="text-lg font-bold text-pink-600">
+                  {formatPrice(order.totalAmount)}
+                </Text>
+              </View>
+            </View>
+
+            <View
+              className={`px-3 py-1.5 rounded-xl ${
                 order.paymentStatus === 'escrowed'
-                  ? 'text-blue-700'
+                  ? 'bg-blue-100'
                   : order.paymentStatus === 'released'
-                  ? 'text-green-700'
+                  ? 'bg-green-100'
                   : order.paymentStatus === 'refunded'
-                  ? 'text-orange-700'
-                  : 'text-yellow-700'
+                  ? 'bg-orange-100'
+                  : 'bg-yellow-100'
               }`}
             >
-              {order.paymentStatus}
-            </Text>
-          </View>
-        </View>
-      </View>
-
-      {}
-      {order.status === 'delivered' && (
-        <View className="bg-blue-50 rounded-2xl p-3 mb-4">
-          <View className="flex-row items-center justify-between">
-            <View className="flex-row items-center">
-              <Ionicons
-                name={order.customerConfirmedDelivery ? 'checkmark-circle' : 'ellipse-outline'}
-                size={20}
-                color={order.customerConfirmedDelivery ? '#10b981' : '#9ca3af'}
-              />
-              <Text className="text-sm text-gray-700 ml-2">You confirmed</Text>
-            </View>
-            <View className="flex-row items-center">
-              <Ionicons
-                name={order.sellerConfirmedDelivery ? 'checkmark-circle' : 'ellipse-outline'}
-                size={20}
-                color={order.sellerConfirmedDelivery ? '#10b981' : '#9ca3af'}
-              />
-              <Text className="text-sm text-gray-700 ml-2">Seller confirmed</Text>
+              <Text
+                className={`text-xs font-bold capitalize ${
+                  order.paymentStatus === 'escrowed'
+                    ? 'text-blue-700'
+                    : order.paymentStatus === 'released'
+                    ? 'text-green-700'
+                    : order.paymentStatus === 'refunded'
+                    ? 'text-orange-700'
+                    : 'text-yellow-700'
+                }`}
+              >
+                {order.paymentStatus}
+              </Text>
             </View>
           </View>
         </View>
-      )}
 
-      {}
-      {getActionButtons(order)}
+        {}
+        {order.status === 'delivered' && (
+          <View className="bg-blue-50 rounded-2xl p-3 mb-4">
+            <View className="flex-row items-center justify-between">
+              <View className="flex-row items-center">
+                <Ionicons
+                  name={order.customerConfirmedDelivery ? 'checkmark-circle' : 'ellipse-outline'}
+                  size={20}
+                  color={order.customerConfirmedDelivery ? '#10b981' : '#9ca3af'}
+                />
+                <Text className="text-sm text-gray-700 ml-2">You confirmed</Text>
+              </View>
+              <View className="flex-row items-center">
+                <Ionicons
+                  name={order.sellerConfirmedDelivery ? 'checkmark-circle' : 'ellipse-outline'}
+                  size={20}
+                  color={order.sellerConfirmedDelivery ? '#10b981' : '#9ca3af'}
+                />
+                <Text className="text-sm text-gray-700 ml-2">Seller confirmed</Text>
+              </View>
+            </View>
+          </View>
+        )}
 
-      {}
-      <TouchableOpacity
-        onPress={() => navigation.navigate('OrderDetail', { orderId: order._id, userType: 'customer' })}
-        className="mt-3 pt-4 border-t border-gray-100"
-      >
-        <View className="flex-row items-center justify-center">
-          <Text className="text-sm text-pink-600 font-bold mr-1">View Full Details</Text>
-          <Ionicons name="chevron-forward" size={18} color="#eb278d" />
-        </View>
+        {}
+        {getActionButtons(order)}
+
+        {}
+        <TouchableOpacity
+          onPress={() => navigation.navigate('OrderDetail', { orderId: order._id, userType: 'customer' })}
+          className="mt-3 pt-4 border-t border-gray-100"
+        >
+          <View className="flex-row items-center justify-center">
+            <Text className="text-sm text-pink-600 font-bold mr-1">View Full Details</Text>
+            <Ionicons name="chevron-forward" size={18} color="#eb278d" />
+          </View>
+        </TouchableOpacity>
       </TouchableOpacity>
-    </TouchableOpacity>
-  );
+    );
+  };
 
   const renderEmptyState = () => (
     <View className="flex-1 items-center justify-center py-20 px-8">
@@ -543,7 +590,7 @@ const CustomerOrdersScreen: React.FC = () => {
     return {
       all: orders.length,
       pending: orders.filter((o) => o.status === 'pending').length,
-      processing: orders.filter((o) => o.status === 'processing').length,
+      processing: orders.filter((o) => o.status === 'processing' || o.status === 'confirmed').length,
       shipped: orders.filter((o) => o.status === 'shipped').length,
       delivered: orders.filter((o) => o.status === 'delivered').length,
       completed: orders.filter((o) => o.status === 'completed').length,

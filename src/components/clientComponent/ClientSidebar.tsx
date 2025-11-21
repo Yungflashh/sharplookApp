@@ -3,6 +3,8 @@ import { View, Text, TouchableOpacity, Modal, Animated, Dimensions, TouchableWit
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
+
 const {
   width: SCREEN_WIDTH
 } = Dimensions.get('window');
@@ -33,6 +35,7 @@ const ClientSidebar: React.FC<ClientSidebarProps> = ({
 }) => {
   const slideAnim = useRef(new Animated.Value(DRAWER_WIDTH)).current;
   const overlayOpacity = useRef(new Animated.Value(0)).current;
+  const navigation = useNavigation()
   useEffect(() => {
     if (visible) {
       Animated.parallel([Animated.spring(slideAnim, {
@@ -135,7 +138,7 @@ const ClientSidebar: React.FC<ClientSidebarProps> = ({
       title: 'My Orders',
       icon: 'receipt',
       onPress: () => {
-        console.log('Orders');
+          navigation.navigate("CustomerOrders")
         onClose();
       }
     }, {

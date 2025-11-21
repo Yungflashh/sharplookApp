@@ -45,6 +45,8 @@ import VendorProductManagementScreen from '@/screens/vendor/Vendorproductmanagem
 import VendorProductOrdersScreen from '@/components/vendorComponent/Vendorproductordersscreen';
 import OrderDetailScreen from '@/components/Orderdetailscreen';
 import VendorStoreSettingsScreen from '@/components/vendorComponent/VendorStoreSettingsScreen';
+import OrderPaymentScreen from '@/components/clientComponent/OrderPaymentScreen';
+import CustomerOrdersScreen from '@/components/clientComponent/Customerordersscreen';
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const RootNavigator = () => {
   useDeepLinking();
@@ -204,6 +206,9 @@ const RootNavigator = () => {
       <Stack.Screen name="MyProducts" component={VendorProductManagementScreen} options={{
         animation: 'slide_from_right'
       }} />
+      <Stack.Screen name="CustomerOrders" component={CustomerOrdersScreen} options={{
+        animation: 'slide_from_right'
+      }} />
       <Stack.Screen name="MyOrders" component={VendorProductOrdersScreen} options={{
         animation: 'slide_from_right'
       }} />
@@ -211,6 +216,9 @@ const RootNavigator = () => {
         animation: 'slide_from_right'
       }} />
       <Stack.Screen name="VendorStoreSettings" component={VendorStoreSettingsScreen} options={{
+        animation: 'slide_from_right'
+      }} />
+      <Stack.Screen name="OrderPayment" component={OrderPaymentScreen} options={{
         animation: 'slide_from_right'
       }} />
           
