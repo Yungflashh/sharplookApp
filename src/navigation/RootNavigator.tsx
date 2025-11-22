@@ -47,12 +47,39 @@ import OrderDetailScreen from '@/components/Orderdetailscreen';
 import VendorStoreSettingsScreen from '@/components/vendorComponent/VendorStoreSettingsScreen';
 import OrderPaymentScreen from '@/components/clientComponent/OrderPaymentScreen';
 import CustomerOrdersScreen from '@/components/clientComponent/Customerordersscreen';
+import callService from '@/services/call.service';
+import socketService from '@/services/socket.service';
+import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const RootNavigator = () => {
   useDeepLinking();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [isLoading, setIsLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isVendor, setIsVendor] = useState(false);
+
+  useEffect(() => {
+    const handleIncomingCall = (data: any) => {
+      console.log('📞 Incoming call received:', data);
+      if (data.call && data.caller) {
+        navigation.navigate('IncomingCall', {
+          call: data.call,
+          caller: data.caller,
+          callType: data.callType || 'voice',
+          offer: data.offer  // Pass the SDP offer
+        });
+      }
+    };
+
+    callService.on('call:incoming', handleIncomingCall);
+
+    return () => {
+      callService.removeListener('call:incoming', handleIncomingCall);
+    };
+  }, [navigation]);
+
   useEffect(() => {
     initializeApp();
   }, []);
@@ -67,12 +94,26 @@ const RootNavigator = () => {
     }, 1000);
     return () => clearInterval(interval);
   }, [isAuthenticated]);
+
+
   const initializeApp = async () => {
     try {
       console.log('🔄 Initializing app...');
       const authStatus = await checkAuthStatus();
       setIsAuthenticated(authStatus.isAuthenticated);
       setIsVendor(authStatus.isVendor);
+
+      if (authStatus.isAuthenticated) {
+        console.log('🔌 Connecting socket...');
+        socketService.connect();
+        
+        // Initialize call service AFTER socket connects
+        socketService.onConnected(() => {
+          console.log('📞 Initializing call service after socket connection');
+          callService.initialize();
+        });
+      }
+
       console.log('🔐 Auth status:', {
         isAuthenticated: authStatus.isAuthenticated,
         isVendor: authStatus.isVendor,
@@ -123,7 +164,7 @@ const RootNavigator = () => {
           <Stack.Screen name="Payment" component={PaymentScreen} options={{
         animation: 'slide_from_right'
       }} />
-          <Stack.Screen name="Dispute" component={DisputesScreen} options={{
+          <Stack.Screen name="Disputes" component={DisputesScreen} options={{
         animation: 'slide_from_right'
       }} />
           <Stack.Screen name="CreateDispute" component={CreateDisputeScreen} options={{
@@ -220,6 +261,17 @@ const RootNavigator = () => {
       }} />
       <Stack.Screen name="OrderPayment" component={OrderPaymentScreen} options={{
         animation: 'slide_from_right'
+      }} />
+      <Stack.Screen name="IncomingCall" component={IncomingCallScreen} options={{
+        animation: 'slide_from_bottom',
+        presentation: 'fullScreenModal',
+        gestureEnabled: false
+      }} />
+      <Stack.Screen name="OngoingCall" component={OngoingCallScreen} options={{
+        animation: 'fade',
+        presentation: 'fullScreenModal',
+        gestureEnabled: false,
+        headerShown: false
       }} />
           
         </>}

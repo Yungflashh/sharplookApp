@@ -28,6 +28,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import { Audio } from 'expo-av';
 import socketService from '@/services/socket.service';
+import callService from '@/services/call.service';
 
 type ChatDetailNavigationProp = NativeStackNavigationProp<RootStackParamList, 'ChatDetail'>;
 type ChatDetailRouteProp = RouteProp<RootStackParamList, 'ChatDetail'>;
@@ -437,6 +438,22 @@ const ChatDetailScreen: React.FC = () => {
       setLoading(false);
       setLoadingMore(false);
     }
+  };
+
+  const handleCall = (type: 'voice' | 'video') => {
+    if (!otherUserId) return;
+
+    navigation.navigate('OngoingCall', {
+      callId: undefined,
+      callType: type,
+      isOutgoing: true,
+      otherUser: {
+        _id: otherUserId,
+        firstName: otherUser?.firstName || otherUserName?.split(' ')[0] || 'User',
+        lastName: otherUser?.lastName || otherUserName?.split(' ')[1] || '',
+        avatar: otherUser?.avatar || otherUserAvatar
+      }
+    });
   };
 
   const handleTextChange = (text: string) => {
@@ -988,6 +1005,7 @@ const ChatDetailScreen: React.FC = () => {
             </TouchableOpacity>
 
             <TouchableOpacity
+              onPress={() => handleCall('video')}
               className="w-10 h-10 rounded-full bg-white/20 items-center justify-center ml-2"
               activeOpacity={0.7}
             >
@@ -995,6 +1013,7 @@ const ChatDetailScreen: React.FC = () => {
             </TouchableOpacity>
             
             <TouchableOpacity
+              onPress={() => handleCall('voice')}
               className="w-10 h-10 rounded-full bg-white/20 items-center justify-center ml-2"
               activeOpacity={0.7}
             >

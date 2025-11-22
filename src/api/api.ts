@@ -13,26 +13,26 @@ api.interceptors.request.use(async (config: InternalAxiosRequestConfig) => {
   if (token && config.headers) {
     config.headers.Authorization = `Bearer ${token}`;
   }
-  console.log('🟢 API Request:', {
-    method: config.method?.toUpperCase(),
-    url: config.url,
-    baseURL: config.baseURL,
-    fullURL: `${config.baseURL}${config.url}`,
-    data: config.data,
-    headers: config.headers
-  });
+  // console.log('🟢 API Request:', {
+  //   method: config.method?.toUpperCase(),
+  //   url: config.url,
+  //   baseURL: config.baseURL,
+  //   fullURL: `${config.baseURL}${config.url}`,
+  //   data: config.data,
+  //   headers: config.headers
+  // });
   return config;
 }, (error: AxiosError) => {
   console.error('🔴 Request Interceptor Error:', error);
   return Promise.reject(error);
 });
 api.interceptors.response.use(response => {
-  console.log('✅ API Response:', {
-    status: response.status,
-    statusText: response.statusText,
-    url: response.config.url,
-    data: response.data
-  });
+  // console.log('✅ API Response:', {
+  //   status: response.status,
+  //   statusText: response.statusText,
+  //   url: response.config.url,
+  //   data: response.data
+  // });
   return response;
 }, async (error: AxiosError) => {
   console.error('🔴 API Error Interceptor:', {

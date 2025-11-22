@@ -127,7 +127,7 @@ const VendorDashboardScreen: React.FC = () => {
   const fetchUnreadNotificationCount = async () => {
     try {
       const response = await notificationAPI.getUnreadCount();
-      console.log('Unread notification count response:', response);
+      // console.log('Unread notification count response:', response);
       
       if (response.data?.count !== undefined) {
         setUnreadNotificationCount(response.data.count);
@@ -144,7 +144,7 @@ const VendorDashboardScreen: React.FC = () => {
   const fetchUnreadMessagesCount = async () => {
     try {
       const response = await messageAPI.getUnreadCount();
-      console.log('Unread messages count response:', response);
+      // console.log('Unread messages count response:', response);
 
       if (response.data?.unreadCount !== undefined) {
         setUnreadMessagesCount(response.data.unreadCount);

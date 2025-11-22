@@ -9,13 +9,14 @@ export type RootStackParamList = {
     isVendor?: boolean;
   };
   Message: undefined;
-  Notification: undefined;
+  Notifications: undefined;
   Chat: undefined;
   Cart: undefined;
   ChatDetail: {
     vendorId: string;
     vendorName: string;
   };
+  ChatList: undefined;
   AllVendors: undefined;
   VendorDetail: {
     vendorId: string;
@@ -56,12 +57,63 @@ export type RootStackParamList = {
     vendorName: string;
     serviceName: string;
   };
+  Reviews: undefined;
+  VendorMyResponses: undefined;
+  PersonalInformation: undefined;
+  Favourites: undefined;
+  NotificationsSetting: undefined;
+  PrivacySetting: undefined;
+  HelpCenter: undefined;
+  CreateOffer: undefined;
+  MyOffers: undefined;
+  OfferDetail: undefined;
+  AvailableOffers: undefined;
+  SetWithdrawalPin: undefined;
+  Marketplace: undefined;
+  AddProduct: undefined;
+  EditProduct: undefined;
+  ProductDetail: undefined;
+  Checkout: undefined;
+  Analytics: undefined;
+  MyProducts: undefined;
+  CustomerOrders: undefined;
+  MyOrders: undefined;
+  OrderDetail: undefined;
+  VendorStoreSettings: undefined;
+  OrderPayment: undefined;
   DisputeDetail: {
     disputeId: string;
   };
   Disputes: undefined;
   CreateDispute: {
     bookingId: string;
+  };
+  OngoingCall: {
+    callId?: string;
+    callType: 'voice' | 'video';
+    isOutgoing: boolean;
+    offer?: any; // SDP offer to be processed immediately
+    otherUser: {
+      _id: string;
+      firstName: string;
+      lastName: string;
+      avatar?: string;
+    };
+  };
+  IncomingCall: {
+    call: {
+      _id: string;
+      receiver: string;
+      status: string;
+    };
+    caller: {
+      _id: string;
+      firstName: string;
+      lastName: string;
+      avatar?: string;
+    };
+    callType: 'voice' | 'video';
+    offer?: any; // SDP offer from caller
   };
 };
 export type AuthStackParamList = {
