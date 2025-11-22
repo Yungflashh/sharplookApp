@@ -47,7 +47,7 @@ interface Order {
     phone?: string;
   };
   totalAmount: number;
-  status: 'pending' | 'processing' | 'shipped' | 'delivered' | 'cancelled' | 'completed' | 'confirmed';
+  status: 'pending' | 'processing' | 'shipped' | 'out_for_delivery' | 'delivered' | 'cancelled' | 'completed' | 'confirmed';
   paymentStatus: 'pending' | 'paid' | 'refunded' | 'failed' | 'escrowed' | 'released';
   deliveryType: 'home_delivery' | 'pickup';
   deliveryAddress?: {
@@ -65,7 +65,7 @@ interface Order {
   createdAt: string;
 }
 
-type FilterStatus = 'all' | 'pending' | 'processing' | 'shipped' | 'delivered' | 'completed' | 'confirmed';
+type FilterStatus = 'all' | 'pending' | 'processing' | 'shipped' | 'out_for_delivery' | 'delivered' | 'completed' | 'confirmed';
 
 const VendorProductOrdersScreen: React.FC = () => {
   const navigation = useNavigation<VendorProductOrdersNavigationProp>();
@@ -99,10 +99,10 @@ const VendorProductOrdersScreen: React.FC = () => {
       }
 
       if (response.success) {
-        
+        // The orders array is in response.data.data based on the API response structure
         let orderList = [];
         
-        
+        // Check the actual structure from the logs
         if (response.data?.data && Array.isArray(response.data.data)) {
           orderList = response.data.data;
           console.log('✅ Using response.data.data');
@@ -118,7 +118,7 @@ const VendorProductOrdersScreen: React.FC = () => {
 
         console.log('Raw orderList length:', orderList.length);
 
-        
+        // Add safety check for items array
         const safeOrders = orderList.map((order: any) => ({
           ...order,
           items: Array.isArray(order.items) ? order.items : [],
@@ -272,6 +272,8 @@ const VendorProductOrdersScreen: React.FC = () => {
         return 'bg-blue-100 text-blue-800 border-blue-200';
       case 'shipped':
         return 'bg-purple-100 text-purple-800 border-purple-200';
+      case 'out_for_delivery':
+        return 'bg-indigo-100 text-indigo-800 border-indigo-200';
       case 'delivered':
         return 'bg-green-100 text-green-800 border-green-200';
       case 'completed':
@@ -292,6 +294,8 @@ const VendorProductOrdersScreen: React.FC = () => {
         return 'hourglass';
       case 'shipped':
         return 'airplane';
+      case 'out_for_delivery':
+        return 'car';
       case 'delivered':
         return 'checkmark-done';
       case 'completed':
@@ -306,7 +310,7 @@ const VendorProductOrdersScreen: React.FC = () => {
   const getActionButtons = (order: Order) => {
     const isLoading = actionLoading === order._id;
 
-    
+    // Handle 'confirmed' status same as 'pending'
     if (order.status === 'pending' || order.status === 'confirmed') {
       return (
         <TouchableOpacity
@@ -378,6 +382,23 @@ const VendorProductOrdersScreen: React.FC = () => {
     if (order.status === 'shipped') {
       return (
         <TouchableOpacity
+          onPress={() => handleUpdateStatus(order._id, 'out_for_delivery')}
+          disabled={isLoading}
+          className="bg-purple-500 py-3 rounded-xl"
+          activeOpacity={0.8}
+        >
+          {isLoading ? (
+            <ActivityIndicator size="small" color="#fff" />
+          ) : (
+            <Text className="text-white text-center font-bold text-sm">Mark as Out for Delivery</Text>
+          )}
+        </TouchableOpacity>
+      );
+    }
+
+    if (order.status === 'out_for_delivery') {
+      return (
+        <TouchableOpacity
           onPress={() => handleUpdateStatus(order._id, 'delivered')}
           disabled={isLoading}
           className="bg-green-500 py-3 rounded-xl"
@@ -413,7 +434,7 @@ const VendorProductOrdersScreen: React.FC = () => {
   };
 
   const renderOrderCard = (order: Order) => {
-    
+    // Safety check for order items
     const orderItems = Array.isArray(order.items) ? order.items : [];
     
     return (
@@ -434,7 +455,7 @@ const VendorProductOrdersScreen: React.FC = () => {
           }),
         }}
       >
-        {}
+        {/* Header */}
         <View className="flex-row items-start justify-between mb-4">
           <View className="flex-1 mr-3">
             <Text className="text-lg font-bold text-gray-900 mb-1">
@@ -470,7 +491,7 @@ const VendorProductOrdersScreen: React.FC = () => {
           </View>
         </View>
 
-        {}
+        {/* Items List */}
         {orderItems.length > 0 && (
           <View className="bg-gray-50 rounded-2xl p-4 mb-4">
             {orderItems.map((item, index) => (
@@ -508,7 +529,7 @@ const VendorProductOrdersScreen: React.FC = () => {
           </View>
         )}
 
-        {}
+        {/* Order Details */}
         <View className="bg-gray-50 rounded-2xl p-4 mb-4" style={{ gap: 12 }}>
           <View className="flex-row items-center">
             <View className="w-9 h-9 rounded-xl bg-blue-100 items-center justify-center mr-3">
@@ -612,7 +633,7 @@ const VendorProductOrdersScreen: React.FC = () => {
           )}
         </View>
 
-        {}
+        {/* Delivery Confirmation Status */}
         {order.status === 'delivered' && (
           <View className="bg-blue-50 rounded-2xl p-3 mb-4">
             <View className="flex-row items-center justify-between">
@@ -636,10 +657,10 @@ const VendorProductOrdersScreen: React.FC = () => {
           </View>
         )}
 
-        {}
+        {/* Action Buttons */}
         {getActionButtons(order)}
 
-        {}
+        {/* View Details Button */}
         <TouchableOpacity
           onPress={() => navigation.navigate('OrderDetail', { orderId: order._id, userType: 'vendor' })}
           className="mt-3 pt-4 border-t border-gray-100"
@@ -677,6 +698,7 @@ const VendorProductOrdersScreen: React.FC = () => {
       processing: orders.filter((o) => o.status === 'processing').length,
       confirmed: orders.filter((o) => o.status === 'confirmed').length,
       shipped: orders.filter((o) => o.status === 'shipped').length,
+      out_for_delivery: orders.filter((o) => o.status === 'out_for_delivery').length,
       delivered: orders.filter((o) => o.status === 'delivered').length,
       completed: orders.filter((o) => o.status === 'completed').length,
     };
@@ -689,6 +711,7 @@ const VendorProductOrdersScreen: React.FC = () => {
     { key: 'confirmed', label: 'New', count: counts.confirmed },
     { key: 'processing', label: 'Processing', count: counts.processing },
     { key: 'shipped', label: 'Shipped', count: counts.shipped },
+    { key: 'out_for_delivery', label: 'Out for Delivery', count: counts.out_for_delivery },
     { key: 'delivered', label: 'Delivered', count: counts.delivered },
     { key: 'completed', label: 'Completed', count: counts.completed },
   ];
@@ -706,7 +729,7 @@ const VendorProductOrdersScreen: React.FC = () => {
 
   return (
     <SafeAreaView className="flex-1 bg-gray-50" edges={['top']}>
-      {}
+      {/* Header */}
       <LinearGradient
         colors={['#eb278d', '#f472b6']}
         start={{ x: 0, y: 0 }}
@@ -723,7 +746,7 @@ const VendorProductOrdersScreen: React.FC = () => {
             </View>
           </View>
 
-          {}
+          {/* Search Bar */}
           <View className="flex-row items-center bg-white/20 rounded-2xl px-4 py-3 mb-4">
             <Ionicons name="search" size={20} color="#fff" />
             <TextInput
@@ -740,7 +763,7 @@ const VendorProductOrdersScreen: React.FC = () => {
             )}
           </View>
 
-          {}
+          {/* Filter Tabs */}
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -768,7 +791,7 @@ const VendorProductOrdersScreen: React.FC = () => {
         </View>
       </LinearGradient>
 
-      {}
+      {/* Orders List */}
       <ScrollView
         className="flex-1"
         showsVerticalScrollIndicator={false}

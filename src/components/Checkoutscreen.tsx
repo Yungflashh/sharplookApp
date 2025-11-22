@@ -8,6 +8,7 @@ import {
   Alert,
   ActivityIndicator,
   Platform,
+  Modal,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -16,7 +17,7 @@ import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as Location from 'expo-location';
 import { RootStackParamList } from '@/types/navigation.types';
-import { orderAPI, cartAPI, handleAPIError, userAPI } from '@/api/api';
+import { orderAPI, cartAPI, handleAPIError, userAPI, sharpPayAPI, paymentAPI } from '@/api/api';
 
 type CheckoutRouteProp = RouteProp<RootStackParamList, 'Checkout'>;
 type CheckoutNavigationProp = NativeStackNavigationProp<RootStackParamList, 'Checkout'>;
@@ -29,7 +30,7 @@ interface DeliveryAddress {
   state: string;
   country: string;
   additionalInfo: string;
-  coordinates?: [number, number]; 
+  coordinates?: [number, number];
 }
 
 interface DeliveryFeeInfo {
@@ -49,14 +50,20 @@ const CheckoutScreen: React.FC = () => {
   const [deliveryType, setDeliveryType] = useState<'home_delivery' | 'pickup'>('home_delivery');
   const [customerNotes, setCustomerNotes] = useState('');
 
-  
+  // Location states
   const [locationLoading, setLocationLoading] = useState(false);
   const [savedLocation, setSavedLocation] = useState<any>(null);
   const [showLocationOptions, setShowLocationOptions] = useState(false);
 
-  
+  // Delivery fee states
   const [deliveryFeeInfo, setDeliveryFeeInfo] = useState<DeliveryFeeInfo | null>(null);
   const [deliveryFeeLoading, setDeliveryFeeLoading] = useState(false);
+
+  // ==================== 💰 SHARPPAY WALLET STATES ====================
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [walletBalance, setWalletBalance] = useState(0);
+  const [walletLoading, setWalletLoading] = useState(false);
+  const [paymentProcessing, setPaymentProcessing] = useState(false);
 
   const [deliveryAddress, setDeliveryAddress] = useState<DeliveryAddress>({
     fullName: '',
@@ -68,12 +75,10 @@ const CheckoutScreen: React.FC = () => {
     additionalInfo: '',
   });
 
-  
   useEffect(() => {
     fetchUserLocation();
   }, []);
 
-  
   useEffect(() => {
     if (deliveryType === 'home_delivery' && deliveryAddress.coordinates) {
       calculateDeliveryFeeForCart();
@@ -88,6 +93,21 @@ const CheckoutScreen: React.FC = () => {
       }
     } catch (error) {
       console.error('Error fetching user location:', error);
+    }
+  };
+
+  // ==================== 💰 WALLET BALANCE CHECK ====================
+  const fetchWalletBalance = async () => {
+    try {
+      setWalletLoading(true);
+      const response = await sharpPayAPI.getBalance();
+      if (response.success) {
+        setWalletBalance(response.data?.balance || 0);
+      }
+    } catch (error) {
+      console.error('Error fetching wallet balance:', error);
+    } finally {
+      setWalletLoading(false);
     }
   };
 
@@ -110,9 +130,8 @@ const CheckoutScreen: React.FC = () => {
     setLocationLoading(true);
 
     try {
-      
       const { status } = await Location.requestForegroundPermissionsAsync();
-      
+
       if (status !== 'granted') {
         Alert.alert(
           'Permission Required',
@@ -123,14 +142,12 @@ const CheckoutScreen: React.FC = () => {
         return;
       }
 
-      
       const position = await Location.getCurrentPositionAsync({
         accuracy: Location.Accuracy.High,
       });
 
       const { latitude, longitude } = position.coords;
 
-      
       const geocode = await Location.reverseGeocodeAsync({
         latitude,
         longitude,
@@ -138,14 +155,16 @@ const CheckoutScreen: React.FC = () => {
 
       if (geocode && geocode.length > 0) {
         const addressData = geocode[0];
-        
+
         setDeliveryAddress({
           ...deliveryAddress,
-          address: `${addressData.street || ''} ${addressData.streetNumber || ''}`.trim() || 'Address not available',
+          address:
+            `${addressData.street || ''} ${addressData.streetNumber || ''}`.trim() ||
+            'Address not available',
           city: addressData.city || addressData.subregion || '',
           state: addressData.region || '',
           country: addressData.country || 'Nigeria',
-          coordinates: [longitude, latitude], 
+          coordinates: [longitude, latitude],
         });
 
         setShowLocationOptions(false);
@@ -169,9 +188,8 @@ const CheckoutScreen: React.FC = () => {
     setDeliveryFeeLoading(true);
 
     try {
-      
       const firstItem = cartItems[0];
-      
+
       if (!firstItem?.product?._id) {
         throw new Error('Invalid cart items');
       }
@@ -186,7 +204,7 @@ const CheckoutScreen: React.FC = () => {
 
       if (response.success) {
         setDeliveryFeeInfo(response.data);
-        
+
         if (!response.data.canDeliver) {
           Alert.alert(
             'Delivery Not Available',
@@ -212,11 +230,11 @@ const CheckoutScreen: React.FC = () => {
 
   const calculateDeliveryFee = () => {
     if (deliveryType === 'pickup') return 0;
-    
+
     if (deliveryFeeInfo && deliveryFeeInfo.canDeliver) {
       return deliveryFeeInfo.deliveryFee;
     }
-    
+
     return 0;
   };
 
@@ -250,23 +268,17 @@ const CheckoutScreen: React.FC = () => {
         Alert.alert('Required', 'Please enter your state');
         return false;
       }
-      
-      
+
       if (!deliveryAddress.coordinates || deliveryAddress.coordinates.length !== 2) {
-        Alert.alert(
-          'Location Required',
-          'Please select your location to calculate delivery fee.',
-          [
-            {
-              text: 'Add Location',
-              onPress: () => setShowLocationOptions(true)
-            }
-          ]
-        );
+        Alert.alert('Location Required', 'Please select your location to calculate delivery fee.', [
+          {
+            text: 'Add Location',
+            onPress: () => setShowLocationOptions(true),
+          },
+        ]);
         return false;
       }
 
-      
       if (deliveryFeeInfo && !deliveryFeeInfo.canDeliver) {
         Alert.alert(
           'Delivery Not Available',
@@ -280,13 +292,115 @@ const CheckoutScreen: React.FC = () => {
     return true;
   };
 
+  // ==================== 💰 PAYMENT METHOD SELECTION ====================
   const handleProceedToPayment = async () => {
     if (!validateForm()) return;
+
+    // Show payment method selection modal
+    await fetchWalletBalance();
+    setShowPaymentModal(true);
+  };
+
+  // ==================== 💰 WALLET PAYMENT ====================
+  const handlePayFromWallet = async () => {
+    const totalAmount = calculateTotal();
+
+    if (walletBalance < totalAmount) {
+      const shortfall = totalAmount - walletBalance;
+      Alert.alert(
+        'Insufficient Balance',
+        `You need ₦${shortfall.toLocaleString()} more in your wallet. Would you like to fund your wallet?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Fund Wallet',
+            onPress: () => {
+              setShowPaymentModal(false);
+              // Navigate to fund wallet screen
+              Alert.alert('Fund Wallet', 'Wallet funding feature coming soon!');
+            },
+          },
+        ]
+      );
+      return;
+    }
+
+    Alert.alert(
+      'Confirm Payment',
+      `Pay ₦${totalAmount.toLocaleString()} from your wallet?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Pay Now',
+          onPress: async () => {
+            try {
+              setPaymentProcessing(true);
+
+              // Create order first
+              const orderData = {
+                items: cartItems.map((item: any) => ({
+                  product: item.product._id,
+                  quantity: item.quantity,
+                  selectedVariant: item.selectedVariant,
+                })),
+                deliveryType,
+                deliveryAddress:
+                  deliveryType === 'home_delivery'
+                    ? {
+                        ...deliveryAddress,
+                        coordinates: deliveryAddress.coordinates,
+                      }
+                    : undefined,
+                paymentMethod: 'wallet', // ← Important!
+                customerNotes: customerNotes.trim() || undefined,
+              };
+
+              console.log('📦 Creating order with wallet payment:', orderData);
+
+              const orderResponse = await orderAPI.createOrder(orderData);
+
+              if (orderResponse.success) {
+                const order = orderResponse.data.order;
+                console.log('✅ Order created:', order._id);
+
+                // Pay from wallet
+                const paymentResponse = await paymentAPI.payOrderFromWallet(order._id);
+
+                if (paymentResponse.success) {
+                  // Clear cart
+                  await cartAPI.clearCart();
+
+                  setShowPaymentModal(false);
+
+                  Alert.alert('Success! 🎉', 'Payment successful! Your order has been placed.', [
+                    {
+                      text: 'View Order',
+                      onPress: () => {
+                        navigation.replace('OrderDetail', { orderId: order._id });
+                      },
+                    },
+                  ]);
+                }
+              }
+            } catch (error) {
+              const apiError = handleAPIError(error);
+              Alert.alert('Payment Failed', apiError.message);
+            } finally {
+              setPaymentProcessing(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  // ==================== 💳 CARD PAYMENT ====================
+  const handlePayWithCard = async () => {
+    setShowPaymentModal(false);
 
     try {
       setLoading(true);
 
-      
       const orderData = {
         items: cartItems.map((item: any) => ({
           product: item.product._id,
@@ -294,28 +408,29 @@ const CheckoutScreen: React.FC = () => {
           selectedVariant: item.selectedVariant,
         })),
         deliveryType,
-        deliveryAddress: deliveryType === 'home_delivery' ? {
-          ...deliveryAddress,
-          coordinates: deliveryAddress.coordinates,
-        } : undefined,
-        paymentMethod: 'card', 
+        deliveryAddress:
+          deliveryType === 'home_delivery'
+            ? {
+                ...deliveryAddress,
+                coordinates: deliveryAddress.coordinates,
+              }
+            : undefined,
+        paymentMethod: 'card',
         customerNotes: customerNotes.trim() || undefined,
       };
 
-      console.log('📦 Creating order with data:', orderData);
+      console.log('📦 Creating order with card payment:', orderData);
 
-      
       const response = await orderAPI.createOrder(orderData);
 
       if (response.success) {
         const order = response.data.order;
-        
         console.log('✅ Order created:', order._id);
-        
-        
+
+        // Clear cart
         await cartAPI.clearCart();
 
-        
+        // Navigate to Paystack payment
         navigation.replace('OrderPayment', {
           orderId: order._id,
           amount: order.totalAmount,
@@ -330,9 +445,11 @@ const CheckoutScreen: React.FC = () => {
     }
   };
 
+  const canPayFromWallet = walletBalance >= calculateTotal();
+
   return (
     <SafeAreaView className="flex-1 bg-gray-50" edges={['top']}>
-      {}
+      {/* Header */}
       <View className="flex-row items-center px-5 py-4 bg-white border-b border-gray-100">
         <TouchableOpacity
           onPress={() => navigation.goBack()}
@@ -345,10 +462,10 @@ const CheckoutScreen: React.FC = () => {
 
       <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
         <View className="p-5">
-          {}
+          {/* Delivery Method */}
           <View className="mb-6">
             <Text className="text-gray-900 text-lg font-bold mb-3">Delivery Method</Text>
-            
+
             <TouchableOpacity
               onPress={() => setDeliveryType('home_delivery')}
               className={`p-4 rounded-2xl border-2 mb-3 ${
@@ -374,7 +491,9 @@ const CheckoutScreen: React.FC = () => {
                     <Text className="text-gray-900 text-base font-bold">Home Delivery</Text>
                     <Text className="text-gray-500 text-sm">
                       {deliveryFeeInfo && deliveryFeeInfo.canDeliver
-                        ? `${formatPrice(deliveryFeeInfo.deliveryFee)} • ${deliveryFeeInfo.estimatedDeliveryTime}`
+                        ? `${formatPrice(deliveryFeeInfo.deliveryFee)} • ${
+                            deliveryFeeInfo.estimatedDeliveryTime
+                          }`
                         : 'Calculated based on your location'}
                     </Text>
                   </View>
@@ -421,20 +540,16 @@ const CheckoutScreen: React.FC = () => {
                 </View>
                 <View
                   className={`w-6 h-6 rounded-full border-2 items-center justify-center ${
-                    deliveryType === 'pickup'
-                      ? 'border-pink-500 bg-pink-500'
-                      : 'border-gray-300'
+                    deliveryType === 'pickup' ? 'border-pink-500 bg-pink-500' : 'border-gray-300'
                   }`}
                 >
-                  {deliveryType === 'pickup' && (
-                    <Ionicons name="checkmark" size={16} color="#fff" />
-                  )}
+                  {deliveryType === 'pickup' && <Ionicons name="checkmark" size={16} color="#fff" />}
                 </View>
               </View>
             </TouchableOpacity>
           </View>
 
-          {}
+          {/* Delivery Address - Only show for home delivery */}
           {deliveryType === 'home_delivery' && (
             <View className="mb-6">
               <View className="flex-row items-center justify-between mb-3">
@@ -449,7 +564,7 @@ const CheckoutScreen: React.FC = () => {
                 </TouchableOpacity>
               </View>
 
-              {}
+              {/* Location Options */}
               {showLocationOptions && (
                 <View className="bg-white rounded-2xl p-4 mb-4" style={{ gap: 12 }}>
                   {savedLocation && (
@@ -484,14 +599,16 @@ const CheckoutScreen: React.FC = () => {
                     ) : (
                       <>
                         <Ionicons name="navigate" size={20} color="#3b82f6" />
-                        <Text className="text-blue-600 font-semibold ml-2">Use Current Location</Text>
+                        <Text className="text-blue-600 font-semibold ml-2">
+                          Use Current Location
+                        </Text>
                       </>
                     )}
                   </TouchableOpacity>
                 </View>
               )}
 
-              {}
+              {/* Delivery Fee Info */}
               {deliveryFeeLoading && (
                 <View className="bg-blue-50 border border-blue-200 rounded-2xl p-4 mb-4 flex-row items-center">
                   <ActivityIndicator size="small" color="#3b82f6" />
@@ -500,24 +617,28 @@ const CheckoutScreen: React.FC = () => {
               )}
 
               {deliveryFeeInfo && !deliveryFeeLoading && (
-                <View className={`rounded-2xl p-4 mb-4 ${
-                  deliveryFeeInfo.canDeliver 
-                    ? 'bg-green-50 border border-green-200' 
-                    : 'bg-red-50 border border-red-200'
-                }`}>
+                <View
+                  className={`rounded-2xl p-4 mb-4 ${
+                    deliveryFeeInfo.canDeliver
+                      ? 'bg-green-50 border border-green-200'
+                      : 'bg-red-50 border border-red-200'
+                  }`}
+                >
                   <View className="flex-row items-center mb-2">
-                    <Ionicons 
-                      name={deliveryFeeInfo.canDeliver ? 'checkmark-circle' : 'alert-circle'} 
-                      size={20} 
-                      color={deliveryFeeInfo.canDeliver ? '#059669' : '#dc2626'} 
+                    <Ionicons
+                      name={deliveryFeeInfo.canDeliver ? 'checkmark-circle' : 'alert-circle'}
+                      size={20}
+                      color={deliveryFeeInfo.canDeliver ? '#059669' : '#dc2626'}
                     />
-                    <Text className={`font-semibold ml-2 ${
-                      deliveryFeeInfo.canDeliver ? 'text-green-700' : 'text-red-700'
-                    }`}>
+                    <Text
+                      className={`font-semibold ml-2 ${
+                        deliveryFeeInfo.canDeliver ? 'text-green-700' : 'text-red-700'
+                      }`}
+                    >
                       {deliveryFeeInfo.canDeliver ? 'Delivery Available' : 'Delivery Not Available'}
                     </Text>
                   </View>
-                  
+
                   {deliveryFeeInfo.canDeliver ? (
                     <>
                       <Text className="text-gray-700 text-sm mb-1">
@@ -535,7 +656,8 @@ const CheckoutScreen: React.FC = () => {
                   )}
                 </View>
               )}
-              
+
+              {/* Address Form */}
               <View className="bg-white rounded-2xl p-4" style={{ gap: 12 }}>
                 <View>
                   <Text className="text-gray-700 text-sm font-semibold mb-2">Full Name *</Text>
@@ -556,9 +678,7 @@ const CheckoutScreen: React.FC = () => {
                     placeholder="08012345678"
                     keyboardType="phone-pad"
                     value={deliveryAddress.phone}
-                    onChangeText={(text) =>
-                      setDeliveryAddress({ ...deliveryAddress, phone: text })
-                    }
+                    onChangeText={(text) => setDeliveryAddress({ ...deliveryAddress, phone: text })}
                   />
                 </View>
 
@@ -583,9 +703,7 @@ const CheckoutScreen: React.FC = () => {
                       className="bg-gray-50 px-4 py-3 rounded-xl text-gray-900"
                       placeholder="City"
                       value={deliveryAddress.city}
-                      onChangeText={(text) =>
-                        setDeliveryAddress({ ...deliveryAddress, city: text })
-                      }
+                      onChangeText={(text) => setDeliveryAddress({ ...deliveryAddress, city: text })}
                     />
                   </View>
 
@@ -617,7 +735,7 @@ const CheckoutScreen: React.FC = () => {
             </View>
           )}
 
-          {}
+          {/* Order Notes */}
           <View className="mb-6">
             <Text className="text-gray-900 text-lg font-bold mb-3">Order Notes (Optional)</Text>
             <TextInput
@@ -630,10 +748,10 @@ const CheckoutScreen: React.FC = () => {
             />
           </View>
 
-          {}
+          {/* Order Summary */}
           <View className="bg-white p-5 rounded-2xl mb-6">
             <Text className="text-gray-900 text-lg font-bold mb-4">Order Summary</Text>
-            
+
             <View style={{ gap: 12 }}>
               <View className="flex-row justify-between">
                 <Text className="text-gray-600 text-sm">Subtotal ({cartItems.length} items)</Text>
@@ -645,9 +763,9 @@ const CheckoutScreen: React.FC = () => {
               <View className="flex-row justify-between">
                 <Text className="text-gray-600 text-sm">Delivery Fee</Text>
                 <Text className="text-gray-900 text-sm font-semibold">
-                  {deliveryType === 'pickup' 
-                    ? 'Free' 
-                    : deliveryFeeLoading 
+                  {deliveryType === 'pickup'
+                    ? 'Free'
+                    : deliveryFeeLoading
                     ? 'Calculating...'
                     : formatPrice(calculateDeliveryFee())}
                 </Text>
@@ -664,7 +782,7 @@ const CheckoutScreen: React.FC = () => {
         </View>
       </ScrollView>
 
-      {}
+      {/* Payment Button */}
       <View
         className="bg-white px-5 py-4 border-t border-gray-100"
         style={{
@@ -681,7 +799,11 @@ const CheckoutScreen: React.FC = () => {
       >
         <TouchableOpacity
           onPress={handleProceedToPayment}
-          disabled={loading || deliveryFeeLoading || (deliveryType === 'home_delivery' && deliveryFeeInfo && !deliveryFeeInfo.canDeliver)}
+          disabled={
+            loading ||
+            deliveryFeeLoading ||
+            (deliveryType === 'home_delivery' && deliveryFeeInfo && !deliveryFeeInfo.canDeliver)
+          }
           activeOpacity={0.8}
         >
           <LinearGradient
@@ -696,9 +818,7 @@ const CheckoutScreen: React.FC = () => {
               <View className="flex-row items-center">
                 <Ionicons name="card" size={20} color="#fff" style={{ marginRight: 8 }} />
                 <Text className="text-white text-lg font-bold mr-2">Proceed to Payment</Text>
-                <Text className="text-white text-lg font-bold">
-                  {formatPrice(calculateTotal())}
-                </Text>
+                <Text className="text-white text-lg font-bold">{formatPrice(calculateTotal())}</Text>
               </View>
             )}
           </LinearGradient>
@@ -706,11 +826,176 @@ const CheckoutScreen: React.FC = () => {
 
         <View className="mt-3 flex-row items-center justify-center">
           <Ionicons name="shield-checkmark" size={16} color="#10b981" />
-          <Text className="text-gray-500 text-xs ml-2">
-            Secure payment powered by Paystack
-          </Text>
+          <Text className="text-gray-500 text-xs ml-2">Secure payment • Wallet or Card</Text>
         </View>
       </View>
+
+      {/* ==================== 💰 PAYMENT METHOD MODAL ==================== */}
+      <Modal visible={showPaymentModal} transparent animationType="slide" onRequestClose={() => setShowPaymentModal(false)}>
+        <View className="flex-1 bg-black/50 justify-end">
+          <View className="bg-white rounded-t-3xl">
+            {/* Modal Header */}
+            <View className="px-6 py-4 border-b border-gray-100">
+              <View className="flex-row items-center justify-between">
+                <Text className="text-xl font-bold text-gray-900">Choose Payment Method</Text>
+                <TouchableOpacity
+                  onPress={() => setShowPaymentModal(false)}
+                  className="h-8 w-8 items-center justify-center rounded-full bg-gray-100"
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="close" size={20} color="#374151" />
+                </TouchableOpacity>
+              </View>
+              <Text className="mt-2 text-sm text-gray-600">
+                Select how you'd like to pay for this order
+              </Text>
+            </View>
+
+            {walletLoading ? (
+              <View className="items-center justify-center py-12">
+                <ActivityIndicator size="large" color="#eb278d" />
+                <Text className="mt-3 text-sm text-gray-500">Checking wallet balance...</Text>
+              </View>
+            ) : (
+              <View className="px-6 py-6" style={{ gap: 16 }}>
+                {/* Amount to Pay */}
+                <View className="bg-gray-50 rounded-2xl p-4">
+                  <Text className="text-sm text-gray-600 mb-1">Total Amount</Text>
+                  <Text className="text-3xl font-bold text-gray-900">
+                    {formatPrice(calculateTotal())}
+                  </Text>
+                </View>
+
+                {/* SharpPAY Wallet Option */}
+                <TouchableOpacity
+                  onPress={handlePayFromWallet}
+                  disabled={paymentProcessing}
+                  className="rounded-2xl overflow-hidden border-2"
+                  style={{
+                    borderColor: canPayFromWallet ? '#eb278d' : '#d1d5db',
+                    opacity: paymentProcessing ? 0.6 : 1,
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <LinearGradient
+                    colors={canPayFromWallet ? ['#eb278d', '#f472b6'] : ['#f9fafb', '#f3f4f6']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    className="p-5"
+                  >
+                    <View className="flex-row items-center justify-between mb-3">
+                      <View className="flex-row items-center">
+                        <View
+                          className="h-12 w-12 items-center justify-center rounded-full mr-3"
+                          style={{
+                            backgroundColor: canPayFromWallet
+                              ? 'rgba(255,255,255,0.3)'
+                              : '#e5e7eb',
+                          }}
+                        >
+                          <Ionicons
+                            name="wallet"
+                            size={24}
+                            color={canPayFromWallet ? '#fff' : '#6b7280'}
+                          />
+                        </View>
+                        <View>
+                          <Text
+                            className="text-lg font-bold"
+                            style={{ color: canPayFromWallet ? '#fff' : '#111827' }}
+                          >
+                            SharpPAY Wallet
+                          </Text>
+                          <Text
+                            className="text-sm"
+                            style={{
+                              color: canPayFromWallet ? 'rgba(255,255,255,0.8)' : '#6b7280',
+                            }}
+                          >
+                            Balance: {formatPrice(walletBalance)}
+                          </Text>
+                        </View>
+                      </View>
+
+                      {canPayFromWallet ? (
+                        <View className="bg-white/20 px-3 py-1.5 rounded-full">
+                          <Text className="text-xs font-bold text-white">⚡ INSTANT</Text>
+                        </View>
+                      ) : (
+                        <View className="bg-red-100 px-3 py-1.5 rounded-full">
+                          <Text className="text-xs font-bold text-red-700">Low Balance</Text>
+                        </View>
+                      )}
+                    </View>
+
+                    {canPayFromWallet ? (
+                      <View
+                        className="rounded-xl p-3"
+                        style={{ backgroundColor: 'rgba(255,255,255,0.2)' }}
+                      >
+                        <View className="flex-row items-center">
+                          <Ionicons name="checkmark-circle" size={16} color="#fff" />
+                          <Text className="ml-2 text-sm font-medium text-white">
+                            Instant payment • No fees
+                          </Text>
+                        </View>
+                      </View>
+                    ) : (
+                      <View className="bg-orange-50 rounded-xl p-3">
+                        <Text className="text-sm text-orange-800">
+                          <Text className="font-bold">
+                            Need {formatPrice(calculateTotal() - walletBalance)} more
+                          </Text>{' '}
+                          to pay from wallet
+                        </Text>
+                      </View>
+                    )}
+                  </LinearGradient>
+                </TouchableOpacity>
+
+                {/* Card Payment Option */}
+                <TouchableOpacity
+                  onPress={handlePayWithCard}
+                  disabled={paymentProcessing}
+                  className="bg-white border-2 border-gray-200 rounded-2xl p-5"
+                  style={{ opacity: paymentProcessing ? 0.6 : 1 }}
+                  activeOpacity={0.8}
+                >
+                  <View className="flex-row items-center justify-between">
+                    <View className="flex-row items-center">
+                      <View className="h-12 w-12 items-center justify-center rounded-full bg-blue-100 mr-3">
+                        <Ionicons name="card" size={24} color="#3b82f6" />
+                      </View>
+                      <View>
+                        <Text className="text-lg font-bold text-gray-900">Card Payment</Text>
+                        <Text className="text-sm text-gray-600">Pay with Debit/Credit Card</Text>
+                      </View>
+                    </View>
+                    <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
+                  </View>
+
+                  <View className="mt-3 bg-blue-50 rounded-xl p-3">
+                    <View className="flex-row items-center">
+                      <Ionicons name="shield-checkmark" size={16} color="#3b82f6" />
+                      <Text className="ml-2 text-sm text-blue-800">Secured by Paystack</Text>
+                    </View>
+                  </View>
+                </TouchableOpacity>
+
+                {/* Processing Indicator */}
+                {paymentProcessing && (
+                  <View className="bg-pink-50 rounded-2xl p-4 flex-row items-center">
+                    <ActivityIndicator size="small" color="#eb278d" />
+                    <Text className="ml-3 text-sm font-medium text-pink-900">
+                      Processing payment...
+                    </Text>
+                  </View>
+                )}
+              </View>
+            )}
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };

@@ -82,7 +82,7 @@ const ClientSidebar: React.FC<ClientSidebarProps> = ({
       title: 'Favorites',
       icon: 'heart',
       onPress: () => {
-        console.log('Favorites');
+        navigation.navigate("Transactions");
         onClose();
       }
     }]

@@ -16,8 +16,9 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '@/types/navigation.types';
-import { bookingAPI, handleAPIError } from '@/api/api';
+import { bookingAPI, handleAPIError,sharpPayAPI } from '@/api/api';
 import { getStoredUser } from '@/utils/authHelper';
+import PaymentMethodModal from '@/components/clientComponent/PaymentMethodModal';
 
 type BookingDetailNavigationProp = NativeStackNavigationProp<RootStackParamList, 'BookingDetail'>;
 type BookingDetailRouteProp = RouteProp<RootStackParamList, 'BookingDetail'>;
@@ -116,6 +117,8 @@ const BookingDetailScreen: React.FC = () => {
   const [booking, setBooking] = useState<BookingDetail | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [isVendor, setIsVendor] = useState(false);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+
 
   useEffect(() => {
     loadCurrentUser();
@@ -416,9 +419,34 @@ const BookingDetailScreen: React.FC = () => {
                 elevation: 4,
               }}
             >
-              <Text className="text-white text-center font-bold text-base">
-                Complete Payment
-              </Text>
+             {status === 'pending' && booking.paymentStatus !== 'escrowed' && !isVendor && (
+  <TouchableOpacity
+    onPress={() => setShowPaymentModal(true)} // Open payment method modal
+    disabled={actionLoading}
+    activeOpacity={0.8}
+  >
+    <LinearGradient
+      colors={['#eb278d', '#f472b6']}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
+      className="py-4 rounded-2xl"
+      style={{
+        shadowColor: '#eb278d',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        elevation: 4,
+      }}
+    >
+      <View className="flex-row items-center justify-center">
+        <Ionicons name="card" size={20} color="#fff" />
+        <Text className="ml-2 text-white text-center font-bold text-base">
+          Complete Payment
+        </Text>
+      </View>
+    </LinearGradient>
+  </TouchableOpacity>
+)}
             </LinearGradient>
           </TouchableOpacity>
         )}
@@ -963,6 +991,18 @@ const BookingDetailScreen: React.FC = () => {
 
           {}
           {renderActionButtons()}
+          <PaymentMethodModal
+  visible={showPaymentModal}
+  onClose={() => setShowPaymentModal(false)}
+  bookingId={booking?._id || ''}
+  bookingAmount={booking?.totalAmount || 0}
+  onPaymentSuccess={() => {
+    fetchBookingDetails(); // Refresh booking details
+  }}
+  onNavigateToPaystack={() => {
+    navigation.navigate('Payment', { bookingId: booking?._id });
+  }}
+/>
         </View>
       </ScrollView>
     </SafeAreaView>

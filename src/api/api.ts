@@ -717,6 +717,26 @@ export const bookingAPI = {
     const response = await api.put(`/bookings/${bookingId}`, updates);
     return response.data;
   },
+
+  
+  /**
+   * Check if can pay from wallet
+   */
+  canPayFromWallet: async (bookingId: string) => {
+    const response = await api.get(`/bookings/${bookingId}/wallet/check`);
+    return response.data;
+  },
+
+  /**
+   * Pay for booking using wallet
+   */
+  payFromWallet: async (bookingId: string) => {
+    const response = await api.post('/bookings/wallet/pay', {
+      bookingId,
+    });
+    return response.data;
+  },
+
   getBookingStats: async (role: 'client' | 'vendor' = 'client') => {
     const response = await api.get('/bookings/stats', {
       params: {
@@ -725,26 +745,120 @@ export const bookingAPI = {
     });
     return response.data;
   },
-  createOffer: async (offerData: {
+   createOffer: async (offerData: {
+    title: string;
+    description: string;
     category: string;
-    serviceDescription: string;
-    preferredDate: string;
-    preferredTime?: string;
-    budgetRange: {
-      min: number;
-      max: number;
-    };
+    service?: string;
+    proposedPrice: number;
     location: {
       address: string;
       city: string;
       state: string;
       coordinates: [number, number];
     };
-    images?: string[];
-    notes?: string;
-  }) => {
-    const response = await api.post('/bookings/offers', offerData);
-    return response.data;
+    preferredDate?: string;
+    preferredTime?: string;
+    flexibility?: 'flexible' | 'specific' | 'urgent';
+    expiresInDays?: number;
+  }, images?: any[]) => {
+    try {
+      const token = await AsyncStorage.getItem('accessToken');
+      
+      console.log('🔵 Creating offer with data:', offerData);
+      console.log('🖼️ Images count:', images?.length || 0);
+
+      if (!images || images.length === 0) {
+        // No images - use regular JSON request
+        console.log('📤 Sending JSON request (no images)');
+        const response = await api.post('/offers', offerData);
+        return response.data;
+      }
+
+      // With images - use FormData
+      console.log('📤 Sending FormData request (with images)');
+      const formData = new FormData();
+
+      // Append all text fields
+      formData.append('title', offerData.title);
+      formData.append('description', offerData.description);
+      formData.append('category', offerData.category);
+      
+      if (offerData.service) {
+        formData.append('service', offerData.service);
+      }
+      
+      formData.append('proposedPrice', String(offerData.proposedPrice));
+      
+      // Stringify location object
+      formData.append('location', JSON.stringify(offerData.location));
+      
+      // Optional fields
+      if (offerData.preferredDate) {
+        formData.append('preferredDate', offerData.preferredDate);
+      }
+      if (offerData.preferredTime) {
+        formData.append('preferredTime', offerData.preferredTime);
+      }
+      if (offerData.flexibility) {
+        formData.append('flexibility', offerData.flexibility);
+      }
+      if (offerData.expiresInDays) {
+        formData.append('expiresInDays', String(offerData.expiresInDays));
+      }
+
+      // Append images
+      for (let i = 0; i < images.length; i++) {
+        const image = images[i];
+        console.log(`📸 Adding image ${i + 1}:`, {
+          uri: image.uri,
+          type: image.type,
+          name: image.name
+        });
+        
+        if (image.uri) {
+          formData.append('images', {
+            uri: image.uri,
+            type: image.type || 'image/jpeg',
+            name: image.name || `offer_image_${i}.jpg`
+          } as any);
+        }
+      }
+
+      console.log('🚀 Sending fetch request to:', `${API_BASE_URL}/offers`);
+
+      // CRITICAL: Do NOT set Content-Type header when using FormData
+      // The browser/React Native will set it automatically with the boundary
+      const response = await fetch(`${API_BASE_URL}/offers`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          // DO NOT include 'Content-Type': 'multipart/form-data'
+        },
+        body: formData
+      });
+
+      console.log('📥 Response status:', response.status);
+
+      const result = await response.json();
+      console.log('📥 Response data:', result);
+
+      if (!response.ok) {
+        console.error('❌ Response not OK:', result);
+        throw new Error(result.message || 'Failed to create offer');
+      }
+
+      console.log('✅ Offer created successfully');
+      return result;
+    } catch (error) {
+      console.error('❌ Create offer error:', error);
+      console.error('Error details:', {
+        name: (error as any)?.name,
+        message: (error as any)?.message,
+        stack: (error as any)?.stack
+      });
+      throw error;
+    }
   },
   getAvailableOffers: async (params?: {
     category?: string;
@@ -806,6 +920,94 @@ export const bookingAPI = {
     return response.data;
   }
 };
+
+
+export const sharpPayAPI = {
+  /**
+   * Get wallet balance
+   */
+  getBalance: async () => {
+    const response = await api.get('/sharppay/balance');
+    return response.data;
+  },
+
+  /**
+   * Initialize wallet deposit
+   */
+  initializeDeposit: async (amount: number, metadata?: any) => {
+    const response = await api.post('/sharppay/deposit/initialize', {
+      amount,
+      metadata,
+    });
+    return response.data;
+  },
+
+  /**
+   * Verify wallet deposit
+   */
+  verifyDeposit: async (reference: string) => {
+    const response = await api.get(`/sharppay/deposit/verify/${reference}`);
+    return response.data;
+  },
+
+  /**
+   * Get wallet transactions
+   */
+  getTransactions: async (params?: {
+    type?: string;
+    status?: string;
+    startDate?: string;
+    endDate?: string;
+    page?: number;
+    limit?: number;
+  }) => {
+    const response = await api.get('/sharppay/transactions', { params });
+    return response.data;
+  },
+
+  /**
+   * Get wallet statistics
+   */
+  getStats: async () => {
+    const response = await api.get('/sharppay/stats');
+    return response.data;
+  },
+
+  /**
+   * Request withdrawal
+   */
+  requestWithdrawal: async (withdrawalData: {
+    amount: number;
+    bankName: string;
+    accountNumber: string;
+    accountName: string;
+    pin: string;
+  }) => {
+    const response = await api.post('/sharppay/withdraw', withdrawalData);
+    return response.data;
+  },
+
+  /**
+   * Get my withdrawals
+   */
+  getMyWithdrawals: async (params?: {
+    page?: number;
+    limit?: number;
+  }) => {
+    const response = await api.get('/sharppay/withdrawals/my-withdrawals', { params });
+    return response.data;
+  },
+
+  /**
+   * Get withdrawal by ID
+   */
+  getWithdrawalById: async (withdrawalId: string) => {
+    const response = await api.get(`/sharppay/withdrawals/${withdrawalId}`);
+    return response.data;
+  },
+};
+
+
 export const paymentAPI = {
   initializePayment: async (paymentData: {
     bookingId: string;
@@ -830,8 +1032,26 @@ export const paymentAPI = {
       params
     });
     return response.data;
-  }
+  },
+
+  
+  /**
+   * Pay for order using wallet
+   */
+  payOrderFromWallet: async (orderId: string) => {
+    const response = await api.post(`/payments/orders/${orderId}/wallet/pay`);
+    return response.data;
+  },
+
+  /**
+   * Check if can pay order from wallet
+   */
+  canPayOrderFromWallet: async (orderId: string) => {
+    const response = await api.get(`/payments/orders/${orderId}/wallet/check`);
+    return response.data;
+  },
 };
+
 export const walletAPI = {
   getBalance: async () => {
     const response = await api.get('/wallet/balance');
