@@ -127,7 +127,7 @@ const VendorDashboardScreen: React.FC = () => {
   const fetchUnreadNotificationCount = async () => {
     try {
       const response = await notificationAPI.getUnreadCount();
-      console.log('Unread notification count response:', response);
+      // console.log('Unread notification count response:', response);
       
       if (response.data?.count !== undefined) {
         setUnreadNotificationCount(response.data.count);
@@ -144,7 +144,7 @@ const VendorDashboardScreen: React.FC = () => {
   const fetchUnreadMessagesCount = async () => {
     try {
       const response = await messageAPI.getUnreadCount();
-      console.log('Unread messages count response:', response);
+      // console.log('Unread messages count response:', response);
 
       if (response.data?.unreadCount !== undefined) {
         setUnreadMessagesCount(response.data.unreadCount);
@@ -607,13 +607,7 @@ const VendorDashboardScreen: React.FC = () => {
               <TouchableOpacity 
                 className="flex-row items-center gap-1 bg-white/20 px-3 py-1.5 rounded-full" 
                 activeOpacity={0.7} 
-                onPress={() => {
-                  Alert.alert(
-                    'Transaction History',
-                    'Transaction history will be available soon.',
-                    [{ text: 'OK' }]
-                  );
-                }}
+                onPress={() => navigation.navigate("Transactions")}
               >
                 <Text className="text-white text-xs font-semibold">
                   History

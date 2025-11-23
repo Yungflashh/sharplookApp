@@ -240,7 +240,7 @@ const PrivacySecurityScreen: React.FC = () => {
 
   return (
     <SafeAreaView className="flex-1 bg-gray-50" edges={['top']}>
-      {}
+      {/* Header */}
       <View className="bg-white px-5 py-4 border-b border-gray-100">
         <View className="flex-row items-center justify-between">
           <TouchableOpacity
@@ -268,15 +268,18 @@ const PrivacySecurityScreen: React.FC = () => {
           </View>
         ) : (
           <>
-            {}
+            {/* Security Options */}
             <View className="px-5 pt-5">
               <Text className="text-[13px] font-semibold text-gray-500 uppercase tracking-wider mb-2 ml-1">
                 Security Settings
               </Text>
               <View className="bg-white rounded-2xl overflow-hidden shadow-sm">
                 {securityOptions.map((option, index) => (
-                  <View
+                  <TouchableOpacity
                     key={index}
+                    activeOpacity={option.type === 'switch' ? 1 : 0.6}
+                    disabled={option.disabled || option.type === 'switch'}
+                    onPress={option.type === 'button' ? option.onPress : undefined}
                     className={`flex-row items-center p-4 ${
                       index !== securityOptions.length - 1
                         ? 'border-b border-gray-100'
@@ -307,22 +310,23 @@ const PrivacySecurityScreen: React.FC = () => {
                         />
                       )
                     ) : (
-                      <TouchableOpacity onPress={option.onPress} disabled={option.disabled}>
-                        <Ionicons name="chevron-forward" size={20} color="#d1d5db" />
-                      </TouchableOpacity>
+                      <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
                     )}
-                  </View>
+                  </TouchableOpacity>
                 ))}
               </View>
             </View>
 
-            {}
+            {/* Privacy Options */}
             <View className="px-5 pt-5">
               <Text className="text-[13px] font-semibold text-gray-500 uppercase tracking-wider mb-2 ml-1">
                 Privacy
               </Text>
               <View className="bg-white rounded-2xl overflow-hidden shadow-sm">
-                <TouchableOpacity className="flex-row items-center p-4 border-b border-gray-100">
+                <TouchableOpacity 
+                  className="flex-row items-center p-4 border-b border-gray-100"
+                  activeOpacity={0.6}
+                >
                   <View className="w-11 h-11 rounded-xl bg-pink-50 items-center justify-center mr-3">
                     <Ionicons name="eye-off" size={22} color="#eb278d" />
                   </View>
@@ -334,10 +338,13 @@ const PrivacySecurityScreen: React.FC = () => {
                       Manage your data and privacy settings
                     </Text>
                   </View>
-                  <Ionicons name="chevron-forward" size={20} color="#d1d5db" />
+                  <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
                 </TouchableOpacity>
 
-                <TouchableOpacity className="flex-row items-center p-4">
+                <TouchableOpacity 
+                  className="flex-row items-center p-4"
+                  activeOpacity={0.6}
+                >
                   <View className="w-11 h-11 rounded-xl bg-pink-50 items-center justify-center mr-3">
                     <Ionicons name="download" size={22} color="#eb278d" />
                   </View>
@@ -349,12 +356,12 @@ const PrivacySecurityScreen: React.FC = () => {
                       Request a copy of your information
                     </Text>
                   </View>
-                  <Ionicons name="chevron-forward" size={20} color="#d1d5db" />
+                  <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
                 </TouchableOpacity>
               </View>
             </View>
 
-            {}
+            {/* Info Box */}
             <View className="mx-5 mt-5 bg-blue-50 rounded-xl px-4 py-3 flex-row">
               <Ionicons name="information-circle" size={20} color="#3b82f6" />
               <Text className="flex-1 ml-2 text-xs text-blue-600 leading-5">
@@ -367,7 +374,7 @@ const PrivacySecurityScreen: React.FC = () => {
         )}
       </ScrollView>
 
-      {}
+      {/* Password Modal */}
       <ConfirmPasswordModal
         visible={showPasswordModal}
         onClose={() => setShowPasswordModal(false)}

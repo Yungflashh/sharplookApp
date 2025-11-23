@@ -19,11 +19,10 @@ import { RootStackParamList } from '@/types/navigation.types';
 import { bookingAPI, handleAPIError,sharpPayAPI } from '@/api/api';
 import { getStoredUser } from '@/utils/authHelper';
 import PaymentMethodModal from '@/components/clientComponent/PaymentMethodModal';
+import callService from '@/services/call.service';
 
 type BookingDetailNavigationProp = NativeStackNavigationProp<RootStackParamList, 'BookingDetail'>;
 type BookingDetailRouteProp = RouteProp<RootStackParamList, 'BookingDetail'>;
-
-
 
 interface VendorPartyInfo {
   type: 'vendor';
@@ -160,7 +159,6 @@ const BookingDetailScreen: React.FC = () => {
     fetchBookingDetails();
   }, [bookingId]);
 
-  
   const getServiceInfo = () => {
     if (!booking) return null;
 
@@ -180,7 +178,6 @@ const BookingDetailScreen: React.FC = () => {
       };
     }
 
-    
     return {
       name: 'Custom Service Offer',
       description: 'Service details from accepted offer',
@@ -295,22 +292,19 @@ const BookingDetailScreen: React.FC = () => {
     }
   };
 
-  const handleCall = (phoneNumber?: string) => {
-    if (!phoneNumber) {
-      Alert.alert('Error', 'Phone number not available');
+  const handleCall = async () => {
+    const otherParty = getOtherParty();
+    if (!otherParty?.data?._id) {
+      Alert.alert('Error', 'User information not available');
       return;
     }
 
-    const phoneUrl = `tel:${phoneNumber}`;
-    Linking.canOpenURL(phoneUrl)
-      .then((supported) => {
-        if (supported) {
-          Linking.openURL(phoneUrl);
-        } else {
-          Alert.alert('Error', 'Cannot make phone call on this device');
-        }
-      })
-      .catch((err) => console.error('Error opening phone app:', err));
+    try {
+      await callService.initiateCall(otherParty.data._id, 'voice');
+    } catch (error) {
+      console.error('Error initiating call:', error);
+      Alert.alert('Error', 'Failed to initiate call');
+    }
   };
 
   const handleMessage = () => {

@@ -87,13 +87,13 @@ const ClientSidebar: React.FC<ClientSidebarProps> = ({
       }
     }]
   }, {
-    title: 'SERVICES',
+    title: 'Referrals',
     items: [{
-      id: 'beauty',
-      title: 'Beauty & Wellness',
+      id: 'referral',
+      title: 'Referrals',
       icon: 'sparkles',
       onPress: () => {
-        console.log('Beauty');
+        navigation.navigate("Referrals")
         onClose();
       }
     }, {

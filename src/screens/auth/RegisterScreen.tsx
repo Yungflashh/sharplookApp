@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { View, TouchableOpacity, Text, Alert, Image, ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native';
+import { View, TouchableOpacity, Text, Alert, Image, ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator, TextInput } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import { AuthStackParamList } from '@/types/navigation.types';
-import { authAPI, handleAPIError } from '@/api/api';
+import { authAPI, handleAPIError, referralAPI } from '@/api/api';
 import { Input, PasswordInput, Button, Checkbox, SocialLoginButton, PhoneInput, CountryCodePicker } from '@/components/ui/forms';
 
 type RegisterScreenNavigationProp = NativeStackNavigationProp<AuthStackParamList, 'Register'>;
@@ -22,7 +22,7 @@ interface LocationData {
 const RegisterScreen = () => {
   const navigation = useNavigation<RegisterScreenNavigationProp>();
   
-  
+  // Form states
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
@@ -37,7 +37,13 @@ const RegisterScreen = () => {
   const [showCountryPicker, setShowCountryPicker] = useState(false);
   const [generalError, setGeneralError] = useState('');
   
+  // ⭐ NEW: Referral code validation states
+  const [referralCodeValid, setReferralCodeValid] = useState<boolean | null>(null);
+  const [referralCodeChecking, setReferralCodeChecking] = useState(false);
+  const [referralCodeError, setReferralCodeError] = useState('');
+  const [referrerName, setReferrerName] = useState('');
   
+  // Location states
   const [location, setLocation] = useState<LocationData | null>(null);
   const [locationLoading, setLocationLoading] = useState(false);
   const [locationError, setLocationError] = useState('');
@@ -53,11 +59,68 @@ const RegisterScreen = () => {
     terms: ''
   });
 
-  
+  // Check location permission on mount
   useEffect(() => {
     checkLocationPermission();
   }, []);
 
+  // ⭐ NEW: Debounced referral code validation
+  useEffect(() => {
+    const delayDebounce = setTimeout(() => {
+      if (referralId.trim() && referralId.length >= 6) {
+        validateReferralCode(referralId);
+      } else {
+        setReferralCodeValid(null);
+        setReferralCodeError('');
+        setReferrerName('');
+      }
+    }, 800);
+
+    return () => clearTimeout(delayDebounce);
+  }, [referralId]);
+
+
+const validateReferralCode = async (code: string) => {
+  if (!code.trim()) {
+    setReferralCodeValid(null);
+    setReferralCodeError('');
+    setReferrerName('');
+    return;
+  }
+
+  setReferralCodeChecking(true);
+  setReferralCodeError(''); // Clear before checking
+  setGeneralError('');
+
+  try {
+    const response = await referralAPI.validateReferralCode(code.trim().toUpperCase());
+    
+    console.log('Response data:', response.data);
+    
+    // ⭐ MORE EXPLICIT CHECK
+    const isValid = response.data?.success && response.data?.data?.valid === true;
+    
+    if (isValid) {
+      console.log('✅ Code is VALID');
+      setReferralCodeValid(true);
+      setReferrerName(response.data.data.referrerName || 'a friend');
+      setReferralCodeError(''); // Clear error
+    } else {
+      console.log('❌ Code is INVALID');
+      setReferralCodeValid(false);
+      setReferrerName('');
+      // Only set error for invalid codes, not for the validation message
+      setReferralCodeError('Invalid referral code');
+    }
+  } catch (error: any) {
+    console.log('❌ ERROR:', error);
+    setReferralCodeValid(false);
+    setReferralCodeError('Invalid referral code');
+    setReferrerName('');
+  } finally {
+    setReferralCodeChecking(false);
+  }
+};
   const checkLocationPermission = async () => {
     try {
       const { status } = await Location.getForegroundPermissionsAsync();
@@ -83,7 +146,6 @@ const RegisterScreen = () => {
     setLocationError('');
 
     try {
-      
       if (!locationPermissionGranted) {
         const granted = await requestLocationPermission();
         if (!granted) {
@@ -98,14 +160,12 @@ const RegisterScreen = () => {
         }
       }
 
-      
       const position = await Location.getCurrentPositionAsync({
         accuracy: Location.Accuracy.High,
       });
 
       const { latitude, longitude } = position.coords;
 
-      
       const geocode = await Location.reverseGeocodeAsync({
         latitude,
         longitude,
@@ -235,7 +295,6 @@ const RegisterScreen = () => {
       return;
     }
 
-    
     if (!location) {
       Alert.alert(
         'Add Location?',
@@ -250,7 +309,6 @@ const RegisterScreen = () => {
             text: 'Add Location',
             onPress: async () => {
               await getCurrentLocation();
-              
               if (location) {
                 proceedWithRegistration();
               }
@@ -278,14 +336,14 @@ const RegisterScreen = () => {
         isVendor: registerAsVendor
       };
 
-      
       if (location) {
         registerData.location = location;
       }
 
-      if (referralId.trim()) {
-        registerData.referralId = referralId.trim();
-      }
+      // ⭐ UPDATED: Send referralCode instead of referralId
+      if (referralId.trim() && referralCodeValid === true) {
+  registerData.referredBy = referralId.trim().toUpperCase();  // ✅ Changed field name
+}
 
       console.log('Registration data:', registerData);
 
@@ -304,9 +362,14 @@ const RegisterScreen = () => {
             ]
           );
         } else {
+          // ⭐ UPDATED: Show different message if referral code was used
+          const successMessage = referralCodeValid === true 
+            ? `Account created successfully! 🎉\n\nYou've been referred by ${referrerName}. Complete your first booking to unlock your rewards!`
+            : 'Account created successfully!';
+            
           Alert.alert(
             'Success',
-            'Account created successfully!',
+            successMessage,
             [
               {
                 text: 'OK',
@@ -362,7 +425,7 @@ const RegisterScreen = () => {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {}
+          {/* Logo */}
           <View className="items-center mb-8">
             <Image
               source={require('@/assets/logo.png')}
@@ -371,7 +434,7 @@ const RegisterScreen = () => {
             />
           </View>
 
-          {}
+          {/* Title */}
           <View className="mb-6">
             <Text className="text-3xl font-bold text-center text-black mb-2">
               Create Your Account
@@ -381,7 +444,7 @@ const RegisterScreen = () => {
             </Text>
           </View>
 
-          {}
+          {/* General Error */}
           {generalError ? (
             <View className="bg-red-50 border border-red-200 rounded-xl p-4 mb-6 flex-row items-start">
               <Ionicons
@@ -394,7 +457,7 @@ const RegisterScreen = () => {
             </View>
           ) : null}
 
-          {}
+          {/* Name Fields */}
           <View className="flex-row gap-3">
             <Input
               containerClassName="flex-1 mb-0"
@@ -425,7 +488,7 @@ const RegisterScreen = () => {
             />
           </View>
 
-          {}
+          {/* Email */}
           <Input
             label="Enter E-mail Address"
             placeholder=""
@@ -441,7 +504,7 @@ const RegisterScreen = () => {
             editable={!loading}
           />
 
-          {}
+          {/* Phone */}
           <PhoneInput
             label="Enter Phone Number"
             placeholder="8123456789"
@@ -457,7 +520,7 @@ const RegisterScreen = () => {
             onCountryCodePress={() => setShowCountryPicker(true)}
           />
 
-          {}
+          {/* Password */}
           <PasswordInput
             label="Password"
             placeholder=""
@@ -471,7 +534,7 @@ const RegisterScreen = () => {
             editable={!loading}
           />
 
-          {}
+          {/* Confirm Password */}
           <PasswordInput
             label="Confirm Password"
             placeholder=""
@@ -485,7 +548,7 @@ const RegisterScreen = () => {
             editable={!loading}
           />
 
-          {}
+          {/* Location Section */}
           <View className="mb-4">
             <Text className="text-sm font-semibold text-gray-700 mb-2">
               Location (required)
@@ -543,16 +606,97 @@ const RegisterScreen = () => {
             </Text>
           </View>
 
-          {}
-          <Input
-            label="Referral Code (optional)"
-            placeholder=""
-            value={referralId}
-            onChangeText={setReferralId}
-            editable={!loading}
-          />
+          {/* ⭐ ENHANCED REFERRAL CODE SECTION */}
+          <View className="mb-4">
+            <Text className="text-sm font-semibold text-gray-700 mb-2">
+              Referral Code (Optional)
+            </Text>
+            
+            <View className="relative">
+              <View
+                className={`flex-row items-center bg-white border rounded-xl px-4 py-3 ${
+                  referralCodeValid === true
+                    ? 'border-green-500 bg-green-50'
+                    : referralCodeValid === false
+                    ? 'border-red-500 bg-red-50'
+                    : 'border-gray-300'
+                }`}
+              >
+                <Ionicons
+                  name="ticket-outline"
+                  size={20}
+                  color={
+                    referralCodeValid === true
+                      ? '#10B981'
+                      : referralCodeValid === false
+                      ? '#EF4444'
+                      : '#9CA3AF'
+                  }
+                />
+                <TextInput
+                  className="flex-1 ml-3 text-base text-gray-900"
+                  placeholder="Enter referral code"
+                  placeholderTextColor="#9CA3AF"
+                  value={referralId}
+                  onChangeText={(text) => {
+                    setReferralId(text.toUpperCase());
+                    setGeneralError('');
+                  }}
+                  editable={!loading}
+                  autoCapitalize="characters"
+                  maxLength={10}
+                  style={{ letterSpacing: 1 }}
+                />
+                
+                {referralCodeChecking && (
+                  <ActivityIndicator size="small" color="#EC4899" />
+                )}
+                
+                {referralCodeValid === true && !referralCodeChecking && (
+                  <Ionicons name="checkmark-circle" size={24} color="#10B981" />
+                )}
+                
+                {referralCodeValid === false && !referralCodeChecking && (
+                  <Ionicons name="close-circle" size={24} color="#EF4444" />
+                )}
+              </View>
+            </View>
 
-          {}
+            {/* Success Message */}
+            {referralCodeValid === true && referrerName && (
+              <View className="bg-green-50 border border-green-200 rounded-xl p-3 mt-3 flex-row items-start">
+                <Ionicons name="gift" size={20} color="#10B981" style={{ marginTop: 1 }} />
+                <View className="flex-1 ml-2">
+                  <Text className="text-green-700 font-semibold text-sm mb-1">
+                    Valid Referral Code! 🎉
+                  </Text>
+                  <Text className="text-green-600 text-xs">
+                    Referred by {referrerName}. You`ll get bonus rewards on your first booking!
+                  </Text>
+                </View>
+              </View>
+            )}
+
+            {/* Error Message */}
+            {referralCodeError && (
+              <View className="flex-row items-center mt-2">
+                <Ionicons name="alert-circle" size={16} color="#EF4444" />
+                <Text className="text-red-600 text-xs ml-1">{referralCodeError}</Text>
+              </View>
+            )}
+
+            {/* Info Message */}
+            {!referralId && (
+              <View className="flex-row items-start mt-2">
+                <Ionicons name="information-circle-outline" size={16} color="#9CA3AF" style={{ marginTop: 1 }} />
+                <Text className="text-gray-500 text-xs ml-1 flex-1">
+                  Have a referral code? Enter it to get exclusive rewards on your first booking!
+                </Text>
+              </View>
+            )}
+          </View>
+
+          {/* Terms & Vendor Checkbox */}
           <View className="mb-6">
             <Checkbox
               checked={agreeToTerms}
@@ -577,7 +721,7 @@ const RegisterScreen = () => {
             />
           </View>
 
-          {}
+          {/* Create Account Button */}
           <Button
             onPress={handleRegister}
             loading={loading}
@@ -587,21 +731,21 @@ const RegisterScreen = () => {
             Create Account
           </Button>
 
-          {}
+          {/* Social Login Divider */}
           <View className="flex-row items-center mb-6">
             <View className="flex-1 h-px bg-pink-200" />
             <Text className="px-4 text-sm text-gray-700">or sign up with</Text>
             <View className="flex-1 h-px bg-pink-200" />
           </View>
 
-          {}
+          {/* Social Login Buttons */}
           <View className="flex-row justify-center items-center gap-4 mb-8">
             <SocialLoginButton platform="google" size="lg" />
             <SocialLoginButton platform="facebook" size="lg" />
             <SocialLoginButton platform="apple" size="lg" />
           </View>
 
-          {}
+          {/* Login Link */}
           <View className="flex-row justify-center items-center">
             <Text className="text-base text-gray-700">Already have an account? </Text>
             <TouchableOpacity
@@ -615,7 +759,7 @@ const RegisterScreen = () => {
         </ScrollView>
       </KeyboardAvoidingView>
 
-      {}
+      {/* Country Code Picker Modal */}
       <CountryCodePicker
         visible={showCountryPicker}
         onClose={() => setShowCountryPicker(false)}

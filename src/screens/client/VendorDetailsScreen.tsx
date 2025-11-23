@@ -9,12 +9,16 @@ import { RootStackParamList } from '@/types/navigation.types';
 import { vendorAPI, handleAPIError } from '@/api/api';
 import ServiceCard from '@/components/clientComponent/ServiceCard';
 import ReviewCard from '@/components/clientComponent/ReviewCard';
+import callService from '@/services/call.service';
+
 const {
   width: SCREEN_WIDTH,
   height: SCREEN_HEIGHT
 } = Dimensions.get('window');
+
 type VendorDetailScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'VendorDetail'>;
 type VendorDetailScreenRouteProp = RouteProp<RootStackParamList, 'VendorDetail'>;
+
 interface VendorData {
   _id: string;
   firstName: string;
@@ -45,6 +49,7 @@ interface VendorData {
     serviceRadius?: number;
   };
 }
+
 const VendorDetailScreen: React.FC = () => {
   const navigation = useNavigation<VendorDetailScreenNavigationProp>();
   const route = useRoute<VendorDetailScreenRouteProp>();
@@ -59,6 +64,7 @@ const VendorDetailScreen: React.FC = () => {
   const [stats, setStats] = useState<any>(null);
   const [activeTab, setActiveTab] = useState<'about' | 'services' | 'reviews'>('about');
   const [isFavorite, setIsFavorite] = useState(false);
+
   const fetchVendorDetails = async () => {
     try {
       setLoading(true);
@@ -66,21 +72,6 @@ const VendorDetailScreen: React.FC = () => {
       console.log('🔍 Full API Response:', JSON.stringify(response, null, 2));
       if (response.success || response.data?.success) {
         const responseData = response.data?.data || response.data;
-        console.log('📦 Response Data Keys:', Object.keys(responseData));
-        console.log('👤 Vendor Profile:', JSON.stringify(responseData.vendor?.vendorProfile, null, 2));
-        console.log('📝 Reviews Array:', JSON.stringify(responseData.reviews, null, 2));
-        console.log('💼 Services Array:', JSON.stringify(responseData.services, null, 2));
-        console.log('📊 Stats:', JSON.stringify(responseData.stats, null, 2));
-        console.log('✅ Setting state with:', {
-          hasVendor: !!responseData.vendor,
-          hasVendorProfile: !!responseData.vendor?.vendorProfile,
-          servicesCount: responseData.services?.length || 0,
-          reviewsCount: responseData.reviews?.length || 0,
-          vendorFirstName: responseData.vendor?.firstName,
-          vendorLastName: responseData.vendor?.lastName,
-          vendorRating: responseData.vendor?.vendorProfile?.rating,
-          vendorCategories: responseData.vendor?.vendorProfile?.categories?.length || 0
-        });
         setVendor(responseData.vendor);
         setServices(responseData.services || []);
         setReviews(responseData.reviews || []);
@@ -93,31 +84,63 @@ const VendorDetailScreen: React.FC = () => {
       setLoading(false);
     }
   };
+
   useEffect(() => {
     fetchVendorDetails();
   }, [vendorId]);
+
   const onRefresh = useCallback(() => {
     setRefreshing(true);
     fetchVendorDetails().finally(() => {
       setRefreshing(false);
     });
   }, [vendorId]);
+
   const handleFavoriteToggle = () => {
     setIsFavorite(!isFavorite);
   };
-  const handleCallVendor = () => {
-    if (vendor?.phone) {
-      Linking.openURL(`tel:${vendor.phone}`);
-    }
-  };
-  const handleMessageVendor = () => {
+
+  const handleCallVendor = async () => {
     if (vendor) {
-      navigation.navigate('ChatDetail', {
-        vendorId: vendor._id,
-        vendorName: vendor.vendorProfile.businessName
-      });
+      try {
+        navigation.navigate('OngoingCall', {
+          callType: 'voice',
+          isOutgoing: true,
+          otherUser: {
+            _id: vendor._id,
+            firstName: vendor.firstName,
+            lastName: vendor.lastName,
+            avatar: vendor.avatar,
+          },
+        });
+      } catch (error) {
+        console.error('Error initiating call:', error);
+        Alert.alert('Error', 'Failed to initiate call');
+      }
     }
   };
+const handleMessageVendor = () => {
+  if (vendor) {
+    console.log('📨 Opening chat with vendor:', {
+      _id: vendor._id,
+      businessName: vendor.vendorProfile.businessName,
+      avatar: vendor.avatar
+    });
+
+    // ✅ Validate vendor ID exists before navigation
+    if (!vendor._id) {
+      console.error('❌ Vendor ID is missing!');
+      Alert.alert('Error', 'Cannot open chat - vendor information is incomplete');
+      return;
+    }
+
+    navigation.navigate('ChatDetail', {
+      otherUserId: vendor._id,  // ✅ Correct parameter name
+      otherUserName: vendor.vendorProfile.businessName,  // ✅ Correct parameter name
+      otherUserAvatar: vendor.avatar,  // ✅ Added avatar parameter
+    });
+  }
+};
   const handleShareVendor = () => {
     console.log('Share vendor:', vendorId);
   };

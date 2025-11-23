@@ -13,26 +13,26 @@ api.interceptors.request.use(async (config: InternalAxiosRequestConfig) => {
   if (token && config.headers) {
     config.headers.Authorization = `Bearer ${token}`;
   }
-  console.log('🟢 API Request:', {
-    method: config.method?.toUpperCase(),
-    url: config.url,
-    baseURL: config.baseURL,
-    fullURL: `${config.baseURL}${config.url}`,
-    data: config.data,
-    headers: config.headers
-  });
+  // console.log('🟢 API Request:', {
+  //   method: config.method?.toUpperCase(),
+  //   url: config.url,
+  //   baseURL: config.baseURL,
+  //   fullURL: `${config.baseURL}${config.url}`,
+  //   data: config.data,
+  //   headers: config.headers
+  // });
   return config;
 }, (error: AxiosError) => {
   console.error('🔴 Request Interceptor Error:', error);
   return Promise.reject(error);
 });
 api.interceptors.response.use(response => {
-  console.log('✅ API Response:', {
-    status: response.status,
-    statusText: response.statusText,
-    url: response.config.url,
-    data: response.data
-  });
+  // console.log('✅ API Response:', {
+  //   status: response.status,
+  //   statusText: response.statusText,
+  //   url: response.config.url,
+  //   data: response.data
+  // });
   return response;
 }, async (error: AxiosError) => {
   console.error('🔴 API Error Interceptor:', {
@@ -88,7 +88,7 @@ export const authAPI = {
   phone: string;
   password: string;
   isVendor?: boolean;
-  referralId?: string;
+  referredBy?: string;
   location?: {  
     type: 'Point';
     coordinates: [number, number];
@@ -241,6 +241,73 @@ export const userAPI = {
     return response.data;
   },
 };
+
+
+
+
+// Add this to your existing api.ts file, after the notificationAPI export:
+
+/**
+ * Referral API
+ */
+export const referralAPI = {
+
+    
+  validateReferralCode: (referralCode: string) =>
+    api.post('/referrals/validate', { referralCode }),
+
+
+  /**
+   * Apply referral code during registration or later
+   */
+  applyReferralCode: async (referralCode: string) => {
+    const response = await api.post('/referrals/apply', { referralCode });
+    return response.data;
+  },
+
+  /**
+   * Get user's referral statistics
+   */
+  getReferralStats: async () => {
+    const response = await api.get('/referrals/stats');
+    return response.data;
+  },
+
+  /**
+   * Get user's referrals list
+   */
+  getMyReferrals: async (params?: {
+    status?: string;
+    page?: number;
+    limit?: number;
+  }) => {
+    const response = await api.get('/referrals/my-referrals', { params });
+    return response.data;
+  },
+
+  /**
+   * Get referral by ID
+   */
+  getReferralById: async (referralId: string) => {
+    const response = await api.get(`/referrals/${referralId}`);
+    return response.data;
+  },
+
+  /**
+   * Get referral leaderboard
+   */
+  getLeaderboard: async (limit: number = 10) => {
+    const response = await api.get('/referrals/leaderboard', {
+      params: { limit }
+    });
+    return response.data;
+  },
+};
+
+
+
+
+
 export const vendorAPI = {
   setupProfile: async (setupData: {
     businessName: string;
@@ -1150,6 +1217,9 @@ export const analyticsAPI = {
 
 export const messageAPI = {
   
+  /**
+   * Get user's conversations list
+   */
   getConversations: async (params?: {
     page?: number;
     limit?: number;
@@ -1158,19 +1228,27 @@ export const messageAPI = {
     return response.data;
   },
 
-  
+  /**
+   * Get or create conversation with another user
+   * ✅ UPDATED: Changed from /conversations/:otherUserId to /conversations/with/:otherUserId
+   */
   getOrCreateConversation: async (otherUserId: string) => {
-    const response = await api.get(`/messages/conversations/${otherUserId}`);
+    const response = await api.get(`/messages/conversations/with/${otherUserId}`);
     return response.data;
   },
 
-  
+  /**
+   * Get conversation by ID
+   * ✅ UPDATED: Consistent path structure
+   */
   getConversationById: async (conversationId: string) => {
-    const response = await api.get(`/messages/conversation/${conversationId}`);
+    const response = await api.get(`/messages/conversations/${conversationId}`);
     return response.data;
   },
 
-  
+  /**
+   * Send a message
+   */
   sendMessage: async (messageData: {
     receiverId: string;
     messageType: 'text' | 'image' | 'file' | 'audio' | 'video';
@@ -1187,52 +1265,71 @@ export const messageAPI = {
     return response.data;
   },
 
-  
+  /**
+   * Get messages in a conversation
+   * ✅ UPDATED: More explicit path
+   */
   getMessages: async (conversationId: string, params?: {
     page?: number;
     limit?: number;
   }) => {
-    const response = await api.get(`/messages/${conversationId}`, { params });
+    const response = await api.get(`/messages/conversations/${conversationId}/messages`, { params });
     return response.data;
   },
 
-  
+  /**
+   * Mark message as read
+   */
   markAsRead: async (messageId: string) => {
     const response = await api.put(`/messages/${messageId}/read`);
     return response.data;
   },
 
-  
+  /**
+   * Mark all messages in conversation as read
+   * ✅ UPDATED: Consistent path structure
+   */
   markConversationAsRead: async (conversationId: string) => {
-    const response = await api.put(`/messages/conversation/${conversationId}/read`);
+    const response = await api.put(`/messages/conversations/${conversationId}/read`);
     return response.data;
   },
 
-  
+  /**
+   * Toggle reaction on a message
+   */
   toggleReaction: async (messageId: string, emoji: string) => {
     const response = await api.post(`/messages/${messageId}/reaction`, { emoji });
     return response.data;
   },
 
-  
+  /**
+   * Delete a message
+   */
   deleteMessage: async (messageId: string) => {
     const response = await api.delete(`/messages/${messageId}`);
     return response.data;
   },
 
-  
+  /**
+   * Delete conversation
+   * ✅ UPDATED: Consistent path structure
+   */
   deleteConversation: async (conversationId: string) => {
-    const response = await api.delete(`/messages/conversation/${conversationId}`);
+    const response = await api.delete(`/messages/conversations/${conversationId}`);
     return response.data;
   },
 
-  
+  /**
+   * Get unread messages count
+   */
   getUnreadCount: async () => {
     const response = await api.get('/messages/unread/count');
     return response.data;
   },
 
-  
+  /**
+   * Search messages
+   */
   searchMessages: async (query: string, params?: {
     page?: number;
     limit?: number;
@@ -1243,7 +1340,9 @@ export const messageAPI = {
     return response.data;
   },
 
-  
+  /**
+   * Upload message attachment
+   */
   uploadAttachment: async (file: any) => {
     try {
       const token = await AsyncStorage.getItem('accessToken');

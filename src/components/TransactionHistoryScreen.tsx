@@ -41,6 +41,7 @@ const TransactionHistoryScreen = () => {
   const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [filter, setFilter] = useState<'all' | 'inflow' | 'outflow'>('all');
+  const [dateFilter, setDateFilter] = useState<'all' | 'today' | 'week' | 'month'>('all');
 
   const loadTransactions = async (pageNum: number = 1, refresh: boolean = false) => {
     try {
@@ -104,12 +105,12 @@ const TransactionHistoryScreen = () => {
       }
     });
 
-    // Update stats with calculated totals
+    // Update stats with calculated totals while preserving balance
     setStats((prevStats) => ({
-      ...prevStats,
+      totalTransactions: txns.length,
       totalInflow,
       totalOutflow,
-      totalTransactions: txns.length,
+      currentBalance: prevStats?.currentBalance || 0, // Preserve existing balance
     }));
 
     console.log('💰 Calculated totals - Inflow:', totalInflow, 'Outflow:', totalOutflow);
@@ -215,12 +216,39 @@ const TransactionHistoryScreen = () => {
     return outflowTypes.some(t => type.toLowerCase().includes(t));
   };
 
-  const filteredTransactions = (transactions || []).filter(txn => {
-    if (filter === 'all') return true;
-    if (filter === 'inflow') return !isOutflow(txn.type);
-    if (filter === 'outflow') return isOutflow(txn.type);
+  const filterByDate = (transaction: Transaction) => {
+    if (dateFilter === 'all') return true;
+
+    const txnDate = new Date(transaction.createdAt);
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+    if (dateFilter === 'today') {
+      return txnDate >= todayStart;
+    }
+
+    if (dateFilter === 'week') {
+      const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      return txnDate >= weekAgo;
+    }
+
+    if (dateFilter === 'month') {
+      const monthAgo = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate());
+      return txnDate >= monthAgo;
+    }
+
     return true;
-  });
+  };
+
+  const filteredTransactions = (transactions || [])
+    .filter(txn => {
+      // Type filter
+      if (filter === 'inflow' && isOutflow(txn.type)) return false;
+      if (filter === 'outflow' && !isOutflow(txn.type)) return false;
+      
+      // Date filter
+      return filterByDate(txn);
+    });
 
   if (loading) {
     return (
@@ -345,7 +373,7 @@ const TransactionHistoryScreen = () => {
             <Text className={`text-sm font-medium ${
               filter === 'all' ? 'text-white' : 'text-gray-600'
             }`}>
-              All ({transactions.length})
+              All
             </Text>
           </TouchableOpacity>
 
@@ -378,6 +406,74 @@ const TransactionHistoryScreen = () => {
               Outflow
             </Text>
           </TouchableOpacity>
+        </View>
+
+        {/* Date Filter */}
+        <View className="px-4 pt-3">
+          <Text className="text-gray-500 text-xs font-medium mb-2">FILTER BY DATE</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            <View className="flex-row gap-2">
+              <TouchableOpacity
+                className={`py-2 px-4 rounded-full border ${
+                  dateFilter === 'all'
+                    ? 'bg-pink-500 border-pink-500'
+                    : 'bg-white border-gray-200'
+                }`}
+                onPress={() => setDateFilter('all')}
+              >
+                <Text className={`text-sm font-medium ${
+                  dateFilter === 'all' ? 'text-white' : 'text-gray-600'
+                }`}>
+                  All Time
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                className={`py-2 px-4 rounded-full border ${
+                  dateFilter === 'today'
+                    ? 'bg-pink-500 border-pink-500'
+                    : 'bg-white border-gray-200'
+                }`}
+                onPress={() => setDateFilter('today')}
+              >
+                <Text className={`text-sm font-medium ${
+                  dateFilter === 'today' ? 'text-white' : 'text-gray-600'
+                }`}>
+                  Today
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                className={`py-2 px-4 rounded-full border ${
+                  dateFilter === 'week'
+                    ? 'bg-pink-500 border-pink-500'
+                    : 'bg-white border-gray-200'
+                }`}
+                onPress={() => setDateFilter('week')}
+              >
+                <Text className={`text-sm font-medium ${
+                  dateFilter === 'week' ? 'text-white' : 'text-gray-600'
+                }`}>
+                  Last 7 Days
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                className={`py-2 px-4 rounded-full border ${
+                  dateFilter === 'month'
+                    ? 'bg-pink-500 border-pink-500'
+                    : 'bg-white border-gray-200'
+                }`}
+                onPress={() => setDateFilter('month')}
+              >
+                <Text className={`text-sm font-medium ${
+                  dateFilter === 'month' ? 'text-white' : 'text-gray-600'
+                }`}>
+                  Last 30 Days
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </ScrollView>
         </View>
 
         {/* Transactions List */}

@@ -31,16 +31,18 @@ interface Conversation {
     lastSeen?: string;
   }>;
   lastMessage?: {
-    _id: string;
+    _id?: string;
     text: string;
     sender: {
       _id: string;
       firstName: string;
+      lastName?: string;
     };
-    messageType: string;
-    createdAt: string;
+    messageType?: string;
+    createdAt?: string;
+    sentAt: string;
   };
-  unreadCount: number;
+  unreadCount: { [userId: string]: number };
   updatedAt: string;
 }
 
@@ -85,6 +87,7 @@ const ChatListScreen: React.FC = () => {
     try {
       const userData = await getStoredUser();
       if (userData) {
+        console.log('Current user loaded:', userData._id);
         setCurrentUserId(userData._id);
       }
     } catch (error) {
@@ -98,25 +101,56 @@ const ChatListScreen: React.FC = () => {
         setLoading(true);
       }
 
+      console.log('\n🔄 Fetching conversations...');
       const response = await messageAPI.getConversations({
         page: 1,
         limit: 50,
       });
 
+      // Log the full response
+      console.log('\n=== FULL API RESPONSE ===');
+      console.log(JSON.stringify(response, null, 2));
+      console.log('=========================\n');
+
       if (response.success) {
         const convos = response.data.conversations || response.data || [];
+        
+        // Log conversations array
+        console.log('=== CONVERSATIONS ARRAY ===');
+        console.log('Total conversations:', convos.length);
+        console.log(JSON.stringify(convos, null, 2));
+        console.log('===========================\n');
+
+        // Log each conversation individually for easier reading
+        convos.forEach((conv: Conversation, index: number) => {
+          console.log(`\n--- Conversation ${index + 1} ---`);
+          console.log('ID:', conv._id);
+          console.log('Participants:', JSON.stringify(conv.participants, null, 2));
+          console.log('Last Message:', JSON.stringify(conv.lastMessage, null, 2));
+          console.log('Unread Count:', conv.unreadCount);
+          console.log('Updated At:', conv.updatedAt);
+          console.log('------------------------\n');
+        });
+
         setConversations(convos);
 
-        
+        // Calculate total unread count for current user
         const unreadTotal = convos.reduce(
-          (sum: number, conv: Conversation) => sum + (conv.unreadCount || 0),
+          (sum: number, conv: Conversation) => {
+            const userUnreadCount = conv.unreadCount?.[currentUserId || ''] || 0;
+            return sum + userUnreadCount;
+          },
           0
         );
+        console.log('📊 Total unread count for current user:', unreadTotal);
         setTotalUnreadCount(unreadTotal);
+      } else {
+        console.warn('⚠️ API response was not successful');
       }
     } catch (error) {
       const apiError = handleAPIError(error);
-      console.error('Load conversations error:', apiError);
+      console.error('❌ Load conversations error:', apiError);
+      console.error('Full error object:', JSON.stringify(error, null, 2));
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -142,18 +176,8 @@ const ChatListScreen: React.FC = () => {
     const isMyMessage = conversation.lastMessage.sender._id === currentUserId;
     const prefix = isMyMessage ? 'You: ' : '';
 
-    if (conversation.lastMessage.messageType === 'text') {
-      return `${prefix}${conversation.lastMessage.text}`;
-    }
-
-    const typeMap: { [key: string]: string } = {
-      image: '📷 Photo',
-      video: '🎥 Video',
-      audio: '🎤 Voice message',
-      file: '📄 File',
-    };
-
-    return `${prefix}${typeMap[conversation.lastMessage.messageType] || 'Message'}`;
+    // Use the text directly from the API
+    return `${prefix}${conversation.lastMessage.text}`;
   };
 
   const formatTime = (dateString: string) => {
@@ -180,6 +204,8 @@ const ChatListScreen: React.FC = () => {
     const otherUser = getOtherParticipant(conversation);
     if (!otherUser) return;
 
+    console.log('Navigating to chat with:', otherUser.firstName, otherUser.lastName);
+
     navigation.navigate('ChatDetail', {
       otherUserId: otherUser._id,
       otherUserName: `${otherUser.firstName} ${otherUser.lastName}`,
@@ -191,7 +217,9 @@ const ChatListScreen: React.FC = () => {
     const otherUser = getOtherParticipant(item);
     if (!otherUser) return null;
 
-    const hasUnread = (item.unreadCount || 0) > 0;
+    // Get unread count for current user
+    const userUnreadCount = item.unreadCount?.[currentUserId || ''] || 0;
+    const hasUnread = userUnreadCount > 0;
 
     return (
       <TouchableOpacity
@@ -244,7 +272,7 @@ const ChatListScreen: React.FC = () => {
                     hasUnread ? 'text-pink-600 font-bold' : 'text-gray-500'
                   }`}
                 >
-                  {formatTime(item.lastMessage.createdAt)}
+                  {formatTime(item.lastMessage.sentAt)}
                 </Text>
               )}
             </View>
@@ -263,7 +291,7 @@ const ChatListScreen: React.FC = () => {
               {hasUnread && (
                 <View className="ml-2 min-w-[22px] h-[22px] bg-pink-500 rounded-full items-center justify-center px-1.5">
                   <Text className="text-white text-xs font-bold">
-                    {item.unreadCount > 99 ? '99+' : item.unreadCount}
+                    {userUnreadCount > 99 ? '99+' : userUnreadCount}
                   </Text>
                 </View>
               )}

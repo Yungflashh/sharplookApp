@@ -6,12 +6,15 @@ const SOCKET_URL = 'https://sharplook-be.onrender.com';
 class SocketService {
   private socket: Socket | null = null;
   private isConnected: boolean = false;
+  private connectionCallbacks: Array<() => void> = [];
 
   
   async connect(): Promise<void> {
     try {
       if (this.socket?.connected) {
         console.log('🔌 Socket already connected');
+        // Trigger callbacks immediately if already connected
+        this.connectionCallbacks.forEach(cb => cb());
         return;
       }
 
@@ -48,6 +51,9 @@ class SocketService {
       this.isConnected = true;
       console.log('✅ Socket connected successfully');
       console.log('   Socket ID:', this.socket?.id);
+      
+      // Trigger all connection callbacks
+      this.connectionCallbacks.forEach(cb => cb());
     });
 
     this.socket.on('disconnect', (reason) => {
@@ -67,6 +73,16 @@ class SocketService {
     this.socket.on('authenticated', () => {
       console.log('🔐 Socket authenticated successfully');
     });
+  }
+
+  
+  onConnected(callback: () => void): void {
+    this.connectionCallbacks.push(callback);
+    
+    // If already connected, trigger immediately
+    if (this.isConnected) {
+      callback();
+    }
   }
 
   

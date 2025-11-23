@@ -89,7 +89,17 @@ const VendorSidebar: React.FC<VendorSidebarProps> = ({
         navigation.navigate("Analytics")
         onClose();
       }
-    }]
+    },
+      {
+      id: 'referrals',
+      title: 'Referrals',
+      icon: '',
+      onPress: () => {
+        navigation.navigate("Referrals")
+        onClose();
+      }
+    }
+  ]
   }, {
     title: 'STORE',
     items: [{
