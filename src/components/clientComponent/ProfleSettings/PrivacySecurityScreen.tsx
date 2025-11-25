@@ -69,7 +69,10 @@ const PrivacySecurityScreen: React.FC = () => {
 
       
       if (userData && userData.hasWithdrawalPin !== undefined) {
+        console.log('📌 hasWithdrawalPin from backend:', userData.hasWithdrawalPin);
         setHasWithdrawalPin(userData.hasWithdrawalPin);
+      } else {
+        console.log('⚠️ hasWithdrawalPin not found in user data');
       }
     } catch (error) {
       console.error('❌ Error loading preferences:', error);
@@ -164,29 +167,42 @@ const PrivacySecurityScreen: React.FC = () => {
   };
 
   const handleNavigateToSetPin = () => {
+    console.log('🔍 handleNavigateToSetPin called');
+    console.log('📌 hasWithdrawalPin:', hasWithdrawalPin);
     
-    navigation.navigate('SetWithdrawalPin' as never);
-  };
-
-  const handleNavigateToChangePin = () => {
     
-    if (!hasWithdrawalPin) {
+    if (hasWithdrawalPin) {
+      console.log('✅ User has PIN, showing alert to change');
+      
       Alert.alert(
-        'No PIN Set',
-        'You need to set up a withdrawal PIN first before you can change it.',
+        'PIN Already Set',
+        'You already have a withdrawal PIN. Would you like to change it?',
         [
           { text: 'Cancel', style: 'cancel' },
           {
-            text: 'Set PIN Now',
-            onPress: () => navigation.navigate('SetWithdrawalPin' as never),
+            text: 'Change PIN',
+            onPress: () => {
+              console.log('🔄 Navigating to ChangeWithdrawalPin');
+              try {
+                navigation.navigate('ChangeWithdrawalPin' as never);
+              } catch (error) {
+                console.error('❌ Navigation error:', error);
+                Alert.alert('Navigation Error', 'Could not navigate to Change PIN screen. Make sure "ChangeWithdrawalPin" is registered in your navigation stack.');
+              }
+            },
           },
         ]
       );
-      return;
+    } else {
+      console.log('⚠️ User has NO PIN, navigating to SetWithdrawalPin');
+      
+      try {
+        navigation.navigate('SetWithdrawalPin' as never);
+      } catch (error) {
+        console.error('❌ Navigation error:', error);
+        Alert.alert('Navigation Error', 'Could not navigate to Set PIN screen. Make sure "SetWithdrawalPin" is registered in your navigation stack.');
+      }
     }
-    
-    
-    navigation.navigate('ChangeWithdrawalPin' as never);
   };
 
   const getBiometricTitle = () => {
@@ -199,6 +215,7 @@ const PrivacySecurityScreen: React.FC = () => {
     return `Use ${biometricsType || 'biometrics'} to login quickly and securely`;
   };
 
+  
   const securityOptions = [
     {
       icon: 'finger-print',
@@ -234,13 +251,13 @@ const PrivacySecurityScreen: React.FC = () => {
         : 'Secure your wallet transactions',
       type: 'button',
       disabled: loading,
-      onPress: hasWithdrawalPin ? handleNavigateToChangePin : handleNavigateToSetPin,
+      onPress: handleNavigateToSetPin,
     },
   ];
 
   return (
     <SafeAreaView className="flex-1 bg-gray-50" edges={['top']}>
-      {/* Header */}
+      {}
       <View className="bg-white px-5 py-4 border-b border-gray-100">
         <View className="flex-row items-center justify-between">
           <TouchableOpacity
@@ -268,7 +285,7 @@ const PrivacySecurityScreen: React.FC = () => {
           </View>
         ) : (
           <>
-            {/* Security Options */}
+            {}
             <View className="px-5 pt-5">
               <Text className="text-[13px] font-semibold text-gray-500 uppercase tracking-wider mb-2 ml-1">
                 Security Settings
@@ -317,7 +334,7 @@ const PrivacySecurityScreen: React.FC = () => {
               </View>
             </View>
 
-            {/* Privacy Options */}
+            {}
             <View className="px-5 pt-5">
               <Text className="text-[13px] font-semibold text-gray-500 uppercase tracking-wider mb-2 ml-1">
                 Privacy
@@ -361,7 +378,7 @@ const PrivacySecurityScreen: React.FC = () => {
               </View>
             </View>
 
-            {/* Info Box */}
+            {}
             <View className="mx-5 mt-5 bg-blue-50 rounded-xl px-4 py-3 flex-row">
               <Ionicons name="information-circle" size={20} color="#3b82f6" />
               <Text className="flex-1 ml-2 text-xs text-blue-600 leading-5">
@@ -374,7 +391,7 @@ const PrivacySecurityScreen: React.FC = () => {
         )}
       </ScrollView>
 
-      {/* Password Modal */}
+      {}
       <ConfirmPasswordModal
         visible={showPasswordModal}
         onClose={() => setShowPasswordModal(false)}

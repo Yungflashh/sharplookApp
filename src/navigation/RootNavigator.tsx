@@ -56,6 +56,10 @@ import ReferralScreen from '@/components/ReferralScreen';
 import ReferralLeaderboard from '@/components/ReferralLeaderBoard';
 import ApplyReferralCode from '@/components/ApplyReferralCode';
 import ReferralDetailScreen from '@/components/ReferralDetailScreen';
+import WalletPaymentScreen from '@/components/WalletPaymentScreen';
+import ChangeWithdrawalPinScreen from '@/components/clientComponent/ProfleSettings/ChangeWithdrawalPinScreen';
+import SubscriptionScreen from '@/components/vendorComponent/SubscriptionScreen';
+import DisputeOrderDetailScreen from '@/components/DisputeOrderDetailScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const RootNavigator = () => {
@@ -73,7 +77,7 @@ const RootNavigator = () => {
           call: data.call,
           caller: data.caller,
           callType: data.callType || 'voice',
-          offer: data.offer  // Pass the SDP offer
+          offer: data.offer  
         });
       }
     };
@@ -112,7 +116,7 @@ const RootNavigator = () => {
         console.log('🔌 Connecting socket...');
         socketService.connect();
         
-        // Initialize call service AFTER socket connects
+        
         socketService.onConnected(() => {
           console.log('📞 Initializing call service after socket connection');
           callService.initialize();
@@ -178,6 +182,9 @@ const RootNavigator = () => {
           <Stack.Screen name="DisputeDetail" component={DisputeDetailScreen} options={{
         animation: 'slide_from_right'
       }} />
+          <Stack.Screen name="DisputeOrderDetail" component={DisputeOrderDetailScreen} options={{
+        animation: 'slide_from_right'
+      }} />
           <Stack.Screen name="CreateReview" component={CreateReviewScreen} options={{
         animation: 'slide_from_right'
       }} />
@@ -223,10 +230,17 @@ const RootNavigator = () => {
       <Stack.Screen name="SetWithdrawalPin" component={SetWithdrawalPinScreen} options={{
         animation: 'slide_from_right'
       }} />
+
+      <Stack.Screen name="ChangeWithdrawalPin" component={ChangeWithdrawalPinScreen} options={{
+        animation: 'slide_from_right'
+      }} />
       <Stack.Screen name="ChatDetail" component={ChatDetailScreen} options={{
         animation: 'slide_from_right'
       }} />
       <Stack.Screen name="ChatList" component={ChatListScreen} options={{
+        animation: 'slide_from_right'
+      }} />
+      <Stack.Screen name="Subsriptions" component={SubscriptionScreen} options={{
         animation: 'slide_from_right'
       }} />
       {}
@@ -305,6 +319,13 @@ options={{
         headerShown: false
       }}/>
 <Stack.Screen name="ReferralDetail" component={ReferralDetailScreen}  
+options={{
+        animation: 'fade',
+        presentation: 'fullScreenModal',
+        gestureEnabled: false,
+        headerShown: false
+      }} />
+<Stack.Screen name="WalletPayment" component={WalletPaymentScreen}  
 options={{
         animation: 'fade',
         presentation: 'fullScreenModal',

@@ -415,7 +415,7 @@ const BookingDetailScreen: React.FC = () => {
             >
              {status === 'pending' && booking.paymentStatus !== 'escrowed' && !isVendor && (
   <TouchableOpacity
-    onPress={() => setShowPaymentModal(true)} // Open payment method modal
+    onPress={() => setShowPaymentModal(true)} 
     disabled={actionLoading}
     activeOpacity={0.8}
   >
@@ -991,7 +991,7 @@ const BookingDetailScreen: React.FC = () => {
   bookingId={booking?._id || ''}
   bookingAmount={booking?.totalAmount || 0}
   onPaymentSuccess={() => {
-    fetchBookingDetails(); // Refresh booking details
+    fetchBookingDetails(); 
   }}
   onNavigateToPaystack={() => {
     navigation.navigate('Payment', { bookingId: booking?._id });

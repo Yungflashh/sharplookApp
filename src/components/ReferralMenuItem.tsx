@@ -28,11 +28,11 @@ const FloatingReferralButton: React.FC<FloatingReferralButtonProps> = ({
   const [isDragging, setIsDragging] = useState(false);
   const [tooltipVisible, setTooltipVisible] = useState(true);
   
-  // Position state - default to right middle
+  
   const defaultX = SCREEN_WIDTH - 80;
   const defaultY = SCREEN_HEIGHT / 2 - 100;
   
-  // ⭐ ALL animations use native driver FALSE to avoid conflicts
+  
   const pan = useRef(new Animated.ValueXY({ 
     x: initialPosition?.x ?? defaultX,
     y: initialPosition?.y ?? defaultY,
@@ -72,12 +72,12 @@ const FloatingReferralButton: React.FC<FloatingReferralButtonProps> = ({
         Animated.timing(pulseAnim, {
           toValue: 1.15,
           duration: 1000,
-          useNativeDriver: false, // ⭐ Changed to false
+          useNativeDriver: false, 
         }),
         Animated.timing(pulseAnim, {
           toValue: 1,
           duration: 1000,
-          useNativeDriver: false, // ⭐ Changed to false
+          useNativeDriver: false, 
         }),
       ])
     ).start();
@@ -87,7 +87,7 @@ const FloatingReferralButton: React.FC<FloatingReferralButtonProps> = ({
     setTooltipVisible(true);
     Animated.spring(tooltipOpacity, {
       toValue: 1,
-      useNativeDriver: false, // ⭐ Changed to false
+      useNativeDriver: false, 
       tension: 40,
       friction: 7,
     }).start();
@@ -97,7 +97,7 @@ const FloatingReferralButton: React.FC<FloatingReferralButtonProps> = ({
     Animated.timing(tooltipOpacity, {
       toValue: 0,
       duration: 300,
-      useNativeDriver: false, // ⭐ Changed to false
+      useNativeDriver: false, 
     }).start(() => {
       setTooltipVisible(false);
     });
@@ -114,14 +114,14 @@ const FloatingReferralButton: React.FC<FloatingReferralButtonProps> = ({
         
         Animated.spring(scaleAnim, {
           toValue: 0.9,
-          useNativeDriver: false, // ⭐ Changed to false
+          useNativeDriver: false, 
         }).start();
         
-        // @ts-ignore
+        
         pan.setOffset({
-          // @ts-ignore
+          
           x: pan.x._value,
-          // @ts-ignore
+          
           y: pan.y._value,
         });
       },
@@ -134,7 +134,7 @@ const FloatingReferralButton: React.FC<FloatingReferralButtonProps> = ({
       onPanResponderRelease: (_, gesture) => {
         Animated.spring(scaleAnim, {
           toValue: 1,
-          useNativeDriver: false, // ⭐ Changed to false
+          useNativeDriver: false, 
           tension: 40,
           friction: 5,
         }).start();
@@ -147,11 +147,11 @@ const FloatingReferralButton: React.FC<FloatingReferralButtonProps> = ({
           Animated.sequence([
             Animated.spring(scaleAnim, {
               toValue: 0.85,
-              useNativeDriver: false, // ⭐ Changed to false
+              useNativeDriver: false, 
             }),
             Animated.spring(scaleAnim, {
               toValue: 1,
-              useNativeDriver: false, // ⭐ Changed to false
+              useNativeDriver: false, 
             }),
           ]).start();
           
@@ -168,9 +168,9 @@ const FloatingReferralButton: React.FC<FloatingReferralButtonProps> = ({
   ).current;
 
   const snapToEdge = () => {
-    // @ts-ignore
+    
     const currentX = pan.x._value;
-    // @ts-ignore
+    
     const currentY = pan.y._value;
     
     const leftDistance = currentX;
@@ -208,7 +208,7 @@ const FloatingReferralButton: React.FC<FloatingReferralButtonProps> = ({
         ],
       }}
     >
-      {/* Pulse ring effect */}
+      {}
       {!isDragging && (
         <Animated.View
           className="absolute inset-0 rounded-full"
@@ -222,7 +222,7 @@ const FloatingReferralButton: React.FC<FloatingReferralButtonProps> = ({
         />
       )}
       
-      {/* Main button */}
+      {}
       <TouchableOpacity
         activeOpacity={0.9}
         className="rounded-full overflow-hidden"
@@ -240,7 +240,7 @@ const FloatingReferralButton: React.FC<FloatingReferralButtonProps> = ({
         >
           <Ionicons name="gift" size={30} color="#FFFFFF" />
           
-          {/* Badge for pending referrals */}
+          {}
           {stats && stats.pendingReferrals > 0 && (
             <View 
               className="absolute -top-1 -right-1 bg-yellow-400 rounded-full min-w-[22px] h-[22px] items-center justify-center px-1.5"
@@ -262,7 +262,7 @@ const FloatingReferralButton: React.FC<FloatingReferralButtonProps> = ({
         </LinearGradient>
       </TouchableOpacity>
       
-      {/* Tooltip */}
+      {}
       {showTooltip && tooltipVisible && stats && (
         <Animated.View
           className="absolute top-4 right-16 bg-white rounded-xl px-3 py-2.5"
@@ -287,7 +287,7 @@ const FloatingReferralButton: React.FC<FloatingReferralButtonProps> = ({
             </Text>
           )}
           
-          {/* Arrow */}
+          {}
           <View 
             className="absolute -right-1.5 top-5 w-3 h-3 bg-white"
             style={{ 
@@ -297,7 +297,7 @@ const FloatingReferralButton: React.FC<FloatingReferralButtonProps> = ({
         </Animated.View>
       )}
       
-      {/* Drag hint */}
+      {}
       {isDragging && (
         <View 
           className="absolute -bottom-10 left-1/2 bg-gray-900/80 rounded-lg px-3 py-1.5"

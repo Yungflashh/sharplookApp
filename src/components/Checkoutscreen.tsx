@@ -50,16 +50,16 @@ const CheckoutScreen: React.FC = () => {
   const [deliveryType, setDeliveryType] = useState<'home_delivery' | 'pickup'>('home_delivery');
   const [customerNotes, setCustomerNotes] = useState('');
 
-  // Location states
+  
   const [locationLoading, setLocationLoading] = useState(false);
   const [savedLocation, setSavedLocation] = useState<any>(null);
   const [showLocationOptions, setShowLocationOptions] = useState(false);
 
-  // Delivery fee states
+  
   const [deliveryFeeInfo, setDeliveryFeeInfo] = useState<DeliveryFeeInfo | null>(null);
   const [deliveryFeeLoading, setDeliveryFeeLoading] = useState(false);
 
-  // ==================== 💰 SHARPPAY WALLET STATES ====================
+  
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [walletBalance, setWalletBalance] = useState(0);
   const [walletLoading, setWalletLoading] = useState(false);
@@ -96,7 +96,7 @@ const CheckoutScreen: React.FC = () => {
     }
   };
 
-  // ==================== 💰 WALLET BALANCE CHECK ====================
+  
   const fetchWalletBalance = async () => {
     try {
       setWalletLoading(true);
@@ -292,16 +292,16 @@ const CheckoutScreen: React.FC = () => {
     return true;
   };
 
-  // ==================== 💰 PAYMENT METHOD SELECTION ====================
+  
   const handleProceedToPayment = async () => {
     if (!validateForm()) return;
 
-    // Show payment method selection modal
+    
     await fetchWalletBalance();
     setShowPaymentModal(true);
   };
 
-  // ==================== 💰 WALLET PAYMENT ====================
+  
   const handlePayFromWallet = async () => {
     const totalAmount = calculateTotal();
 
@@ -316,7 +316,7 @@ const CheckoutScreen: React.FC = () => {
             text: 'Fund Wallet',
             onPress: () => {
               setShowPaymentModal(false);
-              // Navigate to fund wallet screen
+              
               Alert.alert('Fund Wallet', 'Wallet funding feature coming soon!');
             },
           },
@@ -336,7 +336,7 @@ const CheckoutScreen: React.FC = () => {
             try {
               setPaymentProcessing(true);
 
-              // Create order first
+              
               const orderData = {
                 items: cartItems.map((item: any) => ({
                   product: item.product._id,
@@ -351,7 +351,7 @@ const CheckoutScreen: React.FC = () => {
                         coordinates: deliveryAddress.coordinates,
                       }
                     : undefined,
-                paymentMethod: 'wallet', // ← Important!
+                paymentMethod: 'wallet', 
                 customerNotes: customerNotes.trim() || undefined,
               };
 
@@ -363,11 +363,11 @@ const CheckoutScreen: React.FC = () => {
                 const order = orderResponse.data.order;
                 console.log('✅ Order created:', order._id);
 
-                // Pay from wallet
+                
                 const paymentResponse = await paymentAPI.payOrderFromWallet(order._id);
 
                 if (paymentResponse.success) {
-                  // Clear cart
+                  
                   await cartAPI.clearCart();
 
                   setShowPaymentModal(false);
@@ -394,7 +394,7 @@ const CheckoutScreen: React.FC = () => {
     );
   };
 
-  // ==================== 💳 CARD PAYMENT ====================
+  
   const handlePayWithCard = async () => {
     setShowPaymentModal(false);
 
@@ -427,10 +427,10 @@ const CheckoutScreen: React.FC = () => {
         const order = response.data.order;
         console.log('✅ Order created:', order._id);
 
-        // Clear cart
+        
         await cartAPI.clearCart();
 
-        // Navigate to Paystack payment
+        
         navigation.replace('OrderPayment', {
           orderId: order._id,
           amount: order.totalAmount,
@@ -449,7 +449,7 @@ const CheckoutScreen: React.FC = () => {
 
   return (
     <SafeAreaView className="flex-1 bg-gray-50" edges={['top']}>
-      {/* Header */}
+      {}
       <View className="flex-row items-center px-5 py-4 bg-white border-b border-gray-100">
         <TouchableOpacity
           onPress={() => navigation.goBack()}
@@ -462,7 +462,7 @@ const CheckoutScreen: React.FC = () => {
 
       <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
         <View className="p-5">
-          {/* Delivery Method */}
+          {}
           <View className="mb-6">
             <Text className="text-gray-900 text-lg font-bold mb-3">Delivery Method</Text>
 
@@ -549,7 +549,7 @@ const CheckoutScreen: React.FC = () => {
             </TouchableOpacity>
           </View>
 
-          {/* Delivery Address - Only show for home delivery */}
+          {}
           {deliveryType === 'home_delivery' && (
             <View className="mb-6">
               <View className="flex-row items-center justify-between mb-3">
@@ -564,7 +564,7 @@ const CheckoutScreen: React.FC = () => {
                 </TouchableOpacity>
               </View>
 
-              {/* Location Options */}
+              {}
               {showLocationOptions && (
                 <View className="bg-white rounded-2xl p-4 mb-4" style={{ gap: 12 }}>
                   {savedLocation && (
@@ -608,7 +608,7 @@ const CheckoutScreen: React.FC = () => {
                 </View>
               )}
 
-              {/* Delivery Fee Info */}
+              {}
               {deliveryFeeLoading && (
                 <View className="bg-blue-50 border border-blue-200 rounded-2xl p-4 mb-4 flex-row items-center">
                   <ActivityIndicator size="small" color="#3b82f6" />
@@ -657,7 +657,7 @@ const CheckoutScreen: React.FC = () => {
                 </View>
               )}
 
-              {/* Address Form */}
+              {}
               <View className="bg-white rounded-2xl p-4" style={{ gap: 12 }}>
                 <View>
                   <Text className="text-gray-700 text-sm font-semibold mb-2">Full Name *</Text>
@@ -735,7 +735,7 @@ const CheckoutScreen: React.FC = () => {
             </View>
           )}
 
-          {/* Order Notes */}
+          {}
           <View className="mb-6">
             <Text className="text-gray-900 text-lg font-bold mb-3">Order Notes (Optional)</Text>
             <TextInput
@@ -748,7 +748,7 @@ const CheckoutScreen: React.FC = () => {
             />
           </View>
 
-          {/* Order Summary */}
+          {}
           <View className="bg-white p-5 rounded-2xl mb-6">
             <Text className="text-gray-900 text-lg font-bold mb-4">Order Summary</Text>
 
@@ -782,7 +782,7 @@ const CheckoutScreen: React.FC = () => {
         </View>
       </ScrollView>
 
-      {/* Payment Button */}
+      {}
       <View
         className="bg-white px-5 py-4 border-t border-gray-100"
         style={{
@@ -830,11 +830,11 @@ const CheckoutScreen: React.FC = () => {
         </View>
       </View>
 
-      {/* ==================== 💰 PAYMENT METHOD MODAL ==================== */}
+      {}
       <Modal visible={showPaymentModal} transparent animationType="slide" onRequestClose={() => setShowPaymentModal(false)}>
         <View className="flex-1 bg-black/50 justify-end">
           <View className="bg-white rounded-t-3xl">
-            {/* Modal Header */}
+            {}
             <View className="px-6 py-4 border-b border-gray-100">
               <View className="flex-row items-center justify-between">
                 <Text className="text-xl font-bold text-gray-900">Choose Payment Method</Text>

@@ -80,20 +80,20 @@ const loadReferralData = async () => {
     console.log('Stats response:', statsResponse);
     console.log('Referrals response:', referralsResponse);
     
-    // Stats
+    
     const statsData = statsResponse.data?.stats;
     setStats(statsData);
     
-    // ⭐ FIX: Remove one .data - the array is directly in data
-    const referralsData = referralsResponse.data;  // NOT .data.data
+    
+    const referralsData = referralsResponse.data;  
     
     console.log('Setting referrals:', referralsData?.length || 0, 'items');
     console.log('First referral:', referralsData?.[0]);
     
     setReferrals(referralsData || []);
     
-    // Pagination
-    const pagination = referralsResponse.meta?.pagination;  // Also remove .data here
+    
+    const pagination = referralsResponse.meta?.pagination;  
     setHasMore(pagination?.hasNextPage || false);
   } catch (error) {
     console.error('Error loading referral data:', error);
@@ -117,12 +117,12 @@ const loadMore = async () => {
     const nextPage = page + 1;
     const response = await referralAPI.getMyReferrals({ page: nextPage, limit: 20 });
 
-    const newReferrals = response.data || [];  // ⭐ Direct access to .data
+    const newReferrals = response.data || [];  
     
     setReferrals(prev => [...prev, ...newReferrals]);
     setPage(nextPage);
     
-    const pagination = response.meta?.pagination;  // ⭐ Remove .data
+    const pagination = response.meta?.pagination;  
     setHasMore(pagination?.hasNextPage || false);
   } catch (error) {
     console.error('Error loading more referrals:', error);
@@ -296,7 +296,7 @@ const loadMore = async () => {
         contentContainerStyle={{ paddingBottom: 20 }}
         ListHeaderComponent={
           <>
-            {/* Stats Section */}
+            {}
             <View className="flex-row px-5 py-5 gap-3">
               <View 
                 className="flex-1 bg-white rounded-2xl p-4 items-center"
@@ -357,7 +357,7 @@ const loadMore = async () => {
               </View>
             </View>
 
-            {/* Referral Code Section */}
+            {}
             <View 
               className="mx-5 mb-5 bg-white rounded-2xl p-5"
               style={{
@@ -404,7 +404,7 @@ const loadMore = async () => {
               </Text>
             </View>
 
-            {/* Leaderboard Button */}
+            {}
             <TouchableOpacity
               className="flex-row items-center justify-between mx-5 mb-5 bg-white rounded-xl p-4"
               style={{
@@ -424,7 +424,7 @@ const loadMore = async () => {
               <Ionicons name="chevron-forward" size={24} color="#6B7280" />
             </TouchableOpacity>
 
-            {/* Referrals List Header */}
+            {}
             <View className="flex-row items-center justify-between px-5 pb-3">
               <Text className="text-xl font-bold text-gray-900">Your Referrals</Text>
               <Text className="text-sm text-gray-500">

@@ -100,7 +100,7 @@ const CustomerOrdersScreen: React.FC = () => {
       }
 
       if (response.success) {
-        // Fix: Orders are in response.data.data, not response.data.orders
+        
         let orderList = [];
         
         if (Array.isArray(response.data.data)) {
@@ -118,7 +118,7 @@ const CustomerOrdersScreen: React.FC = () => {
 
         console.log('Raw orderList length:', orderList.length);
 
-        // Add safety check for items array
+        
         const safeOrders = orderList.map((order: any) => ({
           ...order,
           items: Array.isArray(order.items) ? order.items : [],
@@ -247,7 +247,7 @@ const CustomerOrdersScreen: React.FC = () => {
       case 'pending':
         return 'bg-yellow-100 text-yellow-800 border-yellow-200';
       case 'processing':
-      case 'confirmed': // Added confirmed status
+      case 'confirmed': 
         return 'bg-blue-100 text-blue-800 border-blue-200';
       case 'shipped':
         return 'bg-purple-100 text-purple-800 border-purple-200';
@@ -269,7 +269,7 @@ const CustomerOrdersScreen: React.FC = () => {
       case 'pending':
         return 'time';
       case 'processing':
-      case 'confirmed': // Added confirmed status
+      case 'confirmed': 
         return 'hourglass';
       case 'shipped':
         return 'airplane';
@@ -339,7 +339,7 @@ const CustomerOrdersScreen: React.FC = () => {
   };
 
   const renderOrderCard = (order: Order) => {
-    // Safety check for order items
+    
     const orderItems = Array.isArray(order.items) ? order.items : [];
     
     return (
@@ -360,7 +360,7 @@ const CustomerOrdersScreen: React.FC = () => {
           }),
         }}
       >
-        {/* Header */}
+        {}
         <View className="flex-row items-start justify-between mb-4">
           <View className="flex-1 mr-3">
             <Text className="text-lg font-bold text-gray-900 mb-1">Order #{order.orderNumber}</Text>
@@ -396,7 +396,7 @@ const CustomerOrdersScreen: React.FC = () => {
           </View>
         </View>
 
-        {/* Items List */}
+        {}
         {orderItems.length > 0 && (
           <View className="bg-gray-50 rounded-2xl p-4 mb-4">
             {orderItems.map((item, index) => (
@@ -434,7 +434,7 @@ const CustomerOrdersScreen: React.FC = () => {
           </View>
         )}
 
-        {/* Tracking Info */}
+        {}
         {order.trackingNumber && (
           <View className="bg-purple-50 rounded-2xl p-4 mb-4">
             <View className="flex-row items-center">
@@ -450,7 +450,7 @@ const CustomerOrdersScreen: React.FC = () => {
           </View>
         )}
 
-        {/* Order Details */}
+        {}
         <View className="bg-gray-50 rounded-2xl p-4 mb-4" style={{ gap: 12 }}>
           <View className="flex-row items-center">
             <View className="w-9 h-9 rounded-xl bg-blue-100 items-center justify-center mr-3">
@@ -519,7 +519,7 @@ const CustomerOrdersScreen: React.FC = () => {
           </View>
         </View>
 
-        {/* Delivery Confirmation Status */}
+        {}
         {order.status === 'delivered' && (
           <View className="bg-blue-50 rounded-2xl p-3 mb-4">
             <View className="flex-row items-center justify-between">
@@ -543,10 +543,10 @@ const CustomerOrdersScreen: React.FC = () => {
           </View>
         )}
 
-        {/* Action Buttons */}
+        {}
         {getActionButtons(order)}
 
-        {/* View Details Button */}
+        {}
         <TouchableOpacity
           onPress={() => navigation.navigate('OrderDetail', { orderId: order._id, userType: 'customer' })}
           className="mt-3 pt-4 border-t border-gray-100"
@@ -625,7 +625,7 @@ const CustomerOrdersScreen: React.FC = () => {
 
   return (
     <SafeAreaView className="flex-1 bg-gray-50" edges={['top']}>
-      {/* Header */}
+      {}
       <LinearGradient
         colors={['#eb278d', '#f472b6']}
         start={{ x: 0, y: 0 }}
@@ -642,7 +642,7 @@ const CustomerOrdersScreen: React.FC = () => {
             </View>
           </View>
 
-          {/* Search Bar */}
+          {}
           <View className="flex-row items-center bg-white/20 rounded-2xl px-4 py-3 mb-4">
             <Ionicons name="search" size={20} color="#fff" />
             <TextInput
@@ -659,7 +659,7 @@ const CustomerOrdersScreen: React.FC = () => {
             )}
           </View>
 
-          {/* Filter Tabs */}
+          {}
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -687,7 +687,7 @@ const CustomerOrdersScreen: React.FC = () => {
         </View>
       </LinearGradient>
 
-      {/* Orders List */}
+      {}
       <ScrollView
         className="flex-1"
         showsVerticalScrollIndicator={false}

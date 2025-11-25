@@ -7,6 +7,7 @@ import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '@/types/navigation.types';
 import { orderAPI, handleAPIError } from '@/api/api';
+import socketService from '@/services/socket.service';
 
 type OrderPaymentNavigationProp = NativeStackNavigationProp<RootStackParamList, 'OrderPayment'>;
 type OrderPaymentRouteProp = RouteProp<RootStackParamList, 'OrderPayment'>;
@@ -20,82 +21,105 @@ const OrderPaymentScreen: React.FC = () => {
   const [paymentUrl, setPaymentUrl] = useState('');
   const [reference, setReference] = useState('');
   const [verifying, setVerifying] = useState(false);
-  const [showDoneButton, setShowDoneButton] = useState(false);
-  const [confirmingPayment, setConfirmingPayment] = useState(false);
+  const [paymentConfirmed, setPaymentConfirmed] = useState(false);
+  const [socketConnected, setSocketConnected] = useState(false);
+  const [showManualButton, setShowManualButton] = useState(false);
 
+  
   useEffect(() => {
     initializePayment();
   }, [orderId]);
 
+  
   useEffect(() => {
-    if (!reference || verifying || !paymentUrl) return;
+    if (!paymentUrl || paymentConfirmed) return;
+
+    const timer = setTimeout(() => {
+      if (!paymentConfirmed) {
+        setShowManualButton(true);
+      }
+    }, 10000); 
+
+    return () => clearTimeout(timer);
+  }, [paymentUrl, paymentConfirmed]);
+
+  
+  useEffect(() => {
+    if (!reference) return;
+
+    console.log('🔌 Setting up order payment socket listener for:', reference);
 
     
-    const doneButtonTimer = setTimeout(() => {
-      setShowDoneButton(true);
-    }, 15000);
+    const connected = socketService.isSocketConnected();
+    setSocketConnected(connected);
+
+    if (!connected) {
+      console.log('🔌 Socket not connected, attempting to connect...');
+      socketService.connect();
+    }
 
     
-    const startPollingTimer = setTimeout(() => {
-      console.log('🔄 Starting automatic payment polling...');
-      setConfirmingPayment(true);
-
-      const pollInterval = setInterval(async () => {
-        try {
-          console.log('📊 Polling payment status for:', reference);
-          const response = await orderAPI.verifyOrderPayment(orderId, reference);
-
-          if (response.success) {
-            const order = response.data.order;
-            
-            if (order.isPaid) {
-              console.log('✅ Payment confirmed via polling!');
-              clearInterval(pollInterval);
-              setVerifying(false);
-              setShowDoneButton(false);
-              setConfirmingPayment(false);
-
-              setTimeout(() => {
-                Alert.alert(
-                  'Payment Successful! 🎉',
-                  `Your order #${orderNumber} has been paid successfully. The seller will process your order shortly.`,
-                  [
-                    {
-                      text: 'View Order',
-                      onPress: () => {
-                        navigation.replace('OrderDetail', { orderId });
-                      },
-                    },
-                  ],
-                  { cancelable: false }
-                );
-              }, 300);
-            }
-          }
-        } catch (error) {
-          console.log('Poll error (will retry):', error);
-        }
-      }, 5000); 
+    const handlePaymentSuccess = (data: any) => {
+      console.log('💰 Order payment success received via socket:', data);
 
       
-      setTimeout(() => {
-        console.log('⏱️ Stopping payment polling');
-        clearInterval(pollInterval);
-        setConfirmingPayment(false);
-      }, 180000);
+      if (data.reference === reference || data.orderId === orderId) {
+        console.log('✅ This payment matches our reference!');
+        setPaymentConfirmed(true);
+        setVerifying(false);
+        setShowManualButton(false);
 
-      return () => clearInterval(pollInterval);
-    }, 20000);
-
-    return () => {
-      clearTimeout(doneButtonTimer);
-      clearTimeout(startPollingTimer);
+        
+        setTimeout(() => {
+          Alert.alert(
+            'Payment Successful! 🎉',
+            `Your order #${orderNumber} has been paid successfully. The seller will process your order shortly.`,
+            [
+              {
+                text: 'View Order',
+                onPress: () => navigation.replace('OrderDetail', { orderId }),
+              },
+            ],
+            { cancelable: false }
+          );
+        }, 500);
+      }
     };
-  }, [reference, verifying, paymentUrl]);
+
+    
+    const handlePaymentFailed = (data: any) => {
+      console.log('❌ Order payment failed received via socket:', data);
+
+      if (data.reference === reference || data.orderId === orderId) {
+        setVerifying(false);
+        Alert.alert(
+          'Payment Failed',
+          data.reason || 'Your payment could not be completed. Please try again.',
+          [
+            { text: 'Try Again', onPress: () => initializePayment() },
+            { text: 'Cancel', style: 'cancel', onPress: () => navigation.goBack() },
+          ]
+        );
+      }
+    };
+
+    
+    socketService.onOrderPaymentSuccess(handlePaymentSuccess);
+    socketService.onOrderPaymentFailed(handlePaymentFailed);
+
+    
+    return () => {
+      console.log('🧹 Cleaning up order payment socket listeners');
+      socketService.removeListener('order:payment:success');
+      socketService.removeListener('order:payment:failed');
+    };
+  }, [reference, orderId, orderNumber, navigation]);
 
   const initializePayment = async () => {
     try {
       setLoading(true);
+      setPaymentConfirmed(false);
+      setShowManualButton(false);
 
       const response = await orderAPI.initializeOrderPayment({
         orderId,
@@ -120,15 +144,8 @@ const OrderPaymentScreen: React.FC = () => {
         'Payment Error',
         apiError.message || 'Failed to initialize payment',
         [
-          {
-            text: 'Try Again',
-            onPress: () => initializePayment(),
-          },
-          {
-            text: 'Cancel',
-            style: 'cancel',
-            onPress: () => navigation.goBack(),
-          },
+          { text: 'Try Again', onPress: () => initializePayment() },
+          { text: 'Cancel', style: 'cancel', onPress: () => navigation.goBack() },
         ]
       );
     } finally {
@@ -136,122 +153,84 @@ const OrderPaymentScreen: React.FC = () => {
     }
   };
 
-  const handleNavigationStateChange = async (navState: any) => {
-    const { url } = navState;
-    console.log('Navigation state changed:', url);
-
-    
-    if (
-      url.includes('/payment/verify') ||
-      url.includes('sharpLook://') ||
-      url.includes('status=success') ||
-      url.includes('trxref=')
-    ) {
-      console.log('Payment callback detected');
-      if (!verifying) {
-        await verifyPayment();
-      }
-      return;
-    }
-
-    
-    if (url.includes('status=cancelled') || url.includes('cancel')) {
-      Alert.alert(
-        'Payment Cancelled',
-        'Your payment was cancelled. Would you like to try again?',
-        [
-          {
-            text: 'No',
-            style: 'cancel',
-            onPress: () => navigation.goBack(),
-          },
-          {
-            text: 'Yes',
-            onPress: () => initializePayment(),
-          },
-        ]
-      );
-    }
-  };
-
   const verifyPayment = async () => {
+    if (verifying || paymentConfirmed) return;
+
     try {
       setVerifying(true);
-      console.log('Verifying payment:', reference);
+      console.log('🔍 Manually verifying order payment:', reference);
 
       const response = await orderAPI.verifyOrderPayment(orderId, reference);
-
-      console.log('Payment verification:', response);
+      console.log('📊 Payment verification:', response);
 
       if (response.success) {
         const order = response.data.order;
 
         if (order.isPaid) {
           setVerifying(false);
+          setPaymentConfirmed(true);
+          setShowManualButton(false);
 
-          setTimeout(() => {
-            Alert.alert(
-              'Payment Successful! 🎉',
-              `Your order #${orderNumber} has been paid successfully. The seller will process your order shortly.`,
-              [
-                {
-                  text: 'View Order',
-                  onPress: () => {
-                    navigation.replace('OrderDetail', { orderId });
-                  },
-                },
-              ],
-              { cancelable: false }
-            );
-          }, 300);
+          Alert.alert(
+            'Payment Successful! 🎉',
+            `Your order #${orderNumber} has been paid successfully. The seller will process your order shortly.`,
+            [
+              {
+                text: 'View Order',
+                onPress: () => navigation.replace('OrderDetail', { orderId }),
+              },
+            ],
+            { cancelable: false }
+          );
         } else {
           setVerifying(false);
+
           Alert.alert(
             'Payment Pending',
-            'Your payment is being processed. Please wait...',
+            'Your payment is still being processed. Please wait a moment and try again.',
             [{ text: 'OK' }]
           );
         }
+      } else {
+        setVerifying(false);
+        Alert.alert('Error', 'Could not verify payment. Please try again.');
       }
     } catch (error) {
       const apiError = handleAPIError(error);
-      console.error('Payment verification error:', apiError);
+      console.error('❌ Payment verification error:', apiError);
       setVerifying(false);
 
       Alert.alert(
         'Verification Error',
         'Could not verify payment. Please contact support if you were charged.',
-        [
-          {
-            text: 'OK',
-            onPress: () => navigation.goBack(),
-          },
-        ]
+        [{ text: 'OK' }]
       );
     }
   };
 
-  const handleWebViewError = (syntheticEvent: any) => {
-    const { nativeEvent } = syntheticEvent;
-    console.error('WebView error:', nativeEvent);
-
+  const handleCancel = () => {
     Alert.alert(
-      'Connection Error',
-      'Failed to load payment page. Please check your internet connection.',
+      'Cancel Payment',
+      'Are you sure you want to cancel this payment? Your order will not be processed.',
       [
-        {
-          text: 'Try Again',
-          onPress: () => initializePayment(),
-        },
-        {
-          text: 'Cancel',
-          style: 'cancel',
-          onPress: () => navigation.goBack(),
-        },
+        { text: 'No', style: 'cancel' },
+        { text: 'Yes', style: 'destructive', onPress: () => navigation.goBack() },
       ]
     );
   };
 
+  const handleWebViewError = () => {
+    Alert.alert(
+      'Connection Error',
+      'Failed to load payment page. Please check your internet connection.',
+      [
+        { text: 'Try Again', onPress: () => initializePayment() },
+        { text: 'Cancel', style: 'cancel', onPress: () => navigation.goBack() },
+      ]
+    );
+  };
+
+  
   if (loading) {
     return (
       <SafeAreaView className="flex-1 bg-white">
@@ -263,6 +242,30 @@ const OrderPaymentScreen: React.FC = () => {
     );
   }
 
+  
+  if (paymentConfirmed) {
+    return (
+      <SafeAreaView className="flex-1 bg-white">
+        <View className="flex-1 items-center justify-center p-5">
+          <View className="w-24 h-24 rounded-full bg-green-100 items-center justify-center mb-6">
+            <Ionicons name="checkmark-circle" size={60} color="#10b981" />
+          </View>
+          <Text className="text-2xl font-bold text-gray-900 mb-2">Payment Successful!</Text>
+          <Text className="text-gray-600 text-center mb-6">
+            Your order #{orderNumber} has been paid successfully.
+          </Text>
+          <TouchableOpacity
+            onPress={() => navigation.replace('OrderDetail', { orderId })}
+            className="bg-pink-600 px-8 py-4 rounded-2xl"
+          >
+            <Text className="text-white font-bold text-base">View Order</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  
   if (verifying) {
     return (
       <SafeAreaView className="flex-1 bg-white">
@@ -281,23 +284,7 @@ const OrderPaymentScreen: React.FC = () => {
       <View className="bg-white px-5 py-4 border-b border-gray-100">
         <View className="flex-row items-center justify-between">
           <TouchableOpacity
-            onPress={() => {
-              Alert.alert(
-                'Cancel Payment',
-                'Are you sure you want to cancel this payment? Your order will not be processed.',
-                [
-                  {
-                    text: 'No',
-                    style: 'cancel',
-                  },
-                  {
-                    text: 'Yes',
-                    style: 'destructive',
-                    onPress: () => navigation.goBack(),
-                  },
-                ]
-              );
-            }}
+            onPress={handleCancel}
             className="w-10 h-10 rounded-full bg-gray-100 items-center justify-center"
           >
             <Ionicons name="close" size={24} color="#1f2937" />
@@ -322,42 +309,26 @@ const OrderPaymentScreen: React.FC = () => {
             </View>
           </View>
         </View>
+
+        {}
+        <View className="mt-3 flex-row items-center justify-center">
+          <View
+            className={`w-2 h-2 rounded-full mr-2 ${
+              socketConnected ? 'bg-green-500' : 'bg-yellow-500'
+            }`}
+          />
+          <Text className="text-xs text-gray-500">
+            {socketConnected ? 'Live updates enabled' : 'Connecting...'}
+          </Text>
+        </View>
       </View>
 
       {}
       {paymentUrl ? (
-        <>
+        <View className="flex-1">
           <WebView
             source={{ uri: paymentUrl }}
-            onNavigationStateChange={handleNavigationStateChange}
             onError={handleWebViewError}
-            onMessage={(event) => {
-              console.log('WebView message:', event.nativeEvent.data);
-              try {
-                const data = JSON.parse(event.nativeEvent.data);
-                if (data.event === 'success' || data.status === 'success') {
-                  console.log('Payment success message received');
-                  if (!verifying) {
-                    verifyPayment();
-                  }
-                }
-              } catch (e) {
-                
-              }
-            }}
-            onShouldStartLoadWithRequest={(request) => {
-              console.log('Should start load:', request.url);
-
-              if (request.url.startsWith('sharpLook://')) {
-                console.log('Deep link detected:', request.url);
-                if (request.url.includes('payment/verify') && !verifying) {
-                  verifyPayment();
-                }
-                return false;
-              }
-
-              return true;
-            }}
             startInLoadingState={true}
             renderLoading={() => (
               <View className="flex-1 items-center justify-center bg-white">
@@ -374,87 +345,40 @@ const OrderPaymentScreen: React.FC = () => {
           />
 
           {}
-          {showDoneButton && !verifying && !confirmingPayment && (
-            <View className="absolute bottom-20 left-5 right-5">
+          {showManualButton && (
+            <View className="px-5 py-4 bg-white border-t border-gray-100">
               <TouchableOpacity
-                onPress={() => {
-                  Alert.alert(
-                    'Verify Payment',
-                    'Have you completed the payment successfully?',
-                    [
-                      {
-                        text: 'Not Yet',
-                        style: 'cancel',
-                      },
-                      {
-                        text: 'Yes, Verify Now',
-                        onPress: () => {
-                          if (!verifying && reference) {
-                            setShowDoneButton(false);
-                            setConfirmingPayment(true);
-                            verifyPayment();
-                          }
-                        },
-                      },
-                    ]
-                  );
-                }}
-                className="bg-pink-600 py-4 rounded-2xl shadow-lg"
+                onPress={verifyPayment}
+                disabled={verifying}
+                className={`py-4 rounded-2xl ${verifying ? 'bg-gray-400' : 'bg-pink-600'}`}
                 style={{
                   shadowColor: '#000',
                   shadowOffset: { width: 0, height: 4 },
-                  shadowOpacity: 0.3,
+                  shadowOpacity: 0.2,
                   shadowRadius: 8,
-                  elevation: 8,
+                  elevation: 6,
                 }}
               >
-                <Text className="text-white text-center text-base font-bold">
-                  ✓ I've Completed Payment
-                </Text>
+                {verifying ? (
+                  <View className="flex-row items-center justify-center">
+                    <ActivityIndicator size="small" color="#fff" />
+                    <Text className="text-white text-center text-base font-bold ml-2">
+                      Verifying...
+                    </Text>
+                  </View>
+                ) : (
+                  <Text className="text-white text-center text-base font-bold">
+                    ✓ I've Completed Payment
+                  </Text>
+                )}
               </TouchableOpacity>
+
+              <Text className="text-gray-400 text-xs text-center mt-2">
+                Tap if payment doesn't auto-confirm
+              </Text>
             </View>
           )}
-
-          {/* Confirming Payment Overlay */}
-          {confirmingPayment && (
-            <View className="absolute inset-0 bg-white/95 items-center justify-center">
-              <View
-                className="bg-white rounded-3xl p-8 shadow-2xl items-center"
-                style={{
-                  shadowColor: '#000',
-                  shadowOffset: { width: 0, height: 8 },
-                  shadowOpacity: 0.15,
-                  shadowRadius: 16,
-                  elevation: 12,
-                }}
-              >
-                <View className="w-20 h-20 rounded-full bg-pink-100 items-center justify-center mb-4">
-                  <ActivityIndicator size="large" color="#eb278d" />
-                </View>
-
-                <Text className="text-xl font-bold text-gray-900 mb-2">
-                  Confirming Payment
-                </Text>
-
-                <Text className="text-gray-600 text-center mb-4">
-                  Please wait while we verify your payment...
-                </Text>
-
-                <View className="flex-row items-center gap-2">
-                  <View className="w-2 h-2 bg-pink-500 rounded-full animate-pulse" />
-                  <View
-                    className="w-2 h-2 bg-pink-400 rounded-full animate-pulse"
-                    style={{ animationDelay: '0.2s' }}
-                  />
-                  <View
-                    className="w-2 h-2 bg-pink-300 rounded-full animate-pulse"
-                    style={{ animationDelay: '0.4s' }}
-                  />
-                </View>
-              </View>
-            </View>
-          )}
-        </>
+        </View>
       ) : (
         <View className="flex-1 items-center justify-center p-5">
           <Ionicons name="alert-circle-outline" size={64} color="#d1d5db" />
@@ -470,7 +394,7 @@ const OrderPaymentScreen: React.FC = () => {
         </View>
       )}
 
-      {/* Footer */}
+      {}
       <View className="bg-gray-50 px-5 py-3 border-t border-gray-100">
         <View className="flex-row items-center justify-center">
           <Ionicons name="lock-closed" size={16} color="#10b981" />

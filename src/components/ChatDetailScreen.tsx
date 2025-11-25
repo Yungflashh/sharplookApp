@@ -323,25 +323,25 @@ const ChatDetailScreen: React.FC = () => {
     }
   }, [currentUserId]);
 
-  // Scroll to bottom ONLY after initial messages load
+  
   const hasScrolledOnLoad = useRef(false);
   
   useEffect(() => {
     if (messages.length > 0 && !loading && !hasScrolledOnLoad.current) {
-      // Multiple scroll attempts to ensure it works on first load only
+      
       const scrollToBottom = () => {
         flatListRef.current?.scrollToEnd({ animated: false });
       };
 
-      // Immediate scroll
+      
       scrollToBottom();
 
-      // Delayed scrolls for reliability
+      
       const timer1 = setTimeout(scrollToBottom, 100);
       const timer2 = setTimeout(scrollToBottom, 300);
       const timer3 = setTimeout(scrollToBottom, 500);
       
-      // Mark that we've scrolled once
+      
       hasScrolledOnLoad.current = true;
       
       return () => {
@@ -371,7 +371,7 @@ const ChatDetailScreen: React.FC = () => {
 
   const initializeConversation = async () => {
   try {
-    // ✅ ADD THIS VALIDATION
+    
     if (!otherUserId) {
       console.error('❌ No otherUserId provided');
       Alert.alert('Error', 'Invalid user. Please go back and try again.');
@@ -463,20 +463,20 @@ const ChatDetailScreen: React.FC = () => {
     console.log('   - Other user ID:', otherUserId);
     console.log('   - Conversation ID:', conversationId);
 
-    // ✅ FIRST: Initiate the call with the backend
+    
     await callService.initiateCall(
       otherUserId,
       type,
-      undefined, // Offer will be created later
+      undefined, 
       conversationId || undefined
     );
 
     console.log('   ✅ Call initiation sent to backend');
     console.log('   - Navigating to OngoingCall screen...');
 
-    // ✅ THEN: Navigate to the OngoingCall screen
+    
     navigation.navigate('OngoingCall', {
-      callId: undefined, // Will be set when call:initiated event is received
+      callId: undefined, 
       callType: type,
       isOutgoing: true,
       otherUser: {
@@ -755,21 +755,21 @@ const ChatDetailScreen: React.FC = () => {
         flatListRef.current?.scrollToIndex({
           index: messageIndex,
           animated: true,
-          viewPosition: 0.5, // Center the message on screen
+          viewPosition: 0.5, 
         });
         
-        // Highlight the message briefly
+        
         setHighlightedMessageId(messageId);
         setTimeout(() => {
           setHighlightedMessageId(null);
-        }, 2000); // Remove highlight after 2 seconds
+        }, 2000); 
       } catch (error) {
-        // Fallback: If scrollToIndex fails, scroll to offset
+        
         console.log('ScrollToIndex failed, trying alternative method');
         flatListRef.current?.scrollToEnd({ animated: true });
       }
     } else {
-      // Message not found in current list (might be older, not loaded yet)
+      
       Alert.alert(
         'Message Not Found',
         'The original message might have been deleted or is not loaded yet.'
@@ -852,10 +852,10 @@ const ChatDetailScreen: React.FC = () => {
         <View className="px-4 py-3">
           <View className="bg-pink-50 rounded-2xl overflow-hidden">
             <View className="flex-row items-center p-3">
-              {/* Left accent bar */}
+              {}
               <View className="w-1 h-full absolute left-0 bg-pink-500" />
               
-              {/* Avatar */}
+              {}
               <View className="ml-3 w-10 h-10 rounded-full bg-white items-center justify-center overflow-hidden mr-3"
                 style={{
                   shadowColor: '#000',
@@ -878,7 +878,7 @@ const ChatDetailScreen: React.FC = () => {
                 )}
               </View>
 
-              {/* Content */}
+              {}
               <View className="flex-1">
                 <View className="flex-row items-center mb-1">
                   <Ionicons name="arrow-undo" size={12} color="#eb278d" />
@@ -891,7 +891,7 @@ const ChatDetailScreen: React.FC = () => {
                 </Text>
               </View>
 
-              {/* Close button */}
+              {}
               <TouchableOpacity
                 onPress={() => setReplyingTo(null)}
                 className="w-7 h-7 rounded-full bg-white items-center justify-center ml-3"
@@ -978,7 +978,7 @@ const ChatDetailScreen: React.FC = () => {
         className="flex-1"
         keyboardVerticalOffset={0}
       >
-        {/* Header */}
+        {}
         <LinearGradient
           colors={['#eb278d', '#f472b6']}
           start={{ x: 0, y: 0 }}
@@ -1061,7 +1061,7 @@ const ChatDetailScreen: React.FC = () => {
         </View>
       </LinearGradient>
 
-        {/* Messages List */}
+        {}
         <FlatList
           ref={flatListRef}
           data={messages}
@@ -1078,7 +1078,7 @@ const ChatDetailScreen: React.FC = () => {
           showsVerticalScrollIndicator={false}
           extraData={`${isOtherUserTyping}-${highlightedMessageId}`}
           onScrollToIndexFailed={(info) => {
-            // Handle scroll failure gracefully
+            
             const wait = new Promise(resolve => setTimeout(resolve, 500));
             wait.then(() => {
               flatListRef.current?.scrollToIndex({ 
@@ -1110,13 +1110,13 @@ const ChatDetailScreen: React.FC = () => {
         }
       />
 
-        {/* Reply Preview */}
+        {}
         {renderReplyPreview()}
 
-        {/* Media Preview */}
+        {}
         {renderMediaPreview()}
 
-        {/* Recording UI */}
+        {}
         {isRecording && (
         <View className="bg-gradient-to-r from-red-50 to-pink-50 border-t border-red-100">
           <View className="px-4 py-4">
@@ -1157,7 +1157,7 @@ const ChatDetailScreen: React.FC = () => {
         </View>
         )}
 
-        {/* Input Area */}
+        {}
         <View
         className="bg-white border-t border-gray-100"
         style={{
@@ -1250,7 +1250,7 @@ const ChatDetailScreen: React.FC = () => {
           </View>
         </View>
 
-        {/* Attachment Menu Modal */}
+        {}
         <AttachmentMenuModal
         visible={showAttachmentMenu}
         onClose={() => setShowAttachmentMenu(false)}
@@ -1264,7 +1264,7 @@ const ChatDetailScreen: React.FC = () => {
   );
 };
 
-// Swipeable Message Component
+
 const SwipeableMessage: React.FC<{
   message: Message;
   isMyMessage: boolean;
@@ -1496,7 +1496,7 @@ const SwipeableMessage: React.FC<{
   );
 };
 
-// Attachment Menu Modal
+
 const AttachmentMenuModal: React.FC<{
   visible: boolean;
   onClose: () => void;

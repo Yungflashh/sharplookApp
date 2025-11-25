@@ -16,7 +16,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '@/types/navigation.types';
-import { orderAPI, disputeAPI, handleAPIError } from '@/api/api';
+import { orderAPI, handleAPIError } from '@/api/api';
 
 type OrderDetailRouteProp = RouteProp<RootStackParamList, 'OrderDetail'>;
 type OrderDetailNavigationProp = NativeStackNavigationProp<RootStackParamList, 'OrderDetail'>;
@@ -86,6 +86,17 @@ interface Order {
   createdAt: string;
 }
 
+
+type DisputeReason = 
+  | 'product_not_received'
+  | 'product_damaged'
+  | 'wrong_product'
+  | 'product_not_as_described'
+  | 'quality_issue'
+  | 'delivery_issue'
+  | 'payment_issue'
+  | 'other';
+
 const OrderDetailScreen: React.FC = () => {
   const navigation = useNavigation<OrderDetailNavigationProp>();
   const route = useRoute<OrderDetailRouteProp>();
@@ -94,9 +105,8 @@ const OrderDetailScreen: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [order, setOrder] = useState<Order | null>(null);
   const [showDisputeForm, setShowDisputeForm] = useState(false);
-  const [disputeReason, setDisputeReason] = useState('');
+  const [disputeReason, setDisputeReason] = useState<DisputeReason>('product_not_as_described');
   const [disputeDescription, setDisputeDescription] = useState('');
-  const [disputeCategory, setDisputeCategory] = useState('product_issue');
   const [creatingDispute, setCreatingDispute] = useState(false);
 
   useEffect(() => {
@@ -188,8 +198,21 @@ const OrderDetailScreen: React.FC = () => {
   const handleCreateDispute = async () => {
     if (!order) return;
 
-    if (!disputeReason.trim() || !disputeDescription.trim()) {
-      Alert.alert('Required', 'Please provide reason and description for the dispute');
+    
+    const trimmedDescription = disputeDescription.trim();
+    
+    if (!trimmedDescription) {
+      Alert.alert('Required', 'Please provide a description for the dispute');
+      return;
+    }
+
+    if (trimmedDescription.length < 20) {
+      Alert.alert('Too Short', 'Please provide a more detailed description (at least 20 characters)');
+      return;
+    }
+
+    if (trimmedDescription.length > 2000) {
+      Alert.alert('Too Long', 'Description cannot exceed 2000 characters');
       return;
     }
 
@@ -197,13 +220,14 @@ const OrderDetailScreen: React.FC = () => {
       setCreatingDispute(true);
 
       const disputeData = {
-        bookingId: order._id,
-        reason: disputeReason.trim(),
-        description: disputeDescription.trim(),
-        category: disputeCategory,
+        order: order._id,         
+        reason: disputeReason,    
+        description: trimmedDescription,
       };
 
-      const response = await disputeAPI.createDispute(disputeData);
+      console.log('Creating dispute with data:', disputeData);
+
+      const response = await orderAPI.createDispute(disputeData);
 
       if (response.success) {
         Alert.alert(
@@ -214,6 +238,7 @@ const OrderDetailScreen: React.FC = () => {
               text: 'OK',
               onPress: () => {
                 setShowDisputeForm(false);
+                setDisputeDescription('');
                 fetchOrder();
               },
             },
@@ -228,6 +253,19 @@ const OrderDetailScreen: React.FC = () => {
     }
   };
 
+ const handleFetchDisputeStatus = async ()=>{
+  if (order?.dispute){
+    const response = await orderAPI.getDisputeById(order.dispute)
+    const disputeorderId = response.data.dispute._id
+    console.log(response.data.dispute._id);
+    
+    
+    navigation.navigate("DisputeOrderDetail", { 
+      disputeorderId,
+      userType: 'customer' 
+    })
+  }
+}
   const formatPrice = (price: number) => {
     return `₦${price.toLocaleString()}`;
   };
@@ -281,9 +319,21 @@ const OrderDetailScreen: React.FC = () => {
   const orderItems = Array.isArray(order.items) ? order.items : [];
   const orderTimeline = Array.isArray(order.timeline) ? order.timeline : [];
 
+  
+  const disputeCategories = [
+    { key: 'product_not_as_described' as DisputeReason, label: 'Not As Described', icon: 'document-text' },
+    { key: 'product_not_received' as DisputeReason, label: 'Not Received', icon: 'close-circle' },
+    { key: 'product_damaged' as DisputeReason, label: 'Damaged', icon: 'alert-circle' },
+    { key: 'wrong_product' as DisputeReason, label: 'Wrong Product', icon: 'swap-horizontal' },
+    { key: 'quality_issue' as DisputeReason, label: 'Quality Issue', icon: 'thumbs-down' },
+    { key: 'delivery_issue' as DisputeReason, label: 'Delivery Issue', icon: 'car' },
+    { key: 'payment_issue' as DisputeReason, label: 'Payment Issue', icon: 'card' },
+    { key: 'other' as DisputeReason, label: 'Other', icon: 'ellipsis-horizontal' },
+  ];
+
   return (
     <SafeAreaView className="flex-1 bg-gray-50" edges={['top']}>
-      {/* Header */}
+      {}
       <LinearGradient
         colors={['#eb278d', '#f472b6']}
         start={{ x: 0, y: 0 }}
@@ -315,7 +365,7 @@ const OrderDetailScreen: React.FC = () => {
 
       <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
         <View className="p-4">
-          {/* Order Status Card */}
+          {}
           <View className="bg-white rounded-3xl p-5 mb-4"
             style={{
               shadowColor: '#000',
@@ -340,7 +390,7 @@ const OrderDetailScreen: React.FC = () => {
               </View>
             </View>
 
-            {/* Timeline */}
+            {}
             {orderTimeline.length > 0 && (
               <View style={{ gap: 16 }}>
                 {orderTimeline.map((event, index) => (
@@ -383,7 +433,7 @@ const OrderDetailScreen: React.FC = () => {
             )}
           </View>
 
-          {/* Order Items Card */}
+          {}
           {orderItems.length > 0 && (
             <View className="bg-white rounded-3xl p-5 mb-4"
               style={{
@@ -444,7 +494,7 @@ const OrderDetailScreen: React.FC = () => {
             </View>
           )}
 
-          {/* Contact Information Card */}
+          {}
           <View className="bg-white rounded-3xl p-5 mb-4"
             style={{
               shadowColor: '#000',
@@ -499,7 +549,7 @@ const OrderDetailScreen: React.FC = () => {
             )}
           </View>
 
-          {/* Delivery Information Card */}
+          {}
           <View className="bg-white rounded-3xl p-5 mb-4"
             style={{
               shadowColor: '#000',
@@ -564,7 +614,7 @@ const OrderDetailScreen: React.FC = () => {
             )}
           </View>
 
-          {/* Payment Summary Card */}
+          {}
           <View className="bg-white rounded-3xl p-5 mb-4"
             style={{
               shadowColor: '#000',
@@ -618,7 +668,7 @@ const OrderDetailScreen: React.FC = () => {
             </View>
           </View>
 
-          {/* Notes Card */}
+          {}
           {(order.customerNotes || order.sellerNotes) && (
             <View className="bg-white rounded-3xl p-5 mb-4"
               style={{
@@ -652,7 +702,7 @@ const OrderDetailScreen: React.FC = () => {
             </View>
           )}
 
-          {/* Active Dispute Alert */}
+          {}
           {order.dispute && (
             <View className="bg-gradient-to-br from-orange-50 to-red-50 border-2 border-orange-300 rounded-3xl p-5 mb-4"
               style={{
@@ -685,7 +735,8 @@ const OrderDetailScreen: React.FC = () => {
               </View>
 
               <TouchableOpacity
-                onPress={() => navigation.navigate('DisputeDetail', { disputeId: order.dispute!._id })}
+                onPress={() => handleFetchDisputeStatus()
+                }
                 activeOpacity={0.8}
               >
                 <LinearGradient
@@ -705,7 +756,7 @@ const OrderDetailScreen: React.FC = () => {
             </View>
           )}
 
-          {/* Create Dispute Button */}
+          {}
           {!order.dispute &&
             (order.status === 'delivered' || order.status === 'completed') &&
             !showDisputeForm && (
@@ -733,7 +784,7 @@ const OrderDetailScreen: React.FC = () => {
               </TouchableOpacity>
             )}
 
-          {/* Dispute Form */}
+          {}
           {showDisputeForm && (
             <View className="bg-white rounded-3xl p-5 mb-4"
               style={{
@@ -752,24 +803,18 @@ const OrderDetailScreen: React.FC = () => {
               </View>
 
               <View className="mb-4">
-                <Text className="text-gray-700 text-sm font-bold mb-3">Category</Text>
+                <Text className="text-gray-700 text-sm font-bold mb-3">Select Issue Type *</Text>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} className="-mx-5 px-5">
-                  {[
-                    { key: 'product_issue', label: 'Product Issue', icon: 'cube' },
-                    { key: 'not_received', label: 'Not Received', icon: 'close-circle' },
-                    { key: 'damaged', label: 'Damaged', icon: 'alert-circle' },
-                    { key: 'wrong_item', label: 'Wrong Item', icon: 'swap-horizontal' },
-                    { key: 'other', label: 'Other', icon: 'ellipsis-horizontal' },
-                  ].map((category) => (
+                  {disputeCategories.map((category) => (
                     <TouchableOpacity
                       key={category.key}
-                      onPress={() => setDisputeCategory(category.key)}
+                      onPress={() => setDisputeReason(category.key)}
                       activeOpacity={0.7}
                       className="mr-2"
                     >
                       <LinearGradient
                         colors={
-                          disputeCategory === category.key
+                          disputeReason === category.key
                             ? ['#ef4444', '#dc2626']
                             : ['#f3f4f6', '#e5e7eb']
                         }
@@ -778,11 +823,11 @@ const OrderDetailScreen: React.FC = () => {
                         <Ionicons 
                           name={category.icon as any} 
                           size={16} 
-                          color={disputeCategory === category.key ? '#fff' : '#6b7280'} 
+                          color={disputeReason === category.key ? '#fff' : '#6b7280'} 
                         />
                         <Text
                           className={`text-sm font-bold ml-2 ${
-                            disputeCategory === category.key ? 'text-white' : 'text-gray-700'
+                            disputeReason === category.key ? 'text-white' : 'text-gray-700'
                           }`}
                         >
                           {category.label}
@@ -793,37 +838,42 @@ const OrderDetailScreen: React.FC = () => {
                 </ScrollView>
               </View>
 
-              <View className="mb-4">
-                <Text className="text-gray-700 text-sm font-bold mb-2">Reason *</Text>
-                <TextInput
-                  className="bg-gray-50 px-4 py-4 rounded-2xl text-gray-900 border border-gray-200"
-                  placeholder="Brief reason for dispute"
-                  placeholderTextColor="#9ca3af"
-                  value={disputeReason}
-                  onChangeText={setDisputeReason}
-                />
-              </View>
-
               <View className="mb-5">
-                <Text className="text-gray-700 text-sm font-bold mb-2">Description *</Text>
+                <View className="flex-row items-center justify-between mb-2">
+                  <Text className="text-gray-700 text-sm font-bold">Description *</Text>
+                  <Text className={`text-xs ${
+                    disputeDescription.length > 2000 
+                      ? 'text-red-500 font-bold' 
+                      : disputeDescription.length > 1800 
+                      ? 'text-orange-500' 
+                      : 'text-gray-400'
+                  }`}>
+                    {disputeDescription.length}/2000
+                  </Text>
+                </View>
                 <TextInput
                   className="bg-gray-50 px-4 py-4 rounded-2xl text-gray-900 border border-gray-200"
-                  placeholder="Detailed explanation of the issue..."
+                  placeholder="Provide detailed explanation (minimum 20 characters)..."
                   placeholderTextColor="#9ca3af"
                   value={disputeDescription}
                   onChangeText={setDisputeDescription}
                   multiline
-                  numberOfLines={5}
+                  numberOfLines={6}
                   textAlignVertical="top"
-                  style={{ minHeight: 120 }}
+                  maxLength={2000}
+                  style={{ minHeight: 140 }}
                 />
+                {disputeDescription.length > 0 && disputeDescription.length < 20 && (
+                  <Text className="text-orange-500 text-xs mt-2">
+                    Please provide at least {20 - disputeDescription.length} more characters
+                  </Text>
+                )}
               </View>
 
               <View className="flex-row" style={{ gap: 12 }}>
                 <TouchableOpacity
                   onPress={() => {
                     setShowDisputeForm(false);
-                    setDisputeReason('');
                     setDisputeDescription('');
                   }}
                   className="flex-1 border-2 border-gray-300 py-4 rounded-2xl"
@@ -834,9 +884,12 @@ const OrderDetailScreen: React.FC = () => {
 
                 <TouchableOpacity
                   onPress={handleCreateDispute}
-                  disabled={creatingDispute}
+                  disabled={creatingDispute || disputeDescription.trim().length < 20}
                   className="flex-1"
                   activeOpacity={0.8}
+                  style={{ 
+                    opacity: (creatingDispute || disputeDescription.trim().length < 20) ? 0.5 : 1 
+                  }}
                 >
                   <LinearGradient
                     colors={['#ef4444', '#dc2626']}

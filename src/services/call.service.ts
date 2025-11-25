@@ -45,7 +45,7 @@ class CallService {
     socketService.on('call:initiated', (data: any) => {
       console.log('📞 Call initiated:', data);
       
-      // ✅ Update the callData with real call ID and full data
+      
       this.callData = {
         ...this.callData,
         ...data.call,
@@ -59,10 +59,10 @@ class CallService {
     socketService.on('call:incoming', async (data: any) => {
    console.log('📞 Incoming call received - FULL DATA:', JSON.stringify(data, null, 2));
   console.log('   - Caller ID:', data.caller._id);
-  console.log('   - Call type from data:', data.type);  // ⚠️ This should be 'video'!
-  console.log('   - Call.type from call object:', data.call.type);  // ⚠️ Check this too!
+  console.log('   - Call type from data:', data.type);  
+  console.log('   - Call.type from call object:', data.call.type);  
   
-  // ✅ Get current user ID to prevent receiving our own call
+  
   try {
     const userDataString = await AsyncStorage.getItem('userData');
     console.log('   - UserData from storage:', userDataString ? 'Found' : 'Not found');
@@ -73,7 +73,7 @@ class CallService {
       console.log('   - Current user ID:', currentUserId);
       console.log('   - Comparing:', currentUserId, 'vs', data.caller._id);
       
-      // ✅ Ignore if we're the caller (prevents receiving our own call)
+      
       if (data.caller._id === currentUserId || data.caller.id === currentUserId) {
         console.log('⏭️ Ignoring our own outgoing call - IDs match!');
         return;
@@ -83,11 +83,11 @@ class CallService {
     console.error('❌ Error getting user data:', error);
   }
 
-  // Continue with normal incoming call handling...
+  
   console.log('✅ Processing incoming call from another user');
   this.callData = {
     callId: data.call._id,
-    type: data.type,  // ⚠️ Make sure this is the correct type!
+    type: data.type,  
     caller: data.caller,
     receiver: data.call.receiver,
     conversationId: data.conversationId,
@@ -121,30 +121,30 @@ class CallService {
       this.emit('call:busy', data);
     });
 
-    // ✅ WebRTC Signaling - Emit events instead of calling webrtcService directly
+    
     socketService.on('call:signal:offer', async (data: any) => {
       console.log('📞 Received offer via socket:', data);
       
-      // Store offer in callData
+      
       if (this.callData) {
         this.callData.offer = data.offer;
       }
       
-      // Emit to UI components
+      
       this.emit('call:signal:offer', data);
     });
 
     socketService.on('call:signal:answer', async (data: any) => {
       console.log('📞 Received answer via socket:', data);
       
-      // Emit to UI components
+      
       this.emit('call:signal:answer', data);
     });
 
     socketService.on('call:signal:ice', async (data: any) => {
       console.log('📞 Received ICE candidate via socket:', data);
       
-      // Emit to UI components
+      
       this.emit('call:signal:ice', data);
     });
   }
@@ -158,11 +158,11 @@ class CallService {
     try {
       console.log('📞 Initiating call:', { receiverId, type, hasOffer: !!offer });
 
-      // ✅ Store temporary call data so we can send offer before getting call ID back
+      
       this.callData = {
-        callId: 'pending', // Temporary ID
+        callId: 'pending', 
         type: type,
-        caller: null, // Will be filled by call:initiated
+        caller: null, 
         receiver: { _id: receiverId },
         conversationId: conversationId,
       };
@@ -186,7 +186,7 @@ class CallService {
     try {
       console.log('📞 Accepting call:', callId);
 
-      // Store callId so it can be used when ending the call
+      
       if (!this.callData) {
         this.callData = {} as any;
       }
@@ -248,9 +248,9 @@ class CallService {
       return;
     }
 
-    // ✅ Determine receiverId based on call status
-    // If we're calling (outgoing), send to receiver
-    // If we're receiving (incoming), send to caller
+    
+    
+    
     const receiverId = this.callStatus === 'calling' 
       ? this.callData.receiver._id || this.callData.receiver
       : this.callData.caller._id || this.callData.caller;

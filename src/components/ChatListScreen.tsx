@@ -107,7 +107,7 @@ const ChatListScreen: React.FC = () => {
         limit: 50,
       });
 
-      // Log the full response
+      
       console.log('\n=== FULL API RESPONSE ===');
       console.log(JSON.stringify(response, null, 2));
       console.log('=========================\n');
@@ -115,13 +115,13 @@ const ChatListScreen: React.FC = () => {
       if (response.success) {
         const convos = response.data.conversations || response.data || [];
         
-        // Log conversations array
+        
         console.log('=== CONVERSATIONS ARRAY ===');
         console.log('Total conversations:', convos.length);
         console.log(JSON.stringify(convos, null, 2));
         console.log('===========================\n');
 
-        // Log each conversation individually for easier reading
+        
         convos.forEach((conv: Conversation, index: number) => {
           console.log(`\n--- Conversation ${index + 1} ---`);
           console.log('ID:', conv._id);
@@ -134,7 +134,7 @@ const ChatListScreen: React.FC = () => {
 
         setConversations(convos);
 
-        // Calculate total unread count for current user
+        
         const unreadTotal = convos.reduce(
           (sum: number, conv: Conversation) => {
             const userUnreadCount = conv.unreadCount?.[currentUserId || ''] || 0;
@@ -176,7 +176,7 @@ const ChatListScreen: React.FC = () => {
     const isMyMessage = conversation.lastMessage.sender._id === currentUserId;
     const prefix = isMyMessage ? 'You: ' : '';
 
-    // Use the text directly from the API
+    
     return `${prefix}${conversation.lastMessage.text}`;
   };
 
@@ -217,7 +217,7 @@ const ChatListScreen: React.FC = () => {
     const otherUser = getOtherParticipant(item);
     if (!otherUser) return null;
 
-    // Get unread count for current user
+    
     const userUnreadCount = item.unreadCount?.[currentUserId || ''] || 0;
     const hasUnread = userUnreadCount > 0;
 

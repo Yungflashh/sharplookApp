@@ -9,6 +9,8 @@ import { RootStackParamList } from '@/types/navigation.types';
 import VendorSidebar from '@/components/VendorSidebar';
 import { vendorAPI, walletAPI, bookingAPI, servicesAPI, handleAPIError, userAPI, notificationAPI, messageAPI, analyticsAPI } from '@/api/api';
 import socketService from '@/services/socket.service';
+import WalletFundingModal from '@/components/WalletFundingModal';
+import WithdrawalModal from '@/components/WIthdrawalModal'; 
 
 const {
   width: SCREEN_WIDTH
@@ -42,6 +44,7 @@ interface VendorProfile {
   lastName?: string;
   email?: string;
   walletBalance?: number;
+  avatar?: string;
 }
 
 interface WalletData {
@@ -68,6 +71,8 @@ const VendorDashboardScreen: React.FC = () => {
   const [sidebarVisible, setSidebarVisible] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(true);
   const [vendorProfile, setVendorProfile] = useState<VendorProfile | null>(null);
+  const [fundingModalVisible, setFundingModalVisible] = useState<boolean>(false);
+  const [withdrawalModalVisible, setWithdrawalModalVisible] = useState<boolean>(false);
   const [walletData, setWalletData] = useState<WalletData>({
     balance: 0,
     pendingBalance: 0,
@@ -104,20 +109,15 @@ const VendorDashboardScreen: React.FC = () => {
   const slideAnim = useRef(new Animated.Value(50)).current;
   const scaleAnim = useRef(new Animated.Value(0.95)).current;
 
-  
   useEffect(() => {
     console.log('🔌 Connecting to Socket.IO...');
     socketService.connect();
 
-    
     socketService.onNewMessage((data) => {
       console.log('📩 New message received via socket:', data);
-      
-      
       setUnreadMessagesCount((prev) => prev + 1);
     });
 
-    
     return () => {
       console.log('🧹 Cleaning up socket listeners');
       socketService.removeListener('message:new');
@@ -127,7 +127,6 @@ const VendorDashboardScreen: React.FC = () => {
   const fetchUnreadNotificationCount = async () => {
     try {
       const response = await notificationAPI.getUnreadCount();
-      // console.log('Unread notification count response:', response);
       
       if (response.data?.count !== undefined) {
         setUnreadNotificationCount(response.data.count);
@@ -144,7 +143,6 @@ const VendorDashboardScreen: React.FC = () => {
   const fetchUnreadMessagesCount = async () => {
     try {
       const response = await messageAPI.getUnreadCount();
-      // console.log('Unread messages count response:', response);
 
       if (response.data?.unreadCount !== undefined) {
         setUnreadMessagesCount(response.data.unreadCount);
@@ -162,13 +160,11 @@ const VendorDashboardScreen: React.FC = () => {
     try {
       setLoading(true);
       
-      
       const profileResponse = await userAPI.getProfile();
       console.log(profileResponse.data);
       if (profileResponse.success) {
         const userData = profileResponse.data.user || profileResponse.data;
         setVendorProfile(userData);
-        
         
         if (userData.walletBalance !== undefined) {
           setWalletData({
@@ -179,17 +175,14 @@ const VendorDashboardScreen: React.FC = () => {
         }
       }
 
-      
       const bookingsResponse = await vendorAPI.getStats();
       if (bookingsResponse.success) {
         const statsData = bookingsResponse.data?.stats || bookingsResponse.data || {};
         console.log('Stats data:', statsData);
         
-        
         if (statsData.total !== undefined) {
           setStats(prevStats => {
             const newStats = [...prevStats];
-            
             
             newStats[0] = {
               label: 'Total Bookings',
@@ -197,7 +190,6 @@ const VendorDashboardScreen: React.FC = () => {
               change: `${statsData.pending || 0} pending`,
               isPositive: true
             };
-            
             
             newStats[3] = {
               label: 'Completed',
@@ -210,22 +202,18 @@ const VendorDashboardScreen: React.FC = () => {
           });
         }
         
-        
         setBookingsData([]);
         setRecentActivities([]);
       }
 
-      
       const servicesResponse = await servicesAPI.getMyServices();
       if (servicesResponse.success) {
-        
         const servicesArray = servicesResponse.data?.services || servicesResponse.data || [];
         console.log('Services array:', servicesArray);
         setServicesData(Array.isArray(servicesArray) ? servicesArray : []);
         updateServicesStats(Array.isArray(servicesArray) ? servicesArray : []);
       }
 
-      
       try {
         const analyticsResponse = await analyticsAPI.getVendorAnalytics({
           startDate: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
@@ -240,7 +228,6 @@ const VendorDashboardScreen: React.FC = () => {
         console.log('Analytics fetch error (non-critical):', analyticsError);
       }
 
-      
       await fetchUnreadNotificationCount();
       await fetchUnreadMessagesCount();
     } catch (error) {
@@ -284,7 +271,6 @@ const VendorDashboardScreen: React.FC = () => {
     setStats(prevStats => {
       const newStats = [...prevStats];
       
-      
       if (analytics.reviews?.averageRating) {
         newStats[2] = {
           label: 'Avg. Rating',
@@ -294,7 +280,6 @@ const VendorDashboardScreen: React.FC = () => {
         };
       }
 
-      
       if (analytics.performance?.acceptanceRate !== undefined) {
         newStats[3] = {
           label: 'Acceptance Rate',
@@ -353,7 +338,6 @@ const VendorDashboardScreen: React.FC = () => {
     fetchDashboardData();
   }, []);
 
-  
   useFocusEffect(
     useCallback(() => {
       console.log('🔄 Dashboard focused - refreshing counts');
@@ -361,13 +345,11 @@ const VendorDashboardScreen: React.FC = () => {
       fetchUnreadNotificationCount();
       fetchUnreadMessagesCount();
 
-      
       if (!socketService.isSocketConnected()) {
         console.log('🔌 Reconnecting socket...');
         socketService.connect();
       }
 
-      
       const interval = setInterval(() => {
         fetchUnreadNotificationCount();
         fetchUnreadMessagesCount();
@@ -466,7 +448,6 @@ const VendorDashboardScreen: React.FC = () => {
           <Text className="text-lg font-bold text-gray-800">Dashboard</Text>
           
           <View className="flex-row items-center gap-3">
-            {}
             <TouchableOpacity 
               className="relative w-10 h-10 items-center justify-center" 
               activeOpacity={0.7} 
@@ -493,7 +474,6 @@ const VendorDashboardScreen: React.FC = () => {
               )}
             </TouchableOpacity>
             
-            {}
             <TouchableOpacity 
               className="relative w-10 h-10 items-center justify-center" 
               activeOpacity={0.7} 
@@ -648,13 +628,12 @@ const VendorDashboardScreen: React.FC = () => {
               )}
             </View>
 
+            {}
             <View className="flex-row gap-4">
               <TouchableOpacity 
                 className="flex-1 bg-white/20 rounded-2xl py-3 items-center flex-row justify-center gap-2" 
                 activeOpacity={0.7} 
-                onPress={() => {
-                  console.log('Fund Wallet');
-                }}
+                onPress={() => setFundingModalVisible(true)}
               >
                 <View className="w-10 h-10 rounded-full bg-white/30 items-center justify-center">
                   <Ionicons name="add" size={20} color="#fff" />
@@ -665,9 +644,7 @@ const VendorDashboardScreen: React.FC = () => {
               <TouchableOpacity 
                 className="flex-1 bg-white rounded-2xl py-3 items-center flex-row justify-center gap-2" 
                 activeOpacity={0.7} 
-                onPress={() => {
-                  console.log('Withdraw');
-                }}
+                onPress={() => setWithdrawalModalVisible(true)}
               >
                 <View className="w-10 h-10 rounded-full bg-pink-100 items-center justify-center">
                   <Ionicons name="arrow-up" size={20} color="#eb278d" />
@@ -784,9 +761,6 @@ const VendorDashboardScreen: React.FC = () => {
         </View>
 
         {}
-        {}
-
-        {}
         <View className="px-5 py-4 mb-4">
           <View className="flex-row items-center justify-between mb-4">
             <Text className="text-lg font-bold text-gray-900">Performance Dashboard</Text>
@@ -798,7 +772,6 @@ const VendorDashboardScreen: React.FC = () => {
               <Text className="text-pink-600 text-sm font-semibold mr-1">View All</Text>
               <Ionicons name="chevron-forward" size={16} color="#eb278d" />
             </TouchableOpacity>
-           
           </View>
 
           {analyticsData && analyticsData.performance ? (
@@ -966,7 +939,6 @@ const VendorDashboardScreen: React.FC = () => {
               </View>
             </View>
           ) : (
-            
             servicesData.length === 0 ? (
               <TouchableOpacity className="mt-4" activeOpacity={0.7}>
                 <LinearGradient 
@@ -1015,11 +987,32 @@ const VendorDashboardScreen: React.FC = () => {
         </View>
       </ScrollView>
 
+      {}
       <VendorSidebar 
         visible={sidebarVisible} 
         onClose={() => setSidebarVisible(false)} 
         userName={vendorProfile?.businessName || vendorProfile?.firstName || 'Vendor'} 
-        userEmail={vendorProfile?.email || 'vendor@example.com'} 
+        userEmail={vendorProfile?.email || 'vendor@example.com'}
+        userAvatar={vendorProfile?.avatar}
+      />
+
+      {}
+      <WalletFundingModal
+        visible={fundingModalVisible}
+        onClose={() => setFundingModalVisible(false)}
+        onSuccess={() => {
+          fetchDashboardData(); 
+        }}
+        currentBalance={walletData.balance}
+      />
+
+      <WithdrawalModal
+        visible={withdrawalModalVisible}
+        onClose={() => setWithdrawalModalVisible(false)}
+        onSuccess={() => {
+          fetchDashboardData(); 
+        }}
+        currentBalance={walletData.balance}
       />
     </SafeAreaView>
   );

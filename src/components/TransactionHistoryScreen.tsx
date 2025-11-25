@@ -58,7 +58,7 @@ const TransactionHistoryScreen = () => {
         limit: 20,
       });
 
-      // CORRECT: Transactions are directly in response.data (not response.data.data)
+      
       const newTransactions = response.data || [];
       const pagination = response.meta?.pagination;
 
@@ -67,13 +67,13 @@ const TransactionHistoryScreen = () => {
       if (refresh || pageNum === 1) {
         setTransactions(newTransactions);
         
-        // Calculate totals from actual transactions
+        
         calculateTotalsFromTransactions(newTransactions);
       } else {
         const allTransactions = [...transactions, ...newTransactions];
         setTransactions(allTransactions);
         
-        // Recalculate totals with all transactions
+        
         calculateTotalsFromTransactions(allTransactions);
       }
 
@@ -105,12 +105,12 @@ const TransactionHistoryScreen = () => {
       }
     });
 
-    // Update stats with calculated totals while preserving balance
+    
     setStats((prevStats) => ({
       totalTransactions: txns.length,
       totalInflow,
       totalOutflow,
-      currentBalance: prevStats?.currentBalance || 0, // Preserve existing balance
+      currentBalance: prevStats?.currentBalance || 0, 
     }));
 
     console.log('💰 Calculated totals - Inflow:', totalInflow, 'Outflow:', totalOutflow);
@@ -120,13 +120,13 @@ const TransactionHistoryScreen = () => {
     try {
       const response = await sharpPayAPI.getStats();
       
-      // CORRECT: Stats are at response.data.stats (not response.data.data.stats)
+      
       const statsData = response.data.stats || {};
       
       console.log('📊 Stats Data extracted:', statsData);
       
-      // Set initial stats with balance
-      // Inflow/Outflow will be calculated from actual transactions
+      
+      
       setStats({
         totalTransactions: 0,
         totalInflow: 0,
@@ -242,11 +242,11 @@ const TransactionHistoryScreen = () => {
 
   const filteredTransactions = (transactions || [])
     .filter(txn => {
-      // Type filter
+      
       if (filter === 'inflow' && isOutflow(txn.type)) return false;
       if (filter === 'outflow' && !isOutflow(txn.type)) return false;
       
-      // Date filter
+      
       return filterByDate(txn);
     });
 
@@ -274,7 +274,7 @@ const TransactionHistoryScreen = () => {
 
   return (
     <SafeAreaView className="flex-1 bg-gray-50">
-      {/* Header */}
+      {}
       <View className="flex-row items-center justify-between px-4 py-4 bg-white border-b border-gray-200">
         <TouchableOpacity 
           onPress={() => navigation.goBack()} 
@@ -301,10 +301,10 @@ const TransactionHistoryScreen = () => {
         }}
         scrollEventThrottle={400}
       >
-        {/* Stats Cards */}
+        {}
         {stats && (
           <>
-            {/* Current Balance Card - Full Width */}
+            {}
             <View className="px-4 pt-4">
               <View 
                 className="bg-pink-500 rounded-xl p-5 border border-pink-400" 
@@ -333,9 +333,9 @@ const TransactionHistoryScreen = () => {
               </View>
             </View>
 
-            {/* Inflow/Outflow Cards */}
+            {}
             <View className="flex-row px-4 pt-3 gap-3">
-              {/* Inflow Card */}
+              {}
               <View className="flex-1 bg-white rounded-xl p-4 border border-gray-200">
                 <View className="w-10 h-10 rounded-full bg-green-100 items-center justify-center mb-2">
                   <Ionicons name="trending-up" size={20} color="#10b981" />
@@ -346,7 +346,7 @@ const TransactionHistoryScreen = () => {
                 </Text>
               </View>
 
-              {/* Outflow Card */}
+              {}
               <View className="flex-1 bg-white rounded-xl p-4 border border-gray-200">
                 <View className="w-10 h-10 rounded-full bg-red-100 items-center justify-center mb-2">
                   <Ionicons name="trending-down" size={20} color="#ef4444" />
@@ -360,7 +360,7 @@ const TransactionHistoryScreen = () => {
           </>
         )}
 
-        {/* Filter Tabs */}
+        {}
         <View className="flex-row px-4 pt-4 gap-2">
           <TouchableOpacity
             className={`flex-1 py-2.5 px-4 rounded-full items-center border ${
@@ -408,7 +408,7 @@ const TransactionHistoryScreen = () => {
           </TouchableOpacity>
         </View>
 
-        {/* Date Filter */}
+        {}
         <View className="px-4 pt-3">
           <Text className="text-gray-500 text-xs font-medium mb-2">FILTER BY DATE</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
@@ -476,7 +476,7 @@ const TransactionHistoryScreen = () => {
           </ScrollView>
         </View>
 
-        {/* Transactions List */}
+        {}
         <View className="px-4 pt-4">
           {filteredTransactions.length === 0 ? (
             <View className="items-center justify-center py-16">

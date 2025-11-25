@@ -8,11 +8,13 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  ScrollView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import { userAPI, handleAPIError } from '@/api/api';
+import { LinearGradient } from 'expo-linear-gradient';
+import { walletAPI, handleAPIError } from '@/api/api';
 
 const ChangeWithdrawalPinScreen: React.FC = () => {
   const navigation = useNavigation();
@@ -25,17 +27,22 @@ const ChangeWithdrawalPinScreen: React.FC = () => {
   const handleChangePin = async () => {
     
     if (!currentPin || !newPin || !confirmNewPin) {
-      Alert.alert('Error', 'Please fill in all fields');
+      Alert.alert('Error', 'Please fill in all PIN fields');
       return;
     }
 
-    if (currentPin.length !== 4 || newPin.length !== 4) {
-      Alert.alert('Error', 'PIN must be exactly 4 digits');
+    if (currentPin.length !== 4) {
+      Alert.alert('Error', 'Current PIN must be exactly 4 digits');
       return;
     }
 
-    if (!/^\d+$/.test(currentPin) || !/^\d+$/.test(newPin)) {
-      Alert.alert('Error', 'PIN must contain only numbers');
+    if (newPin.length !== 4) {
+      Alert.alert('Error', 'New PIN must be exactly 4 digits');
+      return;
+    }
+
+    if (!/^\d+$/.test(newPin)) {
+      Alert.alert('Error', 'New PIN must contain only numbers');
       return;
     }
 
@@ -62,21 +69,23 @@ const ChangeWithdrawalPinScreen: React.FC = () => {
 
     setLoading(true);
     try {
-      await userAPI.changeWithdrawalPin(currentPin, newPin, confirmNewPin);
+      await walletAPI.changeWithdrawalPin(currentPin, newPin, confirmNewPin);
       
       Alert.alert(
-        'Success',
+        'Success! 🎉',
         'Your withdrawal PIN has been changed successfully',
         [
           {
             text: 'OK',
-            onPress: () => navigation.goBack(),
+            onPress: () => {
+              navigation.goBack();
+            },
           },
         ]
       );
     } catch (error) {
       const apiError = handleAPIError(error);
-      Alert.alert('Error', apiError.message || 'Failed to change PIN. Please verify your current PIN.');
+      Alert.alert('Error', apiError.message);
     } finally {
       setLoading(false);
     }
@@ -84,207 +93,300 @@ const ChangeWithdrawalPinScreen: React.FC = () => {
 
   const renderPinDots = (value: string, maxLength: number = 4) => {
     return (
-      <View className="flex-row justify-center space-x-3 mb-2">
+      <View className="flex-row justify-center space-x-4">
         {[...Array(maxLength)].map((_, index) => (
           <View
             key={index}
-            className={`w-4 h-4 rounded-full ${
-              index < value.length ? 'bg-pink-500' : 'bg-gray-300'
+            className={`w-14 h-14 rounded-2xl border-2 items-center justify-center ${
+              index < value.length 
+                ? 'bg-pink-50 border-pink-500' 
+                : 'bg-gray-50 border-gray-300'
             }`}
-          />
+          >
+            {index < value.length && (
+              <View className="w-3 h-3 rounded-full bg-pink-500" />
+            )}
+          </View>
         ))}
       </View>
     );
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-gray-50" edges={['top']}>
+    <SafeAreaView className="flex-1 bg-white" edges={['top']}>
       {}
-      <View className="bg-white px-5 py-4 border-b border-gray-100">
-        <View className="flex-row items-center justify-between">
-          <TouchableOpacity
-            onPress={() => navigation.goBack()}
-            className="w-10 h-10 items-center justify-center"
-          >
-            <Ionicons name="arrow-back" size={24} color="#1f2937" />
-          </TouchableOpacity>
-          <Text className="text-lg font-semibold text-gray-900">
-            Change Withdrawal PIN
-          </Text>
-          <View className="w-10" />
+      <LinearGradient
+        colors={['#eb278d', '#f472b6']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={{
+          shadowColor: '#eb278d',
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: 0.2,
+          shadowRadius: 8,
+          elevation: 8,
+        }}
+      >
+        <View className="px-5 py-4">
+          <View className="flex-row items-center justify-between">
+            <TouchableOpacity
+              onPress={() => navigation.goBack()}
+              className="w-10 h-10 rounded-full bg-white/20 items-center justify-center"
+              activeOpacity={0.7}
+            >
+              <Ionicons name="arrow-back" size={24} color="#fff" />
+            </TouchableOpacity>
+            <Text className="text-lg font-bold text-white">
+              Change Withdrawal PIN
+            </Text>
+            <View className="w-10" />
+          </View>
         </View>
-      </View>
+      </LinearGradient>
 
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         className="flex-1"
       >
-        <View className="flex-1 px-5 pt-8">
-          {}
-          <View className="items-center mb-8">
-            <View className="w-20 h-20 rounded-full bg-pink-100 items-center justify-center mb-4">
-              <Ionicons name="key" size={40} color="#eb278d" />
+        <ScrollView 
+          className="flex-1"
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: 20 }}
+        >
+          <View className="flex-1 px-6 pt-8">
+            {}
+            <View className="items-center mb-10">
+              <LinearGradient
+                colors={['#eb278d', '#f472b6']}
+                className="w-24 h-24 rounded-3xl items-center justify-center mb-5"
+                style={{
+                  shadowColor: '#eb278d',
+                  shadowOffset: { width: 0, height: 4 },
+                  shadowOpacity: 0.3,
+                  shadowRadius: 8,
+                  elevation: 8,
+                }}
+              >
+                <Ionicons name="key" size={44} color="#fff" />
+              </LinearGradient>
+              <Text className="text-2xl font-bold text-gray-900 mb-2">
+                Update Your PIN
+              </Text>
+              <Text className="text-sm text-gray-500 text-center px-4 leading-6">
+                Enter your current PIN and choose a new secure PIN
+              </Text>
             </View>
-            <Text className="text-xl font-bold text-gray-900 mb-2">
-              Update Your PIN
-            </Text>
-            <Text className="text-sm text-gray-500 text-center px-8">
-              Enter your current PIN and choose a new one
-            </Text>
-          </View>
 
-          {}
-          <View className="mb-6">
-            <Text className="text-sm font-semibold text-gray-700 mb-3">
-              Current PIN
-            </Text>
-            <View className="bg-white rounded-2xl p-5 shadow-sm">
-              {showPins ? (
-                <TextInput
-                  className="text-center text-2xl tracking-widest text-gray-900 font-semibold"
-                  placeholder="••••"
-                  keyboardType="numeric"
-                  maxLength={4}
-                  value={currentPin}
-                  onChangeText={setCurrentPin}
-                  secureTextEntry={!showPins}
-                />
-              ) : (
-                <>
-                  {renderPinDots(currentPin)}
+            {}
+            <View className="mb-8">
+              <Text className="text-base font-bold text-gray-900 mb-4">
+                Current PIN
+              </Text>
+              <View 
+                className="bg-gray-50 rounded-3xl p-6 border border-gray-100"
+                style={{
+                  shadowColor: '#000',
+                  shadowOffset: { width: 0, height: 2 },
+                  shadowOpacity: 0.05,
+                  shadowRadius: 4,
+                  elevation: 2,
+                }}
+              >
+                {showPins ? (
                   <TextInput
-                    className="text-center text-2xl tracking-widest text-gray-900 font-semibold opacity-0 absolute"
-                    placeholder="••••"
+                    className="text-center text-3xl tracking-[20px] text-gray-900 font-bold"
+                    placeholder="0000"
+                    placeholderTextColor="#d1d5db"
                     keyboardType="numeric"
                     maxLength={4}
                     value={currentPin}
                     onChangeText={setCurrentPin}
                     secureTextEntry={false}
+                    autoFocus
                   />
-                </>
-              )}
+                ) : (
+                  <View className="relative">
+                    {renderPinDots(currentPin)}
+                    <TextInput
+                      className="opacity-0 absolute inset-0"
+                      keyboardType="numeric"
+                      maxLength={4}
+                      value={currentPin}
+                      onChangeText={setCurrentPin}
+                      secureTextEntry={false}
+                      autoFocus
+                    />
+                  </View>
+                )}
+              </View>
             </View>
-          </View>
 
-          {}
-          <View className="mb-6">
-            <Text className="text-sm font-semibold text-gray-700 mb-3">
-              New PIN
-            </Text>
-            <View className="bg-white rounded-2xl p-5 shadow-sm">
-              {showPins ? (
-                <TextInput
-                  className="text-center text-2xl tracking-widest text-gray-900 font-semibold"
-                  placeholder="••••"
-                  keyboardType="numeric"
-                  maxLength={4}
-                  value={newPin}
-                  onChangeText={setNewPin}
-                  secureTextEntry={!showPins}
-                />
-              ) : (
-                <>
-                  {renderPinDots(newPin)}
+            {}
+            <View className="mb-8">
+              <Text className="text-base font-bold text-gray-900 mb-4">
+                New PIN
+              </Text>
+              <View 
+                className="bg-gray-50 rounded-3xl p-6 border border-gray-100"
+                style={{
+                  shadowColor: '#000',
+                  shadowOffset: { width: 0, height: 2 },
+                  shadowOpacity: 0.05,
+                  shadowRadius: 4,
+                  elevation: 2,
+                }}
+              >
+                {showPins ? (
                   <TextInput
-                    className="text-center text-2xl tracking-widest text-gray-900 font-semibold opacity-0 absolute"
-                    placeholder="••••"
+                    className="text-center text-3xl tracking-[20px] text-gray-900 font-bold"
+                    placeholder="0000"
+                    placeholderTextColor="#d1d5db"
                     keyboardType="numeric"
                     maxLength={4}
                     value={newPin}
                     onChangeText={setNewPin}
                     secureTextEntry={false}
                   />
-                </>
-              )}
+                ) : (
+                  <View className="relative">
+                    {renderPinDots(newPin)}
+                    <TextInput
+                      className="opacity-0 absolute inset-0"
+                      keyboardType="numeric"
+                      maxLength={4}
+                      value={newPin}
+                      onChangeText={setNewPin}
+                      secureTextEntry={false}
+                    />
+                  </View>
+                )}
+              </View>
             </View>
-          </View>
 
-          {}
-          <View className="mb-6">
-            <Text className="text-sm font-semibold text-gray-700 mb-3">
-              Confirm New PIN
-            </Text>
-            <View className="bg-white rounded-2xl p-5 shadow-sm">
-              {showPins ? (
-                <TextInput
-                  className="text-center text-2xl tracking-widest text-gray-900 font-semibold"
-                  placeholder="••••"
-                  keyboardType="numeric"
-                  maxLength={4}
-                  value={confirmNewPin}
-                  onChangeText={setConfirmNewPin}
-                  secureTextEntry={!showPins}
-                />
-              ) : (
-                <>
-                  {renderPinDots(confirmNewPin)}
+            {}
+            <View className="mb-6">
+              <Text className="text-base font-bold text-gray-900 mb-4">
+                Confirm New PIN
+              </Text>
+              <View 
+                className="bg-gray-50 rounded-3xl p-6 border border-gray-100"
+                style={{
+                  shadowColor: '#000',
+                  shadowOffset: { width: 0, height: 2 },
+                  shadowOpacity: 0.05,
+                  shadowRadius: 4,
+                  elevation: 2,
+                }}
+              >
+                {showPins ? (
                   <TextInput
-                    className="text-center text-2xl tracking-widest text-gray-900 font-semibold opacity-0 absolute"
-                    placeholder="••••"
+                    className="text-center text-3xl tracking-[20px] text-gray-900 font-bold"
+                    placeholder="0000"
+                    placeholderTextColor="#d1d5db"
                     keyboardType="numeric"
                     maxLength={4}
                     value={confirmNewPin}
                     onChangeText={setConfirmNewPin}
                     secureTextEntry={false}
                   />
-                </>
-              )}
+                ) : (
+                  <View className="relative">
+                    {renderPinDots(confirmNewPin)}
+                    <TextInput
+                      className="opacity-0 absolute inset-0"
+                      keyboardType="numeric"
+                      maxLength={4}
+                      value={confirmNewPin}
+                      onChangeText={setConfirmNewPin}
+                      secureTextEntry={false}
+                    />
+                  </View>
+                )}
+              </View>
             </View>
-          </View>
 
-          {}
-          <TouchableOpacity
-            onPress={() => setShowPins(!showPins)}
-            className="flex-row items-center justify-center mb-8"
-          >
-            <Ionicons
-              name={showPins ? 'eye-off' : 'eye'}
-              size={20}
-              color="#6b7280"
-            />
-            <Text className="text-sm text-gray-600 ml-2">
-              {showPins ? 'Hide PINs' : 'Show PINs'}
-            </Text>
-          </TouchableOpacity>
-
-          {}
-          <View className="bg-blue-50 rounded-xl p-4 flex-row mb-8">
-            <Ionicons name="information-circle" size={20} color="#3b82f6" />
-            <View className="flex-1 ml-3">
-              <Text className="text-xs text-blue-600 leading-5">
-                • New PIN must be 4 digits{'\n'}
-                • Choose a different PIN from your current one{'\n'}
-                • Avoid common PINs like 1234 or 0000
+            {}
+            <TouchableOpacity
+              onPress={() => setShowPins(!showPins)}
+              className="flex-row items-center justify-center py-3 mb-6"
+              activeOpacity={0.7}
+            >
+              <View className="w-8 h-8 rounded-full bg-gray-100 items-center justify-center mr-2">
+                <Ionicons
+                  name={showPins ? 'eye-off' : 'eye'}
+                  size={18}
+                  color="#6b7280"
+                />
+              </View>
+              <Text className="text-sm font-semibold text-gray-700">
+                {showPins ? 'Hide PINs' : 'Show PINs'}
               </Text>
+            </TouchableOpacity>
+
+            {}
+            <View className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-2xl p-5 mb-8 border border-blue-100">
+              <View className="flex-row items-start mb-3">
+                <View className="w-8 h-8 rounded-full bg-blue-100 items-center justify-center mr-3">
+                  <Ionicons name="shield-checkmark" size={18} color="#3b82f6" />
+                </View>
+                <Text className="flex-1 text-sm font-bold text-blue-900">
+                  Security Tips
+                </Text>
+              </View>
+              <View className="ml-11">
+                <View className="flex-row items-start mb-2">
+                  <View className="w-1.5 h-1.5 rounded-full bg-blue-400 mt-1.5 mr-2" />
+                  <Text className="flex-1 text-xs text-blue-700 leading-5">
+                    Choose a different PIN from your current one
+                  </Text>
+                </View>
+                <View className="flex-row items-start mb-2">
+                  <View className="w-1.5 h-1.5 rounded-full bg-blue-400 mt-1.5 mr-2" />
+                  <Text className="flex-1 text-xs text-blue-700 leading-5">
+                    Avoid common patterns like 1234 or 0000
+                  </Text>
+                </View>
+                <View className="flex-row items-start">
+                  <View className="w-1.5 h-1.5 rounded-full bg-blue-400 mt-1.5 mr-2" />
+                  <Text className="flex-1 text-xs text-blue-700 leading-5">
+                    Never share your PIN with anyone
+                  </Text>
+                </View>
+              </View>
             </View>
+
+            {}
+            <TouchableOpacity
+              onPress={handleChangePin}
+              disabled={loading || !currentPin || !newPin || !confirmNewPin}
+              activeOpacity={0.8}
+            >
+              <LinearGradient
+                colors={
+                  loading || !currentPin || !newPin || !confirmNewPin
+                    ? ['#d1d5db', '#9ca3af']
+                    : ['#eb278d', '#f472b6']
+                }
+                className="rounded-2xl py-5 items-center justify-center"
+                style={{
+                  shadowColor: loading || !currentPin || !newPin || !confirmNewPin ? '#000' : '#eb278d',
+                  shadowOffset: { width: 0, height: 4 },
+                  shadowOpacity: loading || !currentPin || !newPin || !confirmNewPin ? 0.1 : 0.3,
+                  shadowRadius: 8,
+                  elevation: loading || !currentPin || !newPin || !confirmNewPin ? 2 : 6,
+                }}
+              >
+                {loading ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <Text className="text-white text-base font-bold">
+                    Change PIN
+                  </Text>
+                )}
+              </LinearGradient>
+            </TouchableOpacity>
           </View>
-
-          {}
-          <TouchableOpacity
-            onPress={handleChangePin}
-            disabled={loading || !currentPin || !newPin || !confirmNewPin}
-            className={`rounded-2xl py-4 items-center justify-center ${
-              loading || !currentPin || !newPin || !confirmNewPin
-                ? 'bg-gray-300'
-                : 'bg-pink-500'
-            }`}
-          >
-            {loading ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text className="text-white text-base font-semibold">
-                Change PIN
-              </Text>
-            )}
-          </TouchableOpacity>
-
-          {}
-          <TouchableOpacity className="mt-6 items-center">
-            <Text className="text-sm text-pink-500 font-medium">
-              Forgot Your PIN?
-            </Text>
-          </TouchableOpacity>
-        </View>
+        </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );

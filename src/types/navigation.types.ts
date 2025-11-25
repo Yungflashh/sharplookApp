@@ -92,7 +92,7 @@ export type RootStackParamList = {
     callId?: string;
     callType: 'voice' | 'video';
     isOutgoing: boolean;
-    offer?: any; // SDP offer to be processed immediately
+    offer?: any; 
     otherUser: {
       _id: string;
       firstName: string;
@@ -113,7 +113,7 @@ export type RootStackParamList = {
       avatar?: string;
     };
     callType: 'voice' | 'video';
-    offer?: any; // SDP offer from caller
+    offer?: any; 
   };
 };
 export type AuthStackParamList = {

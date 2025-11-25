@@ -1,26 +1,23 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, ActivityIndicator, Alert, Platform } from 'react-native';
+import { View, Text, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '@/types/navigation.types';
-import { paymentAPI, handleAPIError } from '@/api/api';
+import { walletAPI, handleAPIError } from '@/api/api';
 import socketService from '@/services/socket.service';
 
-type PaymentScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'Payment'>;
-type PaymentScreenRouteProp = RouteProp<RootStackParamList, 'Payment'>;
+type WalletPaymentScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'WalletPayment'>;
+type WalletPaymentScreenRouteProp = RouteProp<RootStackParamList, 'WalletPayment'>;
 
-const PaymentScreen: React.FC = () => {
-  const navigation = useNavigation<PaymentScreenNavigationProp>();
-  const route = useRoute<PaymentScreenRouteProp>();
-
-  const { bookingId, amount } = route.params;
-
-  const [loading, setLoading] = useState(true);
-  const [paymentUrl, setPaymentUrl] = useState('');
-  const [reference, setReference] = useState('');
+const WalletPaymentScreen: React.FC = () => {
+  const navigation = useNavigation<WalletPaymentScreenNavigationProp>();
+  const route = useRoute<WalletPaymentScreenRouteProp>();
+  
+  const { amount, reference, authorizationUrl } = route.params;
+  
   const [verifying, setVerifying] = useState(false);
   const [paymentConfirmed, setPaymentConfirmed] = useState(false);
   const [socketConnected, setSocketConnected] = useState(false);
@@ -28,13 +25,6 @@ const PaymentScreen: React.FC = () => {
 
   
   useEffect(() => {
-    initializePayment();
-  }, [bookingId]);
-
-  
-  useEffect(() => {
-    if (!paymentUrl || paymentConfirmed) return;
-
     const timer = setTimeout(() => {
       if (!paymentConfirmed) {
         setShowManualButton(true);
@@ -42,18 +32,16 @@ const PaymentScreen: React.FC = () => {
     }, 10000); 
 
     return () => clearTimeout(timer);
-  }, [paymentUrl, paymentConfirmed]);
+  }, [paymentConfirmed]);
 
   
   useEffect(() => {
-    if (!reference) return;
-
-    console.log('🔌 Setting up payment socket listener for:', reference);
+    console.log('🔌 Setting up wallet payment socket listener for:', reference);
 
     
     const connected = socketService.isSocketConnected();
     setSocketConnected(connected);
-
+    
     if (!connected) {
       console.log('🔌 Socket not connected, attempting to connect...');
       socketService.connect();
@@ -62,113 +50,78 @@ const PaymentScreen: React.FC = () => {
     
     const handlePaymentSuccess = (data: any) => {
       console.log('💰 Payment success received via socket:', data);
-
       
-      if (data.reference === reference || data.bookingId === bookingId) {
+      
+      if (data.reference === reference) {
         console.log('✅ This payment matches our reference!');
         setPaymentConfirmed(true);
-        setVerifying(false);
-        setShowManualButton(false);
+        
+       
       }
     };
 
     
     const handlePaymentFailed = (data: any) => {
       console.log('❌ Payment failed received via socket:', data);
-
-      if (data.reference === reference || data.bookingId === bookingId) {
-        setVerifying(false);
+      
+      if (data.reference === reference) {
         Alert.alert(
           'Payment Failed',
-          data.reason || 'Your payment could not be completed. Please try again.',
-          [
-            { text: 'Try Again', onPress: () => initializePayment() },
-            { text: 'Cancel', style: 'cancel', onPress: () => navigation.goBack() },
-          ]
+          data.reason || 'Your wallet funding could not be completed. Please try again.',
+          [{ text: 'OK', onPress: () => navigation.goBack() }]
         );
       }
     };
 
     
-    socketService.onPaymentSuccess(handlePaymentSuccess);
-    socketService.onPaymentFailed(handlePaymentFailed);
+    socketService.onWalletFunded(handlePaymentSuccess);
+    socketService.onWalletFundingFailed(handlePaymentFailed);
 
     
     return () => {
-      console.log('🧹 Cleaning up payment socket listeners');
-      socketService.removeListener('payment:success');
-      socketService.removeListener('payment:failed');
+      console.log('🧹 Cleaning up wallet payment socket listeners');
+      socketService.removeListener('wallet:funded');
+      socketService.removeListener('wallet:funding:failed');
     };
-  }, [reference, bookingId, navigation]);
-
-  const initializePayment = async () => {
-    try {
-      setLoading(true);
-      setPaymentConfirmed(false);
-      setShowManualButton(false);
-
-      const response = await paymentAPI.initializePayment({
-        bookingId,
-        metadata: {
-          bookingId,
-          platform: Platform.OS,
-        },
-      });
-
-      console.log('Payment initialized:', response);
-
-      if (response.success) {
-        setPaymentUrl(response.data.authorizationUrl);
-        setReference(response.data.payment.reference);
-      }
-    } catch (error) {
-      const apiError = handleAPIError(error);
-      console.error('Payment initialization error:', apiError);
-
-      Alert.alert(
-        'Payment Error',
-        apiError.message || 'Failed to initialize payment',
-        [
-          { text: 'Try Again', onPress: () => initializePayment() },
-          { text: 'Cancel', style: 'cancel', onPress: () => navigation.goBack() },
-        ]
-      );
-    } finally {
-      setLoading(false);
-    }
-  };
+  }, [reference, amount, navigation]);
 
   const verifyPayment = async () => {
     if (verifying || paymentConfirmed) return;
 
     try {
       setVerifying(true);
-      console.log('🔍 Manually verifying payment:', reference);
+      console.log('🔍 Manually verifying wallet payment:', reference);
 
-      const response = await paymentAPI.verifyPayment(reference);
-      console.log('📊 Payment verification:', response);
+      const response = await walletAPI.verifyWalletFunding(reference);
+      console.log('📊 Verification response:', response);
 
       if (response.success) {
         const payment = response.data.payment;
 
-        if (payment.status === 'COMPLETED' || payment.status === 'completed' || payment.escrowStatus === 'held') {
+        if (payment.status === 'completed' || payment.status === 'success') {
           setVerifying(false);
           setPaymentConfirmed(true);
-          setShowManualButton(false);
 
-          
-        } else if (payment.status === 'FAILED' || payment.status === 'failed') {
+          Alert.alert(
+            'Wallet Funded! 🎉',
+            `Your wallet has been credited with ₦${amount.toLocaleString()}`,
+            [
+              {
+                text: 'View Wallet',
+                onPress: () => navigation.navigate('Main'),
+              },
+            ],
+            { cancelable: false }
+          );
+        } else if (payment.status === 'failed') {
           setVerifying(false);
 
           Alert.alert(
             'Payment Failed',
-            'Your payment could not be processed. Please try again.',
-            [
-              { text: 'Try Again', onPress: () => initializePayment() },
-              { text: 'Cancel', style: 'cancel', onPress: () => navigation.goBack() },
-            ]
+            'Your wallet funding could not be processed. Please try again.',
+            [{ text: 'OK' }]
           );
-        } else if (payment.status === 'PENDING' || payment.status === 'pending') {
+        } else if (payment.status === 'pending') {
           setVerifying(false);
 
           Alert.alert(
@@ -191,12 +144,12 @@ const PaymentScreen: React.FC = () => {
       }
     } catch (error) {
       const apiError = handleAPIError(error);
-      console.error('❌ Payment verification error:', apiError);
+      console.error('❌ Verification error:', apiError);
       setVerifying(false);
 
       Alert.alert(
         'Verification Error',
-        'Could not verify payment. Please contact support if you were charged.',
+        'Could not verify payment. Please check your wallet balance or contact support if you were charged.',
         [{ text: 'OK' }]
       );
     }
@@ -208,17 +161,10 @@ const PaymentScreen: React.FC = () => {
       'Are you sure you want to cancel this payment?',
       [
         { text: 'No', style: 'cancel' },
-        { 
-          text: 'Yes', 
-          style: 'destructive', 
-          onPress: () => {
-            
-            if (navigation.canGoBack()) {
-              navigation.goBack();
-            } else {
-              navigation.navigate('Home'); 
-            }
-          } 
+        {
+          text: 'Yes',
+          style: 'destructive',
+          onPress: () => navigation.goBack(),
         },
       ]
     );
@@ -228,29 +174,9 @@ const PaymentScreen: React.FC = () => {
     Alert.alert(
       'Connection Error',
       'Failed to load payment page. Please check your internet connection.',
-      [
-        { text: 'Try Again', onPress: () => initializePayment() },
-        { text: 'Cancel', style: 'cancel', onPress: () => navigation.goBack() },
-      ]
+      [{ text: 'OK', onPress: () => navigation.goBack() }]
     );
   };
-
-  const handleViewBooking = () => {
-    
-    navigation.replace('BookingDetail', { bookingId });
-  };
-
-  
-  if (loading) {
-    return (
-      <SafeAreaView className="flex-1 bg-white">
-        <View className="flex-1 items-center justify-center">
-          <ActivityIndicator size="large" color="#eb278d" />
-          <Text className="text-gray-600 mt-4 text-base">Initializing payment...</Text>
-        </View>
-      </SafeAreaView>
-    );
-  }
 
   
   if (paymentConfirmed) {
@@ -260,41 +186,16 @@ const PaymentScreen: React.FC = () => {
           <View className="w-24 h-24 rounded-full bg-green-100 items-center justify-center mb-6">
             <Ionicons name="checkmark-circle" size={60} color="#10b981" />
           </View>
-          <Text className="text-2xl font-bold text-gray-900 mb-2 text-center">
-            Payment Successful!
-          </Text>
-          <Text className="text-gray-600 text-center mb-2">
-            Your payment of <Text className="font-bold">₦{amount.toLocaleString()}</Text> has been confirmed.
-          </Text>
-          <Text className="text-sm text-gray-500 text-center mb-8">
-            The vendor has been notified and will accept your booking shortly.
+          <Text className="text-2xl font-bold text-gray-900 mb-2">Payment Successful!</Text>
+          <Text className="text-gray-600 text-center mb-6">
+            Your wallet has been credited with ₦{amount.toLocaleString()}
           </Text>
           <TouchableOpacity
-            onPress={handleViewBooking}
+            onPress={() => navigation.navigate('Main')}
             className="bg-pink-600 px-8 py-4 rounded-2xl"
-            style={{
-              shadowColor: '#eb278d',
-              shadowOffset: { width: 0, height: 4 },
-              shadowOpacity: 0.3,
-              shadowRadius: 8,
-              elevation: 6,
-            }}
           >
-            <Text className="text-white font-bold text-base">View Booking</Text>
+            <Text className="text-white font-bold text-base">View Wallet</Text>
           </TouchableOpacity>
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  
-  if (verifying) {
-    return (
-      <SafeAreaView className="flex-1 bg-white">
-        <View className="flex-1 items-center justify-center">
-          <ActivityIndicator size="large" color="#10b981" />
-          <Text className="text-gray-600 mt-4 text-base">Verifying payment...</Text>
-          <Text className="text-gray-400 text-sm mt-2">Please wait...</Text>
         </View>
       </SafeAreaView>
     );
@@ -312,7 +213,7 @@ const PaymentScreen: React.FC = () => {
             <Ionicons name="close" size={24} color="#1f2937" />
           </TouchableOpacity>
 
-          <Text className="text-lg font-bold text-gray-900">Secure Payment</Text>
+          <Text className="text-lg font-bold text-gray-900">Fund Wallet</Text>
 
           <View className="w-10" />
         </View>
@@ -321,24 +222,20 @@ const PaymentScreen: React.FC = () => {
         <View className="mt-4 bg-pink-50 rounded-2xl p-4">
           <View className="flex-row items-center justify-between">
             <View>
-              <Text className="text-sm text-gray-600">Amount to Pay</Text>
+              <Text className="text-sm text-gray-600">Amount to Fund</Text>
               <Text className="text-2xl font-bold text-pink-600 mt-1">
                 ₦{amount.toLocaleString()}
               </Text>
             </View>
             <View className="bg-pink-100 p-3 rounded-full">
-              <Ionicons name="shield-checkmark" size={24} color="#eb278d" />
+              <Ionicons name="wallet" size={24} color="#eb278d" />
             </View>
           </View>
         </View>
 
         {}
         <View className="mt-3 flex-row items-center justify-center">
-          <View
-            className={`w-2 h-2 rounded-full mr-2 ${
-              socketConnected ? 'bg-green-500' : 'bg-yellow-500'
-            }`}
-          />
+          <View className={`w-2 h-2 rounded-full mr-2 ${socketConnected ? 'bg-green-500' : 'bg-yellow-500'}`} />
           <Text className="text-xs text-gray-500">
             {socketConnected ? 'Live updates enabled' : 'Connecting...'}
           </Text>
@@ -346,10 +243,10 @@ const PaymentScreen: React.FC = () => {
       </View>
 
       {}
-      {paymentUrl ? (
+      {authorizationUrl ? (
         <View className="flex-1">
           <WebView
-            source={{ uri: paymentUrl }}
+            source={{ uri: authorizationUrl }}
             onError={handleWebViewError}
             startInLoadingState={true}
             renderLoading={() => (
@@ -409,9 +306,9 @@ const PaymentScreen: React.FC = () => {
           </Text>
           <TouchableOpacity
             className="mt-6 bg-pink-500 px-6 py-3 rounded-xl"
-            onPress={initializePayment}
+            onPress={() => navigation.goBack()}
           >
-            <Text className="text-white font-semibold">Try Again</Text>
+            <Text className="text-white font-semibold">Go Back</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -429,4 +326,4 @@ const PaymentScreen: React.FC = () => {
   );
 };
 
-export default PaymentScreen;
+export default WalletPaymentScreen;

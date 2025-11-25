@@ -13,26 +13,26 @@ api.interceptors.request.use(async (config: InternalAxiosRequestConfig) => {
   if (token && config.headers) {
     config.headers.Authorization = `Bearer ${token}`;
   }
-  // console.log('🟢 API Request:', {
-  //   method: config.method?.toUpperCase(),
-  //   url: config.url,
-  //   baseURL: config.baseURL,
-  //   fullURL: `${config.baseURL}${config.url}`,
-  //   data: config.data,
-  //   headers: config.headers
-  // });
+  
+  
+  
+  
+  
+  
+  
+  
   return config;
 }, (error: AxiosError) => {
   console.error('🔴 Request Interceptor Error:', error);
   return Promise.reject(error);
 });
 api.interceptors.response.use(response => {
-  // console.log('✅ API Response:', {
-  //   status: response.status,
-  //   statusText: response.statusText,
-  //   url: response.config.url,
-  //   data: response.data
-  // });
+  
+  
+  
+  
+  
+  
   return response;
 }, async (error: AxiosError) => {
   console.error('🔴 API Error Interceptor:', {
@@ -245,11 +245,9 @@ export const userAPI = {
 
 
 
-// Add this to your existing api.ts file, after the notificationAPI export:
 
-/**
- * Referral API
- */
+
+
 export const referralAPI = {
 
     
@@ -257,25 +255,19 @@ export const referralAPI = {
     api.post('/referrals/validate', { referralCode }),
 
 
-  /**
-   * Apply referral code during registration or later
-   */
+  
   applyReferralCode: async (referralCode: string) => {
     const response = await api.post('/referrals/apply', { referralCode });
     return response.data;
   },
 
-  /**
-   * Get user's referral statistics
-   */
+  
   getReferralStats: async () => {
     const response = await api.get('/referrals/stats');
     return response.data;
   },
 
-  /**
-   * Get user's referrals list
-   */
+  
   getMyReferrals: async (params?: {
     status?: string;
     page?: number;
@@ -285,17 +277,13 @@ export const referralAPI = {
     return response.data;
   },
 
-  /**
-   * Get referral by ID
-   */
+  
   getReferralById: async (referralId: string) => {
     const response = await api.get(`/referrals/${referralId}`);
     return response.data;
   },
 
-  /**
-   * Get referral leaderboard
-   */
+  
   getLeaderboard: async (limit: number = 10) => {
     const response = await api.get('/referrals/leaderboard', {
       params: { limit }
@@ -362,6 +350,41 @@ export const vendorAPI = {
     const response = await api.put('/vendors/profile', profileData);
     return response.data;
   },
+
+  
+  uploadDocument: async (formData: FormData) => {
+    try {
+      const response = await api.post('/vendors/documents', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+        
+        timeout: 30000,
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Error uploading document:', error);
+      throw error;
+    }
+  },
+
+  
+  deleteDocument: async (documentType: 'idCard' | 'businessLicense' | 'certification', certificationIndex?: number) => {
+    try {
+      const response = await api.delete('/vendors/documents', {
+        data: {
+          documentType,
+          certificationIndex, 
+        },
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Error deleting document:', error);
+      throw error;
+    }
+  },
+
+
 
   
   updateMyAvailability: async (schedule: {
@@ -786,23 +809,34 @@ export const bookingAPI = {
   },
 
   
-  /**
-   * Check if can pay from wallet
-   */
+  
   canPayFromWallet: async (bookingId: string) => {
     const response = await api.get(`/bookings/${bookingId}/wallet/check`);
     return response.data;
   },
 
-  /**
-   * Pay for booking using wallet
-   */
+  
   payFromWallet: async (bookingId: string) => {
     const response = await api.post('/bookings/wallet/pay', {
       bookingId,
     });
     return response.data;
   },
+
+  
+  initializePaystackPayment: async (bookingId: string) => {
+    const response = await api.post(
+      `/bookings/${bookingId}/payment/paystack/initialize`
+    );
+    return response.data;
+  },
+
+  
+  verifyPaystackPayment: async (reference: string) => {
+    const response = await api.get(`/bookings/payment/verify/${reference}`);
+    return response.data;
+  },
+
 
   getBookingStats: async (role: 'client' | 'vendor' = 'client') => {
     const response = await api.get('/bookings/stats', {
@@ -836,17 +870,17 @@ export const bookingAPI = {
       console.log('🖼️ Images count:', images?.length || 0);
 
       if (!images || images.length === 0) {
-        // No images - use regular JSON request
+        
         console.log('📤 Sending JSON request (no images)');
         const response = await api.post('/offers', offerData);
         return response.data;
       }
 
-      // With images - use FormData
+      
       console.log('📤 Sending FormData request (with images)');
       const formData = new FormData();
 
-      // Append all text fields
+      
       formData.append('title', offerData.title);
       formData.append('description', offerData.description);
       formData.append('category', offerData.category);
@@ -857,10 +891,10 @@ export const bookingAPI = {
       
       formData.append('proposedPrice', String(offerData.proposedPrice));
       
-      // Stringify location object
+      
       formData.append('location', JSON.stringify(offerData.location));
       
-      // Optional fields
+      
       if (offerData.preferredDate) {
         formData.append('preferredDate', offerData.preferredDate);
       }
@@ -874,7 +908,7 @@ export const bookingAPI = {
         formData.append('expiresInDays', String(offerData.expiresInDays));
       }
 
-      // Append images
+      
       for (let i = 0; i < images.length; i++) {
         const image = images[i];
         console.log(`📸 Adding image ${i + 1}:`, {
@@ -894,13 +928,13 @@ export const bookingAPI = {
 
       console.log('🚀 Sending fetch request to:', `${API_BASE_URL}/offers`);
 
-      // CRITICAL: Do NOT set Content-Type header when using FormData
-      // The browser/React Native will set it automatically with the boundary
+      
+      
       const response = await fetch(`${API_BASE_URL}/offers`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
-          // DO NOT include 'Content-Type': 'multipart/form-data'
+          
         },
         body: formData
       });
@@ -990,17 +1024,13 @@ export const bookingAPI = {
 
 
 export const sharpPayAPI = {
-  /**
-   * Get wallet balance
-   */
+  
   getBalance: async () => {
     const response = await api.get('/sharppay/balance');
     return response.data;
   },
 
-  /**
-   * Initialize wallet deposit
-   */
+  
   initializeDeposit: async (amount: number, metadata?: any) => {
     const response = await api.post('/sharppay/deposit/initialize', {
       amount,
@@ -1009,17 +1039,13 @@ export const sharpPayAPI = {
     return response.data;
   },
 
-  /**
-   * Verify wallet deposit
-   */
+  
   verifyDeposit: async (reference: string) => {
     const response = await api.get(`/sharppay/deposit/verify/${reference}`);
     return response.data;
   },
 
-  /**
-   * Get wallet transactions
-   */
+  
   getTransactions: async (params?: {
     type?: string;
     status?: string;
@@ -1032,17 +1058,13 @@ export const sharpPayAPI = {
     return response.data;
   },
 
-  /**
-   * Get wallet statistics
-   */
+  
   getStats: async () => {
     const response = await api.get('/sharppay/stats');
     return response.data;
   },
 
-  /**
-   * Request withdrawal
-   */
+  
   requestWithdrawal: async (withdrawalData: {
     amount: number;
     bankName: string;
@@ -1054,9 +1076,7 @@ export const sharpPayAPI = {
     return response.data;
   },
 
-  /**
-   * Get my withdrawals
-   */
+  
   getMyWithdrawals: async (params?: {
     page?: number;
     limit?: number;
@@ -1065,9 +1085,7 @@ export const sharpPayAPI = {
     return response.data;
   },
 
-  /**
-   * Get withdrawal by ID
-   */
+  
   getWithdrawalById: async (withdrawalId: string) => {
     const response = await api.get(`/sharppay/withdrawals/${withdrawalId}`);
     return response.data;
@@ -1102,17 +1120,13 @@ export const paymentAPI = {
   },
 
   
-  /**
-   * Pay for order using wallet
-   */
+  
   payOrderFromWallet: async (orderId: string) => {
     const response = await api.post(`/payments/orders/${orderId}/wallet/pay`);
     return response.data;
   },
 
-  /**
-   * Check if can pay order from wallet
-   */
+  
   canPayOrderFromWallet: async (orderId: string) => {
     const response = await api.get(`/payments/orders/${orderId}/wallet/check`);
     return response.data;
@@ -1120,10 +1134,13 @@ export const paymentAPI = {
 };
 
 export const walletAPI = {
+  
   getBalance: async () => {
     const response = await api.get('/wallet/balance');
     return response.data;
   },
+
+  
   getTransactions: async (params?: {
     type?: string;
     status?: string;
@@ -1132,65 +1149,114 @@ export const walletAPI = {
     page?: number;
     limit?: number;
   }) => {
-    const response = await api.get('/wallet/transactions', {
-      params
-    });
+    const response = await api.get('/wallet/transactions', { params });
     return response.data;
   },
+
+  
   getStats: async () => {
     const response = await api.get('/wallet/stats');
     return response.data;
   },
-  requestWithdrawal: async (withdrawalData: {
-    amount: number;
-    bankCode: string;
-    accountNumber: string;
-    accountName: string;
-    narration?: string;
-  }) => {
-    const response = await api.post('/wallet/withdraw', withdrawalData);
-    return response.data;
-  },
-  getMyWithdrawals: async (params?: {
-    page?: number;
-    limit?: number;
-  }) => {
-    const response = await api.get('/wallet/withdrawals/my-withdrawals', {
-      params
+
+  
+  
+  initializeWalletFunding: async (amount: number, metadata?: any) => {
+    const response = await api.post('/payments/wallet/fund/initialize', {
+      amount,
+      metadata,
     });
     return response.data;
   },
-  getWithdrawalById: async (withdrawalId: string) => {
-    const response = await api.get(`/wallet/withdrawals/${withdrawalId}`);
+
+  
+  verifyWalletFunding: async (reference: string) => {
+    const response = await api.get(`/payments/wallet/fund/verify/${reference}`);
     return response.data;
   },
+
+  
+  getFundingHistory: async (page: number = 1, limit: number = 20) => {
+    const response = await api.get('/payments/wallet/fund/history', {
+      params: { page, limit }
+    });
+    return response.data;
+  },
+
+  
+  
+  verifyBankAccount: async (data: { accountNumber: string; bankCode: string }) => {
+    const response = await api.post('/payments/wallet/verify-account', data);
+    return response.data;
+  },
+
+  
+  getBankList: async (country: string = 'nigeria') => {
+    const response = await api.get('/payments/wallet/banks', {
+      params: { country },
+    });
+    return response.data;
+  },
+
+  
+  
+  requestWithdrawal: async (withdrawalData: {
+    amount: number;
+    bankName: string;
+    bankCode: string; 
+    accountNumber: string;
+    accountName: string;
+    pin: string;
+  }) => {
+    const response = await api.post('/payments/wallet/withdraw', withdrawalData);
+    return response.data;
+  },
+
+  
+  getMyWithdrawals: async (page: number = 1, limit: number = 10) => {
+    const response = await api.get('/payment/withdrawals/my-withdrawals', {
+      params: { page, limit }
+    });
+    return response.data;
+  },
+
+  
+  getWithdrawalById: async (withdrawalId: string) => {
+    const response = await api.get(`/payment/withdrawals/${withdrawalId}`);
+    return response.data;
+  },
+
+  
+  
   setWithdrawalPin: async (pin: string, confirmPin: string) => {
-  const response = await api.post('/users/withdrawal-pin', {
-    pin,
-    confirmPin,
-  });
-  return response.data;
-},
+    const response = await api.post('/users/withdrawal-pin', {
+      pin,
+      confirmPin,
+    });
+    return response.data;
+  },
 
-verifyWithdrawalPin: async (pin: string) => {
-  const response = await api.post('/users/verify-withdrawal-pin', {
-    pin,
-  });
-  return response.data;
-},
+  
+  verifyWithdrawalPin: async (pin: string) => {
+    const response = await api.post('/users/verify-withdrawal-pin', {
+      pin,
+    });
+    return response.data;
+  },
 
-changeWithdrawalPin: async (
-  currentPin: string,
-  newPin: string,
-  confirmNewPin: string
-) => {
-  const response = await api.put('/users/withdrawal-pin', {
-    currentPin,
-    newPin,
-    confirmNewPin,
-  });
-  return response.data;
-},
+  
+  changeWithdrawalPin: async (
+    currentPin: string,
+    newPin: string,
+    confirmNewPin: string
+  ) => {
+    const response = await api.put('/users/withdrawal-pin', {
+      currentPin,
+      newPin,
+      confirmNewPin,
+    });
+    return response.data;
+  },
 };
 
 
@@ -1217,9 +1283,7 @@ export const analyticsAPI = {
 
 export const messageAPI = {
   
-  /**
-   * Get user's conversations list
-   */
+  
   getConversations: async (params?: {
     page?: number;
     limit?: number;
@@ -1228,27 +1292,19 @@ export const messageAPI = {
     return response.data;
   },
 
-  /**
-   * Get or create conversation with another user
-   * ✅ UPDATED: Changed from /conversations/:otherUserId to /conversations/with/:otherUserId
-   */
+  
   getOrCreateConversation: async (otherUserId: string) => {
     const response = await api.get(`/messages/conversations/with/${otherUserId}`);
     return response.data;
   },
 
-  /**
-   * Get conversation by ID
-   * ✅ UPDATED: Consistent path structure
-   */
+  
   getConversationById: async (conversationId: string) => {
     const response = await api.get(`/messages/conversations/${conversationId}`);
     return response.data;
   },
 
-  /**
-   * Send a message
-   */
+  
   sendMessage: async (messageData: {
     receiverId: string;
     messageType: 'text' | 'image' | 'file' | 'audio' | 'video';
@@ -1265,10 +1321,7 @@ export const messageAPI = {
     return response.data;
   },
 
-  /**
-   * Get messages in a conversation
-   * ✅ UPDATED: More explicit path
-   */
+  
   getMessages: async (conversationId: string, params?: {
     page?: number;
     limit?: number;
@@ -1277,59 +1330,43 @@ export const messageAPI = {
     return response.data;
   },
 
-  /**
-   * Mark message as read
-   */
+  
   markAsRead: async (messageId: string) => {
     const response = await api.put(`/messages/${messageId}/read`);
     return response.data;
   },
 
-  /**
-   * Mark all messages in conversation as read
-   * ✅ UPDATED: Consistent path structure
-   */
+  
   markConversationAsRead: async (conversationId: string) => {
     const response = await api.put(`/messages/conversations/${conversationId}/read`);
     return response.data;
   },
 
-  /**
-   * Toggle reaction on a message
-   */
+  
   toggleReaction: async (messageId: string, emoji: string) => {
     const response = await api.post(`/messages/${messageId}/reaction`, { emoji });
     return response.data;
   },
 
-  /**
-   * Delete a message
-   */
+  
   deleteMessage: async (messageId: string) => {
     const response = await api.delete(`/messages/${messageId}`);
     return response.data;
   },
 
-  /**
-   * Delete conversation
-   * ✅ UPDATED: Consistent path structure
-   */
+  
   deleteConversation: async (conversationId: string) => {
     const response = await api.delete(`/messages/conversations/${conversationId}`);
     return response.data;
   },
 
-  /**
-   * Get unread messages count
-   */
+  
   getUnreadCount: async () => {
     const response = await api.get('/messages/unread/count');
     return response.data;
   },
 
-  /**
-   * Search messages
-   */
+  
   searchMessages: async (query: string, params?: {
     page?: number;
     limit?: number;
@@ -1340,9 +1377,7 @@ export const messageAPI = {
     return response.data;
   },
 
-  /**
-   * Upload message attachment
-   */
+  
   uploadAttachment: async (file: any) => {
     try {
       const token = await AsyncStorage.getItem('accessToken');
@@ -1915,6 +1950,28 @@ export const productAPI = {
 };
 
 
+export const subscriptionAPI = {
+  getMySubscription: async () => {
+    const response = await api.get('/subscriptions/my-subscription');
+    return response.data;
+  },
+
+  createSubscription: async (plan: 'in_shop' | 'home_service' | 'both') => {
+    const response = await api.post('/subscriptions', { plan });
+    return response.data;
+  },
+
+  cancelSubscription: async (subscriptionId: string) => {
+    const response = await api.put(`/subscriptions/${subscriptionId}/cancel`);
+    return response.data;
+  },
+
+  changePlan: async (subscriptionId: string, plan: 'in_shop' | 'home_service' | 'both') => {
+    const response = await api.put(`/subscriptions/${subscriptionId}/change-plan`, { plan });
+    return response.data;
+  },
+};
+
 export const orderAPI = {
 
    
@@ -2058,6 +2115,54 @@ export const orderAPI = {
     endDate?: string;
   }) => {
     const response = await api.get('/orders', { params });
+    return response.data;
+  },
+
+  
+  
+  createDispute: async (disputeData: {
+    order: string;
+    product?: string;
+    reason: string;
+    description: string;
+  }) => {
+    const response = await api.post('/disputesProduct', disputeData);
+    return response.data;
+  },
+
+  
+  getMyDisputes: async (params?: {
+    page?: number;
+    limit?: number;
+    status?: string;
+    priority?: string;
+    reason?: string;
+    role?: 'customer' | 'seller';
+  }) => {
+    const response = await api.get('/disputesProduct/my-disputes', { params });
+    return response.data;
+  },
+
+  
+  getDisputeById: async (disputeId: string) => {
+    const response = await api.get(`/disputesProduct/${disputeId}`);
+    return response.data;
+  },
+
+  
+  addDisputeMessage: async (disputeId: string, message: string, attachments?: string[]) => {
+    const response = await api.post(`/disputesProduct/${disputeId}/messages`, {
+      message,
+      attachments,
+    });
+    return response.data;
+  },
+
+  
+  escalateDispute: async (disputeId: string, reason: string) => {
+    const response = await api.post(`/disputesProduct/${disputeId}/escalate`, {
+      reason,
+    });
     return response.data;
   },
 };

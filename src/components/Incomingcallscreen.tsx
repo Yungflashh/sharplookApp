@@ -31,7 +31,7 @@ const IncomingCallScreen: React.FC = () => {
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const rippleAnim = useRef(new Animated.Value(0)).current;
   const [ringtone, setRingtone] = useState<Audio.Sound | null>(null);
-  const [receivedOffer, setReceivedOffer] = useState<any>(offer); // Initialize with params offer
+  const [receivedOffer, setReceivedOffer] = useState<any>(offer); 
 
   useEffect(() => {
     console.log('📲 IncomingCallScreen MOUNTED');
@@ -62,7 +62,7 @@ const IncomingCallScreen: React.FC = () => {
     
     playRingtone();
 
-    // ✅ Listen for offer arriving via socket while on incoming call screen
+    
     const handleSignalOffer = (data: any) => {
       console.log('📞 Received offer via socket in IncomingCallScreen:', data);
       if (data.offer && data.callId === call._id) {
@@ -141,7 +141,7 @@ const IncomingCallScreen: React.FC = () => {
     console.log('   - Call ID:', call._id);
     console.log('   - Call type:', callType);
     console.log('   - Caller:', caller.firstName, caller.lastName);
-    console.log('   - Passing offer:', !!receivedOffer); // Now should be true!
+    console.log('   - Passing offer:', !!receivedOffer); 
     
     try {
       console.log('   - Running cleanup (stop ringtone)...');
@@ -156,7 +156,7 @@ const IncomingCallScreen: React.FC = () => {
         callId: call._id,
         callType: callType,
         isOutgoing: false,
-        offer: receivedOffer,  // ✅ Pass the stored offer (from socket or params)
+        offer: receivedOffer,  
         otherUser: caller,
       });
       console.log('   ✅ Navigation complete');
@@ -180,7 +180,7 @@ const IncomingCallScreen: React.FC = () => {
     <View className="flex-1 bg-gray-900">
       <StatusBar barStyle="light-content" />
       
-      {/* Background Image with Overlay */}
+      {}
       <View className="absolute inset-0">
         {caller.avatar ? (
           <Image
@@ -195,9 +195,9 @@ const IncomingCallScreen: React.FC = () => {
         />
       </View>
 
-      {/* Content */}
+      {}
       <SafeAreaView className="flex-1 justify-between py-8">
-        {/* Caller Info */}
+        {}
         <View className="items-center px-6 mt-12">
           <View className="mb-6">
             <Animated.View 
@@ -222,7 +222,7 @@ const IncomingCallScreen: React.FC = () => {
               </View>
             </Animated.View>
 
-            {/* Ripple Effect */}
+            {}
             <Animated.View 
               style={{
                 position: 'absolute',
@@ -252,10 +252,10 @@ const IncomingCallScreen: React.FC = () => {
           </Text>
         </View>
 
-        {/* Action Buttons */}
+        {}
         <View className="px-12">
           <View className="flex-row justify-around items-center">
-            {/* Reject Button */}
+            {}
             <TouchableOpacity
               onPress={handleReject}
               activeOpacity={0.8}
@@ -270,7 +270,7 @@ const IncomingCallScreen: React.FC = () => {
               <Text className="text-white text-sm mt-3 font-medium">Decline</Text>
             </TouchableOpacity>
 
-            {/* Accept Button */}
+            {}
             <TouchableOpacity
               onPress={handleAccept}
               activeOpacity={0.8}

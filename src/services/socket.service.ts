@@ -13,7 +13,7 @@ class SocketService {
     try {
       if (this.socket?.connected) {
         console.log('🔌 Socket already connected');
-        // Trigger callbacks immediately if already connected
+        
         this.connectionCallbacks.forEach(cb => cb());
         return;
       }
@@ -52,7 +52,7 @@ class SocketService {
       console.log('✅ Socket connected successfully');
       console.log('   Socket ID:', this.socket?.id);
       
-      // Trigger all connection callbacks
+      
       this.connectionCallbacks.forEach(cb => cb());
     });
 
@@ -79,7 +79,7 @@ class SocketService {
   onConnected(callback: () => void): void {
     this.connectionCallbacks.push(callback);
     
-    // If already connected, trigger immediately
+    
     if (this.isConnected) {
       callback();
     }
@@ -102,6 +102,175 @@ class SocketService {
     return connected;
   }
 
+  
+  
+  
+
+  
+  onWalletFunded(callback: (data: {
+    reference: string;
+    amount: number;
+    newBalance: number;
+    message: string;
+    timestamp: string;
+  }) => void): void {
+    if (!this.socket) {
+      console.error('❌ Cannot listen for wallet:funded - socket not initialized');
+      return;
+    }
+
+    console.log('👂 Setting up listener for: wallet:funded');
+    this.socket.on('wallet:funded', (data) => {
+      console.log('💰 RECEIVED wallet:funded:', JSON.stringify(data, null, 2));
+      callback(data);
+    });
+  }
+
+  
+  onWalletFundingFailed(callback: (data: {
+    reference: string;
+    reason: string;
+    message: string;
+    timestamp: string;
+  }) => void): void {
+    if (!this.socket) {
+      console.error('❌ Cannot listen for wallet:funding:failed - socket not initialized');
+      return;
+    }
+
+    console.log('👂 Setting up listener for: wallet:funding:failed');
+    this.socket.on('wallet:funding:failed', (data) => {
+      console.log('❌ RECEIVED wallet:funding:failed:', JSON.stringify(data, null, 2));
+      callback(data);
+    });
+  }
+
+  
+  onWithdrawalSuccess(callback: (data: {
+    reference: string;
+    amount: number;
+    newBalance: number;
+    bankName: string;
+    accountNumber: string;
+    message: string;
+    timestamp: string;
+  }) => void): void {
+    if (!this.socket) {
+      console.error('❌ Cannot listen for withdrawal:success - socket not initialized');
+      return;
+    }
+
+    console.log('👂 Setting up listener for: withdrawal:success');
+    this.socket.on('withdrawal:success', (data) => {
+      console.log('💸 RECEIVED withdrawal:success:', JSON.stringify(data, null, 2));
+      callback(data);
+    });
+  }
+
+  
+  onWithdrawalFailed(callback: (data: {
+    reference: string;
+    reason: string;
+    refundedAmount?: number;
+    newBalance?: number;
+    message: string;
+    timestamp: string;
+  }) => void): void {
+    if (!this.socket) {
+      console.error('❌ Cannot listen for withdrawal:failed - socket not initialized');
+      return;
+    }
+
+    console.log('👂 Setting up listener for: withdrawal:failed');
+    this.socket.on('withdrawal:failed', (data) => {
+      console.log('❌ RECEIVED withdrawal:failed:', JSON.stringify(data, null, 2));
+      callback(data);
+    });
+  }
+
+  
+  onPaymentSuccess(callback: (data: {
+    reference: string;
+    bookingId?: string;
+    amount?: number;
+    message: string;
+    timestamp: string;
+  }) => void): void {
+    if (!this.socket) {
+      console.error('❌ Cannot listen for payment:success - socket not initialized');
+      return;
+    }
+
+    console.log('👂 Setting up listener for: payment:success');
+    this.socket.on('payment:success', (data) => {
+      console.log('💳 RECEIVED payment:success:', JSON.stringify(data, null, 2));
+      callback(data);
+    });
+  }
+
+  
+  onPaymentFailed(callback: (data: {
+    reference: string;
+    bookingId?: string;
+    reason?: string;
+    message: string;
+    timestamp: string;
+  }) => void): void {
+    if (!this.socket) {
+      console.error('❌ Cannot listen for payment:failed - socket not initialized');
+      return;
+    }
+
+    console.log('👂 Setting up listener for: payment:failed');
+    this.socket.on('payment:failed', (data) => {
+      console.log('❌ RECEIVED payment:failed:', JSON.stringify(data, null, 2));
+      callback(data);
+    });
+  }
+
+  
+  onOrderPaymentSuccess(callback: (data: {
+    reference: string;
+    orderId?: string;
+    orderNumber?: string;
+    amount?: number;
+    message: string;
+    timestamp: string;
+  }) => void): void {
+    if (!this.socket) {
+      console.error('❌ Cannot listen for order:payment:success - socket not initialized');
+      return;
+    }
+
+    console.log('👂 Setting up listener for: order:payment:success');
+    this.socket.on('order:payment:success', (data) => {
+      console.log('🛒 RECEIVED order:payment:success:', JSON.stringify(data, null, 2));
+      callback(data);
+    });
+  }
+
+  
+  onOrderPaymentFailed(callback: (data: {
+    reference: string;
+    orderId?: string;
+    reason?: string;
+    message: string;
+    timestamp: string;
+  }) => void): void {
+    if (!this.socket) {
+      console.error('❌ Cannot listen for order:payment:failed - socket not initialized');
+      return;
+    }
+
+    console.log('👂 Setting up listener for: order:payment:failed');
+    this.socket.on('order:payment:failed', (data) => {
+      console.log('❌ RECEIVED order:payment:failed:', JSON.stringify(data, null, 2));
+      callback(data);
+    });
+  }
+
+  
+  
   
 
   
@@ -140,6 +309,8 @@ class SocketService {
     });
   }
 
+  
+  
   
 
   
@@ -232,6 +403,8 @@ class SocketService {
   }
 
   
+  
+  
 
   
   startTyping(conversationId: string): void {
@@ -284,6 +457,8 @@ class SocketService {
   }
 
   
+  
+  
 
   
   requestUserStatus(userIds: string[]): void {
@@ -325,6 +500,8 @@ class SocketService {
   }
 
   
+  
+  
 
   
   addReaction(messageId: string, emoji: string): void {
@@ -363,6 +540,8 @@ class SocketService {
   }
 
   
+  
+  
 
   
   deleteMessage(messageId: string): void {
@@ -389,6 +568,8 @@ class SocketService {
     });
   }
 
+  
+  
   
 
   

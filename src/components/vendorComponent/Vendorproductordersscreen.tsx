@@ -99,10 +99,10 @@ const VendorProductOrdersScreen: React.FC = () => {
       }
 
       if (response.success) {
-        // The orders array is in response.data.data based on the API response structure
+        
         let orderList = [];
         
-        // Check the actual structure from the logs
+        
         if (response.data?.data && Array.isArray(response.data.data)) {
           orderList = response.data.data;
           console.log('✅ Using response.data.data');
@@ -118,7 +118,7 @@ const VendorProductOrdersScreen: React.FC = () => {
 
         console.log('Raw orderList length:', orderList.length);
 
-        // Add safety check for items array
+        
         const safeOrders = orderList.map((order: any) => ({
           ...order,
           items: Array.isArray(order.items) ? order.items : [],
@@ -306,66 +306,49 @@ const VendorProductOrdersScreen: React.FC = () => {
         return 'help-circle';
     }
   };
+const getActionButtons = (order: Order) => {
+  const isLoading = actionLoading === order._id;
 
-  const getActionButtons = (order: Order) => {
-    const isLoading = actionLoading === order._id;
+  
+  if (order.status === 'pending' || order.status === 'confirmed') {
+    return (
+      <TouchableOpacity
+        onPress={() => handleUpdateStatus(order._id, 'processing')}
+        disabled={isLoading}
+        className="bg-blue-500 py-3 rounded-xl"
+        activeOpacity={0.8}
+      >
+        {isLoading ? (
+          <ActivityIndicator size="small" color="#fff" />
+        ) : (
+          <Text className="text-white text-center font-bold text-sm">Accept & Process</Text>
+        )}
+      </TouchableOpacity>
+    );
+  }
 
-    // Handle 'confirmed' status same as 'pending'
-    if (order.status === 'pending' || order.status === 'confirmed') {
-      return (
-        <TouchableOpacity
-          onPress={() => handleUpdateStatus(order._id, 'processing')}
-          disabled={isLoading}
-          className="bg-blue-500 py-3 rounded-xl"
-          activeOpacity={0.8}
-        >
-          {isLoading ? (
-            <ActivityIndicator size="small" color="#fff" />
-          ) : (
-            <Text className="text-white text-center font-bold text-sm">Accept & Process</Text>
-          )}
-        </TouchableOpacity>
-      );
-    }
-
-    if (order.status === 'processing' && order.deliveryType === 'home_delivery') {
-      return (
-        <View style={{ gap: 8 }}>
-          {!order.trackingNumber && (
-            <TouchableOpacity
-              onPress={() => handleAddTracking(order._id)}
-              disabled={isLoading}
-              className="bg-purple-500 py-3 rounded-xl"
-              activeOpacity={0.8}
-            >
-              {isLoading ? (
-                <ActivityIndicator size="small" color="#fff" />
-              ) : (
-                <Text className="text-white text-center font-bold text-sm">Add Tracking</Text>
-              )}
-            </TouchableOpacity>
-          )}
-          
+  if (order.status === 'processing') {
+    return (
+      <View style={{ gap: 8 }}>
+        {}
+        {order.deliveryType === 'home_delivery' && !order.trackingNumber && (
           <TouchableOpacity
-            onPress={() => handleUpdateStatus(order._id, 'shipped')}
+            onPress={() => handleAddTracking(order._id)}
             disabled={isLoading}
-            className="bg-green-500 py-3 rounded-xl"
+            className="bg-purple-500 py-3 rounded-xl"
             activeOpacity={0.8}
           >
             {isLoading ? (
               <ActivityIndicator size="small" color="#fff" />
             ) : (
-              <Text className="text-white text-center font-bold text-sm">Mark as Shipped</Text>
+              <Text className="text-white text-center font-bold text-sm">Add Tracking</Text>
             )}
           </TouchableOpacity>
-        </View>
-      );
-    }
-
-    if (order.status === 'processing' && order.deliveryType === 'pickup') {
-      return (
+        )}
+        
+        {}
         <TouchableOpacity
-          onPress={() => handleUpdateStatus(order._id, 'delivered')}
+          onPress={() => handleUpdateStatus(order._id, 'shipped')}
           disabled={isLoading}
           className="bg-green-500 py-3 rounded-xl"
           activeOpacity={0.8}
@@ -373,68 +356,73 @@ const VendorProductOrdersScreen: React.FC = () => {
           {isLoading ? (
             <ActivityIndicator size="small" color="#fff" />
           ) : (
-            <Text className="text-white text-center font-bold text-sm">Mark as Ready for Pickup</Text>
+            <Text className="text-white text-center font-bold text-sm">
+              {order.deliveryType === 'pickup' ? 'Mark as Ready for Pickup' : 'Mark as Shipped'}
+            </Text>
           )}
         </TouchableOpacity>
-      );
-    }
+      </View>
+    );
+  }
 
-    if (order.status === 'shipped') {
-      return (
-        <TouchableOpacity
-          onPress={() => handleUpdateStatus(order._id, 'out_for_delivery')}
-          disabled={isLoading}
-          className="bg-purple-500 py-3 rounded-xl"
-          activeOpacity={0.8}
-        >
-          {isLoading ? (
-            <ActivityIndicator size="small" color="#fff" />
-          ) : (
-            <Text className="text-white text-center font-bold text-sm">Mark as Out for Delivery</Text>
-          )}
-        </TouchableOpacity>
-      );
-    }
+  if (order.status === 'shipped') {
+    return (
+      <TouchableOpacity
+        onPress={() => handleUpdateStatus(order._id, 'out_for_delivery')}
+        disabled={isLoading}
+        className="bg-purple-500 py-3 rounded-xl"
+        activeOpacity={0.8}
+      >
+        {isLoading ? (
+          <ActivityIndicator size="small" color="#fff" />
+        ) : (
+          <Text className="text-white text-center font-bold text-sm">
+            {order.deliveryType === 'pickup' ? 'Customer Picked Up' : 'Mark as Out for Delivery'}
+          </Text>
+        )}
+      </TouchableOpacity>
+    );
+  }
 
-    if (order.status === 'out_for_delivery') {
-      return (
-        <TouchableOpacity
-          onPress={() => handleUpdateStatus(order._id, 'delivered')}
-          disabled={isLoading}
-          className="bg-green-500 py-3 rounded-xl"
-          activeOpacity={0.8}
-        >
-          {isLoading ? (
-            <ActivityIndicator size="small" color="#fff" />
-          ) : (
-            <Text className="text-white text-center font-bold text-sm">Mark as Delivered</Text>
-          )}
-        </TouchableOpacity>
-      );
-    }
+  if (order.status === 'out_for_delivery') {
+    return (
+      <TouchableOpacity
+        onPress={() => handleUpdateStatus(order._id, 'delivered')}
+        disabled={isLoading}
+        className="bg-green-500 py-3 rounded-xl"
+        activeOpacity={0.8}
+      >
+        {isLoading ? (
+          <ActivityIndicator size="small" color="#fff" />
+        ) : (
+          <Text className="text-white text-center font-bold text-sm">Mark as Delivered</Text>
+        )}
+      </TouchableOpacity>
+    );
+  }
 
-    if (order.status === 'delivered' && !order.sellerConfirmedDelivery) {
-      return (
-        <TouchableOpacity
-          onPress={() => handleConfirmDelivery(order._id)}
-          disabled={isLoading}
-          className="bg-green-500 py-3 rounded-xl"
-          activeOpacity={0.8}
-        >
-          {isLoading ? (
-            <ActivityIndicator size="small" color="#fff" />
-          ) : (
-            <Text className="text-white text-center font-bold text-sm">Confirm Delivery</Text>
-          )}
-        </TouchableOpacity>
-      );
-    }
+  if (order.status === 'delivered' && !order.sellerConfirmedDelivery) {
+    return (
+      <TouchableOpacity
+        onPress={() => handleConfirmDelivery(order._id)}
+        disabled={isLoading}
+        className="bg-green-500 py-3 rounded-xl"
+        activeOpacity={0.8}
+      >
+        {isLoading ? (
+          <ActivityIndicator size="small" color="#fff" />
+        ) : (
+          <Text className="text-white text-center font-bold text-sm">Confirm Delivery</Text>
+        )}
+      </TouchableOpacity>
+    );
+  }
 
-    return null;
-  };
+  return null;
+};
 
   const renderOrderCard = (order: Order) => {
-    // Safety check for order items
+    
     const orderItems = Array.isArray(order.items) ? order.items : [];
     
     return (
@@ -455,7 +443,7 @@ const VendorProductOrdersScreen: React.FC = () => {
           }),
         }}
       >
-        {/* Header */}
+        {}
         <View className="flex-row items-start justify-between mb-4">
           <View className="flex-1 mr-3">
             <Text className="text-lg font-bold text-gray-900 mb-1">
@@ -491,7 +479,7 @@ const VendorProductOrdersScreen: React.FC = () => {
           </View>
         </View>
 
-        {/* Items List */}
+        {}
         {orderItems.length > 0 && (
           <View className="bg-gray-50 rounded-2xl p-4 mb-4">
             {orderItems.map((item, index) => (
@@ -529,7 +517,7 @@ const VendorProductOrdersScreen: React.FC = () => {
           </View>
         )}
 
-        {/* Order Details */}
+        {}
         <View className="bg-gray-50 rounded-2xl p-4 mb-4" style={{ gap: 12 }}>
           <View className="flex-row items-center">
             <View className="w-9 h-9 rounded-xl bg-blue-100 items-center justify-center mr-3">
@@ -633,7 +621,7 @@ const VendorProductOrdersScreen: React.FC = () => {
           )}
         </View>
 
-        {/* Delivery Confirmation Status */}
+        {}
         {order.status === 'delivered' && (
           <View className="bg-blue-50 rounded-2xl p-3 mb-4">
             <View className="flex-row items-center justify-between">
@@ -657,10 +645,10 @@ const VendorProductOrdersScreen: React.FC = () => {
           </View>
         )}
 
-        {/* Action Buttons */}
+        {}
         {getActionButtons(order)}
 
-        {/* View Details Button */}
+        {}
         <TouchableOpacity
           onPress={() => navigation.navigate('OrderDetail', { orderId: order._id, userType: 'vendor' })}
           className="mt-3 pt-4 border-t border-gray-100"
@@ -729,7 +717,7 @@ const VendorProductOrdersScreen: React.FC = () => {
 
   return (
     <SafeAreaView className="flex-1 bg-gray-50" edges={['top']}>
-      {/* Header */}
+      {}
       <LinearGradient
         colors={['#eb278d', '#f472b6']}
         start={{ x: 0, y: 0 }}
@@ -746,7 +734,7 @@ const VendorProductOrdersScreen: React.FC = () => {
             </View>
           </View>
 
-          {/* Search Bar */}
+          {}
           <View className="flex-row items-center bg-white/20 rounded-2xl px-4 py-3 mb-4">
             <Ionicons name="search" size={20} color="#fff" />
             <TextInput
@@ -763,7 +751,7 @@ const VendorProductOrdersScreen: React.FC = () => {
             )}
           </View>
 
-          {/* Filter Tabs */}
+          {}
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -791,7 +779,7 @@ const VendorProductOrdersScreen: React.FC = () => {
         </View>
       </LinearGradient>
 
-      {/* Orders List */}
+      {}
       <ScrollView
         className="flex-1"
         showsVerticalScrollIndicator={false}

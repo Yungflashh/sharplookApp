@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useNavigation } from '@react-navigation/native';
 import { bookingAPI, sharpPayAPI, handleAPIError } from '@/api/api';
 
 interface PaymentMethodModalProps {
@@ -17,7 +18,6 @@ interface PaymentMethodModalProps {
   bookingId: string;
   bookingAmount: number;
   onPaymentSuccess: () => void;
-  onNavigateToPaystack: () => void;
 }
 
 const PaymentMethodModal: React.FC<PaymentMethodModalProps> = ({
@@ -26,8 +26,9 @@ const PaymentMethodModal: React.FC<PaymentMethodModalProps> = ({
   bookingId,
   bookingAmount,
   onPaymentSuccess,
-  onNavigateToPaystack,
 }) => {
+  const navigation = useNavigation();
+  
   const [loading, setLoading] = useState(true);
   const [paying, setPaying] = useState(false);
   const [walletBalance, setWalletBalance] = useState(0);
@@ -44,12 +45,12 @@ const PaymentMethodModal: React.FC<PaymentMethodModalProps> = ({
     try {
       setLoading(true);
 
-      // Get wallet balance
+      
       const balanceResponse = await sharpPayAPI.getBalance();
       const balance = balanceResponse.data?.balance || 0;
       setWalletBalance(balance);
 
-      // Check if can pay from wallet
+      
       const canPayResponse = await bookingAPI.canPayFromWallet(bookingId);
       const { canPay, shortfall: walletShortfall } = canPayResponse.data;
 
@@ -75,8 +76,8 @@ const PaymentMethodModal: React.FC<PaymentMethodModalProps> = ({
             text: 'Fund Wallet',
             onPress: () => {
               onClose();
-              // Navigate to fund wallet screen
-              // navigation.navigate('FundWallet', { amount: shortfall });
+              
+              
               Alert.alert('Fund Wallet', 'Wallet funding feature coming soon!');
             },
           },
@@ -96,7 +97,8 @@ const PaymentMethodModal: React.FC<PaymentMethodModalProps> = ({
             try {
               setPaying(true);
 
-              const response = await bookingAPI.payFromWallet(bookingId);
+              
+              const response = await bookingAPI.payFromWallet({ bookingId });
 
               if (response.success) {
                 Alert.alert(
@@ -126,8 +128,15 @@ const PaymentMethodModal: React.FC<PaymentMethodModalProps> = ({
   };
 
   const handlePayWithCard = () => {
+    
     onClose();
-    onNavigateToPaystack();
+    
+    
+    
+    navigation.navigate('Payment', {
+      bookingId,
+      amount: bookingAmount,
+    });
   };
 
   const formatPrice = (price: number) => `₦${price.toLocaleString()}`;
@@ -141,7 +150,7 @@ const PaymentMethodModal: React.FC<PaymentMethodModalProps> = ({
     >
       <View className="flex-1 bg-black/50 justify-end">
         <View className="bg-white rounded-t-3xl">
-          {/* Header */}
+          {}
           <View className="px-6 py-4 border-b border-gray-100">
             <View className="flex-row items-center justify-between">
               <Text className="text-xl font-bold text-gray-900">

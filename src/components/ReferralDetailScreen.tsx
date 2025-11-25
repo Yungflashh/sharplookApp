@@ -147,7 +147,7 @@ const ReferralDetailScreen = ({ route, navigation }: any) => {
       </LinearGradient>
 
       <View style={styles.content}>
-        {/* Referee Info */}
+        {}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Referred User</Text>
           <View style={styles.userCard}>
@@ -172,7 +172,7 @@ const ReferralDetailScreen = ({ route, navigation }: any) => {
           </View>
         </View>
 
-        {/* Referral Code */}
+        {}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Referral Code Used</Text>
           <View style={styles.codeBox}>
@@ -180,7 +180,7 @@ const ReferralDetailScreen = ({ route, navigation }: any) => {
           </View>
         </View>
 
-        {/* Rewards */}
+        {}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Rewards</Text>
           <View style={styles.rewardCard}>

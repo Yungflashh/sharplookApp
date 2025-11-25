@@ -5,10 +5,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import * as Location from 'expo-location';
 import { RootStackParamList } from '@/types/navigation.types';
 import { bookingAPI, handleAPIError } from '@/api/api';
+
 type CreateBookingNavigationProp = NativeStackNavigationProp<RootStackParamList, 'CreateBooking'>;
 type CreateBookingRouteProp = RouteProp<RootStackParamList, 'CreateBooking'>;
+
 const CreateBookingScreen: React.FC = () => {
   const navigation = useNavigation<CreateBookingNavigationProp>();
   const route = useRoute<CreateBookingRouteProp>();
@@ -16,6 +19,7 @@ const CreateBookingScreen: React.FC = () => {
     service,
     vendor
   } = route.params;
+
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [scheduledDate, setScheduledDate] = useState(new Date());
@@ -31,22 +35,113 @@ const CreateBookingScreen: React.FC = () => {
   const [servicePrice, setServicePrice] = useState(service.basePrice || 0);
   const [distanceCharge, setDistanceCharge] = useState(0);
   const [totalAmount, setTotalAmount] = useState(service.basePrice || 0);
+
+  
+  const [locationLoading, setLocationLoading] = useState(false);
+  const [locationError, setLocationError] = useState('');
+  const [locationPermissionGranted, setLocationPermissionGranted] = useState(false);
+
   const isHomeServiceAvailable = vendor.vendorProfile.vendorType === 'home_service' || vendor.vendorProfile.vendorType === 'both';
   const isShopServiceAvailable = vendor.vendorProfile.vendorType === 'in_shop' || vendor.vendorProfile.vendorType === 'both';
+
   useEffect(() => {
     if (!isHomeServiceAvailable && isShopServiceAvailable) {
       setLocationType('shop');
     }
   }, []);
+
   useEffect(() => {
     setTotalAmount(servicePrice + distanceCharge);
   }, [servicePrice, distanceCharge]);
+
+  
+  useEffect(() => {
+    checkLocationPermission();
+  }, []);
+
+  const checkLocationPermission = async () => {
+    try {
+      const { status } = await Location.getForegroundPermissionsAsync();
+      setLocationPermissionGranted(status === 'granted');
+    } catch (error) {
+      console.error('Error checking location permission:', error);
+    }
+  };
+
+  const requestLocationPermission = async () => {
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      setLocationPermissionGranted(status === 'granted');
+      return status === 'granted';
+    } catch (error) {
+      console.error('Error requesting location permission:', error);
+      return false;
+    }
+  };
+
+  const getCurrentLocation = async () => {
+    setLocationLoading(true);
+    setLocationError('');
+
+    try {
+      if (!locationPermissionGranted) {
+        const granted = await requestLocationPermission();
+        if (!granted) {
+          setLocationError('Location permission is required');
+          Alert.alert(
+            'Location Permission Required',
+            'Please enable location permissions in your device settings to use this feature.',
+            [{ text: 'OK' }]
+          );
+          setLocationLoading(false);
+          return;
+        }
+      }
+
+      const position = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.High,
+      });
+
+      const { latitude, longitude } = position.coords;
+
+      const geocode = await Location.reverseGeocodeAsync({
+        latitude,
+        longitude,
+      });
+
+      if (geocode && geocode.length > 0) {
+        const addressData = geocode[0];
+        
+        
+        setAddress(`${addressData.street || ''} ${addressData.streetNumber || ''}`.trim() || 'Address not available');
+        setCity(addressData.city || addressData.subregion || 'Unknown City');
+        setState(addressData.region || 'Unknown State');
+        setCoordinates([longitude, latitude]);
+
+        Alert.alert('Success', 'Location captured successfully!');
+      } else {
+        throw new Error('Unable to get address details');
+      }
+    } catch (error: any) {
+      console.error('Location error:', error);
+      setLocationError('Failed to get location. Please try again.');
+      Alert.alert(
+        'Location Error',
+        'Unable to get your location. Please ensure location services are enabled and try again.',
+        [{ text: 'OK' }]
+      );
+    } finally {
+      setLocationLoading(false);
+    }
+  };
+
   const onDateChange = (_event: any, selectedDate?: Date) => {
     setShowDatePicker(Platform.OS === 'ios');
     if (selectedDate) {
       setScheduledDate(selectedDate);
     }
   };
+
   const onTimeChange = (_event: any, selectedDate?: Date) => {
     setShowTimePicker(Platform.OS === 'ios');
     if (selectedDate) {
@@ -55,9 +150,7 @@ const CreateBookingScreen: React.FC = () => {
       setScheduledTime(`${hours}:${minutes}`);
     }
   };
-  const getCurrentLocation = async () => {
-    Alert.alert('Location', 'Getting current location...');
-  };
+
   const validateStep1 = () => {
     if (!scheduledDate) {
       Alert.alert('Error', 'Please select a date');
@@ -69,6 +162,7 @@ const CreateBookingScreen: React.FC = () => {
     }
     return true;
   };
+
   const validateStep2 = () => {
     if (locationType === 'home' && isHomeServiceAvailable) {
       if (!address.trim()) {
@@ -86,6 +180,7 @@ const CreateBookingScreen: React.FC = () => {
     }
     return true;
   };
+
   const handleNext = () => {
     if (step === 1 && validateStep1()) {
       setStep(2);
@@ -93,6 +188,7 @@ const CreateBookingScreen: React.FC = () => {
       setStep(3);
     }
   };
+
   const handleBack = () => {
     if (step > 1) {
       setStep(step - 1);
@@ -100,6 +196,7 @@ const CreateBookingScreen: React.FC = () => {
       navigation.goBack();
     }
   };
+
   const handleCreateBooking = async () => {
     try {
       setLoading(true);
@@ -109,14 +206,17 @@ const CreateBookingScreen: React.FC = () => {
         }]);
         return;
       }
+
       const bookingData: any = {
         service: service._id,
         scheduledDate: scheduledDate.toISOString(),
         scheduledTime
       };
+
       if (clientNotes.trim()) {
         bookingData.clientNotes = clientNotes.trim();
       }
+
       if (locationType === 'home' && isHomeServiceAvailable) {
         bookingData.location = {
           address: address.trim(),
@@ -125,9 +225,11 @@ const CreateBookingScreen: React.FC = () => {
           coordinates
         };
       }
+
       console.log('Creating booking with data:', bookingData);
       const response = await bookingAPI.createBooking(bookingData);
       console.log('Booking created:', response);
+
       if (response.success) {
         Alert.alert('Booking Created!', 'Your booking has been created. Please complete the payment.', [{
           text: 'OK',
@@ -154,9 +256,11 @@ const CreateBookingScreen: React.FC = () => {
       setLoading(false);
     }
   };
+
   const formatPrice = (price: number) => {
     return `₦${price.toLocaleString()}`;
   };
+
   const formatDate = (date: Date) => {
     return date.toLocaleDateString('en-US', {
       weekday: 'short',
@@ -165,6 +269,7 @@ const CreateBookingScreen: React.FC = () => {
       day: 'numeric'
     });
   };
+
   return <SafeAreaView className="flex-1 bg-gray-50">
       {}
       <View className="bg-white px-5 py-4 border-b border-gray-100">
@@ -299,48 +404,78 @@ const CreateBookingScreen: React.FC = () => {
               </View>
             </View>
 
-            {}
+            {/* Address Input (Home Service) */}
             {locationType === 'home' && isHomeServiceAvailable && <View className="bg-white rounded-2xl p-5">
                 <View className="flex-row items-center justify-between mb-4">
                   <Text className="text-base font-bold text-gray-900">
                     Your Address
                   </Text>
-                  <TouchableOpacity onPress={getCurrentLocation} className="flex-row items-center">
-                    <Ionicons name="navigate" size={16} color="#eb278d" />
-                    <Text className="text-sm text-pink-600 ml-1 font-semibold">
-                      Use current
-                    </Text>
+                  <TouchableOpacity
+                    onPress={getCurrentLocation}
+                    disabled={locationLoading}
+                    className="flex-row items-center"
+                    activeOpacity={0.7}
+                  >
+                    {locationLoading ? (
+                      <ActivityIndicator size="small" color="#eb278d" />
+                    ) : (
+                      <>
+                        <Ionicons name="navigate" size={16} color="#eb278d" />
+                        <Text className="text-sm text-pink-600 ml-1 font-semibold">
+                          Use current
+                        </Text>
+                      </>
+                    )}
                   </TouchableOpacity>
                 </View>
 
+                {locationError ? (
+                  <View className="bg-red-50 border border-red-200 rounded-xl p-3 mb-4 flex-row items-center">
+                    <Ionicons name="alert-circle" size={18} color="#DC2626" />
+                    <Text className="text-red-600 text-xs ml-2 flex-1">{locationError}</Text>
+                  </View>
+                ) : null}
+
                 <View className="gap-4">
-                  {}
+                  {/* Street Address */}
                   <View>
                     <Text className="text-sm font-semibold text-gray-700 mb-2">
                       Street Address *
                     </Text>
-                    <TextInput className="border-2 border-gray-200 rounded-xl px-4 py-3 text-gray-900" placeholder="Enter your street address" value={address} onChangeText={setAddress} multiline />
+                    <TextInput className="border-2 border-gray-200 rounded-xl px-4 py-3 text-gray-900" placeholder="Enter your street address" value={address} onChangeText={setAddress} multiline editable={!locationLoading} />
                   </View>
 
-                  {}
+                  {/* City */}
                   <View>
                     <Text className="text-sm font-semibold text-gray-700 mb-2">
                       City *
                     </Text>
-                    <TextInput className="border-2 border-gray-200 rounded-xl px-4 py-3 text-gray-900" placeholder="Enter city" value={city} onChangeText={setCity} />
+                    <TextInput className="border-2 border-gray-200 rounded-xl px-4 py-3 text-gray-900" placeholder="Enter city" value={city} onChangeText={setCity} editable={!locationLoading} />
                   </View>
 
-                  {}
+                  {/* State */}
                   <View>
                     <Text className="text-sm font-semibold text-gray-700 mb-2">
                       State *
                     </Text>
-                    <TextInput className="border-2 border-gray-200 rounded-xl px-4 py-3 text-gray-900" placeholder="Enter state" value={state} onChangeText={setState} />
+                    <TextInput className="border-2 border-gray-200 rounded-xl px-4 py-3 text-gray-900" placeholder="Enter state" value={state} onChangeText={setState} editable={!locationLoading} />
                   </View>
                 </View>
+
+                {address && city && state && (
+                  <View className="bg-green-50 border border-green-200 rounded-xl p-3 mt-4">
+                    <View className="flex-row items-center mb-2">
+                      <Ionicons name="checkmark-circle" size={20} color="#059669" />
+                      <Text className="text-green-700 font-semibold ml-2">Location Set</Text>
+                    </View>
+                    <Text className="text-gray-700 text-sm">
+                      {address}, {city}, {state}
+                    </Text>
+                  </View>
+                )}
               </View>}
 
-            {}
+            {/* Vendor Location (Shop Service) */}
             {locationType === 'shop' && vendor.vendorProfile.location && <View className="bg-white rounded-2xl p-5">
                 <Text className="text-base font-bold text-gray-900 mb-4">
                   Vendor's Location
@@ -478,4 +613,5 @@ const CreateBookingScreen: React.FC = () => {
       </View>
     </SafeAreaView>;
 };
+
 export default CreateBookingScreen;

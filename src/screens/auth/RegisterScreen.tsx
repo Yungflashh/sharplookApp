@@ -22,7 +22,7 @@ interface LocationData {
 const RegisterScreen = () => {
   const navigation = useNavigation<RegisterScreenNavigationProp>();
   
-  // Form states
+  
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
@@ -37,13 +37,13 @@ const RegisterScreen = () => {
   const [showCountryPicker, setShowCountryPicker] = useState(false);
   const [generalError, setGeneralError] = useState('');
   
-  // ⭐ NEW: Referral code validation states
+  
   const [referralCodeValid, setReferralCodeValid] = useState<boolean | null>(null);
   const [referralCodeChecking, setReferralCodeChecking] = useState(false);
   const [referralCodeError, setReferralCodeError] = useState('');
   const [referrerName, setReferrerName] = useState('');
   
-  // Location states
+  
   const [location, setLocation] = useState<LocationData | null>(null);
   const [locationLoading, setLocationLoading] = useState(false);
   const [locationError, setLocationError] = useState('');
@@ -59,12 +59,12 @@ const RegisterScreen = () => {
     terms: ''
   });
 
-  // Check location permission on mount
+  
   useEffect(() => {
     checkLocationPermission();
   }, []);
 
-  // ⭐ NEW: Debounced referral code validation
+  
   useEffect(() => {
     const delayDebounce = setTimeout(() => {
       if (referralId.trim() && referralId.length >= 6) {
@@ -89,7 +89,7 @@ const validateReferralCode = async (code: string) => {
   }
 
   setReferralCodeChecking(true);
-  setReferralCodeError(''); // Clear before checking
+  setReferralCodeError(''); 
   setGeneralError('');
 
   try {
@@ -97,19 +97,19 @@ const validateReferralCode = async (code: string) => {
     
     console.log('Response data:', response.data);
     
-    // ⭐ MORE EXPLICIT CHECK
+    
     const isValid = response.data?.success && response.data?.data?.valid === true;
     
     if (isValid) {
       console.log('✅ Code is VALID');
       setReferralCodeValid(true);
       setReferrerName(response.data.data.referrerName || 'a friend');
-      setReferralCodeError(''); // Clear error
+      setReferralCodeError(''); 
     } else {
       console.log('❌ Code is INVALID');
       setReferralCodeValid(false);
       setReferrerName('');
-      // Only set error for invalid codes, not for the validation message
+      
       setReferralCodeError('Invalid referral code');
     }
   } catch (error: any) {
@@ -340,9 +340,9 @@ const validateReferralCode = async (code: string) => {
         registerData.location = location;
       }
 
-      // ⭐ UPDATED: Send referralCode instead of referralId
+      
       if (referralId.trim() && referralCodeValid === true) {
-  registerData.referredBy = referralId.trim().toUpperCase();  // ✅ Changed field name
+  registerData.referredBy = referralId.trim().toUpperCase();  
 }
 
       console.log('Registration data:', registerData);
@@ -362,7 +362,7 @@ const validateReferralCode = async (code: string) => {
             ]
           );
         } else {
-          // ⭐ UPDATED: Show different message if referral code was used
+          
           const successMessage = referralCodeValid === true 
             ? `Account created successfully! 🎉\n\nYou've been referred by ${referrerName}. Complete your first booking to unlock your rewards!`
             : 'Account created successfully!';
@@ -425,7 +425,7 @@ const validateReferralCode = async (code: string) => {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {/* Logo */}
+          {}
           <View className="items-center mb-8">
             <Image
               source={require('@/assets/logo.png')}
@@ -434,7 +434,7 @@ const validateReferralCode = async (code: string) => {
             />
           </View>
 
-          {/* Title */}
+          {}
           <View className="mb-6">
             <Text className="text-3xl font-bold text-center text-black mb-2">
               Create Your Account
@@ -444,7 +444,7 @@ const validateReferralCode = async (code: string) => {
             </Text>
           </View>
 
-          {/* General Error */}
+          {}
           {generalError ? (
             <View className="bg-red-50 border border-red-200 rounded-xl p-4 mb-6 flex-row items-start">
               <Ionicons
@@ -457,7 +457,7 @@ const validateReferralCode = async (code: string) => {
             </View>
           ) : null}
 
-          {/* Name Fields */}
+          {}
           <View className="flex-row gap-3">
             <Input
               containerClassName="flex-1 mb-0"
@@ -488,7 +488,7 @@ const validateReferralCode = async (code: string) => {
             />
           </View>
 
-          {/* Email */}
+          {}
           <Input
             label="Enter E-mail Address"
             placeholder=""
@@ -504,7 +504,7 @@ const validateReferralCode = async (code: string) => {
             editable={!loading}
           />
 
-          {/* Phone */}
+          {}
           <PhoneInput
             label="Enter Phone Number"
             placeholder="8123456789"
@@ -520,7 +520,7 @@ const validateReferralCode = async (code: string) => {
             onCountryCodePress={() => setShowCountryPicker(true)}
           />
 
-          {/* Password */}
+          {}
           <PasswordInput
             label="Password"
             placeholder=""
@@ -534,7 +534,7 @@ const validateReferralCode = async (code: string) => {
             editable={!loading}
           />
 
-          {/* Confirm Password */}
+          {}
           <PasswordInput
             label="Confirm Password"
             placeholder=""
@@ -548,7 +548,7 @@ const validateReferralCode = async (code: string) => {
             editable={!loading}
           />
 
-          {/* Location Section */}
+          {}
           <View className="mb-4">
             <Text className="text-sm font-semibold text-gray-700 mb-2">
               Location (required)
@@ -606,7 +606,7 @@ const validateReferralCode = async (code: string) => {
             </Text>
           </View>
 
-          {/* ⭐ ENHANCED REFERRAL CODE SECTION */}
+          {}
           <View className="mb-4">
             <Text className="text-sm font-semibold text-gray-700 mb-2">
               Referral Code (Optional)
@@ -662,7 +662,7 @@ const validateReferralCode = async (code: string) => {
               </View>
             </View>
 
-            {/* Success Message */}
+            {}
             {referralCodeValid === true && referrerName && (
               <View className="bg-green-50 border border-green-200 rounded-xl p-3 mt-3 flex-row items-start">
                 <Ionicons name="gift" size={20} color="#10B981" style={{ marginTop: 1 }} />

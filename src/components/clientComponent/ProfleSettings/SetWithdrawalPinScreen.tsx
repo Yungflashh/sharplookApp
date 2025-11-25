@@ -14,7 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { userAPI, handleAPIError } from '@/api/api';
+import { userAPI, handleAPIError, walletAPI } from '@/api/api';
 
 const SetWithdrawalPinScreen: React.FC = () => {
   const navigation = useNavigation();
@@ -58,7 +58,7 @@ const SetWithdrawalPinScreen: React.FC = () => {
 
     setLoading(true);
     try {
-      await userAPI.setWithdrawalPin(pin, confirmPin);
+      await walletAPI.setWithdrawalPin(pin, confirmPin);
       
       Alert.alert(
         'Success',
@@ -67,10 +67,7 @@ const SetWithdrawalPinScreen: React.FC = () => {
           {
             text: 'OK',
             onPress: () => {
-              
               navigation.goBack();
-              
-              
             },
           },
         ]
@@ -106,7 +103,7 @@ const SetWithdrawalPinScreen: React.FC = () => {
 
   return (
     <SafeAreaView className="flex-1 bg-white" edges={['top']}>
-      {/* Header */}
+      {}
       <LinearGradient
         colors={['#eb278d', '#f472b6']}
         start={{ x: 0, y: 0 }}
@@ -146,7 +143,7 @@ const SetWithdrawalPinScreen: React.FC = () => {
           contentContainerStyle={{ paddingBottom: 20 }}
         >
           <View className="flex-1 px-6 pt-8">
-            {/* Icon and Title */}
+            {}
             <View className="items-center mb-10">
               <LinearGradient
                 colors={['#eb278d', '#f472b6']}
@@ -169,7 +166,7 @@ const SetWithdrawalPinScreen: React.FC = () => {
               </Text>
             </View>
 
-            {/* Enter PIN */}
+            {}
             <View className="mb-8">
               <Text className="text-base font-bold text-gray-900 mb-4">
                 Enter PIN
@@ -212,7 +209,7 @@ const SetWithdrawalPinScreen: React.FC = () => {
               </View>
             </View>
 
-            {/* Confirm PIN */}
+            {}
             <View className="mb-6">
               <Text className="text-base font-bold text-gray-900 mb-4">
                 Confirm PIN
@@ -254,7 +251,7 @@ const SetWithdrawalPinScreen: React.FC = () => {
               </View>
             </View>
 
-            {/* Show/Hide PIN Toggle */}
+            {}
             <TouchableOpacity
               onPress={() => setShowPin(!showPin)}
               className="flex-row items-center justify-center py-3 mb-6"
@@ -272,7 +269,7 @@ const SetWithdrawalPinScreen: React.FC = () => {
               </Text>
             </TouchableOpacity>
 
-            {/* Security Tips */}
+            {}
             <View className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-2xl p-5 mb-8 border border-blue-100">
               <View className="flex-row items-start mb-3">
                 <View className="w-8 h-8 rounded-full bg-blue-100 items-center justify-center mr-3">
@@ -304,7 +301,7 @@ const SetWithdrawalPinScreen: React.FC = () => {
               </View>
             </View>
 
-            {/* Submit Button */}
+            {}
             <TouchableOpacity
               onPress={handleSetPin}
               disabled={loading || !pin || !confirmPin}

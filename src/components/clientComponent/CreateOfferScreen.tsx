@@ -42,7 +42,7 @@ const CreateOfferScreen: React.FC = () => {
       const response = await categoriesAPI.getAll();
       console.log('Categories API Response:', JSON.stringify(response, null, 2));
       
-      // The API returns data nested as response.data.data
+      
       const apiData = response.data || response;
       const categoryData = apiData.data || apiData || [];
       
@@ -138,7 +138,7 @@ const CreateOfferScreen: React.FC = () => {
     if (!formData.category) {
       newErrors.category = 'Please select a category';
     } else {
-      // Verify category exists in loaded categories
+      
       const categoryExists = categories.some(cat => cat._id === formData.category);
       if (!categoryExists) {
         console.error('Selected category not found in categories list:', formData.category);
@@ -202,7 +202,7 @@ const CreateOfferScreen: React.FC = () => {
 
   return (
     <SafeAreaView className="flex-1 bg-gray-50" edges={['top']}>
-      {/* Header */}
+      {}
       <View className="bg-white px-5 py-4 border-b border-gray-100">
         <View className="flex-row items-center justify-between">
           <TouchableOpacity
@@ -225,7 +225,7 @@ const CreateOfferScreen: React.FC = () => {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          {/* Info Banner */}
+          {}
           <View className="bg-purple-50 rounded-xl p-4 my-4 flex-row">
             <Ionicons name="information-circle" size={24} color="#9333ea" />
             <Text className="flex-1 ml-3 text-sm text-purple-700 leading-5">
@@ -233,7 +233,7 @@ const CreateOfferScreen: React.FC = () => {
             </Text>
           </View>
 
-          {/* Title */}
+          {}
           <View className="mb-5">
             <Text className="text-sm font-semibold text-gray-900 mb-2">
               What do you need? *
@@ -250,7 +250,7 @@ const CreateOfferScreen: React.FC = () => {
             {errors.title && <Text className="text-red-500 text-xs mt-1">{errors.title}</Text>}
           </View>
 
-          {/* Description */}
+          {}
           <View className="mb-5">
             <Text className="text-sm font-semibold text-gray-900 mb-2">
               Description *
@@ -270,7 +270,7 @@ const CreateOfferScreen: React.FC = () => {
             {errors.description && <Text className="text-red-500 text-xs mt-1">{errors.description}</Text>}
           </View>
 
-          {/* Category */}
+          {}
           <View className="mb-5">
             <Text className="text-sm font-semibold text-gray-900 mb-2">Category *</Text>
             
@@ -317,7 +317,7 @@ const CreateOfferScreen: React.FC = () => {
             {errors.category && <Text className="text-red-500 text-xs mt-1">{errors.category}</Text>}
           </View>
 
-          {/* Budget */}
+          {}
           <View className="mb-5">
             <Text className="text-sm font-semibold text-gray-900 mb-2">Your Budget (₦) *</Text>
             <View
@@ -343,7 +343,7 @@ const CreateOfferScreen: React.FC = () => {
             {errors.proposedPrice && <Text className="text-red-500 text-xs mt-1">{errors.proposedPrice}</Text>}
           </View>
 
-          {/* Time Flexibility */}
+          {}
           <View className="mb-5">
             <Text className="text-sm font-semibold text-gray-900 mb-2">Time Flexibility</Text>
             <View className="flex-row gap-2">
@@ -380,7 +380,7 @@ const CreateOfferScreen: React.FC = () => {
             </View>
           </View>
 
-          {/* Preferred Date & Time */}
+          {}
           {formData.flexibility !== 'flexible' && (
             <View className="mb-5">
               <Text className="text-sm font-semibold text-gray-900 mb-2">
@@ -407,7 +407,7 @@ const CreateOfferScreen: React.FC = () => {
             </View>
           )}
 
-          {/* Location */}
+          {}
           <View className="mb-5">
             <Text className="text-sm font-semibold text-gray-900 mb-2">Location *</Text>
             <TouchableOpacity
@@ -442,7 +442,7 @@ const CreateOfferScreen: React.FC = () => {
             {errors.location && <Text className="text-red-500 text-xs mt-1">{errors.location}</Text>}
           </View>
 
-          {/* Offer Valid For */}
+          {}
           <View className="mb-5">
             <Text className="text-sm font-semibold text-gray-900 mb-2">
               Offer Valid For (Days)
@@ -472,7 +472,7 @@ const CreateOfferScreen: React.FC = () => {
             </View>
           </View>
 
-          {/* Add Images */}
+          {}
           <View className="mb-8">
             <Text className="text-sm font-semibold text-gray-900 mb-2">
               Add Images ({selectedImages.length}/5)
@@ -510,7 +510,7 @@ const CreateOfferScreen: React.FC = () => {
           </View>
         </ScrollView>
 
-        {/* Submit Button */}
+        {}
         <View className="bg-white px-5 py-4 border-t border-gray-100">
           <TouchableOpacity
             className={`py-4 rounded-xl items-center ${

@@ -127,7 +127,7 @@ const handleMessageVendor = () => {
       avatar: vendor.avatar
     });
 
-    // ✅ Validate vendor ID exists before navigation
+    
     if (!vendor._id) {
       console.error('❌ Vendor ID is missing!');
       Alert.alert('Error', 'Cannot open chat - vendor information is incomplete');
@@ -135,9 +135,9 @@ const handleMessageVendor = () => {
     }
 
     navigation.navigate('ChatDetail', {
-      otherUserId: vendor._id,  // ✅ Correct parameter name
-      otherUserName: vendor.vendorProfile.businessName,  // ✅ Correct parameter name
-      otherUserAvatar: vendor.avatar,  // ✅ Added avatar parameter
+      otherUserId: vendor._id,  
+      otherUserName: vendor.vendorProfile.businessName,  
+      otherUserAvatar: vendor.avatar,  
     });
   }
 };

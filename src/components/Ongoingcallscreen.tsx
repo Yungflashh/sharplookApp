@@ -56,7 +56,7 @@ const OngoingCallScreen: React.FC = () => {
   const rippleAnim = useRef(new Animated.Value(0)).current;
   const hasInitiatedCall = useRef(false);
   
-  // ✅ Add refs to prevent duplicate processing
+  
   const hasProcessedOffer = useRef(false);
   const hasProcessedAnswer = useRef(false);
   const processedIceCandidates = useRef(new Set<string>());
@@ -72,7 +72,7 @@ const OngoingCallScreen: React.FC = () => {
         console.log('✅ Setting currentCallId to:', data.call._id);
         setCurrentCallId(data.call._id);
         
-        // ✅ Create offer only once when we have both callId and webView loaded
+        
         if (isOutgoing && webViewLoaded && !hasInitiatedCall.current) {
           console.log('✅ Call ID received and WebView is ready! Creating WebRTC offer now...');
           hasInitiatedCall.current = true;
@@ -116,7 +116,7 @@ const OngoingCallScreen: React.FC = () => {
       }, 1000);
     };
 
-    // ✅ Handle incoming offer via socket - prevent duplicates
+    
     const handleSignalOffer = (data: any) => {
       console.log('📞 Received signal offer in OngoingCallScreen:', data);
       if (!isOutgoing && data.offer && webViewLoaded && !hasProcessedOffer.current) {
@@ -130,7 +130,7 @@ const OngoingCallScreen: React.FC = () => {
       }
     };
 
-    // ✅ Handle incoming answer via socket - prevent duplicates
+    
     const handleSignalAnswer = (data: any) => {
       console.log('📞 Received signal answer in OngoingCallScreen:', data);
       if (isOutgoing && data.answer && !hasProcessedAnswer.current) {
@@ -142,7 +142,7 @@ const OngoingCallScreen: React.FC = () => {
       }
     };
 
-    // ✅ Handle incoming ICE candidates via socket - prevent duplicates
+    
     const handleSignalIce = (data: any) => {
       console.log('📞 Received signal ICE in OngoingCallScreen:', data);
       if (data.candidate) {
@@ -166,7 +166,7 @@ const OngoingCallScreen: React.FC = () => {
     callService.on('call:signal:answer', handleSignalAnswer);
     callService.on('call:signal:ice', handleSignalIce);
 
-    // Setup WebRTC Service callbacks
+    
     webrtcService.setOnMessageCallback((event) => {
       console.log('🌐 WebRTC event received:', event.type);
       
@@ -276,7 +276,7 @@ const OngoingCallScreen: React.FC = () => {
     
     if (isOutgoing) {
       console.log('📞 Outgoing call - checking if we can create offer');
-      // Check if we already have callId (in case event came before webview loaded)
+      
       if (currentCallId && !hasInitiatedCall.current) {
         console.log('✅ WebView loaded and we already have call ID! Creating offer...');
         hasInitiatedCall.current = true;
@@ -424,7 +424,7 @@ const OngoingCallScreen: React.FC = () => {
   <View className="flex-1 bg-gray-900">
     <StatusBar barStyle="light-content" />
     
-    {/* WebView for WebRTC - Always visible for video calls when connected */}
+    {}
     <View style={{ flex: 1 }}>
       <WebView
         ref={(ref) => {
@@ -451,10 +451,10 @@ const OngoingCallScreen: React.FC = () => {
       />
     </View>
 
-    {/* Voice Call UI or Video Call Before Connection */}
+    {}
     {(callType === 'voice' || (callType === 'video' && !isConnected)) && (
       <View className="absolute inset-0">
-        {/* Background Image with Overlay */}
+        {}
         <View className="absolute inset-0">
           {otherUser.avatar ? (
             <Image
@@ -473,7 +473,7 @@ const OngoingCallScreen: React.FC = () => {
         </View>
 
         <SafeAreaView className="flex-1 justify-between">
-          {/* Header Info */}
+          {}
           <View className="items-center mt-12">
             <Text className="text-white/60 text-sm font-medium tracking-widest uppercase mb-2">
               {isOutgoing ? 'Outgoing Call' : 'Incoming Call'}
@@ -486,7 +486,7 @@ const OngoingCallScreen: React.FC = () => {
             </Text>
           </View>
 
-          {/* Center Avatar Animation */}
+          {}
           <View className="items-center justify-center -mt-20">
             <Animated.View
               style={{
@@ -520,7 +520,7 @@ const OngoingCallScreen: React.FC = () => {
             </View>
           </View>
 
-          {/* Bottom Controls */}
+          {}
           <View className="mb-12">
             <View className="flex-row justify-center items-center bg-white/10 mx-6 py-6 rounded-3xl backdrop-blur-xl border border-white/5">
               <ControlButton
@@ -559,7 +559,7 @@ const OngoingCallScreen: React.FC = () => {
       </View>
     )}
 
-    {/* Video Call Overlay Controls (When Connected) */}
+    {}
     {callType === 'video' && isConnected && (
       <SafeAreaView className="absolute inset-0 justify-between" style={{ pointerEvents: 'box-none' }}>
         <LinearGradient

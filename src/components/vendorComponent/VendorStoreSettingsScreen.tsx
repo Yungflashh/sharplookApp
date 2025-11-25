@@ -9,11 +9,14 @@ import {
   Alert,
   ActivityIndicator,
   Switch,
+  Image,
 } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
+import * as ImagePicker from 'expo-image-picker';
+import * as DocumentPicker from 'expo-document-picker';
 import { vendorAPI, categoriesAPI } from '@/api/api';
 import { getStoredUser } from '@/utils/authHelper';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -33,14 +36,21 @@ interface LocationData {
   country: string;
 }
 
+interface DocumentsData {
+  idCard?: string;
+  businessLicense?: string;
+  certification?: string[];
+}
+
 const VendorStoreSettingsScreen: React.FC = () => {
   const navigation = useNavigation();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [loadingCategories, setLoadingCategories] = useState(false);
-  
+  const [uploadingDocument, setUploadingDocument] = useState(false);
   
   const [isEditMode, setIsEditMode] = useState(false);
+  const [vendorTypeSet, setVendorTypeSet] = useState(false); 
   
   
   const [businessName, setBusinessName] = useState('');
@@ -55,6 +65,13 @@ const VendorStoreSettingsScreen: React.FC = () => {
   const [locationError, setLocationError] = useState('');
   const [locationPermissionGranted, setLocationPermissionGranted] = useState(false);
   const [serviceRadius, setServiceRadius] = useState('10');
+  
+  
+  const [documents, setDocuments] = useState<DocumentsData>({
+    idCard: undefined,
+    businessLicense: undefined,
+    certification: [],
+  });
   
   
   const [availability, setAvailability] = useState({
@@ -72,7 +89,17 @@ const VendorStoreSettingsScreen: React.FC = () => {
   useEffect(() => {
     loadData();
     checkLocationPermission();
+    requestMediaLibraryPermission();
   }, []);
+
+  const requestMediaLibraryPermission = async () => {
+    if (Platform.OS !== 'web') {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Required', 'We need camera roll permissions to upload documents.');
+      }
+    }
+  };
 
   const checkLocationPermission = async () => {
     try {
@@ -99,7 +126,6 @@ const VendorStoreSettingsScreen: React.FC = () => {
     setLocationError('');
 
     try {
-      
       if (!locationPermissionGranted) {
         const granted = await requestLocationPermission();
         if (!granted) {
@@ -114,14 +140,12 @@ const VendorStoreSettingsScreen: React.FC = () => {
         }
       }
 
-      
       const position = await Location.getCurrentPositionAsync({
         accuracy: Location.Accuracy.High,
       });
 
       const { latitude, longitude } = position.coords;
 
-      
       const geocode = await Location.reverseGeocodeAsync({
         latitude,
         longitude,
@@ -180,9 +204,16 @@ const VendorStoreSettingsScreen: React.FC = () => {
         console.log('👤 Vendor data:', vendor);
         console.log('🏪 Vendor profile:', vendor.vendorProfile);
         
+        
         setBusinessName(vendor.vendorProfile?.businessName || '');
         setBusinessDescription(vendor.vendorProfile?.businessDescription || '');
-        setVendorType(vendor.vendorProfile?.vendorType || 'home_service');
+        
+        
+        const currentVendorType = vendor.vendorProfile?.vendorType;
+        if (currentVendorType) {
+          setVendorType(currentVendorType);
+          setVendorTypeSet(true); 
+        }
         
         
         if (vendor.vendorProfile?.categories) {
@@ -208,6 +239,15 @@ const VendorStoreSettingsScreen: React.FC = () => {
         }
         
         setServiceRadius(String(vendor.vendorProfile?.serviceRadius || 10));
+        
+        
+        if (vendor.vendorProfile?.documents) {
+          setDocuments({
+            idCard: vendor.vendorProfile.documents.idCard,
+            businessLicense: vendor.vendorProfile.documents.businessLicense,
+            certification: vendor.vendorProfile.documents.certification || [],
+          });
+        }
         
         
         if (vendor.vendorProfile?.availabilitySchedule) {
@@ -241,6 +281,102 @@ const VendorStoreSettingsScreen: React.FC = () => {
     }
   };
 
+  const pickDocument = async (documentType: 'idCard' | 'businessLicense' | 'certification') => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        await uploadDocument(documentType, result.assets[0].uri);
+      }
+    } catch (error) {
+      console.error('Error picking document:', error);
+      Alert.alert('Error', 'Failed to pick document');
+    }
+  };
+
+  const uploadDocument = async (
+    documentType: 'idCard' | 'businessLicense' | 'certification',
+    uri: string
+  ) => {
+    try {
+      setUploadingDocument(true);
+
+      
+      const formData = new FormData();
+      const filename = uri.split('/').pop() || 'document.jpg';
+      const match = /\.(\w+)$/.exec(filename);
+      const type = match ? `image/${match[1]}` : 'image/jpeg';
+
+      formData.append('document', {
+        uri,
+        name: filename,
+        type,
+      } as any);
+
+      formData.append('documentType', documentType);
+
+      console.log('📤 Uploading document:', documentType);
+      const response = await vendorAPI.uploadDocument(formData);
+      console.log('✅ Upload response:', response);
+
+      if (response.success) {
+        
+        if (documentType === 'certification') {
+          setDocuments((prev) => ({
+            ...prev,
+            certification: [
+              ...(prev.certification || []),
+              response.data.vendor.vendorProfile.documents.certification.slice(-1)[0],
+            ],
+          }));
+        } else {
+          setDocuments((prev) => ({
+            ...prev,
+            [documentType]: response.data.vendor.vendorProfile.documents[documentType],
+          }));
+        }
+
+        Alert.alert('Success', 'Document uploaded successfully');
+      }
+    } catch (error: any) {
+      console.error('❌ Error uploading document:', error);
+      Alert.alert('Error', error.response?.data?.message || 'Failed to upload document');
+    } finally {
+      setUploadingDocument(false);
+    }
+  };
+
+  const removeDocument = (documentType: 'idCard' | 'businessLicense', index?: number) => {
+    Alert.alert(
+      'Remove Document',
+      'Are you sure you want to remove this document?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: () => {
+            if (documentType === 'certification' && index !== undefined) {
+              setDocuments((prev) => ({
+                ...prev,
+                certification: prev.certification?.filter((_, i) => i !== index) || [],
+              }));
+            } else {
+              setDocuments((prev) => ({
+                ...prev,
+                [documentType]: undefined,
+              }));
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const handleSave = async () => {
     try {
       
@@ -269,7 +405,7 @@ const VendorStoreSettingsScreen: React.FC = () => {
       const updateData = {
         businessName: businessName.trim(),
         businessDescription: businessDescription.trim(),
-        vendorType,
+        vendorType: !vendorTypeSet ? vendorType : undefined, 
         categories: selectedCategories,
         location: {
           type: 'Point' as const,
@@ -299,14 +435,14 @@ const VendorStoreSettingsScreen: React.FC = () => {
         }
 
         
+        if (!vendorTypeSet && updateData.vendorType) {
+          setVendorTypeSet(true);
+        }
+
+        
         setIsEditMode(false);
 
-        Alert.alert('Success', 'Store settings updated successfully', [
-          {
-            text: 'OK',
-            onPress: () => navigation.goBack(),
-          },
-        ]);
+        Alert.alert('Success', 'Store settings updated successfully');
       }
     } catch (error: any) {
       console.error('❌ Error saving store settings:', error);
@@ -347,7 +483,27 @@ const VendorStoreSettingsScreen: React.FC = () => {
   };
 
   const toggleEditMode = () => {
-    setIsEditMode(!isEditMode);
+    if (isEditMode) {
+      
+      Alert.alert(
+        'Discard Changes?',
+        'You have unsaved changes. Do you want to discard them?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Discard',
+            style: 'destructive',
+            onPress: () => {
+              setIsEditMode(false);
+              loadData(); 
+            },
+          },
+        ]
+      );
+    } else {
+      
+      setIsEditMode(true);
+    }
   };
 
   if (loading) {
@@ -383,7 +539,7 @@ const VendorStoreSettingsScreen: React.FC = () => {
             activeOpacity={0.7}
           >
             <Ionicons 
-              name={isEditMode ? "checkmark" : "pencil"} 
+              name={isEditMode ? "close" : "pencil"} 
               size={20} 
               color={isEditMode ? "#ec4899" : "#6b7280"} 
             />
@@ -396,7 +552,7 @@ const VendorStoreSettingsScreen: React.FC = () => {
             <View className="flex-row items-center">
               <Ionicons name="pencil" size={14} color="#ec4899" />
               <Text className="text-pink-600 text-xs font-semibold ml-2">
-                Edit Mode Active - You can now make changes
+                Edit Mode Active - Make your changes and save
               </Text>
             </View>
           </View>
@@ -486,19 +642,24 @@ const VendorStoreSettingsScreen: React.FC = () => {
                 {}
                 <View className="mb-2">
                   <Text className="text-sm font-medium text-gray-700 mb-2">
-                    Service Type *
+                    Service Type * {vendorTypeSet && '(Cannot be changed)'}
                   </Text>
                   <View className="flex-row gap-2">
                     <TouchableOpacity
-                      onPress={() => isEditMode && setVendorType('home_service')}
-                      disabled={!isEditMode}
+                      onPress={() => {
+                        if (isEditMode && !vendorTypeSet) {
+                          setVendorType('home_service');
+                        }
+                      }}
+                      disabled={!isEditMode || vendorTypeSet}
                       className={`flex-1 p-3 rounded-xl border-2 ${
                         vendorType === 'home_service'
                           ? 'border-pink-500 bg-pink-50'
-                          : isEditMode 
+                          : isEditMode && !vendorTypeSet
                           ? 'border-gray-200 bg-white'
                           : 'border-gray-200 bg-gray-50'
                       }`}
+                      activeOpacity={0.7}
                     >
                       <Text
                         className={`text-center text-sm font-medium ${
@@ -510,15 +671,20 @@ const VendorStoreSettingsScreen: React.FC = () => {
                     </TouchableOpacity>
 
                     <TouchableOpacity
-                      onPress={() => isEditMode && setVendorType('in_shop')}
-                      disabled={!isEditMode}
+                      onPress={() => {
+                        if (isEditMode && !vendorTypeSet) {
+                          setVendorType('in_shop');
+                        }
+                      }}
+                      disabled={!isEditMode || vendorTypeSet}
                       className={`flex-1 p-3 rounded-xl border-2 ${
                         vendorType === 'in_shop'
                           ? 'border-pink-500 bg-pink-50'
-                          : isEditMode 
+                          : isEditMode && !vendorTypeSet
                           ? 'border-gray-200 bg-white'
                           : 'border-gray-200 bg-gray-50'
                       }`}
+                      activeOpacity={0.7}
                     >
                       <Text
                         className={`text-center text-sm font-medium ${
@@ -530,15 +696,20 @@ const VendorStoreSettingsScreen: React.FC = () => {
                     </TouchableOpacity>
 
                     <TouchableOpacity
-                      onPress={() => isEditMode && setVendorType('both')}
-                      disabled={!isEditMode}
+                      onPress={() => {
+                        if (isEditMode && !vendorTypeSet) {
+                          setVendorType('both');
+                        }
+                      }}
+                      disabled={!isEditMode || vendorTypeSet}
                       className={`flex-1 p-3 rounded-xl border-2 ${
                         vendorType === 'both'
                           ? 'border-pink-500 bg-pink-50'
-                          : isEditMode 
+                          : isEditMode && !vendorTypeSet
                           ? 'border-gray-200 bg-white'
                           : 'border-gray-200 bg-gray-50'
                       }`}
+                      activeOpacity={0.7}
                     >
                       <Text
                         className={`text-center text-sm font-medium ${
@@ -549,6 +720,11 @@ const VendorStoreSettingsScreen: React.FC = () => {
                       </Text>
                     </TouchableOpacity>
                   </View>
+                  {vendorTypeSet && (
+                    <Text className="text-orange-600 text-xs mt-2">
+                      ⚠️ Service type has been set and cannot be changed
+                    </Text>
+                  )}
                 </View>
               </View>
             )}
@@ -722,7 +898,143 @@ const VendorStoreSettingsScreen: React.FC = () => {
             )}
           </View>
 
-          {/* Availability */}
+          {/* Documents Section */}
+          <View className="bg-white rounded-2xl p-4 mb-4">
+            <TouchableOpacity
+              onPress={() => toggleSection('documents')}
+              className="flex-row items-center justify-between mb-3"
+            >
+              <View className="flex-row items-center">
+                <View className="w-10 h-10 rounded-xl bg-pink-50 items-center justify-center mr-3">
+                  <MaterialCommunityIcons name="file-document" size={22} color="#ec4899" />
+                </View>
+                <Text className="text-base font-semibold text-gray-900">
+                  Verification Documents
+                </Text>
+              </View>
+              <Ionicons
+                name={expandedSection === 'documents' ? 'chevron-up' : 'chevron-down'}
+                size={24}
+                color="#9ca3af"
+              />
+            </TouchableOpacity>
+
+            {expandedSection === 'documents' && (
+              <View className="pt-3 border-t border-gray-100">
+                {/* ID Card */}
+                <View className="mb-4">
+                  <Text className="text-sm font-medium text-gray-700 mb-2">ID Card</Text>
+                  {documents.idCard ? (
+                    <View className="relative">
+                      <Image
+                        source={{ uri: documents.idCard }}
+                        className="w-full h-40 rounded-xl"
+                        resizeMode="cover"
+                      />
+                      {isEditMode && (
+                        <TouchableOpacity
+                          onPress={() => removeDocument('idCard')}
+                          className="absolute top-2 right-2 bg-red-500 rounded-full p-2"
+                          activeOpacity={0.7}
+                        >
+                          <Ionicons name="trash" size={16} color="#fff" />
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  ) : (
+                    <TouchableOpacity
+                      onPress={() => pickDocument('idCard')}
+                      disabled={uploadingDocument || !isEditMode}
+                      className={`border-2 border-dashed border-gray-300 rounded-xl p-6 items-center ${
+                        !isEditMode ? 'opacity-50' : ''
+                      }`}
+                      activeOpacity={0.7}
+                    >
+                      <Ionicons name="cloud-upload-outline" size={32} color="#9ca3af" />
+                      <Text className="text-gray-600 text-sm mt-2">Upload ID Card</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+
+                {/* Business License */}
+                <View className="mb-4">
+                  <Text className="text-sm font-medium text-gray-700 mb-2">Business License</Text>
+                  {documents.businessLicense ? (
+                    <View className="relative">
+                      <Image
+                        source={{ uri: documents.businessLicense }}
+                        className="w-full h-40 rounded-xl"
+                        resizeMode="cover"
+                      />
+                      {isEditMode && (
+                        <TouchableOpacity
+                          onPress={() => removeDocument('businessLicense')}
+                          className="absolute top-2 right-2 bg-red-500 rounded-full p-2"
+                          activeOpacity={0.7}
+                        >
+                          <Ionicons name="trash" size={16} color="#fff" />
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  ) : (
+                    <TouchableOpacity
+                      onPress={() => pickDocument('businessLicense')}
+                      disabled={uploadingDocument || !isEditMode}
+                      className={`border-2 border-dashed border-gray-300 rounded-xl p-6 items-center ${
+                        !isEditMode ? 'opacity-50' : ''
+                      }`}
+                      activeOpacity={0.7}
+                    >
+                      <Ionicons name="cloud-upload-outline" size={32} color="#9ca3af" />
+                      <Text className="text-gray-600 text-sm mt-2">Upload Business License</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+
+                {/* Certifications */}
+                <View className="mb-2">
+                  <Text className="text-sm font-medium text-gray-700 mb-2">
+                    Certifications (Optional)
+                  </Text>
+                  {documents.certification && documents.certification.length > 0 && (
+                    <View className="flex-row flex-wrap gap-2 mb-3">
+                      {documents.certification.map((cert, index) => (
+                        <View key={index} className="relative">
+                          <Image
+                            source={{ uri: cert }}
+                            className="w-24 h-24 rounded-xl"
+                            resizeMode="cover"
+                          />
+                          {isEditMode && (
+                            <TouchableOpacity
+                              onPress={() => removeDocument('certification', index)}
+                              className="absolute top-1 right-1 bg-red-500 rounded-full p-1"
+                              activeOpacity={0.7}
+                            >
+                              <Ionicons name="close" size={12} color="#fff" />
+                            </TouchableOpacity>
+                          )}
+                        </View>
+                      ))}
+                    </View>
+                  )}
+                  {isEditMode && (
+                    <TouchableOpacity
+                      onPress={() => pickDocument('certification')}
+                      disabled={uploadingDocument}
+                      className="border-2 border-dashed border-gray-300 rounded-xl p-6 items-center"
+                      activeOpacity={0.7}
+                    >
+                      <Ionicons name="add-circle-outline" size={32} color="#9ca3af" />
+                      <Text className="text-gray-600 text-sm mt-2">Add Certification</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              </View>
+            )}
+          </View>
+
+          {/* Availability Section */}
           <View className="bg-white rounded-2xl p-4 mb-4">
             <TouchableOpacity
               onPress={() => toggleSection('availability')}
