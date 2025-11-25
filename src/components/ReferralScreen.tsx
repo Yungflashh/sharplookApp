@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   FlatList,
   Image,
+  StatusBar,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -69,67 +70,65 @@ const ReferralScreen = ({ navigation }: any) => {
     }
   };
 
-const loadReferralData = async () => {
-  try {
-    setLoading(true);
-    const [statsResponse, referralsResponse] = await Promise.all([
-      referralAPI.getReferralStats(),
-      referralAPI.getMyReferrals({ page: 1, limit: 20 }),
-    ]);
+  const loadReferralData = async () => {
+    try {
+      setLoading(true);
+      const [statsResponse, referralsResponse] = await Promise.all([
+        referralAPI.getReferralStats(),
+        referralAPI.getMyReferrals({ page: 1, limit: 20 }),
+      ]);
 
-    console.log('Stats response:', statsResponse);
-    console.log('Referrals response:', referralsResponse);
-    
-    
-    const statsData = statsResponse.data?.stats;
-    setStats(statsData);
-    
-    
-    const referralsData = referralsResponse.data;  
-    
-    console.log('Setting referrals:', referralsData?.length || 0, 'items');
-    console.log('First referral:', referralsData?.[0]);
-    
-    setReferrals(referralsData || []);
-    
-    
-    const pagination = referralsResponse.meta?.pagination;  
-    setHasMore(pagination?.hasNextPage || false);
-  } catch (error) {
-    console.error('Error loading referral data:', error);
-    Alert.alert('Error', 'Failed to load referral data');
-  } finally {
-    setLoading(false);
-  }
-};
-const onRefresh = async () => {
+      console.log('Stats response:', statsResponse);
+      console.log('Referrals response:', referralsResponse);
+
+      const statsData = statsResponse.data?.stats;
+      setStats(statsData);
+
+      const referralsData = referralsResponse.data;
+
+      console.log('Setting referrals:', referralsData?.length || 0, 'items');
+      console.log('First referral:', referralsData?.[0]);
+
+      setReferrals(referralsData || []);
+
+      const pagination = referralsResponse.meta?.pagination;
+      setHasMore(pagination?.hasNextPage || false);
+    } catch (error) {
+      console.error('Error loading referral data:', error);
+      Alert.alert('Error', 'Failed to load referral data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const onRefresh = async () => {
     setRefreshing(true);
     setPage(1);
     await loadReferralData();
     setRefreshing(false);
   };
 
-const loadMore = async () => {
-  if (loadingMore || !hasMore) return;
+  const loadMore = async () => {
+    if (loadingMore || !hasMore) return;
 
-  try {
-    setLoadingMore(true);
-    const nextPage = page + 1;
-    const response = await referralAPI.getMyReferrals({ page: nextPage, limit: 20 });
+    try {
+      setLoadingMore(true);
+      const nextPage = page + 1;
+      const response = await referralAPI.getMyReferrals({ page: nextPage, limit: 20 });
 
-    const newReferrals = response.data || [];  
-    
-    setReferrals(prev => [...prev, ...newReferrals]);
-    setPage(nextPage);
-    
-    const pagination = response.meta?.pagination;  
-    setHasMore(pagination?.hasNextPage || false);
-  } catch (error) {
-    console.error('Error loading more referrals:', error);
-  } finally {
-    setLoadingMore(false);
-  }
-};
+      const newReferrals = response.data || [];
+
+      setReferrals(prev => [...prev, ...newReferrals]);
+      setPage(nextPage);
+
+      const pagination = response.meta?.pagination;
+      setHasMore(pagination?.hasNextPage || false);
+    } catch (error) {
+      console.error('Error loading more referrals:', error);
+    } finally {
+      setLoadingMore(false);
+    }
+  };
 
   const shareReferralCode = async () => {
     try {
@@ -187,42 +186,55 @@ const loadMore = async () => {
 
   const renderReferralItem = ({ item }: { item: Referral }) => (
     <TouchableOpacity
-      className="bg-white mx-5 mb-3 rounded-2xl p-4"
       style={{
+        backgroundColor: '#FFFFFF',
+        marginHorizontal: 20,
+        marginBottom: 12,
+        borderRadius: 16,
+        padding: 16,
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.1,
-        shadowRadius: 3,
-        elevation: 2,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.08,
+        shadowRadius: 8,
+        elevation: 3,
       }}
       onPress={() => navigation.navigate('ReferralDetail', { referralId: item._id })}
       activeOpacity={0.7}
     >
-      <View className="flex-row mb-3">
-        <View className="mr-3">
+      <View style={{ flexDirection: 'row', marginBottom: 12 }}>
+        <View style={{ marginRight: 12 }}>
           {item.referee.avatar ? (
-            <Image 
-              source={{ uri: item.referee.avatar }} 
-              className="w-12 h-12 rounded-full"
+            <Image
+              source={{ uri: item.referee.avatar }}
+              style={{ width: 48, height: 48, borderRadius: 24 }}
             />
           ) : (
-            <View className="w-12 h-12 rounded-full bg-pink-500 items-center justify-center">
-              <Text className="text-lg font-bold text-white">
+            <View
+              style={{
+                width: 48,
+                height: 48,
+                borderRadius: 24,
+                backgroundColor: '#eb278d',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#FFFFFF' }}>
                 {item.referee.firstName[0]}{item.referee.lastName[0]}
               </Text>
             </View>
           )}
         </View>
-        <View className="flex-1">
-          <Text className="text-base font-semibold text-gray-900 mb-0.5">
+        <View style={{ flex: 1 }}>
+          <Text style={{ fontSize: 15, fontWeight: '600', color: '#111827', marginBottom: 2 }}>
             {item.referee.firstName} {item.referee.lastName}
           </Text>
-          <Text className="text-sm text-gray-600 mb-0.5">{item.referee.email}</Text>
-          <Text className="text-xs text-gray-400">
+          <Text style={{ fontSize: 13, color: '#6B7280', marginBottom: 2 }}>{item.referee.email}</Text>
+          <Text style={{ fontSize: 11, color: '#9CA3AF' }}>
             Joined {formatDate(item.referee.createdAt)}
           </Text>
         </View>
-        <View className="justify-center">
+        <View style={{ justifyContent: 'center' }}>
           <Ionicons
             name={getStatusIcon(item.status) as any}
             size={24}
@@ -231,26 +243,52 @@ const loadMore = async () => {
         </View>
       </View>
 
-      <View 
-        className="flex-row justify-between items-center pt-3"
-        style={{ borderTopWidth: 1, borderTopColor: '#F3F4F6' }}
+      <View
+        style={{
+          flexDirection: 'row',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          paddingTop: 12,
+          borderTopWidth: 1,
+          borderTopColor: '#F3F4F6',
+        }}
       >
-        <View className="flex-1">
-          <Text className="text-xs text-gray-500 mb-1">Reward</Text>
-          <Text className="text-lg font-bold text-pink-600">
+        <View style={{ flex: 1 }}>
+          <Text style={{ fontSize: 11, color: '#9CA3AF', marginBottom: 4 }}>Reward</Text>
+          <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#eb278d' }}>
             {formatCurrency(item.referrerReward)}
           </Text>
         </View>
         {item.referrerPaid && (
-          <View className="flex-row items-center bg-green-50 px-3 py-1.5 rounded-full">
-            <Ionicons name="checkmark-circle" size={16} color="#10B981" />
-            <Text className="text-xs font-semibold text-green-600 ml-1">Paid</Text>
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              backgroundColor: '#ECFDF5',
+              paddingHorizontal: 12,
+              paddingVertical: 6,
+              borderRadius: 20,
+            }}
+          >
+            <Ionicons name="checkmark-circle" size={14} color="#10B981" />
+            <Text style={{ fontSize: 11, fontWeight: '600', color: '#059669', marginLeft: 4 }}>
+              Paid
+            </Text>
           </View>
         )}
         {!item.firstBookingCompleted && item.status === 'pending' && (
-          <View className="flex-row items-center bg-yellow-50 px-3 py-1.5 rounded-full">
-            <Ionicons name="time" size={16} color="#F59E0B" />
-            <Text className="text-xs font-semibold text-yellow-600 ml-1">
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              backgroundColor: '#FFFBEB',
+              paddingHorizontal: 12,
+              paddingVertical: 6,
+              borderRadius: 20,
+            }}
+          >
+            <Ionicons name="time" size={14} color="#F59E0B" />
+            <Text style={{ fontSize: 11, fontWeight: '600', color: '#D97706', marginLeft: 4 }}>
               Awaiting booking
             </Text>
           </View>
@@ -261,20 +299,45 @@ const loadMore = async () => {
 
   if (loading) {
     return (
-      <SafeAreaView className="flex-1 bg-gray-50 items-center justify-center">
+      <SafeAreaView style={{ flex: 1, backgroundColor: '#F9FAFB', alignItems: 'center', justifyContent: 'center' }}>
+        <StatusBar barStyle="dark-content" />
         <ActivityIndicator size="large" color="#eb278d" />
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView className="flex-1 bg-gray-50" edges={['top']}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: '#F9FAFB' }} edges={['top']}>
+      <StatusBar barStyle="light-content" />
+      
+      {/* Header with Back Button */}
       <LinearGradient
         colors={['#eb278d', '#c71f73']}
-        className="px-5 pt-4 pb-8"
+        style={{ paddingHorizontal: 20, paddingTop: 8, paddingBottom: 32 }}
       >
-        <Text className="text-3xl font-bold text-white mb-2">Referral Program</Text>
-        <Text className="text-base text-pink-100">
+        {/* Back Button Row */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16 }}>
+          <TouchableOpacity
+            onPress={() => navigation.goBack()}
+            style={{
+              width: 40,
+              height: 40,
+              borderRadius: 20,
+              backgroundColor: 'rgba(255, 255, 255, 0.2)',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="arrow-back" size={22} color="#FFFFFF" />
+          </TouchableOpacity>
+        </View>
+        
+        {/* Title */}
+        <Text style={{ fontSize: 28, fontWeight: 'bold', color: '#FFFFFF', marginBottom: 4 }}>
+          Referral Program
+        </Text>
+        <Text style={{ fontSize: 15, color: 'rgba(255, 255, 255, 0.85)' }}>
           Earn rewards by inviting friends
         </Text>
       </LinearGradient>
@@ -284,8 +347,8 @@ const loadMore = async () => {
         renderItem={renderReferralItem}
         keyExtractor={(item) => item._id}
         refreshControl={
-          <RefreshControl 
-            refreshing={refreshing} 
+          <RefreshControl
+            refreshing={refreshing}
             onRefresh={onRefresh}
             tintColor="#eb278d"
             colors={['#eb278d']}
@@ -293,158 +356,288 @@ const loadMore = async () => {
         }
         onEndReached={loadMore}
         onEndReachedThreshold={0.5}
-        contentContainerStyle={{ paddingBottom: 20 }}
+        contentContainerStyle={{ paddingBottom: 24 }}
+        showsVerticalScrollIndicator={false}
         ListHeaderComponent={
           <>
-            {}
-            <View className="flex-row px-5 py-5 gap-3">
-              <View 
-                className="flex-1 bg-white rounded-2xl p-4 items-center"
+            {/* Stats Cards Row 1 */}
+            <View style={{ flexDirection: 'row', paddingHorizontal: 20, paddingTop: 20, gap: 12 }}>
+              <View
                 style={{
+                  flex: 1,
+                  backgroundColor: '#FFFFFF',
+                  borderRadius: 16,
+                  padding: 16,
+                  alignItems: 'center',
                   shadowColor: '#000',
                   shadowOffset: { width: 0, height: 2 },
-                  shadowOpacity: 0.1,
-                  shadowRadius: 4,
+                  shadowOpacity: 0.08,
+                  shadowRadius: 8,
                   elevation: 3,
                 }}
               >
-                <Ionicons name="people" size={32} color="#eb278d" />
-                <Text className="text-2xl font-bold text-gray-900 mt-2">
+                <View
+                  style={{
+                    width: 48,
+                    height: 48,
+                    borderRadius: 24,
+                    backgroundColor: '#FDF2F8',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    marginBottom: 8,
+                  }}
+                >
+                  <Ionicons name="people" size={24} color="#eb278d" />
+                </View>
+                <Text style={{ fontSize: 24, fontWeight: 'bold', color: '#111827' }}>
                   {stats?.totalReferrals || 0}
                 </Text>
-                <Text className="text-xs text-gray-500 mt-1 text-center">
+                <Text style={{ fontSize: 12, color: '#6B7280', marginTop: 4, textAlign: 'center' }}>
                   Total Referrals
                 </Text>
               </View>
-              <View 
-                className="flex-1 bg-white rounded-2xl p-4 items-center"
+
+              <View
                 style={{
+                  flex: 1,
+                  backgroundColor: '#FFFFFF',
+                  borderRadius: 16,
+                  padding: 16,
+                  alignItems: 'center',
                   shadowColor: '#000',
                   shadowOffset: { width: 0, height: 2 },
-                  shadowOpacity: 0.1,
-                  shadowRadius: 4,
+                  shadowOpacity: 0.08,
+                  shadowRadius: 8,
                   elevation: 3,
                 }}
               >
-                <Ionicons name="checkmark-done" size={32} color="#10B981" />
-                <Text className="text-2xl font-bold text-gray-900 mt-2">
+                <View
+                  style={{
+                    width: 48,
+                    height: 48,
+                    borderRadius: 24,
+                    backgroundColor: '#ECFDF5',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    marginBottom: 8,
+                  }}
+                >
+                  <Ionicons name="checkmark-done" size={24} color="#10B981" />
+                </View>
+                <Text style={{ fontSize: 24, fontWeight: 'bold', color: '#111827' }}>
                   {stats?.completedReferrals || 0}
                 </Text>
-                <Text className="text-xs text-gray-500 mt-1 text-center">
+                <Text style={{ fontSize: 12, color: '#6B7280', marginTop: 4, textAlign: 'center' }}>
                   Completed
                 </Text>
               </View>
             </View>
 
-            <View className="flex-row px-5 pb-5 gap-3">
-              <View 
-                className="flex-1 bg-white rounded-2xl p-4 items-center"
+            {/* Stats Card - Earnings */}
+            <View style={{ paddingHorizontal: 20, paddingTop: 12 }}>
+              <View
                 style={{
+                  backgroundColor: '#FFFFFF',
+                  borderRadius: 16,
+                  padding: 20,
+                  flexDirection: 'row',
+                  alignItems: 'center',
                   shadowColor: '#000',
                   shadowOffset: { width: 0, height: 2 },
-                  shadowOpacity: 0.1,
-                  shadowRadius: 4,
+                  shadowOpacity: 0.08,
+                  shadowRadius: 8,
                   elevation: 3,
                 }}
               >
-                <Ionicons name="cash" size={32} color="#F59E0B" />
-                <Text className="text-xl font-bold text-gray-900 mt-2 text-center">
-                  {formatCurrency(stats?.totalEarnings || 0)}
-                </Text>
-                <Text className="text-xs text-gray-500 mt-1 text-center">
-                  Total Earned
-                </Text>
-              </View>
-            </View>
-
-            {}
-            <View 
-              className="mx-5 mb-5 bg-white rounded-2xl p-5"
-              style={{
-                shadowColor: '#000',
-                shadowOffset: { width: 0, height: 2 },
-                shadowOpacity: 0.1,
-                shadowRadius: 4,
-                elevation: 3,
-              }}
-            >
-              <Text className="text-lg font-semibold text-gray-900 mb-3">
-                Your Referral Code
-              </Text>
-              <View 
-                className="flex-row items-center justify-between bg-pink-50 rounded-xl px-4 py-4 mb-3"
-                style={{
-                  borderWidth: 2,
-                  borderColor: '#eb278d',
-                  borderStyle: 'dashed',
-                }}
-              >
-                <Text className="text-2xl font-bold text-pink-600" style={{ letterSpacing: 2 }}>
-                  {referralCode}
-                </Text>
-                <View className="flex-row gap-2">
-                  <TouchableOpacity
-                    className="w-10 h-10 rounded-full bg-pink-100 items-center justify-center"
-                    onPress={copyReferralCode}
-                    activeOpacity={0.7}
-                  >
-                    <Ionicons name="copy" size={20} color="#eb278d" />
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    className="w-10 h-10 rounded-full bg-pink-100 items-center justify-center"
-                    onPress={shareReferralCode}
-                    activeOpacity={0.7}
-                  >
-                    <Ionicons name="share-social" size={20} color="#eb278d" />
-                  </TouchableOpacity>
+                <View
+                  style={{
+                    width: 56,
+                    height: 56,
+                    borderRadius: 28,
+                    backgroundColor: '#FFFBEB',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    marginRight: 16,
+                  }}
+                >
+                  <Ionicons name="cash" size={28} color="#F59E0B" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 12, color: '#6B7280', marginBottom: 4 }}>Total Earned</Text>
+                  <Text style={{ fontSize: 26, fontWeight: 'bold', color: '#111827' }}>
+                    {formatCurrency(stats?.totalEarnings || 0)}
+                  </Text>
                 </View>
               </View>
-              <Text className="text-sm text-gray-500 text-center">
-                Share this code with friends to earn rewards
-              </Text>
             </View>
 
-            {}
+            {/* Referral Code Card */}
+            <View style={{ paddingHorizontal: 20, paddingTop: 16 }}>
+              <View
+                style={{
+                  backgroundColor: '#FFFFFF',
+                  borderRadius: 16,
+                  padding: 20,
+                  shadowColor: '#000',
+                  shadowOffset: { width: 0, height: 2 },
+                  shadowOpacity: 0.08,
+                  shadowRadius: 8,
+                  elevation: 3,
+                }}
+              >
+                <Text style={{ fontSize: 16, fontWeight: '600', color: '#111827', marginBottom: 12 }}>
+                  Your Referral Code
+                </Text>
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    backgroundColor: '#FDF2F8',
+                    borderRadius: 12,
+                    paddingHorizontal: 16,
+                    paddingVertical: 16,
+                    marginBottom: 12,
+                    borderWidth: 2,
+                    borderColor: '#eb278d',
+                    borderStyle: 'dashed',
+                  }}
+                >
+                  <Text style={{ fontSize: 22, fontWeight: 'bold', color: '#eb278d', letterSpacing: 3 }}>
+                    {referralCode}
+                  </Text>
+                  <View style={{ flexDirection: 'row', gap: 8 }}>
+                    <TouchableOpacity
+                      style={{
+                        width: 40,
+                        height: 40,
+                        borderRadius: 20,
+                        backgroundColor: '#FFFFFF',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        shadowColor: '#000',
+                        shadowOffset: { width: 0, height: 1 },
+                        shadowOpacity: 0.1,
+                        shadowRadius: 2,
+                        elevation: 2,
+                      }}
+                      onPress={copyReferralCode}
+                      activeOpacity={0.7}
+                    >
+                      <Ionicons name="copy-outline" size={20} color="#eb278d" />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={{
+                        width: 40,
+                        height: 40,
+                        borderRadius: 20,
+                        backgroundColor: '#eb278d',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        shadowColor: '#eb278d',
+                        shadowOffset: { width: 0, height: 2 },
+                        shadowOpacity: 0.3,
+                        shadowRadius: 4,
+                        elevation: 3,
+                      }}
+                      onPress={shareReferralCode}
+                      activeOpacity={0.7}
+                    >
+                      <Ionicons name="share-social" size={20} color="#FFFFFF" />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+                <Text style={{ fontSize: 13, color: '#6B7280', textAlign: 'center' }}>
+                  Share this code with friends to earn rewards
+                </Text>
+              </View>
+            </View>
+
+            {/* Leaderboard Button */}
             <TouchableOpacity
-              className="flex-row items-center justify-between mx-5 mb-5 bg-white rounded-xl p-4"
               style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                marginHorizontal: 20,
+                marginTop: 16,
+                backgroundColor: '#FFFFFF',
+                borderRadius: 12,
+                padding: 16,
                 shadowColor: '#000',
                 shadowOffset: { width: 0, height: 2 },
-                shadowOpacity: 0.1,
-                shadowRadius: 4,
+                shadowOpacity: 0.08,
+                shadowRadius: 8,
                 elevation: 3,
               }}
               onPress={() => navigation.navigate('ReferralLeaderboard')}
               activeOpacity={0.7}
             >
-              <Ionicons name="trophy" size={24} color="#F59E0B" />
-              <Text className="flex-1 text-base font-semibold text-gray-900 ml-3">
-                View Leaderboard
-              </Text>
-              <Ionicons name="chevron-forward" size={24} color="#6B7280" />
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <View
+                  style={{
+                    width: 40,
+                    height: 40,
+                    borderRadius: 20,
+                    backgroundColor: '#FFFBEB',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    marginRight: 12,
+                  }}
+                >
+                  <Ionicons name="trophy" size={20} color="#F59E0B" />
+                </View>
+                <Text style={{ fontSize: 15, fontWeight: '600', color: '#111827' }}>
+                  View Leaderboard
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
             </TouchableOpacity>
 
-            {}
-            <View className="flex-row items-center justify-between px-5 pb-3">
-              <Text className="text-xl font-bold text-gray-900">Your Referrals</Text>
-              <Text className="text-sm text-gray-500">
+            {/* Section Header */}
+            <View
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                paddingHorizontal: 20,
+                paddingTop: 24,
+                paddingBottom: 12,
+              }}
+            >
+              <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#111827' }}>Your Referrals</Text>
+              <Text style={{ fontSize: 13, color: '#6B7280' }}>
                 {stats?.totalReferrals || 0} total
               </Text>
             </View>
           </>
         }
         ListEmptyComponent={
-          <View className="items-center justify-center py-16 px-5">
-            <Ionicons name="people-outline" size={64} color="#D1D5DB" />
-            <Text className="text-lg font-semibold text-gray-400 mt-4">No referrals yet</Text>
-            <Text className="text-sm text-gray-300 mt-2">
+          <View style={{ alignItems: 'center', justifyContent: 'center', paddingVertical: 64, paddingHorizontal: 20 }}>
+            <View
+              style={{
+                width: 80,
+                height: 80,
+                borderRadius: 40,
+                backgroundColor: '#F3F4F6',
+                alignItems: 'center',
+                justifyContent: 'center',
+                marginBottom: 16,
+              }}
+            >
+              <Ionicons name="people-outline" size={40} color="#9CA3AF" />
+            </View>
+            <Text style={{ fontSize: 17, fontWeight: '600', color: '#6B7280', marginBottom: 8 }}>
+              No referrals yet
+            </Text>
+            <Text style={{ fontSize: 14, color: '#9CA3AF', textAlign: 'center' }}>
               Start inviting friends to earn rewards!
             </Text>
           </View>
         }
         ListFooterComponent={
           loadingMore ? (
-            <View className="py-5 items-center">
+            <View style={{ paddingVertical: 20, alignItems: 'center' }}>
               <ActivityIndicator size="small" color="#eb278d" />
             </View>
           ) : null

@@ -569,12 +569,11 @@ const VendorBookingsScreen: React.FC = () => {
               </View>
             )}
             <View className="flex-row items-center">
-              <LinearGradient
-                colors={['#eb278d', '#f472b6']}
-                className="w-8 h-8 rounded-full items-center justify-center mr-2"
+              <View
+                className="w-8 h-8 rounded-full items-center justify-center mr-2 bg-[#eb278d]"
               >
                 <Ionicons name="person" size={16} color="#fff" />
-              </LinearGradient>
+              </View>
               <Text className="text-sm text-gray-700 font-semibold">
                 {booking.client.firstName} {booking.client.lastName}
               </Text>
@@ -611,12 +610,10 @@ const VendorBookingsScreen: React.FC = () => {
         {}
         <View className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-2xl p-4 mb-4" style={{ gap: 14 }}>
           <View className="flex-row items-center">
-            <LinearGradient
-              colors={['#3b82f6', '#2563eb']}
-              className="w-10 h-10 rounded-xl items-center justify-center mr-3"
+            <View className="w-10 h-10 rounded-full items-center justify-center mr-3 bg-[#2563eb]"
             >
               <Ionicons name="calendar" size={20} color="#fff" />
-            </LinearGradient>
+            </View>
             <View className="flex-1">
               <Text className="text-xs text-gray-500 mb-0.5 font-medium">Date & Time</Text>
               <Text className="text-sm font-bold text-gray-900">
@@ -628,12 +625,10 @@ const VendorBookingsScreen: React.FC = () => {
 
           {booking.location && (
             <View className="flex-row items-center">
-              <LinearGradient
-                colors={['#10b981', '#059669']}
-                className="w-10 h-10 rounded-xl items-center justify-center mr-3"
+              <View className="w-10 h-10 rounded-full items-center justify-center mr-3 bg-[#059669]"
               >
                 <Ionicons name="location" size={20} color="#fff" />
-              </LinearGradient>
+              </View>
               <View className="flex-1">
                 <Text className="text-xs text-gray-500 mb-0.5 font-medium">Location</Text>
                 <Text className="text-sm font-bold text-gray-900" numberOfLines={1}>
@@ -645,12 +640,11 @@ const VendorBookingsScreen: React.FC = () => {
 
           <View className="flex-row items-center justify-between">
             <View className="flex-row items-center flex-1">
-              <LinearGradient
-                colors={['#a855f7', '#9333ea']}
-                className="w-10 h-10 rounded-xl items-center justify-center mr-3"
+              <View
+                className="w-10 h-10 rounded-full items-center justify-center mr-3 bg-[#9333ea]"
               >
                 <Ionicons name="cash" size={20} color="#fff" />
-              </LinearGradient>
+              </View>
               <View className="flex-1">
                 <Text className="text-xs text-gray-500 mb-0.5 font-medium">Amount</Text>
                 <Text className="text-lg font-bold text-pink-600">
