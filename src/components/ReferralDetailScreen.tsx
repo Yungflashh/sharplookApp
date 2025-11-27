@@ -8,9 +8,11 @@ import {
   Image,
   TouchableOpacity,
   Alert,
+  StatusBar,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { referralAPI } from '../api/api';
 
 interface ReferralDetail {
@@ -117,209 +119,252 @@ const ReferralDetailScreen = ({ route, navigation }: any) => {
 
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#7C3AED" />
-      </View>
+      <SafeAreaView style={styles.loadingContainer}>
+        <StatusBar barStyle="dark-content" />
+        <ActivityIndicator size="large" color="#eb278d" />
+      </SafeAreaView>
     );
   }
 
   if (!referral) {
     return (
-      <View style={styles.loadingContainer}>
-        <Text>Referral not found</Text>
-      </View>
+      <SafeAreaView style={styles.loadingContainer}>
+        <StatusBar barStyle="dark-content" />
+        <Text style={styles.notFoundText}>Referral not found</Text>
+      </SafeAreaView>
     );
   }
 
   return (
-    <ScrollView style={styles.container}>
-      <LinearGradient colors={['#7C3AED', '#5B21B6']} style={styles.header}>
-        <View style={styles.statusBadge}>
-          <Ionicons
-            name={getStatusIcon(referral.status) as any}
-            size={24}
-            color={getStatusColor(referral.status)}
-          />
-          <Text style={[styles.statusText, { color: getStatusColor(referral.status) }]}>
-            {referral.status.toUpperCase()}
-          </Text>
-        </View>
-      </LinearGradient>
+    <SafeAreaView style={styles.container} edges={['top']}>
+      <StatusBar barStyle="light-content" />
+      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+        <LinearGradient colors={['#eb278d', '#c71f73']} style={styles.header}>
+          {/* Back Button */}
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => navigation.goBack()}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="arrow-back" size={22} color="#FFFFFF" />
+          </TouchableOpacity>
 
-      <View style={styles.content}>
-        {}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Referred User</Text>
-          <View style={styles.userCard}>
-            {referral.referee.avatar ? (
-              <Image source={{ uri: referral.referee.avatar }} style={styles.avatar} />
-            ) : (
-              <View style={[styles.avatar, styles.avatarPlaceholder]}>
-                <Text style={styles.avatarText}>
-                  {referral.referee.firstName[0]}{referral.referee.lastName[0]}
-                </Text>
-              </View>
-            )}
-            <View style={styles.userInfo}>
-              <Text style={styles.userName}>
-                {referral.referee.firstName} {referral.referee.lastName}
-              </Text>
-              <Text style={styles.userEmail}>{referral.referee.email}</Text>
-              <Text style={styles.userDate}>
-                Joined {formatDate(referral.referee.createdAt)}
-              </Text>
-            </View>
+          {/* Header Title */}
+          <Text style={styles.headerTitle}>Referral Details</Text>
+
+          {/* Status Badge */}
+          <View style={styles.statusBadge}>
+            <Ionicons
+              name={getStatusIcon(referral.status) as any}
+              size={22}
+              color={getStatusColor(referral.status)}
+            />
+            <Text style={[styles.statusText, { color: getStatusColor(referral.status) }]}>
+              {referral.status.toUpperCase()}
+            </Text>
           </View>
-        </View>
+        </LinearGradient>
 
-        {}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Referral Code Used</Text>
-          <View style={styles.codeBox}>
-            <Text style={styles.codeText}>{referral.referralCode}</Text>
-          </View>
-        </View>
-
-        {}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Rewards</Text>
-          <View style={styles.rewardCard}>
-            <View style={styles.rewardItem}>
-              <View style={styles.rewardHeader}>
-                <Ionicons name="gift" size={24} color="#7C3AED" />
-                <Text style={styles.rewardTitle}>Your Reward</Text>
-              </View>
-              <Text style={styles.rewardAmount}>
-                {formatCurrency(referral.referrerReward)}
-              </Text>
-              {referral.referrerPaid ? (
-                <View style={styles.paidBadge}>
-                  <Ionicons name="checkmark-circle" size={16} color="#10B981" />
-                  <Text style={styles.paidText}>
-                    Paid on {formatDate(referral.referrerPaidAt!)}
-                  </Text>
-                </View>
-              ) : (
-                <View style={styles.pendingBadge}>
-                  <Ionicons name="time" size={16} color="#F59E0B" />
-                  <Text style={styles.pendingText}>Pending payment</Text>
-                </View>
-              )}
-            </View>
-
-            <View style={styles.divider} />
-
-            <View style={styles.rewardItem}>
-              <View style={styles.rewardHeader}>
-                <Ionicons name="person" size={24} color="#10B981" />
-                <Text style={styles.rewardTitle}>Friend's Reward</Text>
-              </View>
-              <Text style={styles.rewardAmount}>
-                {formatCurrency(referral.refereeReward)}
-              </Text>
-              {referral.refereePaid ? (
-                <View style={styles.paidBadge}>
-                  <Ionicons name="checkmark-circle" size={16} color="#10B981" />
-                  <Text style={styles.paidText}>
-                    Paid on {formatDate(referral.refereePaidAt!)}
-                  </Text>
-                </View>
-              ) : (
-                <View style={styles.pendingBadge}>
-                  <Ionicons name="time" size={16} color="#F59E0B" />
-                  <Text style={styles.pendingText}>Pending payment</Text>
-                </View>
-              )}
-            </View>
-          </View>
-        </View>
-
-        {/* First Booking */}
-        {referral.requiresFirstBooking && (
+        <View style={styles.content}>
+          {/* Referred User */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>First Booking Requirement</Text>
-            {referral.firstBookingCompleted && referral.firstBookingId ? (
-              <View style={styles.bookingCard}>
-                <View style={styles.bookingHeader}>
-                  <Ionicons name="checkmark-circle" size={24} color="#10B981" />
-                  <Text style={styles.bookingTitle}>Completed</Text>
-                </View>
-                <Text style={styles.bookingService}>
-                  Service: {referral.firstBookingId.service}
-                </Text>
-                <Text style={styles.bookingDate}>
-                  Date: {formatDate(referral.firstBookingId.scheduledDate)}
-                </Text>
-                <Text style={styles.bookingAmount}>
-                  Amount: {formatCurrency(referral.firstBookingId.totalAmount)}
-                </Text>
-              </View>
-            ) : (
-              <View style={styles.bookingCard}>
-                <View style={styles.bookingHeader}>
-                  <Ionicons name="time" size={24} color="#F59E0B" />
-                  <Text style={[styles.bookingTitle, { color: '#F59E0B' }]}>
-                    Awaiting First Booking
+            <Text style={styles.sectionTitle}>Referred User</Text>
+            <View style={styles.userCard}>
+              {referral.referee.avatar ? (
+                <Image source={{ uri: referral.referee.avatar }} style={styles.avatar} />
+              ) : (
+                <View style={[styles.avatar, styles.avatarPlaceholder]}>
+                  <Text style={styles.avatarText}>
+                    {referral.referee.firstName[0]}{referral.referee.lastName[0]}
                   </Text>
                 </View>
-                <Text style={styles.bookingNote}>
-                  Rewards will be activated once {referral.referee.firstName} completes their
-                  first booking.
+              )}
+              <View style={styles.userInfo}>
+                <Text style={styles.userName}>
+                  {referral.referee.firstName} {referral.referee.lastName}
                 </Text>
-              </View>
-            )}
-          </View>
-        )}
-
-        {/* Timeline */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Timeline</Text>
-          <View style={styles.timeline}>
-            <View style={styles.timelineItem}>
-              <View style={styles.timelineDot} />
-              <View style={styles.timelineContent}>
-                <Text style={styles.timelineTitle}>Referral Created</Text>
-                <Text style={styles.timelineDate}>{formatDate(referral.createdAt)}</Text>
+                <Text style={styles.userEmail}>{referral.referee.email}</Text>
+                <Text style={styles.userDate}>
+                  Joined {formatDate(referral.referee.createdAt)}
+                </Text>
               </View>
             </View>
+          </View>
 
-            {referral.firstBookingCompleted && (
-              <View style={styles.timelineItem}>
-                <View style={styles.timelineDot} />
-                <View style={styles.timelineContent}>
-                  <Text style={styles.timelineTitle}>First Booking Completed</Text>
-                  <Text style={styles.timelineDate}>
-                    {referral.completedAt ? formatDate(referral.completedAt) : 'N/A'}
+          {/* Referral Code */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Referral Code Used</Text>
+            <View style={styles.codeBox}>
+              <Text style={styles.codeText}>{referral.referralCode}</Text>
+            </View>
+          </View>
+
+          {/* Rewards */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Rewards</Text>
+            <View style={styles.rewardCard}>
+              <View style={styles.rewardItem}>
+                <View style={styles.rewardHeader}>
+                  <View style={styles.rewardIconContainer}>
+                    <Ionicons name="gift" size={20} color="#eb278d" />
+                  </View>
+                  <Text style={styles.rewardTitle}>Your Reward</Text>
+                </View>
+                <Text style={styles.rewardAmount}>
+                  {formatCurrency(referral.referrerReward)}
+                </Text>
+                {referral.referrerPaid ? (
+                  <View style={styles.paidBadge}>
+                    <Ionicons name="checkmark-circle" size={14} color="#10B981" />
+                    <Text style={styles.paidText}>
+                      Paid on {formatDate(referral.referrerPaidAt!)}
+                    </Text>
+                  </View>
+                ) : (
+                  <View style={styles.pendingBadge}>
+                    <Ionicons name="time" size={14} color="#F59E0B" />
+                    <Text style={styles.pendingText}>Pending payment</Text>
+                  </View>
+                )}
+              </View>
+
+              <View style={styles.divider} />
+
+              <View style={styles.rewardItem}>
+                <View style={styles.rewardHeader}>
+                  <View style={[styles.rewardIconContainer, { backgroundColor: '#ECFDF5' }]}>
+                    <Ionicons name="person" size={20} color="#10B981" />
+                  </View>
+                  <Text style={styles.rewardTitle}>Friend's Reward</Text>
+                </View>
+                <Text style={styles.rewardAmount}>
+                  {formatCurrency(referral.refereeReward)}
+                </Text>
+                {referral.refereePaid ? (
+                  <View style={styles.paidBadge}>
+                    <Ionicons name="checkmark-circle" size={14} color="#10B981" />
+                    <Text style={styles.paidText}>
+                      Paid on {formatDate(referral.refereePaidAt!)}
+                    </Text>
+                  </View>
+                ) : (
+                  <View style={styles.pendingBadge}>
+                    <Ionicons name="time" size={14} color="#F59E0B" />
+                    <Text style={styles.pendingText}>Pending payment</Text>
+                  </View>
+                )}
+              </View>
+            </View>
+          </View>
+
+          {/* First Booking */}
+          {referral.requiresFirstBooking && (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>First Booking Requirement</Text>
+              {referral.firstBookingCompleted && referral.firstBookingId ? (
+                <View style={styles.bookingCard}>
+                  <View style={styles.bookingHeader}>
+                    <View style={[styles.bookingIconContainer, { backgroundColor: '#ECFDF5' }]}>
+                      <Ionicons name="checkmark-circle" size={20} color="#10B981" />
+                    </View>
+                    <Text style={styles.bookingTitle}>Completed</Text>
+                  </View>
+                  <View style={styles.bookingDetails}>
+                    <View style={styles.bookingDetailRow}>
+                      <Text style={styles.bookingLabel}>Service</Text>
+                      <Text style={styles.bookingValue}>{referral.firstBookingId.service}</Text>
+                    </View>
+                    <View style={styles.bookingDetailRow}>
+                      <Text style={styles.bookingLabel}>Date</Text>
+                      <Text style={styles.bookingValue}>{formatDate(referral.firstBookingId.scheduledDate)}</Text>
+                    </View>
+                    <View style={styles.bookingDetailRow}>
+                      <Text style={styles.bookingLabel}>Amount</Text>
+                      <Text style={[styles.bookingValue, { color: '#eb278d', fontWeight: '700' }]}>
+                        {formatCurrency(referral.firstBookingId.totalAmount)}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+              ) : (
+                <View style={styles.bookingCard}>
+                  <View style={styles.bookingHeader}>
+                    <View style={[styles.bookingIconContainer, { backgroundColor: '#FFFBEB' }]}>
+                      <Ionicons name="time" size={20} color="#F59E0B" />
+                    </View>
+                    <Text style={[styles.bookingTitle, { color: '#F59E0B' }]}>
+                      Awaiting First Booking
+                    </Text>
+                  </View>
+                  <Text style={styles.bookingNote}>
+                    Rewards will be activated once {referral.referee.firstName} completes their
+                    first booking.
                   </Text>
                 </View>
-              </View>
-            )}
+              )}
+            </View>
+          )}
 
-            {referral.status === 'completed' && (
+          {/* Timeline */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Timeline</Text>
+            <View style={styles.timeline}>
               <View style={styles.timelineItem}>
-                <View style={[styles.timelineDot, { backgroundColor: '#10B981' }]} />
+                <View style={styles.timelineLeft}>
+                  <View style={styles.timelineDot} />
+                  <View style={styles.timelineLine} />
+                </View>
                 <View style={styles.timelineContent}>
-                  <Text style={styles.timelineTitle}>Rewards Paid</Text>
-                  <Text style={styles.timelineDate}>
-                    {referral.completedAt ? formatDate(referral.completedAt) : 'N/A'}
-                  </Text>
+                  <Text style={styles.timelineTitle}>Referral Created</Text>
+                  <Text style={styles.timelineDate}>{formatDate(referral.createdAt)}</Text>
                 </View>
               </View>
-            )}
 
-            {referral.expiresAt && referral.status === 'pending' && (
-              <View style={styles.timelineItem}>
-                <View style={[styles.timelineDot, { backgroundColor: '#EF4444' }]} />
-                <View style={styles.timelineContent}>
-                  <Text style={styles.timelineTitle}>Expires On</Text>
-                  <Text style={styles.timelineDate}>{formatDate(referral.expiresAt)}</Text>
+              {referral.firstBookingCompleted && (
+                <View style={styles.timelineItem}>
+                  <View style={styles.timelineLeft}>
+                    <View style={styles.timelineDot} />
+                    <View style={styles.timelineLine} />
+                  </View>
+                  <View style={styles.timelineContent}>
+                    <Text style={styles.timelineTitle}>First Booking Completed</Text>
+                    <Text style={styles.timelineDate}>
+                      {referral.completedAt ? formatDate(referral.completedAt) : 'N/A'}
+                    </Text>
+                  </View>
                 </View>
-              </View>
-            )}
+              )}
+
+              {referral.status === 'completed' && (
+                <View style={styles.timelineItem}>
+                  <View style={styles.timelineLeft}>
+                    <View style={[styles.timelineDot, { backgroundColor: '#10B981' }]} />
+                  </View>
+                  <View style={styles.timelineContent}>
+                    <Text style={styles.timelineTitle}>Rewards Paid</Text>
+                    <Text style={styles.timelineDate}>
+                      {referral.completedAt ? formatDate(referral.completedAt) : 'N/A'}
+                    </Text>
+                  </View>
+                </View>
+              )}
+
+              {referral.expiresAt && referral.status === 'pending' && (
+                <View style={styles.timelineItem}>
+                  <View style={styles.timelineLeft}>
+                    <View style={[styles.timelineDot, { backgroundColor: '#EF4444' }]} />
+                  </View>
+                  <View style={styles.timelineContent}>
+                    <Text style={styles.timelineTitle}>Expires On</Text>
+                    <Text style={styles.timelineDate}>{formatDate(referral.expiresAt)}</Text>
+                  </View>
+                </View>
+              )}
+            </View>
           </View>
         </View>
-      </View>
-    </ScrollView>
+      </ScrollView>
+    </SafeAreaView>
   );
 };
 
@@ -328,16 +373,43 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#F9FAFB',
   },
+  scrollView: {
+    flex: 1,
+  },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: '#F9FAFB',
+  },
+  notFoundText: {
+    fontSize: 16,
+    color: '#6B7280',
   },
   header: {
-    padding: 20,
-    paddingTop: 60,
+    paddingHorizontal: 20,
+    paddingTop: 8,
     paddingBottom: 100,
     alignItems: 'center',
+  },
+  backButton: {
+    position: 'absolute',
+    top: 8,
+    left: 20,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 10,
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    marginTop: 8,
+    marginBottom: 20,
   },
   statusBadge: {
     flexDirection: 'row',
@@ -345,50 +417,57 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     paddingHorizontal: 20,
     paddingVertical: 12,
-    borderRadius: 20,
+    borderRadius: 24,
     gap: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 4,
   },
   statusText: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: 'bold',
+    letterSpacing: 0.5,
   },
   content: {
-    marginTop: -80,
-    padding: 20,
+    marginTop: -70,
+    paddingHorizontal: 20,
+    paddingBottom: 32,
   },
   section: {
     marginBottom: 20,
   },
   sectionTitle: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '600',
-    color: '#1F2937',
+    color: '#111827',
     marginBottom: 12,
   },
   userCard: {
     flexDirection: 'row',
     backgroundColor: '#FFFFFF',
-    borderRadius: 12,
+    borderRadius: 16,
     padding: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
     elevation: 3,
   },
   avatar: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    marginRight: 16,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    marginRight: 14,
   },
   avatarPlaceholder: {
-    backgroundColor: '#7C3AED',
+    backgroundColor: '#eb278d',
     justifyContent: 'center',
     alignItems: 'center',
   },
   avatarText: {
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: 'bold',
     color: '#FFFFFF',
   },
@@ -397,9 +476,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   userName: {
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: '600',
-    color: '#1F2937',
+    color: '#111827',
     marginBottom: 4,
   },
   userEmail: {
@@ -413,57 +492,65 @@ const styles = StyleSheet.create({
   },
   codeBox: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 20,
+    borderRadius: 16,
+    padding: 24,
     alignItems: 'center',
     borderWidth: 2,
-    borderColor: '#7C3AED',
+    borderColor: '#eb278d',
     borderStyle: 'dashed',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
     elevation: 3,
   },
   codeText: {
-    fontSize: 32,
+    fontSize: 28,
     fontWeight: 'bold',
-    color: '#7C3AED',
+    color: '#eb278d',
     letterSpacing: 4,
   },
   rewardCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 12,
+    borderRadius: 16,
     padding: 20,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
     elevation: 3,
   },
   rewardItem: {
-    paddingVertical: 8,
+    paddingVertical: 4,
   },
   rewardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 12,
-    gap: 8,
+    gap: 10,
+  },
+  rewardIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#FDF2F8',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   rewardTitle: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
-    color: '#1F2937',
+    color: '#111827',
   },
   rewardAmount: {
-    fontSize: 28,
+    fontSize: 26,
     fontWeight: 'bold',
-    color: '#7C3AED',
+    color: '#eb278d',
     marginBottom: 8,
   },
   divider: {
     height: 1,
-    backgroundColor: '#E5E7EB',
+    backgroundColor: '#F3F4F6',
     marginVertical: 16,
   },
   paidBadge: {
@@ -472,7 +559,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   paidText: {
-    fontSize: 14,
+    fontSize: 13,
     color: '#10B981',
   },
   pendingBadge: {
@@ -481,83 +568,106 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   pendingText: {
-    fontSize: 14,
+    fontSize: 13,
     color: '#F59E0B',
   },
   bookingCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 16,
+    borderRadius: 16,
+    padding: 20,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
     elevation: 3,
   },
   bookingHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
-    gap: 8,
+    marginBottom: 16,
+    gap: 10,
+  },
+  bookingIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   bookingTitle: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
     color: '#10B981',
   },
-  bookingService: {
-    fontSize: 14,
-    color: '#1F2937',
-    marginBottom: 4,
+  bookingDetails: {
+    backgroundColor: '#F9FAFB',
+    borderRadius: 12,
+    padding: 14,
   },
-  bookingDate: {
+  bookingDetailRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
+  bookingLabel: {
     fontSize: 14,
     color: '#6B7280',
-    marginBottom: 4,
   },
-  bookingAmount: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#7C3AED',
+  bookingValue: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#111827',
   },
   bookingNote: {
     fontSize: 14,
     color: '#6B7280',
-    lineHeight: 20,
+    lineHeight: 22,
   },
   timeline: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 12,
+    borderRadius: 16,
     padding: 20,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
     elevation: 3,
   },
   timelineItem: {
     flexDirection: 'row',
-    marginBottom: 20,
+    minHeight: 60,
+  },
+  timelineLeft: {
+    alignItems: 'center',
+    marginRight: 16,
   },
   timelineDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: '#7C3AED',
-    marginRight: 16,
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: '#eb278d',
+    borderWidth: 3,
+    borderColor: '#FDF2F8',
+  },
+  timelineLine: {
+    width: 2,
+    flex: 1,
+    backgroundColor: '#F3F4F6',
     marginTop: 4,
   },
   timelineContent: {
     flex: 1,
+    paddingBottom: 20,
   },
   timelineTitle: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
-    color: '#1F2937',
+    color: '#111827',
     marginBottom: 4,
   },
   timelineDate: {
-    fontSize: 14,
+    fontSize: 13,
     color: '#6B7280',
   },
 });
