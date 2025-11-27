@@ -301,29 +301,51 @@ const VendorProductManagementScreen: React.FC = () => {
         </View>
 
         {}
-        <TouchableOpacity
-          onPress={() => {
-            Alert.alert('Product Options', '', [
-              {
-                text: 'Edit',
-                onPress: () => handleEditProduct(product._id),
-              },
-              {
-                text: 'Update Stock',
-                onPress: () => handleUpdateStock(product),
-              },
-              {
-                text: 'Delete',
-                style: 'destructive',
-                onPress: () => handleDeleteProduct(product._id),
-              },
-              { text: 'Cancel', style: 'cancel' },
-            ]);
-          }}
-          className="absolute top-2 right-2 w-7 h-7 rounded-full bg-white/90 items-center justify-center"
-        >
-          <Ionicons name="ellipsis-vertical" size={14} color="#6b7280" />
-        </TouchableOpacity>
+        {/* Options Menu Button */}
+<TouchableOpacity
+  onPress={() => {
+    if (Platform.OS === 'ios') {
+      // iOS ActionSheet - dismisses when tapped outside
+      const ActionSheetIOS = require('react-native').ActionSheetIOS;
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          options: ['Edit Product', 'Delete Product', 'Cancel'],
+          destructiveButtonIndex: 1,
+          cancelButtonIndex: 2,
+        },
+        (buttonIndex) => {
+          if (buttonIndex === 0) {
+            handleEditProduct(product._id);
+          } else if (buttonIndex === 1) {
+            handleDeleteProduct(product._id);
+          }
+        }
+      );
+    } else {
+      // Android Alert - already dismisses when tapped outside
+      Alert.alert(
+        'Product Options',
+        '',
+        [
+          {
+            text: 'Edit',
+            onPress: () => handleEditProduct(product._id),
+          },
+          {
+            text: 'Delete',
+            style: 'destructive',
+            onPress: () => handleDeleteProduct(product._id),
+          },
+          { text: 'Cancel', style: 'cancel' },
+        ],
+        { cancelable: true } // Allows dismissing by tapping outside on Android
+      );
+    }
+  }}
+  className="absolute top-2 right-2 w-7 h-7 rounded-full bg-white/90 items-center justify-center"
+>
+  <Ionicons name="ellipsis-vertical" size={14} color="#6b7280" />
+</TouchableOpacity>
       </View>
 
       {}

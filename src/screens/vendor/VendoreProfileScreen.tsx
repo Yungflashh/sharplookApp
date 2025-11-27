@@ -126,13 +126,6 @@ const VendorProfileScreen: React.FC = () => {
           iconFamily: 'ionicons',
           onPress: () => navigation.navigate("PersonalInformation"),
         },
-        {
-          icon: 'wallet-outline',
-          title: 'Wallet',
-          subtitle: 'Manage earnings and withdrawals',
-          iconFamily: 'ionicons',
-          onPress: () => console.log('Wallet'),
-        },
         
         {
           icon: 'shield-checkmark-outline',
@@ -165,13 +158,7 @@ const VendorProfileScreen: React.FC = () => {
           iconFamily: 'ionicons',
           onPress: () => navigation.navigate("HelpCenter"),
         },
-        {
-          icon: 'chatbubble-ellipses-outline',
-          title: 'Contact Support',
-          subtitle: 'Get help from our team',
-          iconFamily: 'ionicons',
-          onPress: () => console.log('Contact'),
-        },
+      
         {
           icon: 'document-text-outline',
           title: 'Terms & Privacy',
@@ -238,7 +225,8 @@ const VendorProfileScreen: React.FC = () => {
             </View>
 
             <Text className="text-2xl font-bold text-white mb-1">
-              {user?.businessName || "John's Store"}
+              {user?.vendorProfile?.businessName || "My Store"}
+              
             </Text>
             <Text className="text-sm text-white/90 mb-3">
               {user?.email || 'vendor@example.com'}

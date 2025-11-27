@@ -9,6 +9,9 @@ import {
   Alert,
   TextInput,
   Platform,
+  Modal,
+  KeyboardAvoidingView,
+  Keyboard,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -16,7 +19,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '@/types/navigation.types';
-import { bookingAPI, vendorAPI, handleAPIError } from '@/api/api';
+import { bookingAPI, handleAPIError } from '@/api/api';
 
 type VendorBookingsNavigationProp = NativeStackNavigationProp<RootStackParamList, 'Main'>;
 
@@ -29,7 +32,7 @@ interface VendorBooking {
     name: string;
     images?: string[];
   };
-  offer?: string; 
+  offer?: string;
   client: {
     _id: string;
     firstName: string;
@@ -63,6 +66,118 @@ interface VendorStats {
 
 type FilterTab = 'all' | 'pending' | 'accepted' | 'in_progress' | 'completed' | 'cancelled';
 
+const RejectionModalContent = React.memo<{
+  visible: boolean;
+  rejectionReason: string;
+  onChangeReason: (text: string) => void;
+  onCancel: () => void;
+  onSubmit: () => void;
+}>(({ visible, rejectionReason, onChangeReason, onCancel, onSubmit }) => {
+  const charCount = rejectionReason.length;
+  const isValid = charCount >= 10 && charCount <= 500;
+  
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={onCancel}
+    >
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        className="flex-1"
+      >
+        <TouchableOpacity
+          activeOpacity={1}
+          onPress={onCancel}
+          className="flex-1 bg-black/50 justify-center items-center px-5"
+        >
+          <View 
+            onStartShouldSetResponder={() => true}
+            className="w-full bg-white rounded-3xl p-6"
+          >
+            <View className="flex-row items-center mb-4">
+              <View className="w-12 h-12 rounded-full bg-red-100 items-center justify-center mr-3">
+                <Ionicons name="close-circle" size={24} color="#ef4444" />
+              </View>
+              <Text className="text-xl font-bold text-gray-900 flex-1">Reject Booking</Text>
+            </View>
+
+            <Text className="text-sm text-gray-600 mb-3">
+              Please provide a reason for rejection (10-500 characters):
+            </Text>
+
+            <TextInput
+              className="bg-gray-50 rounded-xl p-4 text-base text-gray-900 mb-2 border border-gray-200"
+              placeholder="Enter rejection reason..."
+              placeholderTextColor="#9ca3af"
+              value={rejectionReason}
+              onChangeText={onChangeReason}
+              multiline
+              numberOfLines={4}
+              textAlignVertical="top"
+              autoFocus
+              style={{ minHeight: 100 }}
+            />
+
+            {/* Character count and validation */}
+            <View className="flex-row items-center justify-between mb-4">
+              <Text 
+                className={`text-xs font-medium ${
+                  charCount < 10 
+                    ? 'text-red-600' 
+                    : charCount > 500 
+                    ? 'text-red-600' 
+                    : 'text-green-600'
+                }`}
+              >
+                {charCount < 10 
+                  ? `Minimum 10 characters (${10 - charCount} more needed)` 
+                  : charCount > 500
+                  ? `Maximum 500 characters (${charCount - 500} over limit)`
+                  : '✓ Valid length'}
+              </Text>
+              <Text 
+                className={`text-xs font-bold ${
+                  charCount > 500 ? 'text-red-600' : 'text-gray-500'
+                }`}
+              >
+                {charCount}/500
+              </Text>
+            </View>
+
+            <View className="flex-row gap-3">
+              <TouchableOpacity
+                onPress={onCancel}
+                className="flex-1 bg-gray-100 py-3.5 rounded-xl"
+                activeOpacity={0.8}
+              >
+                <Text className="text-gray-700 text-center font-bold text-base">Cancel</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={onSubmit}
+                disabled={!isValid}
+                className="flex-1 rounded-xl overflow-hidden"
+                activeOpacity={0.8}
+                style={{ opacity: isValid ? 1 : 0.5 }}
+              >
+                <LinearGradient
+                  colors={['#ef4444', '#dc2626']}
+                  className="py-3.5"
+                >
+                  <Text className="text-white text-center font-bold text-base">Reject</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </TouchableOpacity>
+      </KeyboardAvoidingView>
+    </Modal>
+  );
+});
+
+
 const VendorBookingsScreen: React.FC = () => {
   const navigation = useNavigation<VendorBookingsNavigationProp>();
   const [loading, setLoading] = useState(true);
@@ -75,6 +190,11 @@ const VendorBookingsScreen: React.FC = () => {
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+
+  // Rejection modal states
+  const [rejectModalVisible, setRejectModalVisible] = useState(false);
+  const [rejectingBookingId, setRejectingBookingId] = useState<string | null>(null);
+  const [rejectionReason, setRejectionReason] = useState('');
 
   const calculateStatsFromBookings = useCallback((bookingsData: VendorBooking[]) => {
     const completedBookings = bookingsData.filter((b) => b.status.toLowerCase() === 'completed');
@@ -219,43 +339,58 @@ const VendorBookingsScreen: React.FC = () => {
   };
 
   const handleRejectBooking = (bookingId: string) => {
-    Alert.prompt(
-      'Reject Booking',
-      'Please provide a reason for rejection:',
-      [
-        {
-          text: 'Cancel',
-          style: 'cancel',
-        },
-        {
-          text: 'Reject',
-          style: 'destructive',
-          onPress: async (reason) => {
-            if (!reason || reason.trim().length === 0) {
-              Alert.alert('Error', 'Please provide a reason');
-              return;
-            }
-
-            try {
-              setActionLoading(bookingId);
-              const response = await bookingAPI.rejectBooking(bookingId, reason);
-              if (response.success) {
-                Alert.alert('Success', 'Booking rejected');
-                fetchBookings(1, false);
-              }
-            } catch (error) {
-              const apiError = handleAPIError(error);
-              Alert.alert('Error', apiError.message || 'Failed to reject booking');
-            } finally {
-              setActionLoading(null);
-            }
-          },
-        },
-      ],
-      'plain-text'
-    );
+    setRejectingBookingId(bookingId);
+    setRejectionReason('');
+    setRejectModalVisible(true);
   };
 
+const submitRejection = async () => {
+  const trimmedReason = rejectionReason.trim();
+  
+  // Client-side validation
+  if (trimmedReason.length < 10) {
+    Alert.alert(
+      'Invalid Reason', 
+      `Reason must be at least 10 characters long. You entered ${trimmedReason.length} characters.`
+    );
+    return;
+  }
+  
+  if (trimmedReason.length > 500) {
+    Alert.alert(
+      'Invalid Reason', 
+      `Reason must not exceed 500 characters. You entered ${trimmedReason.length} characters.`
+    );
+    return;
+  }
+
+  try {
+    setActionLoading(rejectingBookingId!);
+    setRejectModalVisible(false);
+    const response = await bookingAPI.rejectBooking(rejectingBookingId!, trimmedReason);
+    if (response.success) {
+      Alert.alert('Success', 'Booking rejected successfully');
+      fetchBookings(1, false);
+    }
+  } catch (error) {
+    const apiError = handleAPIError(error);
+    
+    // Show specific validation errors if available
+    if (apiError.errors && Array.isArray(apiError.errors)) {
+      const errorMessages = apiError.errors
+        .map((err: any) => `${err.field}: ${err.message}`)
+        .join('\n');
+      Alert.alert('Validation Error', errorMessages);
+    } else {
+      Alert.alert('Error', apiError.message || 'Failed to reject booking');
+    }
+    
+    // Reopen modal if there was an error
+    setRejectModalVisible(true);
+  } finally {
+    setActionLoading(null);
+  }
+};
   const handleStartService = (bookingId: string) => {
     Alert.alert('Start Service', 'Mark this booking as in progress?', [
       {
@@ -364,7 +499,6 @@ const VendorBookingsScreen: React.FC = () => {
       .join(' ');
   };
 
-  
   const getBookingTitle = (booking: VendorBooking): string => {
     if (booking.bookingType === 'offer_based') {
       return 'Custom Offer Booking';
@@ -533,6 +667,17 @@ const VendorBookingsScreen: React.FC = () => {
     { key: 'completed', label: 'Completed', count: counts.completed },
   ];
 
+  // Memoized callbacks for the modal
+  const handleCloseModal = useCallback(() => {
+    Keyboard.dismiss();
+    setRejectModalVisible(false);
+    setRejectionReason('');
+  }, []);
+
+  const handleChangeReason = useCallback((text: string) => {
+    setRejectionReason(text);
+  }, []);
+
   const renderBookingCard = (booking: VendorBooking) => (
     <TouchableOpacity
       key={booking._id}
@@ -555,7 +700,7 @@ const VendorBookingsScreen: React.FC = () => {
           }),
         }}
       >
-        {}
+        {/* Header */}
         <View className="flex-row items-start justify-between mb-4">
           <View className="flex-1 mr-3">
             <Text className="text-lg font-bold text-gray-900 mb-2">
@@ -608,7 +753,7 @@ const VendorBookingsScreen: React.FC = () => {
           </View>
         </View>
 
-        {}
+        {/* Details */}
         <View className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-2xl p-4 mb-4" style={{ gap: 14 }}>
           <View className="flex-row items-center">
             <LinearGradient
@@ -701,10 +846,10 @@ const VendorBookingsScreen: React.FC = () => {
           )}
         </View>
 
-        {}
+        {/* Action Buttons */}
         {getActionButtons(booking)}
 
-        {}
+        {/* View Details */}
         <TouchableOpacity
           onPress={() => navigation.navigate('BookingDetail', { bookingId: booking._id })}
           className="mt-3 pt-4 border-t border-gray-100"
@@ -783,7 +928,7 @@ const VendorBookingsScreen: React.FC = () => {
         }}
         scrollEventThrottle={400}
       >
-        {}
+        {/* Header */}
         <LinearGradient
           colors={['#eb278d', '#eb278d']}
           start={{ x: 0, y: 0 }}
@@ -800,7 +945,7 @@ const VendorBookingsScreen: React.FC = () => {
                 </Text>
               </View>
 
-              {}
+              {/* Action Buttons */}
               <View className="flex-row gap-2">
                 <TouchableOpacity
                   onPress={() => navigation.navigate('VendorMyResponses')}
@@ -822,7 +967,7 @@ const VendorBookingsScreen: React.FC = () => {
               </View>
             </View>
 
-            {}
+            {/* Quick Links */}
             <View className="flex-row mb-4" style={{ gap: 8 }}>
               <TouchableOpacity
                 onPress={() => navigation.navigate('AvailableOffers')}
@@ -855,7 +1000,7 @@ const VendorBookingsScreen: React.FC = () => {
               </TouchableOpacity>
             </View>
 
-            {}
+            {/* Stats Cards */}
             {stats && (
               <View className="flex-row mb-4" style={{ gap: 12 }}>
                 <View className="flex-1 bg-white/10 rounded-2xl p-4">
@@ -885,14 +1030,14 @@ const VendorBookingsScreen: React.FC = () => {
           </View>
         </LinearGradient>
 
-        {}
+        {/* Filters Section */}
         <LinearGradient
           colors={['#eb278d', '#eb278d']}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
         >
           <View className="px-5 pb-4">
-            {}
+            {/* Search Bar */}
             <View className="flex-row items-center bg-white/20 rounded-2xl px-4 py-3 mb-4">
               <Ionicons name="search" size={20} color="#fff" />
               <TextInput
@@ -909,7 +1054,7 @@ const VendorBookingsScreen: React.FC = () => {
               )}
             </View>
 
-            {}
+            {/* Filter Tabs */}
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
@@ -938,7 +1083,7 @@ const VendorBookingsScreen: React.FC = () => {
           </View>
         </LinearGradient>
 
-        {}
+        {/* Bookings List */}
         <View className="px-5 py-4">
           {filteredBookings.length > 0 ? (
             <>
@@ -959,6 +1104,15 @@ const VendorBookingsScreen: React.FC = () => {
           )}
         </View>
       </ScrollView>
+
+      {/* Rejection Modal */}
+      <RejectionModalContent
+        visible={rejectModalVisible}
+        rejectionReason={rejectionReason}
+        onChangeReason={handleChangeReason}
+        onCancel={handleCloseModal}
+        onSubmit={submitRejection}
+      />
     </SafeAreaView>
   );
 };
