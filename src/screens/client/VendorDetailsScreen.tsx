@@ -353,47 +353,24 @@ const handleMessageVendor = () => {
                 </Text>
               </View>}
 
-            {}
-            <View className="bg-white rounded-2xl p-5 mb-4">
-              <Text className="text-lg font-bold text-gray-900 mb-4">Contact Information</Text>
+            {/* Location Information */}
+            {vendor.vendorProfile.location && <View className="bg-white rounded-2xl p-5 mb-4">
+              <Text className="text-lg font-bold text-gray-900 mb-4">Location</Text>
               
-              <View className="space-y-3">
-                <View className="flex-row items-center">
-                  <View className="w-10 h-10 rounded-full bg-pink-100 items-center justify-center mr-3">
-                    <Ionicons name="call" size={20} color="#eb278d" />
-                  </View>
-                  <View className="flex-1">
-                    <Text className="text-xs text-gray-500">Phone</Text>
-                    <Text className="text-sm font-semibold text-gray-900">{vendor.phone}</Text>
-                  </View>
+              <View className="flex-row items-center">
+                <View className="w-10 h-10 rounded-full bg-pink-100 items-center justify-center mr-3">
+                  <Ionicons name="location" size={20} color="#eb278d" />
                 </View>
-
-                <View className="flex-row items-center mt-3">
-                  <View className="w-10 h-10 rounded-full bg-pink-100 items-center justify-center mr-3">
-                    <Ionicons name="mail" size={20} color="#eb278d" />
-                  </View>
-                  <View className="flex-1">
-                    <Text className="text-xs text-gray-500">Email</Text>
-                    <Text className="text-sm font-semibold text-gray-900">{vendor.email}</Text>
-                  </View>
+                <View className="flex-1">
+                  <Text className="text-sm font-semibold text-gray-900">
+                    {vendor.vendorProfile.location.address}
+                  </Text>
+                  <Text className="text-sm text-gray-600 mt-1">
+                    {vendor.vendorProfile.location.city}, {vendor.vendorProfile.location.state}
+                  </Text>
                 </View>
-
-                {vendor.vendorProfile.location && <View className="flex-row items-center mt-3">
-                    <View className="w-10 h-10 rounded-full bg-pink-100 items-center justify-center mr-3">
-                      <Ionicons name="location" size={20} color="#eb278d" />
-                    </View>
-                    <View className="flex-1">
-                      <Text className="text-xs text-gray-500">Location</Text>
-                      <Text className="text-sm font-semibold text-gray-900">
-                        {vendor.vendorProfile.location.address}
-                      </Text>
-                      <Text className="text-sm text-gray-600">
-                        {vendor.vendorProfile.location.city}, {vendor.vendorProfile.location.state}
-                      </Text>
-                    </View>
-                  </View>}
               </View>
-            </View>
+            </View>}
 
             {}
             {vendor.vendorProfile.serviceRadius && <View className="bg-white rounded-2xl p-5">
@@ -517,13 +494,9 @@ const handleMessageVendor = () => {
           </View>}
       </ScrollView>
 
-      {}
+      {/* Bottom Action Bar */}
       <View className="absolute bottom-0 left-0 right-0 bg-white border-t border-gray-100 px-5 py-4">
         <View className="flex-row gap-3">
-          <TouchableOpacity className="w-14 h-14 rounded-2xl bg-gray-100 items-center justify-center" onPress={handleCallVendor} activeOpacity={0.7}>
-            <Ionicons name="call" size={24} color="#eb278d" />
-          </TouchableOpacity>
-
           <TouchableOpacity className="w-14 h-14 rounded-2xl bg-gray-100 items-center justify-center" onPress={handleMessageVendor} activeOpacity={0.7}>
             <Ionicons name="chatbubble-ellipses" size={24} color="#eb278d" />
           </TouchableOpacity>

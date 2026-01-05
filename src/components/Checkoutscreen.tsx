@@ -50,20 +50,19 @@ const CheckoutScreen: React.FC = () => {
   const [deliveryType, setDeliveryType] = useState<'home_delivery' | 'pickup'>('home_delivery');
   const [customerNotes, setCustomerNotes] = useState('');
 
-  
   const [locationLoading, setLocationLoading] = useState(false);
   const [savedLocation, setSavedLocation] = useState<any>(null);
   const [showLocationOptions, setShowLocationOptions] = useState(false);
 
-  
   const [deliveryFeeInfo, setDeliveryFeeInfo] = useState<DeliveryFeeInfo | null>(null);
   const [deliveryFeeLoading, setDeliveryFeeLoading] = useState(false);
 
-  
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [walletBalance, setWalletBalance] = useState(0);
   const [walletLoading, setWalletLoading] = useState(false);
   const [paymentProcessing, setPaymentProcessing] = useState(false);
+
+  const [addressError, setAddressError] = useState('');
 
   const [deliveryAddress, setDeliveryAddress] = useState<DeliveryAddress>({
     fullName: '',
@@ -96,7 +95,6 @@ const CheckoutScreen: React.FC = () => {
     }
   };
 
-  
   const fetchWalletBalance = async () => {
     try {
       setWalletLoading(true);
@@ -122,6 +120,10 @@ const CheckoutScreen: React.FC = () => {
         coordinates: savedLocation.coordinates || undefined,
       });
       setShowLocationOptions(false);
+      // Clear address error if saved location is valid
+      if (savedLocation.address && savedLocation.address.trim().length >= 10) {
+        setAddressError('');
+      }
       Alert.alert('Success', 'Saved location applied!');
     }
   };
@@ -155,17 +157,21 @@ const CheckoutScreen: React.FC = () => {
 
       if (geocode && geocode.length > 0) {
         const addressData = geocode[0];
+        const addressString = `${addressData.street || ''} ${addressData.streetNumber || ''}`.trim() || 'Address not available';
 
         setDeliveryAddress({
           ...deliveryAddress,
-          address:
-            `${addressData.street || ''} ${addressData.streetNumber || ''}`.trim() ||
-            'Address not available',
+          address: addressString,
           city: addressData.city || addressData.subregion || '',
           state: addressData.region || '',
           country: addressData.country || 'Nigeria',
           coordinates: [longitude, latitude],
         });
+
+        // Clear address error if location address is valid
+        if (addressString.trim().length >= 10) {
+          setAddressError('');
+        }
 
         setShowLocationOptions(false);
         Alert.alert('Success', 'Current location captured!');
@@ -256,10 +262,25 @@ const CheckoutScreen: React.FC = () => {
         Alert.alert('Required', 'Please enter your phone number');
         return false;
       }
-      if (!deliveryAddress.address.trim()) {
+
+      // Address validation with length check
+      const address = deliveryAddress.address.trim();
+      if (!address) {
         Alert.alert('Required', 'Please enter your delivery address');
+        setAddressError('Address is required');
         return false;
       }
+      if (address.length < 10) {
+        Alert.alert('Invalid Address', 'Address must be at least 10 characters long');
+        setAddressError('Address must be at least 10 characters');
+        return false;
+      }
+      if (address.length > 500) {
+        Alert.alert('Invalid Address', 'Address must be less than 500 characters');
+        setAddressError('Address must be less than 500 characters');
+        return false;
+      }
+
       if (!deliveryAddress.city.trim()) {
         Alert.alert('Required', 'Please enter your city');
         return false;
@@ -292,16 +313,13 @@ const CheckoutScreen: React.FC = () => {
     return true;
   };
 
-  
   const handleProceedToPayment = async () => {
     if (!validateForm()) return;
 
-    
     await fetchWalletBalance();
     setShowPaymentModal(true);
   };
 
-  
   const handlePayFromWallet = async () => {
     const totalAmount = calculateTotal();
 
@@ -316,7 +334,6 @@ const CheckoutScreen: React.FC = () => {
             text: 'Fund Wallet',
             onPress: () => {
               setShowPaymentModal(false);
-              
               Alert.alert('Fund Wallet', 'Wallet funding feature coming soon!');
             },
           },
@@ -336,7 +353,6 @@ const CheckoutScreen: React.FC = () => {
             try {
               setPaymentProcessing(true);
 
-              
               const orderData = {
                 items: cartItems.map((item: any) => ({
                   product: item.product._id,
@@ -351,7 +367,7 @@ const CheckoutScreen: React.FC = () => {
                         coordinates: deliveryAddress.coordinates,
                       }
                     : undefined,
-                paymentMethod: 'wallet', 
+                paymentMethod: 'wallet',
                 customerNotes: customerNotes.trim() || undefined,
               };
 
@@ -363,11 +379,9 @@ const CheckoutScreen: React.FC = () => {
                 const order = orderResponse.data.order;
                 console.log('✅ Order created:', order._id);
 
-                
                 const paymentResponse = await paymentAPI.payOrderFromWallet(order._id);
 
                 if (paymentResponse.success) {
-                  
                   await cartAPI.clearCart();
 
                   setShowPaymentModal(false);
@@ -394,7 +408,6 @@ const CheckoutScreen: React.FC = () => {
     );
   };
 
-  
   const handlePayWithCard = async () => {
     setShowPaymentModal(false);
 
@@ -427,10 +440,8 @@ const CheckoutScreen: React.FC = () => {
         const order = response.data.order;
         console.log('✅ Order created:', order._id);
 
-        
         await cartAPI.clearCart();
 
-        
         navigation.replace('OrderPayment', {
           orderId: order._id,
           amount: order.totalAmount,
@@ -449,7 +460,7 @@ const CheckoutScreen: React.FC = () => {
 
   return (
     <SafeAreaView className="flex-1 bg-gray-50" edges={['top']}>
-      {}
+      {/* Header */}
       <View className="flex-row items-center px-5 py-4 bg-white border-b border-gray-100">
         <TouchableOpacity
           onPress={() => navigation.goBack()}
@@ -462,7 +473,7 @@ const CheckoutScreen: React.FC = () => {
 
       <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
         <View className="p-5">
-          {}
+          {/* Delivery Method */}
           <View className="mb-6">
             <Text className="text-gray-900 text-lg font-bold mb-3">Delivery Method</Text>
 
@@ -549,7 +560,7 @@ const CheckoutScreen: React.FC = () => {
             </TouchableOpacity>
           </View>
 
-          {}
+          {/* Delivery Address */}
           {deliveryType === 'home_delivery' && (
             <View className="mb-6">
               <View className="flex-row items-center justify-between mb-3">
@@ -564,7 +575,7 @@ const CheckoutScreen: React.FC = () => {
                 </TouchableOpacity>
               </View>
 
-              {}
+              {/* Location Options */}
               {showLocationOptions && (
                 <View className="bg-white rounded-2xl p-4 mb-4" style={{ gap: 12 }}>
                   {savedLocation && (
@@ -608,7 +619,7 @@ const CheckoutScreen: React.FC = () => {
                 </View>
               )}
 
-              {}
+              {/* Delivery Fee Loading */}
               {deliveryFeeLoading && (
                 <View className="bg-blue-50 border border-blue-200 rounded-2xl p-4 mb-4 flex-row items-center">
                   <ActivityIndicator size="small" color="#3b82f6" />
@@ -616,6 +627,7 @@ const CheckoutScreen: React.FC = () => {
                 </View>
               )}
 
+              {/* Delivery Fee Info */}
               {deliveryFeeInfo && !deliveryFeeLoading && (
                 <View
                   className={`rounded-2xl p-4 mb-4 ${
@@ -657,7 +669,7 @@ const CheckoutScreen: React.FC = () => {
                 </View>
               )}
 
-              {}
+              {/* Address Form */}
               <View className="bg-white rounded-2xl p-4" style={{ gap: 12 }}>
                 <View>
                   <Text className="text-gray-700 text-sm font-semibold mb-2">Full Name *</Text>
@@ -685,15 +697,47 @@ const CheckoutScreen: React.FC = () => {
                 <View>
                   <Text className="text-gray-700 text-sm font-semibold mb-2">Address *</Text>
                   <TextInput
-                    className="bg-gray-50 px-4 py-3 rounded-xl text-gray-900"
-                    placeholder="Street address"
+                    className={`bg-gray-50 px-4 py-3 rounded-xl text-gray-900 ${
+                      addressError ? 'border-2 border-red-500' : ''
+                    }`}
+                    placeholder="Enter full street address (min. 10 characters)"
                     multiline
                     numberOfLines={2}
                     value={deliveryAddress.address}
-                    onChangeText={(text) =>
-                      setDeliveryAddress({ ...deliveryAddress, address: text })
-                    }
+                    onChangeText={(text) => {
+                      setDeliveryAddress({ ...deliveryAddress, address: text });
+                      // Clear error when user starts typing and reaches valid length
+                      if (addressError && text.trim().length >= 10) {
+                        setAddressError('');
+                      }
+                    }}
+                    maxLength={500}
                   />
+
+                  {/* Character count and validation feedback */}
+                  <View className="flex-row items-center justify-between mt-1.5">
+                    {addressError ? (
+                      <View className="flex-row items-center flex-1">
+                        <Ionicons name="alert-circle" size={14} color="#ef4444" />
+                        <Text className="text-red-500 text-xs ml-1">{addressError}</Text>
+                      </View>
+                    ) : (
+                      <Text
+                        className={`text-xs ${
+                          deliveryAddress.address.trim().length < 10
+                            ? 'text-orange-600 font-semibold'
+                            : 'text-green-600 font-semibold'
+                        }`}
+                      >
+                        {deliveryAddress.address.trim().length < 10
+                          ? `${10 - deliveryAddress.address.trim().length} more characters needed`
+                          : '✓ Valid address'}
+                      </Text>
+                    )}
+                    <Text className="text-xs text-gray-400">
+                      {deliveryAddress.address.length}/500
+                    </Text>
+                  </View>
                 </View>
 
                 <View className="flex-row" style={{ gap: 12 }}>
@@ -735,7 +779,7 @@ const CheckoutScreen: React.FC = () => {
             </View>
           )}
 
-          {}
+          {/* Order Notes */}
           <View className="mb-6">
             <Text className="text-gray-900 text-lg font-bold mb-3">Order Notes (Optional)</Text>
             <TextInput
@@ -748,7 +792,7 @@ const CheckoutScreen: React.FC = () => {
             />
           </View>
 
-          {}
+          {/* Order Summary */}
           <View className="bg-white p-5 rounded-2xl mb-6">
             <Text className="text-gray-900 text-lg font-bold mb-4">Order Summary</Text>
 
@@ -782,7 +826,7 @@ const CheckoutScreen: React.FC = () => {
         </View>
       </ScrollView>
 
-      {}
+      {/* Bottom Action */}
       <View
         className="bg-white px-5 py-4 border-t border-gray-100"
         style={{
@@ -830,11 +874,16 @@ const CheckoutScreen: React.FC = () => {
         </View>
       </View>
 
-      {}
-      <Modal visible={showPaymentModal} transparent animationType="slide" onRequestClose={() => setShowPaymentModal(false)}>
+      {/* Payment Modal */}
+      <Modal
+        visible={showPaymentModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowPaymentModal(false)}
+      >
         <View className="flex-1 bg-black/50 justify-end">
           <View className="bg-white rounded-t-3xl">
-            {}
+            {/* Modal Header */}
             <View className="px-6 py-4 border-b border-gray-100">
               <View className="flex-row items-center justify-between">
                 <Text className="text-xl font-bold text-gray-900">Choose Payment Method</Text>

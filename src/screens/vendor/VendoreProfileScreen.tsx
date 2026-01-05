@@ -32,6 +32,83 @@ interface MenuSection {
   items: MenuItem[];
 }
 
+// Get the most relevant status to display
+const getRelevantStatus = (user: any) => {
+  // Priority 1: If vendor is verified, show verified status (overrides account status)
+  if (user?.vendorProfile?.isVerified) {
+    return {
+      icon: 'shield-checkmark',
+      color: '#10b981',
+      bgColor: 'bg-green-100',
+      textColor: 'text-green-700',
+      label: 'Verified Vendor',
+      showOnAvatar: true,
+    };
+  }
+
+  // Priority 2: Show account status
+  const accountStatus = user?.status || 'unknown';
+  const statusLower = accountStatus.toLowerCase().replace(/_/g, ' ');
+
+  switch (statusLower) {
+    case 'active':
+      return {
+        icon: 'checkmark-circle',
+        color: '#10b981',
+        bgColor: 'bg-green-100',
+        textColor: 'text-green-700',
+        label: 'Active',
+        showOnAvatar: false,
+      };
+    case 'pending verification':
+    case 'pending_verification':
+      return {
+        icon: 'time',
+        color: '#f59e0b',
+        bgColor: 'bg-yellow-100',
+        textColor: 'text-yellow-700',
+        label: 'Pending Verification',
+        showOnAvatar: false,
+      };
+    case 'suspended':
+      return {
+        icon: 'ban',
+        color: '#ef4444',
+        bgColor: 'bg-red-100',
+        textColor: 'text-red-700',
+        label: 'Suspended',
+        showOnAvatar: false,
+      };
+    case 'blocked':
+      return {
+        icon: 'close-circle',
+        color: '#dc2626',
+        bgColor: 'bg-red-100',
+        textColor: 'text-red-700',
+        label: 'Blocked',
+        showOnAvatar: false,
+      };
+    case 'inactive':
+      return {
+        icon: 'pause-circle',
+        color: '#6b7280',
+        bgColor: 'bg-gray-100',
+        textColor: 'text-gray-700',
+        label: 'Inactive',
+        showOnAvatar: false,
+      };
+    default:
+      return {
+        icon: 'help-circle',
+        color: '#6b7280',
+        bgColor: 'bg-gray-100',
+        textColor: 'text-gray-700',
+        label: accountStatus.charAt(0).toUpperCase() + accountStatus.slice(1).replace(/_/g, ' '),
+        showOnAvatar: false,
+      };
+  }
+};
+
 const VendorProfileScreen: React.FC = () => {
   const [user, setUser] = useState<any>(null);
   const [showLogoutModal, setShowLogoutModal] = useState<boolean>(false);
@@ -43,7 +120,6 @@ const VendorProfileScreen: React.FC = () => {
 
   useEffect(() => {
     loadUserData();
-    
     
     const unsubscribe = navigation.addListener('focus', () => {
       loadUserData();
@@ -83,9 +159,7 @@ const VendorProfileScreen: React.FC = () => {
     }
   };
 
-  const stats: Stat[] = [
-    
-  ];
+  const stats: Stat[] = [];
 
   const profileSections: MenuSection[] = [
     {
@@ -96,10 +170,8 @@ const VendorProfileScreen: React.FC = () => {
           title: 'Store Settings',
           subtitle: 'Manage your store details',
           iconFamily: 'material',
-            onPress: () => navigation.navigate('VendorStoreSettings'), 
-
+          onPress: () => navigation.navigate('VendorStoreSettings'),
         },
-       
       ],
     },
     {
@@ -112,10 +184,8 @@ const VendorProfileScreen: React.FC = () => {
           iconFamily: 'ionicons',
           onPress: () => navigation.navigate("MyOrders"),
         },
-        
       ],
     },
-    
     {
       title: 'Account Settings',
       items: [
@@ -126,7 +196,6 @@ const VendorProfileScreen: React.FC = () => {
           iconFamily: 'ionicons',
           onPress: () => navigation.navigate("PersonalInformation"),
         },
-        
         {
           icon: 'shield-checkmark-outline',
           title: 'Privacy & Security',
@@ -145,7 +214,7 @@ const VendorProfileScreen: React.FC = () => {
           subtitle: 'Manage notification settings',
           iconFamily: 'ionicons',
           onPress: () => navigation.navigate("NotificationsSetting"),
-        }
+        },
       ],
     },
     {
@@ -158,13 +227,12 @@ const VendorProfileScreen: React.FC = () => {
           iconFamily: 'ionicons',
           onPress: () => navigation.navigate("HelpCenter"),
         },
-      
         {
           icon: 'document-text-outline',
           title: 'Terms & Privacy',
           subtitle: 'Legal information',
           iconFamily: 'ionicons',
-          onPress: () => console.log('Legal'),
+          onPress: () => navigation.navigate("TermsPrivacy"),
         },
       ],
     },
@@ -186,12 +254,15 @@ const VendorProfileScreen: React.FC = () => {
     }
   };
 
+  // Get the single most relevant status
+  const statusConfig = getRelevantStatus(user);
+
   return (
     <SafeAreaView className="flex-1 bg-gray-50" edges={['top']}>
       <ScrollView showsVerticalScrollIndicator={false} bounces={false}>
-        {}
+        {/* Header with Gradient */}
         <View className="pb-6 rounded-b-[50px] bg-[#ec4899]">
-          {}
+          {/* Top Navigation */}
           <View className="flex-row items-center justify-between px-5 py-4">
             <TouchableOpacity className="w-10 h-10 items-center justify-center">
               <Ionicons name="chevron-back" size={28} color="#FFFFFF" />
@@ -205,9 +276,9 @@ const VendorProfileScreen: React.FC = () => {
             </TouchableOpacity>
           </View>
 
-          {}
+          {/* Profile Information */}
           <View className="items-center pb-5 px-5">
-            {}
+            {/* Avatar */}
             <View className="relative mb-4">
               <View className="w-[104px] h-[104px] rounded-full p-0.5">
                 <View className="w-[100px] h-[100px] rounded-full bg-white items-center justify-center overflow-hidden">
@@ -222,24 +293,32 @@ const VendorProfileScreen: React.FC = () => {
                   )}
                 </View>
               </View>
+              
+              {/* Verification Badge on Avatar - Only show if verified */}
+              {statusConfig.showOnAvatar && (
+                <View className="absolute bottom-0 right-0 w-8 h-8 rounded-full bg-green-500 items-center justify-center border-2 border-white">
+                  <Ionicons name="checkmark" size={16} color="#fff" />
+                </View>
+              )}
             </View>
 
             <Text className="text-2xl font-bold text-white mb-1">
               {user?.vendorProfile?.businessName || "My Store"}
-              
             </Text>
             <Text className="text-sm text-white/90 mb-3">
               {user?.email || 'vendor@example.com'}
             </Text>
 
-            {}
+            {/* Single Status Badge */}
             <View className="flex-row items-center bg-white/20 px-3 py-1.5 rounded-full">
-              <Ionicons name="checkmark-circle" size={16} color="#10b981" />
-              <Text className="text-xs text-white ml-1 font-semibold">Verified Vendor</Text>
+              <Ionicons name={statusConfig.icon as any} size={16} color={statusConfig.color} />
+              <Text className="text-xs text-white ml-1.5 font-semibold">
+                {statusConfig.label}
+              </Text>
             </View>
           </View>
 
-          {}
+          {/* Stats Section */}
           <View className="flex-row px-5 pt-5 pb-2.5 justify-between">
             {stats.map((stat, index) => (
               <TouchableOpacity
@@ -256,7 +335,7 @@ const VendorProfileScreen: React.FC = () => {
           </View>
         </View>
 
-        {}
+        {/* Menu Sections */}
         <View className="pt-5 pb-20">
           {profileSections.map((section, sectionIndex) => (
             <View key={sectionIndex} className="mb-5 px-5">
@@ -322,7 +401,7 @@ const VendorProfileScreen: React.FC = () => {
             </View>
           ))}
 
-          {}
+          {/* Account Actions */}
           <View className="mb-5 px-5">
             <Text className="text-[13px] font-semibold text-gray-500 uppercase tracking-wider mb-2 ml-1">
               Account Actions
@@ -375,7 +454,7 @@ const VendorProfileScreen: React.FC = () => {
             </View>
           </View>
 
-          {}
+          {/* Footer */}
           <View className="items-center py-5 mt-2">
             <Text className="text-xs text-gray-400 mb-1">Version 1.0.0</Text>
             <Text className="text-[11px] text-gray-400">© 2024 VendorHub</Text>
@@ -383,7 +462,7 @@ const VendorProfileScreen: React.FC = () => {
         </View>
       </ScrollView>
 
-      {}
+      {/* Logout Modal */}
       <ConfirmationModal
         visible={showLogoutModal}
         title="Logout"
@@ -398,7 +477,7 @@ const VendorProfileScreen: React.FC = () => {
         onCancel={() => setShowLogoutModal(false)}
       />
 
-      {}
+      {/* Delete Account Modal */}
       <ConfirmationModal
         visible={showDeleteModal}
         title="Delete Account"

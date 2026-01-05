@@ -9,8 +9,11 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { sharpPayAPI } from '../api/api';
 import { useNavigation } from '@react-navigation/native';
+import WalletFundingModal from '@/components/WalletFundingModal';
+import WithdrawalModal from '@/components/WIthdrawalModal';
 
 interface Transaction {
   _id: string;
@@ -42,6 +45,9 @@ const TransactionHistoryScreen = () => {
   const [loadingMore, setLoadingMore] = useState(false);
   const [filter, setFilter] = useState<'all' | 'inflow' | 'outflow'>('all');
   const [dateFilter, setDateFilter] = useState<'all' | 'today' | 'week' | 'month'>('all');
+  const [showBalance, setShowBalance] = useState<boolean>(false);
+  const [fundingModalVisible, setFundingModalVisible] = useState<boolean>(false);
+  const [withdrawalModalVisible, setWithdrawalModalVisible] = useState<boolean>(false);
 
   const loadTransactions = async (pageNum: number = 1, refresh: boolean = false) => {
     try {
@@ -58,7 +64,6 @@ const TransactionHistoryScreen = () => {
         limit: 20,
       });
 
-      
       const newTransactions = response.data || [];
       const pagination = response.meta?.pagination;
 
@@ -66,14 +71,10 @@ const TransactionHistoryScreen = () => {
 
       if (refresh || pageNum === 1) {
         setTransactions(newTransactions);
-        
-        
         calculateTotalsFromTransactions(newTransactions);
       } else {
         const allTransactions = [...transactions, ...newTransactions];
         setTransactions(allTransactions);
-        
-        
         calculateTotalsFromTransactions(allTransactions);
       }
 
@@ -105,12 +106,11 @@ const TransactionHistoryScreen = () => {
       }
     });
 
-    
     setStats((prevStats) => ({
       totalTransactions: txns.length,
       totalInflow,
       totalOutflow,
-      currentBalance: prevStats?.currentBalance || 0, 
+      currentBalance: prevStats?.currentBalance || 0,
     }));
 
     console.log('💰 Calculated totals - Inflow:', totalInflow, 'Outflow:', totalOutflow);
@@ -119,30 +119,26 @@ const TransactionHistoryScreen = () => {
   const loadStats = async () => {
     try {
       const response = await sharpPayAPI.getStats();
-      
-      
       const statsData = response.data.stats || {};
       
       console.log('📊 Stats Data extracted:', statsData);
       
-      
-      
-      setStats({
-        totalTransactions: 0,
-        totalInflow: 0,
-        totalOutflow: 0,
+      setStats((prevStats) => ({
+        totalTransactions: prevStats?.totalTransactions || 0,
+        totalInflow: prevStats?.totalInflow || 0,
+        totalOutflow: prevStats?.totalOutflow || 0,
         currentBalance: statsData.currentBalance || statsData.availableBalance || 0,
-      });
+      }));
       
       console.log('✅ Stats set successfully');
     } catch (error: any) {
       console.error('❌ Error loading stats:', error);
-      setStats({
-        totalTransactions: 0,
-        totalInflow: 0,
-        totalOutflow: 0,
+      setStats((prevStats) => ({
+        totalTransactions: prevStats?.totalTransactions || 0,
+        totalInflow: prevStats?.totalInflow || 0,
+        totalOutflow: prevStats?.totalOutflow || 0,
         currentBalance: 0,
-      });
+      }));
     }
   };
 
@@ -242,11 +238,8 @@ const TransactionHistoryScreen = () => {
 
   const filteredTransactions = (transactions || [])
     .filter(txn => {
-      
       if (filter === 'inflow' && isOutflow(txn.type)) return false;
       if (filter === 'outflow' && !isOutflow(txn.type)) return false;
-      
-      
       return filterByDate(txn);
     });
 
@@ -274,7 +267,7 @@ const TransactionHistoryScreen = () => {
 
   return (
     <SafeAreaView className="flex-1 bg-gray-50">
-      {}
+      {/* Header */}
       <View className="flex-row items-center justify-between px-4 py-4 bg-white border-b border-gray-200">
         <TouchableOpacity 
           onPress={() => navigation.goBack()} 
@@ -301,66 +294,153 @@ const TransactionHistoryScreen = () => {
         }}
         scrollEventThrottle={400}
       >
-        {}
+        {/* Wallet Card - Enhanced Design */}
         {stats && (
           <>
-            {}
             <View className="px-4 pt-4">
-              <View 
-                className="bg-pink-500 rounded-xl p-5 border border-pink-400" 
-                style={{ 
-                  shadowColor: '#eb278d', 
-                  shadowOffset: { width: 0, height: 4 }, 
-                  shadowOpacity: 0.3, 
-                  shadowRadius: 8, 
-                  elevation: 8 
+              <LinearGradient 
+                colors={['#eb278d', '#f472b6']} 
+                start={{ x: 0, y: 0 }} 
+                end={{ x: 1, y: 1 }} 
+                style={{
+                  padding: 20,
+                  borderRadius: 24,
+                  overflow: 'hidden',
+                  shadowColor: '#eb278d',
+                  shadowOffset: { width: 0, height: 8 },
+                  shadowOpacity: 0.3,
+                  shadowRadius: 16,
+                  elevation: 12
                 }}
               >
-                <View className="flex-row items-center mb-2">
-                  <View 
-                    className="w-10 h-10 rounded-full items-center justify-center mr-3" 
-                    style={{ backgroundColor: 'rgba(255, 255, 255, 0.2)' }}
-                  >
-                    <Ionicons name="wallet" size={20} color="#fff" />
+                {/* Header Row */}
+                <View className="flex-row items-center justify-between mb-4">
+                  <View className="flex-row items-center gap-2">
+                    <Text className="text-white/90 text-sm font-medium">
+                      Total Balance
+                    </Text>
+                    <TouchableOpacity 
+                      onPress={() => setShowBalance(!showBalance)} 
+                      className="w-8 h-8 items-center justify-center rounded-full" 
+                      style={{ backgroundColor: 'rgba(255, 255, 255, 0.2)' }} 
+                      activeOpacity={0.7}
+                    >
+                      <Ionicons 
+                        name={showBalance ? "eye-outline" : "eye-off-outline"} 
+                        size={16} 
+                        color="#fff" 
+                      />
+                    </TouchableOpacity>
                   </View>
-                  <Text className="text-white text-sm font-medium" style={{ opacity: 0.9 }}>
-                    Available Balance
-                  </Text>
+                  
+                  <View className="flex-row items-center gap-1 bg-white/20 px-3 py-1.5 rounded-full">
+                    <Ionicons name="stats-chart" size={14} color="#fff" />
+                    <Text className="text-white text-xs font-semibold">
+                      Overview
+                    </Text>
+                  </View>
                 </View>
-                <Text className="text-white text-3xl font-bold">
-                  ₦{(stats.currentBalance || 0).toLocaleString()}
-                </Text>
-              </View>
-            </View>
 
-            {}
-            <View className="flex-row px-4 pt-3 gap-3">
-              {}
-              <View className="flex-1 bg-white rounded-xl p-4 border border-gray-200">
-                <View className="w-10 h-10 rounded-full bg-green-100 items-center justify-center mb-2">
-                  <Ionicons name="trending-up" size={20} color="#10b981" />
+                {/* Balance Display */}
+                <View className="mb-6">
+                  {showBalance ? (
+                    <View>
+                      <Text className="text-white text-4xl font-bold tracking-tight mb-2">
+                        ₦{(stats.currentBalance || 0).toLocaleString()}
+                      </Text>
+                      <View className="flex-row items-center gap-4">
+                        <View>
+                          <Text className="text-white/70 text-xs">Total Inflow</Text>
+                          <Text className="text-white font-semibold">
+                            ₦{(stats.totalInflow || 0).toLocaleString()}
+                          </Text>
+                        </View>
+                        <View className="w-px h-8 bg-white/30" />
+                        <View>
+                          <Text className="text-white/70 text-xs">Total Outflow</Text>
+                          <Text className="text-white font-semibold">
+                            ₦{(stats.totalOutflow || 0).toLocaleString()}
+                          </Text>
+                        </View>
+                      </View>
+                    </View>
+                  ) : (
+                    <View>
+                      <Text className="text-white text-4xl font-bold tracking-widest mb-2">
+                        ••••••
+                      </Text>
+                      <Text className="text-white/70 text-sm">Tap eye to view balance</Text>
+                    </View>
+                  )}
                 </View>
-                <Text className="text-gray-500 text-xs mb-1">Total Inflow</Text>
-                <Text className="text-gray-900 text-lg font-bold">
-                  ₦{(stats.totalInflow || 0).toLocaleString()}
-                </Text>
-              </View>
 
-              {}
-              <View className="flex-1 bg-white rounded-xl p-4 border border-gray-200">
-                <View className="w-10 h-10 rounded-full bg-red-100 items-center justify-center mb-2">
-                  <Ionicons name="trending-down" size={20} color="#ef4444" />
+                {/* Quick Stats */}
+                <View className="flex-row gap-3 bg-white/10 rounded-2xl p-3 mb-4">
+                  <View className="flex-1 items-center">
+                    <View className="w-10 h-10 rounded-full bg-white/20 items-center justify-center mb-2">
+                      <Ionicons name="trending-up" size={18} color="#fff" />
+                    </View>
+                    <Text className="text-white/70 text-xs mb-1">Inflow</Text>
+                    <Text className="text-white text-sm font-bold">
+                      {showBalance ? `₦${(stats.totalInflow || 0).toLocaleString()}` : '••••'}
+                    </Text>
+                  </View>
+                  
+                  <View className="w-px bg-white/20" />
+                  
+                  <View className="flex-1 items-center">
+                    <View className="w-10 h-10 rounded-full bg-white/20 items-center justify-center mb-2">
+                      <Ionicons name="trending-down" size={18} color="#fff" />
+                    </View>
+                    <Text className="text-white/70 text-xs mb-1">Outflow</Text>
+                    <Text className="text-white text-sm font-bold">
+                      {showBalance ? `₦${(stats.totalOutflow || 0).toLocaleString()}` : '••••'}
+                    </Text>
+                  </View>
+                  
+                  <View className="w-px bg-white/20" />
+                  
+                  <View className="flex-1 items-center">
+                    <View className="w-10 h-10 rounded-full bg-white/20 items-center justify-center mb-2">
+                      <Ionicons name="receipt" size={18} color="#fff" />
+                    </View>
+                    <Text className="text-white/70 text-xs mb-1">Total</Text>
+                    <Text className="text-white text-sm font-bold">
+                      {stats.totalTransactions || 0}
+                    </Text>
+                  </View>
                 </View>
-                <Text className="text-gray-500 text-xs mb-1">Total Outflow</Text>
-                <Text className="text-gray-900 text-lg font-bold">
-                  ₦{(stats.totalOutflow || 0).toLocaleString()}
-                </Text>
-              </View>
+
+                {/* Action Buttons */}
+                <View className="flex-row gap-4">
+                  <TouchableOpacity 
+                    className="flex-1 bg-white/20 rounded-2xl py-3 items-center flex-row justify-center gap-2" 
+                    activeOpacity={0.7} 
+                    onPress={() => setFundingModalVisible(true)}
+                  >
+                    <View className="w-10 h-10 rounded-full bg-white/30 items-center justify-center">
+                      <Ionicons name="add" size={20} color="#fff" />
+                    </View>
+                    <Text className="text-white text-sm font-semibold">Fund Wallet</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity 
+                    className="flex-1 bg-white rounded-2xl py-3 items-center flex-row justify-center gap-2" 
+                    activeOpacity={0.7} 
+                    onPress={() => setWithdrawalModalVisible(true)}
+                  >
+                    <View className="w-10 h-10 rounded-full bg-pink-100 items-center justify-center">
+                      <Ionicons name="arrow-up" size={20} color="#eb278d" />
+                    </View>
+                    <Text className="text-gray-800 text-sm font-semibold">Withdraw</Text>
+                  </TouchableOpacity>
+                </View>
+              </LinearGradient>
             </View>
           </>
         )}
 
-        {}
+        {/* Filter Buttons */}
         <View className="flex-row px-4 pt-4 gap-2">
           <TouchableOpacity
             className={`flex-1 py-2.5 px-4 rounded-full items-center border ${
@@ -408,7 +488,7 @@ const TransactionHistoryScreen = () => {
           </TouchableOpacity>
         </View>
 
-        {}
+        {/* Date Filter */}
         <View className="px-4 pt-3">
           <Text className="text-gray-500 text-xs font-medium mb-2">FILTER BY DATE</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
@@ -476,7 +556,7 @@ const TransactionHistoryScreen = () => {
           </ScrollView>
         </View>
 
-        {}
+        {/* Transactions List */}
         <View className="px-4 pt-4">
           {filteredTransactions.length === 0 ? (
             <View className="items-center justify-center py-16">
@@ -562,6 +642,28 @@ const TransactionHistoryScreen = () => {
           )}
         </View>
       </ScrollView>
+
+      {/* Wallet Funding Modal */}
+      <WalletFundingModal
+        visible={fundingModalVisible}
+        onClose={() => setFundingModalVisible(false)}
+        onSuccess={() => {
+          loadTransactions(1, true);
+          loadStats();
+        }}
+        currentBalance={stats?.currentBalance || 0}
+      />
+
+      {/* Withdrawal Modal */}
+      <WithdrawalModal
+        visible={withdrawalModalVisible}
+        onClose={() => setWithdrawalModalVisible(false)}
+        onSuccess={() => {
+          loadTransactions(1, true);
+          loadStats();
+        }}
+        currentBalance={stats?.currentBalance || 0}
+      />
     </SafeAreaView>
   );
 };

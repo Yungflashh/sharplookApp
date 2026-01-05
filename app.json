@@ -2,7 +2,7 @@
   "expo": {
     "name": "sharpLook",
     "slug": "sharpLook",
-    "version": "1.0.0",
+    "version": "1.2.0",
     "scheme": "sharpLook",
     "web": {
       "favicon": "./assets/favicon.png"
@@ -12,10 +12,10 @@
     },
     "plugins": [],
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/app-icon.png",
     "userInterfaceStyle": "light",
     "splash": {
-      "image": "./assets/splash.png",
+      "image": "./assets/sharplooklogo.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
@@ -24,21 +24,31 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.sharplook.app",
+      "bundleIdentifier": "com.techtrove.sharplook",
+      "buildNumber": "20",
       "infoPlist": {
         "CFBundleURLTypes": [
           {
-            "CFBundleURLSchemes": ["sharpLook"]
+            "CFBundleURLSchemes": [
+              "sharpLook"
+            ]
+          },
+          {
+            "CFBundleURLSchemes": [
+              "sharpLook"
+            ]
           }
-        ]
+        ],
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
+        "foregroundImage": "./assets/app-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "com.sharplook.app",
+      "package": "com.sharpLook.app",
+      "versionCode": 47,
       "intentFilters": [
         {
           "action": "VIEW",
@@ -48,9 +58,36 @@
               "scheme": "sharpLook"
             }
           ],
-          "category": ["BROWSABLE", "DEFAULT"]
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
+        },
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "sharpLook"
+            }
+          ],
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
         }
       ]
+    },
+    "extra": {
+      "eas": {
+        "projectId": "2ac05c34-9b63-48bc-8f96-af019c5f2f0c"
+      }
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/2ac05c34-9b63-48bc-8f96-af019c5f2f0c"
     }
   }
 }

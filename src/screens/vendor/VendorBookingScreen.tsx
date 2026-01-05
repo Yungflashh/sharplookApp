@@ -955,9 +955,7 @@ const submitRejection = async () => {
                   <Ionicons name="pricetag" size={20} color="#fff" />
                 </TouchableOpacity>
 
-                <TouchableOpacity className="w-10 h-10 rounded-full bg-white/20 items-center justify-center">
-                  <Ionicons name="notifications-outline" size={22} color="#fff" />
-                </TouchableOpacity>
+            
               </View>
             </View>
 

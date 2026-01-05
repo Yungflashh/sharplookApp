@@ -1,6 +1,6 @@
 import axios, { AxiosInstance, AxiosError, InternalAxiosRequestConfig } from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-const API_BASE_URL = 'https://sharplook-be.onrender.com/api/v1';
+const API_BASE_URL = 'https://sharplook-backend-qay8.onrender.com/api/v1';
 const api: AxiosInstance = axios.create({
   baseURL: API_BASE_URL,
   timeout: 30000,
@@ -74,13 +74,22 @@ api.interceptors.response.use(response => {
   return Promise.reject(error);
 });
 export const authAPI = {
-  login: async (email: string, password: string) => {
-    const response = await api.post('/auth/login', {
-      email,
-      password
-    });
-    return response.data;
-  },
+ login: async (
+  email: string, 
+  password: string,
+  fcmToken?: string,
+  deviceType?: 'ios' | 'android' | 'web',
+  deviceName?: string
+) => {
+  const response = await api.post('/auth/login', {
+    email,
+    password,
+    fcmToken,     // ✅ Send token
+    deviceType,   // ✅ Send device type
+    deviceName,   // ✅ Send device name
+  });
+  return response.data;
+},
   register: async (userData: {
   firstName: string;
   lastName: string;
@@ -746,6 +755,19 @@ export const reviewAPI = {
   }
 };
 export const bookingAPI = {
+
+    previewPrice: async (data: {
+    serviceId: string;
+    serviceType: 'home' | 'shop';
+    location?: {
+      coordinates: [number, number]; // [longitude, latitude]
+    };
+  }) => {
+    const response = await api.post('/bookings/price-preview', data);
+    return response.data;
+  },
+
+  
   createBooking: async (bookingData: {
     service: string;
     scheduledDate: string;
@@ -2401,10 +2423,12 @@ export const offerAPI = {
     });
     return response.data;
   },
-  acceptResponse: async (offerId: string, responseId: string) => {
-    const response = await api.post(`/offers/${offerId}/responses/${responseId}/accept`);
-    return response.data;
-  },
+  acceptResponse: async (offerId: string, responseId: string, paymentMethod: 'wallet' | 'card') => {
+  const response = await api.post(`/offers/${offerId}/responses/${responseId}/accept`, {
+    paymentMethod  // ✅ Add this line
+  });
+  return response.data;
+},
   closeOffer: async (offerId: string) => {
     const response = await api.post(`/offers/${offerId}/close`);
     return response.data;

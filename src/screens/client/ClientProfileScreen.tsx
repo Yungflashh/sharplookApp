@@ -81,23 +81,7 @@ const ClientProfileScreen: React.FC = () => {
         },
       ],
     },
-    {
-      title: 'Bookings & Orders',
-      items: [
-        {
-          icon: 'receipt-outline',
-          title: 'Order History',
-          subtitle: 'Track your orders',
-          onPress: () => navigation.navigate("OrderHistory"),
-        },
-        {
-          icon: 'heart-outline',
-          title: 'My Favorites',
-          subtitle: 'Saved vendors and services',
-          onPress: () => navigation.navigate("Favourites"),
-        },
-      ],
-    },
+    
     {
       title: 'Preferences',
       items: [
@@ -113,13 +97,7 @@ const ClientProfileScreen: React.FC = () => {
           subtitle: 'Password and security settings',
           onPress: () => navigation.navigate("PrivacySetting"),
         },
-        {
-          icon: 'language-outline',
-          iconFamily: 'material',
-          title: 'Language',
-          subtitle: 'English',
-          onPress: () => console.log('Language'),
-        },
+      
       ],
     },
     {
@@ -131,17 +109,12 @@ const ClientProfileScreen: React.FC = () => {
           subtitle: 'FAQs and support',
           onPress: () => navigation.navigate("HelpCenter"),
         },
-        {
-          icon: 'chatbubble-ellipses-outline',
-          title: 'Contact Support',
-          subtitle: 'Get help from our team',
-          onPress: () => console.log('Contact'),
-        },
+       
         {
           icon: 'document-text-outline',
           title: 'Terms & Privacy',
           subtitle: 'Legal information',
-          onPress: () => console.log('Legal'),
+          onPress: () => navigation.navigate('TermsPrivacy'),
         },
       ],
     },
@@ -165,10 +138,9 @@ const ClientProfileScreen: React.FC = () => {
         {}
         <View className="pb-6 rounded-b-[50px] bg-[#eb278d]">
           {}
+       {/* Header */}
           <View className="flex-row items-center justify-between px-5 py-4">
-            <TouchableOpacity className="w-10 h-10 items-center justify-center">
-              <Ionicons name="chevron-back" size={28} color="#FFFFFF" />
-            </TouchableOpacity>
+            <View className="w-10 h-10" />
             <Text className="text-lg font-semibold text-white">Profile</Text>
             <TouchableOpacity 
               className="w-10 h-10 items-center justify-center"

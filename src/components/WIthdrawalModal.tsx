@@ -100,6 +100,9 @@ const WithdrawalModal: React.FC<WithdrawalModalProps> = ({
       if (response.success && response.data?.banks) {
         console.log(`✅ Loaded ${response.data.banks.length} banks`);
         setBanks(response.data.banks);
+
+        console.log(response.data.banks);
+        
       } else {
         console.log('⚠️ Using fallback bank list');
         setBanks(FALLBACK_NIGERIAN_BANKS);

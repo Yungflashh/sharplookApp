@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { checkAuthStatus, checkOnboardingStatus } from '@/utils/authHelper';
@@ -50,8 +50,7 @@ import CustomerOrdersScreen from '@/components/clientComponent/Customerordersscr
 import TransactionHistoryScreen from '@/components/TransactionHistoryScreen';
 import callService from '@/services/call.service';
 import socketService from '@/services/socket.service';
-import { useNavigation } from '@react-navigation/native';
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { navigate } from '../utils/linking';
 import ReferralScreen from '@/components/ReferralScreen';
 import ReferralLeaderboard from '@/components/ReferralLeaderBoard';
 import ApplyReferralCode from '@/components/ApplyReferralCode';
@@ -60,11 +59,13 @@ import WalletPaymentScreen from '@/components/WalletPaymentScreen';
 import ChangeWithdrawalPinScreen from '@/components/clientComponent/ProfleSettings/ChangeWithdrawalPinScreen';
 import SubscriptionScreen from '@/components/vendorComponent/SubscriptionScreen';
 import DisputeOrderDetailScreen from '@/components/DisputeOrderDetailScreen';
+import TermsPrivacyScreen from '@/components/TermsPrivacyScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
+
 const RootNavigator = () => {
-  useDeepLinking();
-  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  useDeepLinking(); // Now safe - uses navigationRef instead of useNavigation hook
+  
   const [isLoading, setIsLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isVendor, setIsVendor] = useState(false);
@@ -73,7 +74,8 @@ const RootNavigator = () => {
     const handleIncomingCall = (data: any) => {
       console.log('📞 Incoming call received:', data);
       if (data.call && data.caller) {
-        navigation.navigate('IncomingCall', {
+        // Use the navigate helper instead of useNavigation hook
+        navigate('IncomingCall', {
           call: data.call,
           caller: data.caller,
           callType: data.callType || 'voice',
@@ -87,11 +89,12 @@ const RootNavigator = () => {
     return () => {
       callService.removeListener('call:incoming', handleIncomingCall);
     };
-  }, [navigation]);
+  }, []);
 
   useEffect(() => {
     initializeApp();
   }, []);
+
   useEffect(() => {
     const interval = setInterval(async () => {
       const authStatus = await checkAuthStatus();
@@ -104,7 +107,6 @@ const RootNavigator = () => {
     return () => clearInterval(interval);
   }, [isAuthenticated]);
 
-
   const initializeApp = async () => {
     try {
       console.log('🔄 Initializing app...');
@@ -115,7 +117,6 @@ const RootNavigator = () => {
       if (authStatus.isAuthenticated) {
         console.log('🔌 Connecting socket...');
         socketService.connect();
-        
         
         socketService.onConnected(() => {
           console.log('📞 Initializing call service after socket connection');
@@ -136,206 +137,159 @@ const RootNavigator = () => {
       console.log('✅ App initialization complete');
     }
   };
+
   if (isLoading) {
-    return <View style={styles.loadingContainer}>
+    return (
+      <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#E91E63" />
-      </View>;
+      </View>
+    );
   }
-  return <Stack.Navigator screenOptions={{
-    headerShown: false
-  }}>
-      {!isAuthenticated ? <Stack.Screen name="Auth" component={AuthNavigator} options={{
-      animationTypeForReplace: 'pop'
-    }} /> : <>
-          <Stack.Screen name="Main" component={MainNavigator} initialParams={{
-        isVendor
-      }} options={{
-        animationTypeForReplace: 'push'
-      }} />
+
+  return (
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      {!isAuthenticated ? (
+        <Stack.Screen 
+          name="Auth" 
+          component={AuthNavigator} 
+          options={{ animationTypeForReplace: 'pop' }} 
+        />
+      ) : (
+        <>
+          <Stack.Screen 
+            name="Main" 
+            component={MainNavigator} 
+            initialParams={{ isVendor }} 
+            options={{ animationTypeForReplace: 'push' }} 
+          />
           <Stack.Screen name="Message" component={MessageScreen} />
           <Stack.Screen name="Chat" component={ChatScreen} />
           <Stack.Screen name="Cart" component={CartScreen} />
-          {}
           
-          {}
-          <Stack.Screen name="AllVendors" component={AllVendorsScreen} options={{
-        animation: 'slide_from_right'
-      }} />
-          <Stack.Screen name="VendorDetail" component={VendorDetailScreen} options={{
-        animation: 'slide_from_right'
-      }} />
-          <Stack.Screen name="CreateBooking" component={CreateBookingScreen} options={{
-        animation: 'slide_from_right'
-      }} />
-          <Stack.Screen name="BookingDetail" component={BookingDetailScreen} options={{
-        animation: 'slide_from_right'
-      }} />
-          <Stack.Screen name="Payment" component={PaymentScreen} options={{
-        animation: 'slide_from_right'
-      }} />
-          <Stack.Screen name="Disputes" component={DisputesScreen} options={{
-        animation: 'slide_from_right'
-      }} />
-          <Stack.Screen name="CreateDispute" component={CreateDisputeScreen} options={{
-        animation: 'slide_from_right'
-      }} />
-          <Stack.Screen name="DisputeDetail" component={DisputeDetailScreen} options={{
-        animation: 'slide_from_right'
-      }} />
-          <Stack.Screen name="DisputeOrderDetail" component={DisputeOrderDetailScreen} options={{
-        animation: 'slide_from_right'
-      }} />
-          <Stack.Screen name="CreateReview" component={CreateReviewScreen} options={{
-        animation: 'slide_from_right'
-      }} />
-          <Stack.Screen name="Reviews" component={ReviewsScreen} options={{
-        animation: 'slide_from_right'
-      }} />
-          <Stack.Screen name="VendorMyResponses" component={VendorMyResponsesScreen} options={{
-        animation: 'slide_from_right'
-      }} />
-          <Stack.Screen name="PersonalInformation" component={PersonalInformationScreen} options={{
-        animation: 'slide_from_right'
-      }} />
-          {}
-          <Stack.Screen name="Favourites" component={FavoritesScreen} options={{
-        animation: 'slide_from_right'
-      }} />
-          <Stack.Screen name="NotificationsSetting" component={NotificationSettingsScreen} options={{
-        animation: 'slide_from_right'
-      }} />
-          <Stack.Screen name="PrivacySetting" component={PrivacySecurityScreen} options={{
-        animation: 'slide_from_right'
-      }} />
-          <Stack.Screen name="HelpCenter" component={HelpCenterScreen} options={{
-        animation: 'slide_from_right'
-      }} />
-          <Stack.Screen name="Notifications" component={NotificationsScreen} options={{
-        animation: 'slide_from_right'
-      }} />
-          <Stack.Screen name="CreateOffer" component={CreateOfferScreen} options={{
-        animation: 'slide_from_right'
-      }} />
-
-      <Stack.Screen name="MyOffers" component={MyOffersScreen} options={{
-        animation: 'slide_from_right'
-      }} />
-      <Stack.Screen name="OfferDetail" component={OfferDetailScreen} options={{
-        animation: 'slide_from_right'
-      }} />
-      <Stack.Screen name="AvailableOffers" component={AvailableOffersScreen} options={{
-        animation: 'slide_from_right'
-      }} />
-
-      <Stack.Screen name="SetWithdrawalPin" component={SetWithdrawalPinScreen} options={{
-        animation: 'slide_from_right'
-      }} />
-
-      <Stack.Screen name="ChangeWithdrawalPin" component={ChangeWithdrawalPinScreen} options={{
-        animation: 'slide_from_right'
-      }} />
-      <Stack.Screen name="ChatDetail" component={ChatDetailScreen} options={{
-        animation: 'slide_from_right'
-      }} />
-      <Stack.Screen name="ChatList" component={ChatListScreen} options={{
-        animation: 'slide_from_right'
-      }} />
-      <Stack.Screen name="Subsriptions" component={SubscriptionScreen} options={{
-        animation: 'slide_from_right'
-      }} />
-      {}
-
-      <Stack.Screen name="Marketplace" component={MarketplaceScreen} options={{
-        animation: 'slide_from_right'
-      }} />
-      <Stack.Screen name="AddProduct" component={AddEditProductScreen} options={{
-        animation: 'slide_from_right'
-      }} />
-      <Stack.Screen name="EditProduct" component={AddEditProductScreen} options={{
-        animation: 'slide_from_right'
-      }} />
-      <Stack.Screen name="ProductDetail" component={ProductDetailScreen} options={{
-        animation: 'slide_from_right'
-      }} />
-      <Stack.Screen name="Checkout" component={CheckoutScreen} options={{
-        animation: 'slide_from_right'
-      }} />
-      <Stack.Screen name="Analytics" component={VendorAnalyticsScreen} options={{
-        animation: 'slide_from_right'
-      }} />
-      <Stack.Screen name="MyProducts" component={VendorProductManagementScreen} options={{
-        animation: 'slide_from_right'
-      }} />
-      <Stack.Screen name="CustomerOrders" component={CustomerOrdersScreen} options={{
-        animation: 'slide_from_right'
-      }} />
-      <Stack.Screen name="MyOrders" component={VendorProductOrdersScreen} options={{
-        animation: 'slide_from_right'
-      }} />
-      <Stack.Screen name="OrderDetail" component={OrderDetailScreen} options={{
-        animation: 'slide_from_right'
-      }} />
-      <Stack.Screen name="VendorStoreSettings" component={VendorStoreSettingsScreen} options={{
-        animation: 'slide_from_right'
-      }} />
-      <Stack.Screen name="OrderPayment" component={OrderPaymentScreen} options={{
-        animation: 'slide_from_right'
-      }} />
-      <Stack.Screen name="Transactions" component={TransactionHistoryScreen} options={{
-        animation: 'slide_from_right'
-      }} />
-     
-      <Stack.Screen name="IncomingCall" component={IncomingCallScreen} options={{
-        animation: 'slide_from_bottom',
-        presentation: 'fullScreenModal',
-        gestureEnabled: false
-      }} />
-      <Stack.Screen name="OngoingCall" component={OngoingCallScreen} options={{
-        animation: 'fade',
-        presentation: 'fullScreenModal',
-        gestureEnabled: false,
-        headerShown: false
-      }} />
-      <Stack.Screen name="Referrals" component={ReferralScreen} options={{
-        animation: 'fade',
-        presentation: 'fullScreenModal',
-        gestureEnabled: false,
-        headerShown: false
-      }} />
-      <Stack.Screen name="ReferralLeaderboard" component={ReferralLeaderboard} options={{
-        animation: 'fade',
-        presentation: 'fullScreenModal',
-        gestureEnabled: false,
-        headerShown: false
-      }} />
-
-
-<Stack.Screen name="ApplyReferralCode" component={ApplyReferralCode}
-
-options={{
-        animation: 'fade',
-        presentation: 'fullScreenModal',
-        gestureEnabled: false,
-        headerShown: false
-      }}/>
-<Stack.Screen name="ReferralDetail" component={ReferralDetailScreen}  
-options={{
-        animation: 'fade',
-        presentation: 'fullScreenModal',
-        gestureEnabled: false,
-        headerShown: false
-      }} />
-<Stack.Screen name="WalletPayment" component={WalletPaymentScreen}  
-options={{
-        animation: 'fade',
-        presentation: 'fullScreenModal',
-        gestureEnabled: false,
-        headerShown: false
-      }} />
+          <Stack.Screen name="AllVendors" component={AllVendorsScreen} options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="VendorDetail" component={VendorDetailScreen} options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="CreateBooking" component={CreateBookingScreen} options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="BookingDetail" component={BookingDetailScreen} options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="Payment" component={PaymentScreen} options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="Disputes" component={DisputesScreen} options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="CreateDispute" component={CreateDisputeScreen} options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="DisputeDetail" component={DisputeDetailScreen} options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="DisputeOrderDetail" component={DisputeOrderDetailScreen} options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="CreateReview" component={CreateReviewScreen} options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="Reviews" component={ReviewsScreen} options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="VendorMyResponses" component={VendorMyResponsesScreen} options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="PersonalInformation" component={PersonalInformationScreen} options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="Favourites" component={FavoritesScreen} options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="NotificationsSetting" component={NotificationSettingsScreen} options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="PrivacySetting" component={PrivacySecurityScreen} options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="HelpCenter" component={HelpCenterScreen} options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="Notifications" component={NotificationsScreen} options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="CreateOffer" component={CreateOfferScreen} options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="MyOffers" component={MyOffersScreen} options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="OfferDetail" component={OfferDetailScreen} options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="AvailableOffers" component={AvailableOffersScreen} options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="SetWithdrawalPin" component={SetWithdrawalPinScreen} options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="ChangeWithdrawalPin" component={ChangeWithdrawalPinScreen} options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="ChatDetail" component={ChatDetailScreen} options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="ChatList" component={ChatListScreen} options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="Subsriptions" component={SubscriptionScreen} options={{ animation: 'slide_from_right' }} />
           
-        </>}
-    </Stack.Navigator>;
+          <Stack.Screen name="Marketplace" component={MarketplaceScreen} options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="AddProduct" component={AddEditProductScreen} options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="EditProduct" component={AddEditProductScreen} options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="ProductDetail" component={ProductDetailScreen} options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="Checkout" component={CheckoutScreen} options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="Analytics" component={VendorAnalyticsScreen} options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="MyProducts" component={VendorProductManagementScreen} options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="CustomerOrders" component={CustomerOrdersScreen} options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="MyOrders" component={VendorProductOrdersScreen} options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="OrderDetail" component={OrderDetailScreen} options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="VendorStoreSettings" component={VendorStoreSettingsScreen} options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="OrderPayment" component={OrderPaymentScreen} options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="Transactions" component={TransactionHistoryScreen} options={{ animation: 'slide_from_right' }} />
+          
+          <Stack.Screen 
+            name="IncomingCall" 
+            component={IncomingCallScreen} 
+            options={{
+              animation: 'slide_from_bottom',
+              presentation: 'fullScreenModal',
+              gestureEnabled: false
+            }} 
+          />
+          <Stack.Screen 
+            name="OngoingCall" 
+            component={OngoingCallScreen} 
+            options={{
+              animation: 'fade',
+              presentation: 'fullScreenModal',
+              gestureEnabled: false,
+              headerShown: false
+            }} 
+          />
+          <Stack.Screen 
+            name="Referrals" 
+            component={ReferralScreen} 
+            options={{
+              animation: 'fade',
+              presentation: 'fullScreenModal',
+              gestureEnabled: false,
+              headerShown: false
+            }} 
+          />
+          <Stack.Screen 
+            name="ReferralLeaderboard" 
+            component={ReferralLeaderboard} 
+            options={{
+              animation: 'fade',
+              presentation: 'fullScreenModal',
+              gestureEnabled: false,
+              headerShown: false
+            }} 
+          />
+          <Stack.Screen 
+            name="ApplyReferralCode" 
+            component={ApplyReferralCode}
+            options={{
+              animation: 'fade',
+              presentation: 'fullScreenModal',
+              gestureEnabled: false,
+              headerShown: false
+            }}
+          />
+          <Stack.Screen 
+            name="ReferralDetail" 
+            component={ReferralDetailScreen}  
+            options={{
+              animation: 'fade',
+              presentation: 'fullScreenModal',
+              gestureEnabled: false,
+              headerShown: false
+            }} 
+          />
+          <Stack.Screen 
+            name="WalletPayment" 
+            component={WalletPaymentScreen}  
+            options={{
+              animation: 'fade',
+              presentation: 'fullScreenModal',
+              gestureEnabled: false,
+              headerShown: false
+            }} 
+          />
+          <Stack.Screen 
+            name="TermsPrivacy" 
+            component={TermsPrivacyScreen}  
+            options={{
+              animation: 'slide_from_right',
+            }} 
+          />
+        </>
+      )}
+    </Stack.Navigator>
+  );
 };
+
 const styles = StyleSheet.create({
   loadingContainer: {
     flex: 1,
@@ -344,4 +298,5 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF'
   }
 });
+
 export default RootNavigator;

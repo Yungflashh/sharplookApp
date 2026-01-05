@@ -9,6 +9,7 @@ import {
   Alert,
   ActivityIndicator,
   Platform,
+  Modal,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -35,6 +36,85 @@ interface Category {
   icon?: string;
 }
 
+interface FieldInfo {
+  title: string;
+  description: string;
+  required: boolean;
+}
+
+const FIELD_INFO: { [key: string]: FieldInfo } = {
+  images: {
+    title: 'Product Images',
+    description: 'Add clear, high-quality photos of your product. First image will be the main display photo. You can add up to 10 images.',
+    required: true,
+  },
+  name: {
+    title: 'Product Name',
+    description: 'Enter a clear and descriptive name for your product. This is what customers will see first.',
+    required: true,
+  },
+  shortDescription: {
+    title: 'Short Description',
+    description: 'A brief one-line summary of your product. This appears in product listings and search results.',
+    required: false,
+  },
+  description: {
+    title: 'Full Description',
+    description: 'Provide detailed information about your product including features, benefits, specifications, and any other relevant details.',
+    required: true,
+  },
+  category: {
+    title: 'Category',
+    description: 'Select the category that best fits your product. This helps customers find your product easily.',
+    required: true,
+  },
+  brand: {
+    title: 'Brand',
+    description: 'Enter the brand name of the product (e.g., Nike, Apple, Samsung). Leave empty if unbranded.',
+    required: false,
+  },
+  condition: {
+    title: 'Product Condition',
+    description: 'New: Brand new, unused. Refurbished: Professionally restored. Used: Previously owned.',
+    required: true,
+  },
+  sellingPrice: {
+    title: 'Selling Price',
+    description: 'The actual price customers will pay when they purchase this product. Enter the amount in Naira (₦).',
+    required: true,
+  },
+  originalPrice: {
+    title: 'Original Price',
+    description: 'The original or market price before discount. This will show customers how much they\'re saving. Leave empty if no discount.',
+    required: false,
+  },
+  stock: {
+    title: 'Stock Quantity',
+    description: 'How many units of this product do you have available for sale?',
+    required: true,
+  },
+  lowStock: {
+    title: 'Low Stock Alert',
+    description: 'You\'ll be notified when stock reaches this number. Helps you restock on time.',
+    required: false,
+  },
+  homeDelivery: {
+    title: 'Home Delivery',
+    description: 'Enable this if you can deliver products to customers\' addresses. Delivery fee will be calculated based on distance.',
+    required: false,
+  },
+  pickup: {
+    title: 'Pickup Available',
+    description: 'Enable this if customers can pick up products from your location. No delivery fee applies.',
+    required: false,
+  },
+  deliveryDays: {
+    title: 'Estimated Delivery Time',
+    description: 'Average number of days it takes to deliver the product after order confirmation.',
+    required: false,
+  },
+};
+
 const AddEditProductScreen: React.FC = () => {
   const navigation = useNavigation<AddEditProductNavigationProp>();
   const route = useRoute<AddEditProductRouteProp>();
@@ -45,8 +125,9 @@ const AddEditProductScreen: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [loadingProduct, setLoadingProduct] = useState(isEdit);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [showInfoModal, setShowInfoModal] = useState(false);
+  const [activeFieldInfo, setActiveFieldInfo] = useState<FieldInfo | null>(null);
 
-  
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [shortDescription, setShortDescription] = useState('');
@@ -57,12 +138,9 @@ const AddEditProductScreen: React.FC = () => {
   const [lowStockThreshold, setLowStockThreshold] = useState('10');
   const [condition, setCondition] = useState<'new' | 'refurbished' | 'used'>('new');
   const [brand, setBrand] = useState('');
-  const [sku, setSku] = useState('');
-  const [weight, setWeight] = useState('');
   
   const [homeDelivery, setHomeDelivery] = useState(true);
   const [pickup, setPickup] = useState(true);
-  const [deliveryFee, setDeliveryFee] = useState('');
   const [estimatedDeliveryDays, setEstimatedDeliveryDays] = useState('3');
 
   const [images, setImages] = useState<ProductImage[]>([]);
@@ -74,6 +152,11 @@ const AddEditProductScreen: React.FC = () => {
       fetchProduct();
     }
   }, []);
+
+  const showFieldInfo = (fieldKey: string) => {
+    setActiveFieldInfo(FIELD_INFO[fieldKey]);
+    setShowInfoModal(true);
+  };
 
   const fetchCategories = async () => {
     try {
@@ -104,12 +187,9 @@ const AddEditProductScreen: React.FC = () => {
         setLowStockThreshold(product.lowStockThreshold?.toString() || '10');
         setCondition(product.condition);
         setBrand(product.brand || '');
-        setSku(product.sku || '');
-        setWeight(product.weight?.toString() || '');
         
         setHomeDelivery(product.deliveryOptions?.homeDelivery || false);
         setPickup(product.deliveryOptions?.pickup || false);
-        setDeliveryFee(product.deliveryOptions?.deliveryFee?.toString() || '');
         setEstimatedDeliveryDays(product.deliveryOptions?.estimatedDeliveryDays?.toString() || '3');
         
         setExistingImages(product.images || []);
@@ -123,58 +203,54 @@ const AddEditProductScreen: React.FC = () => {
     }
   };
 
-  
-
-
-const pickImages = async () => {
-  try {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    
-    if (status !== 'granted') {
-      Alert.alert('Permission Required', 'Please grant permission to access photos');
-      return;
-    }
-
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsMultipleSelection: true,
-      quality: 0.7,  
-      selectionLimit: 10 - images.length - existingImages.length,
-    });
-
-    if (!result.canceled) {
-      const newImages = result.assets.map((asset, index) => {
-        
-        let mimeType = 'image/jpeg'; 
-        
-        if (asset.uri) {
-          const extension = asset.uri.split('.').pop()?.toLowerCase();
-          if (extension === 'png') {
-            mimeType = 'image/png';
-          } else if (extension === 'jpg' || extension === 'jpeg') {
-            mimeType = 'image/jpeg';
-          } else if (extension === 'gif') {
-            mimeType = 'image/gif';
-          } else if (extension === 'webp') {
-            mimeType = 'image/webp';
-          }
-        }
-
-        return {
-          uri: asset.uri,
-          type: mimeType,  
-          name: asset.fileName || `product_${Date.now()}_${index}.jpg`,
-        };
-      });
+  const pickImages = async () => {
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       
-      console.log('📸 New images picked:', newImages);
-      setImages([...images, ...newImages]);
+      if (status !== 'granted') {
+        Alert.alert('Permission Required', 'Please grant permission to access photos');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsMultipleSelection: true,
+        quality: 0.7,
+        selectionLimit: 10 - images.length - existingImages.length,
+      });
+
+      if (!result.canceled) {
+        const newImages = result.assets.map((asset, index) => {
+          let mimeType = 'image/jpeg';
+          
+          if (asset.uri) {
+            const extension = asset.uri.split('.').pop()?.toLowerCase();
+            if (extension === 'png') {
+              mimeType = 'image/png';
+            } else if (extension === 'jpg' || extension === 'jpeg') {
+              mimeType = 'image/jpeg';
+            } else if (extension === 'gif') {
+              mimeType = 'image/gif';
+            } else if (extension === 'webp') {
+              mimeType = 'image/webp';
+            }
+          }
+
+          return {
+            uri: asset.uri,
+            type: mimeType,
+            name: asset.fileName || `product_${Date.now()}_${index}.jpg`,
+          };
+        });
+        
+        console.log('📸 New images picked:', newImages);
+        setImages([...images, ...newImages]);
+      }
+    } catch (error) {
+      console.error('Image picker error:', error);
+      Alert.alert('Error', 'Failed to pick images');
     }
-  } catch (error) {
-    console.error('Image picker error:', error);
-    Alert.alert('Error', 'Failed to pick images');
-  }
-};
+  };
 
   const removeImage = (index: number) => {
     const updatedImages = [...images];
@@ -215,7 +291,7 @@ const pickImages = async () => {
       return false;
     }
     if (!price || parseFloat(price) <= 0) {
-      Alert.alert('Invalid', 'Please enter a valid price');
+      Alert.alert('Invalid', 'Please enter a valid selling price');
       return false;
     }
     if (!stock || parseInt(stock) < 0) {
@@ -251,12 +327,9 @@ const pickImages = async () => {
         lowStockThreshold: parseInt(lowStockThreshold),
         condition,
         brand: brand.trim() || undefined,
-        sku: sku.trim() || undefined,
-        weight: weight ? parseFloat(weight) : undefined,
         deliveryOptions: {
           homeDelivery,
           pickup,
-          deliveryFee: deliveryFee ? parseFloat(deliveryFee) : undefined,
           estimatedDeliveryDays: parseInt(estimatedDeliveryDays),
         },
       };
@@ -278,7 +351,6 @@ const pickImages = async () => {
 
       const formData = new FormData();
 
-      
       console.log('📝 Adding text fields to FormData...');
       formData.append('name', productData.name);
       formData.append('description', productData.description);
@@ -301,26 +373,16 @@ const pickImages = async () => {
       if (productData.brand) {
         formData.append('brand', productData.brand);
       }
-      
-      if (productData.sku) {
-        formData.append('sku', productData.sku);
-      }
-      
-      if (productData.weight) {
-        formData.append('weight', String(productData.weight));
-      }
 
       formData.append('deliveryOptions', JSON.stringify(productData.deliveryOptions));
 
       console.log('✅ Text fields added');
 
-      
       if (isEdit && existingImages.length > 0) {
         console.log('📋 Adding existing images list...');
         formData.append('existingImages', JSON.stringify(existingImages));
       }
 
-      
       if (images.length > 0) {
         console.log('🖼️ Adding new images...');
         for (let i = 0; i < images.length; i++) {
@@ -330,7 +392,6 @@ const pickImages = async () => {
           console.log(`  Type: ${image.type}`);
           console.log(`  Name: ${image.name}`);
 
-          
           let imageUri = image.uri;
           if (Platform.OS === 'ios' && imageUri.startsWith('file://')) {
             imageUri = imageUri.replace('file://', '');
@@ -349,7 +410,6 @@ const pickImages = async () => {
 
       console.log('✅ All data added to FormData');
 
-      
       const endpoint = isEdit 
         ? `${API_BASE_URL}/products/${productId}` 
         : `${API_BASE_URL}/products`;
@@ -362,7 +422,6 @@ const pickImages = async () => {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Accept': 'application/json',
-          
         },
         body: formData,
       });
@@ -457,151 +516,347 @@ const pickImages = async () => {
 
   return (
     <SafeAreaView className="flex-1 bg-gray-50" edges={['top']}>
-      {}
+      {/* Info Modal */}
+      <Modal
+        visible={showInfoModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowInfoModal(false)}
+      >
+        <TouchableOpacity
+          className="flex-1 bg-black/60 justify-center items-center px-6"
+          activeOpacity={1}
+          onPress={() => setShowInfoModal(false)}
+        >
+          <TouchableOpacity
+            activeOpacity={1}
+            onPress={(e) => e.stopPropagation()}
+            className="bg-white rounded-3xl p-6 w-full max-w-md"
+            style={{
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 8 },
+              shadowOpacity: 0.3,
+              shadowRadius: 16,
+              elevation: 16,
+            }}
+          >
+            <View className="flex-row items-start justify-between mb-4">
+              <View className="flex-row items-center flex-1">
+                <View className="w-10 h-10 rounded-full bg-pink-100 items-center justify-center mr-3">
+                  <Ionicons name="information" size={22} color="#eb278d" />
+                </View>
+                <View className="flex-1">
+                  <Text className="text-gray-900 text-lg font-bold">
+                    {activeFieldInfo?.title}
+                  </Text>
+                  {activeFieldInfo?.required && (
+                    <View className="flex-row items-center mt-1">
+                      <View className="w-1.5 h-1.5 rounded-full bg-red-500 mr-1.5" />
+                      <Text className="text-red-500 text-xs font-semibold">Required Field</Text>
+                    </View>
+                  )}
+                </View>
+              </View>
+              <TouchableOpacity
+                onPress={() => setShowInfoModal(false)}
+                className="w-8 h-8 rounded-full bg-gray-100 items-center justify-center ml-2"
+              >
+                <Ionicons name="close" size={18} color="#6b7280" />
+              </TouchableOpacity>
+            </View>
+
+            <Text className="text-gray-600 text-[15px] leading-6 mb-6">
+              {activeFieldInfo?.description}
+            </Text>
+
+            <TouchableOpacity
+              onPress={() => setShowInfoModal(false)}
+              className="bg-pink-500 py-3.5 rounded-xl"
+            >
+              <Text className="text-white text-center font-semibold text-base">Got it</Text>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Header */}
       <LinearGradient
         colors={['#eb278d', '#f472b6']}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
-        className="pb-4"
+        className="pb-6"
       >
         <View className="px-5 pt-4">
-          <View className="flex-row items-center justify-between">
-            <View className="flex-row items-center">
-              <TouchableOpacity
-                onPress={() => navigation.goBack()}
-                className="w-10 h-10 rounded-full bg-white/20 items-center justify-center mr-3"
-              >
-                <Ionicons name="arrow-back" size={22} color="#fff" />
-              </TouchableOpacity>
+          <View className="flex-row items-center justify-between mb-4">
+            <TouchableOpacity
+              onPress={() => navigation.goBack()}
+              className="w-11 h-11 rounded-full bg-white/20 items-center justify-center"
+            >
+              <Ionicons name="arrow-back" size={22} color="#fff" />
+            </TouchableOpacity>
+            <View className="flex-1 mx-4">
               <Text className="text-white text-2xl font-bold">
-                {isEdit ? 'Edit Product' : 'Add New Product'}
+                {isEdit ? 'Edit Product' : 'Add Product'}
+              </Text>
+              <Text className="text-white/80 text-sm mt-0.5">
+                {isEdit ? 'Update your product details' : 'Create a new product listing'}
               </Text>
             </View>
+          </View>
+
+          {/* Progress Indicator */}
+          <View className="bg-white/20 rounded-full h-1.5 overflow-hidden">
+            <View 
+              className="bg-white h-full rounded-full"
+              style={{ 
+                width: `${
+                  ((images.length > 0 ? 1 : 0) + 
+                  (name ? 1 : 0) + 
+                  (description ? 1 : 0) + 
+                  (selectedCategory ? 1 : 0) + 
+                  (price ? 1 : 0) + 
+                  (stock ? 1 : 0)) / 6 * 100
+                }%` 
+              }}
+            />
           </View>
         </View>
       </LinearGradient>
 
-      <ScrollView className="flex-1 px-5 pt-5" showsVerticalScrollIndicator={false}>
-        {}
+      <ScrollView 
+        className="flex-1" 
+        contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 20, paddingBottom: 120 }}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Product Images Section */}
         <View className="mb-6">
-          <Text className="text-gray-900 text-lg font-bold mb-3">Product Images *</Text>
-          
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mb-3">
-            {}
+          <View className="flex-row items-center justify-between mb-4">
+            <View className="flex-row items-center">
+              <View className="w-8 h-8 rounded-full bg-pink-100 items-center justify-center mr-2.5">
+                <Ionicons name="images" size={16} color="#eb278d" />
+              </View>
+              <Text className="text-gray-900 text-lg font-bold">Product Images</Text>
+              <View className="w-1.5 h-1.5 rounded-full bg-red-500 ml-1.5" />
+            </View>
+            <TouchableOpacity
+              onPress={() => showFieldInfo('images')}
+              className="w-8 h-8 rounded-full bg-gray-100 items-center justify-center"
+              activeOpacity={0.7}
+            >
+              <Ionicons name="information-circle" size={20} color="#6b7280" />
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView 
+            horizontal 
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ paddingBottom: 4 }}
+          >
+            {/* Existing Images */}
             {existingImages.map((uri, index) => (
-              <View key={`existing-${index}`} className="mr-3 relative">
+              <View 
+                key={`existing-${index}`} 
+                className="mr-3 relative"
+                style={{
+                  shadowColor: '#000',
+                  shadowOffset: { width: 0, height: 2 },
+                  shadowOpacity: 0.1,
+                  shadowRadius: 8,
+                  elevation: 4,
+                }}
+              >
                 <Image
                   source={{ uri }}
-                  className="w-24 h-24 rounded-xl"
+                  className="w-28 h-28 rounded-2xl"
                   resizeMode="cover"
                 />
+                {index === 0 && (
+                  <View className="absolute top-2 left-2 bg-pink-500 px-2 py-1 rounded-lg">
+                    <Text className="text-white text-xs font-bold">Main</Text>
+                  </View>
+                )}
                 <TouchableOpacity
                   onPress={() => removeExistingImage(index)}
-                  className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-red-500 items-center justify-center"
-                  style={{
-                    shadowColor: '#000',
-                    shadowOffset: { width: 0, height: 2 },
-                    shadowOpacity: 0.3,
-                    shadowRadius: 4,
-                    elevation: 4,
-                  }}
+                  className="absolute -top-2 -right-2 w-7 h-7 rounded-full bg-red-500 items-center justify-center border-2 border-white"
                 >
                   <Ionicons name="close" size={16} color="#fff" />
                 </TouchableOpacity>
               </View>
             ))}
 
-            {}
+            {/* New Images */}
             {images.map((image, index) => (
-              <View key={`new-${index}`} className="mr-3 relative">
+              <View 
+                key={`new-${index}`} 
+                className="mr-3 relative"
+                style={{
+                  shadowColor: '#000',
+                  shadowOffset: { width: 0, height: 2 },
+                  shadowOpacity: 0.1,
+                  shadowRadius: 8,
+                  elevation: 4,
+                }}
+              >
                 <Image
                   source={{ uri: image.uri }}
-                  className="w-24 h-24 rounded-xl"
+                  className="w-28 h-28 rounded-2xl"
                   resizeMode="cover"
                 />
+                {existingImages.length === 0 && index === 0 && (
+                  <View className="absolute top-2 left-2 bg-pink-500 px-2 py-1 rounded-lg">
+                    <Text className="text-white text-xs font-bold">Main</Text>
+                  </View>
+                )}
                 <TouchableOpacity
                   onPress={() => removeImage(index)}
-                  className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-red-500 items-center justify-center"
-                  style={{
-                    shadowColor: '#000',
-                    shadowOffset: { width: 0, height: 2 },
-                    shadowOpacity: 0.3,
-                    shadowRadius: 4,
-                    elevation: 4,
-                  }}
+                  className="absolute -top-2 -right-2 w-7 h-7 rounded-full bg-red-500 items-center justify-center border-2 border-white"
                 >
                   <Ionicons name="close" size={16} color="#fff" />
                 </TouchableOpacity>
               </View>
             ))}
 
-            {}
+            {/* Add Image Button */}
             {(images.length + existingImages.length) < 10 && (
               <TouchableOpacity
                 onPress={pickImages}
-                className="w-24 h-24 rounded-xl bg-gray-100 items-center justify-center border-2 border-dashed border-gray-300"
+                className="w-28 h-28 rounded-2xl bg-gray-50 border-2 border-dashed border-gray-300 items-center justify-center"
+                activeOpacity={0.7}
               >
-                <Ionicons name="camera" size={32} color="#9ca3af" />
-                <Text className="text-gray-400 text-xs mt-1">Add Photo</Text>
+                <View className="w-12 h-12 rounded-full bg-pink-100 items-center justify-center mb-2">
+                  <Ionicons name="camera" size={22} color="#eb278d" />
+                </View>
+                <Text className="text-gray-500 text-xs font-semibold">Add Photo</Text>
               </TouchableOpacity>
             )}
           </ScrollView>
 
-          <Text className="text-gray-500 text-xs">
-            Add up to 10 images. First image will be the main photo.
+          <Text className="text-gray-500 text-xs mt-3 px-1">
+            {images.length + existingImages.length}/10 images • First image is the main display photo
           </Text>
         </View>
 
-        {}
-        <View className="bg-white rounded-2xl p-4 mb-4">
-          <Text className="text-gray-900 text-base font-bold mb-4">Basic Information</Text>
+        {/* Basic Information Card */}
+        <View 
+          className="bg-white rounded-3xl p-5 mb-5"
+          style={{
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: 0.05,
+            shadowRadius: 12,
+            elevation: 3,
+          }}
+        >
+          <View className="flex-row items-center mb-5">
+            <View className="w-8 h-8 rounded-full bg-pink-100 items-center justify-center mr-2.5">
+              <Ionicons name="information-circle" size={16} color="#eb278d" />
+            </View>
+            <Text className="text-gray-900 text-lg font-bold">Basic Information</Text>
+          </View>
 
-          <View className="mb-4">
-            <Text className="text-gray-700 text-sm font-semibold mb-2">Product Name *</Text>
+          {/* Product Name */}
+          <View className="mb-5">
+            <View className="flex-row items-center justify-between mb-2.5">
+              <View className="flex-row items-center">
+                <Text className="text-gray-700 text-sm font-semibold">Product Name</Text>
+                <View className="w-1.5 h-1.5 rounded-full bg-red-500 ml-1.5" />
+              </View>
+              <TouchableOpacity
+                onPress={() => showFieldInfo('name')}
+                className="w-7 h-7 rounded-full bg-gray-50 items-center justify-center"
+                activeOpacity={0.7}
+              >
+                <Ionicons name="information-circle-outline" size={18} color="#6b7280" />
+              </TouchableOpacity>
+            </View>
             <TextInput
-              className="bg-gray-50 px-4 py-3 rounded-xl text-gray-900"
-              placeholder="e.g., Luxury Hair Growth Serum"
+              className="bg-gray-50 px-4 py-3.5 rounded-xl text-gray-900 text-base"
+              placeholder="e.g., Premium Wireless Headphones"
+              placeholderTextColor="#9ca3af"
               value={name}
               onChangeText={setName}
             />
           </View>
 
-          <View className="mb-4">
-            <Text className="text-gray-700 text-sm font-semibold mb-2">Short Description</Text>
+          {/* Short Description */}
+          <View className="mb-5">
+            <View className="flex-row items-center justify-between mb-2.5">
+              <Text className="text-gray-700 text-sm font-semibold">Short Description</Text>
+              <TouchableOpacity
+                onPress={() => showFieldInfo('shortDescription')}
+                className="w-7 h-7 rounded-full bg-gray-50 items-center justify-center"
+                activeOpacity={0.7}
+              >
+                <Ionicons name="information-circle-outline" size={18} color="#6b7280" />
+              </TouchableOpacity>
+            </View>
             <TextInput
-              className="bg-gray-50 px-4 py-3 rounded-xl text-gray-900"
-              placeholder="Brief one-line description"
+              className="bg-gray-50 px-4 py-3.5 rounded-xl text-gray-900 text-base"
+              placeholder="Brief one-line summary"
+              placeholderTextColor="#9ca3af"
               value={shortDescription}
               onChangeText={setShortDescription}
               maxLength={100}
             />
+            <Text className="text-gray-400 text-xs mt-1.5 px-1">
+              {shortDescription.length}/100 characters
+            </Text>
           </View>
 
-          <View className="mb-4">
-            <Text className="text-gray-700 text-sm font-semibold mb-2">Description *</Text>
+          {/* Full Description */}
+          <View className="mb-5">
+            <View className="flex-row items-center justify-between mb-2.5">
+              <View className="flex-row items-center">
+                <Text className="text-gray-700 text-sm font-semibold">Full Description</Text>
+                <View className="w-1.5 h-1.5 rounded-full bg-red-500 ml-1.5" />
+              </View>
+              <TouchableOpacity
+                onPress={() => showFieldInfo('description')}
+                className="w-7 h-7 rounded-full bg-gray-50 items-center justify-center"
+                activeOpacity={0.7}
+              >
+                <Ionicons name="information-circle-outline" size={18} color="#6b7280" />
+              </TouchableOpacity>
+            </View>
             <TextInput
-              className="bg-gray-50 px-4 py-3 rounded-xl text-gray-900"
-              placeholder="Detailed product description..."
+              className="bg-gray-50 px-4 py-3.5 rounded-xl text-gray-900 text-base"
+              placeholder="Provide detailed information about features, specifications, benefits..."
+              placeholderTextColor="#9ca3af"
               value={description}
               onChangeText={setDescription}
               multiline
-              numberOfLines={5}
+              numberOfLines={6}
               textAlignVertical="top"
+              style={{ minHeight: 120 }}
             />
           </View>
 
-          <View className="mb-4">
-            <Text className="text-gray-700 text-sm font-semibold mb-2">Category *</Text>
+          {/* Category */}
+          <View className="mb-5">
+            <View className="flex-row items-center justify-between mb-2.5">
+              <View className="flex-row items-center">
+                <Text className="text-gray-700 text-sm font-semibold">Category</Text>
+                <View className="w-1.5 h-1.5 rounded-full bg-red-500 ml-1.5" />
+              </View>
+              <TouchableOpacity
+                onPress={() => showFieldInfo('category')}
+                className="w-7 h-7 rounded-full bg-gray-50 items-center justify-center"
+                activeOpacity={0.7}
+              >
+                <Ionicons name="information-circle-outline" size={18} color="#6b7280" />
+              </TouchableOpacity>
+            </View>
             <ScrollView horizontal showsHorizontalScrollIndicator={false}>
               {categories.map((category) => (
                 <TouchableOpacity
                   key={category._id}
                   onPress={() => setSelectedCategory(category._id)}
-                  className={`px-4 py-3 rounded-xl mr-2 ${
+                  className={`px-5 py-3 rounded-xl mr-2.5 ${
                     selectedCategory === category._id
                       ? 'bg-pink-500'
-                      : 'bg-gray-100'
+                      : 'bg-gray-50 border border-gray-200'
                   }`}
+                  activeOpacity={0.7}
                 >
                   <Text
                     className={`text-sm font-semibold ${
@@ -615,95 +870,181 @@ const pickImages = async () => {
             </ScrollView>
           </View>
 
-          <View className="mb-4">
-            <Text className="text-gray-700 text-sm font-semibold mb-2">Brand</Text>
+          {/* Brand */}
+          <View className="mb-5">
+            <View className="flex-row items-center justify-between mb-2.5">
+              <Text className="text-gray-700 text-sm font-semibold">Brand</Text>
+              <TouchableOpacity
+                onPress={() => showFieldInfo('brand')}
+                className="w-7 h-7 rounded-full bg-gray-50 items-center justify-center"
+                activeOpacity={0.7}
+              >
+                <Ionicons name="information-circle-outline" size={18} color="#6b7280" />
+              </TouchableOpacity>
+            </View>
             <TextInput
-              className="bg-gray-50 px-4 py-3 rounded-xl text-gray-900"
-              placeholder="e.g., Nike, Apple, etc."
+              className="bg-gray-50 px-4 py-3.5 rounded-xl text-gray-900 text-base"
+              placeholder="e.g., Nike, Apple, Samsung"
+              placeholderTextColor="#9ca3af"
               value={brand}
               onChangeText={setBrand}
             />
           </View>
 
-          <View className="mb-4">
-            <Text className="text-gray-700 text-sm font-semibold mb-2">Condition *</Text>
-            <View className="flex-row" style={{ gap: 8 }}>
-              {['new', 'refurbished', 'used'].map((cond) => (
+          {/* Condition */}
+          <View>
+            <View className="flex-row items-center justify-between mb-2.5">
+              <View className="flex-row items-center">
+                <Text className="text-gray-700 text-sm font-semibold">Condition</Text>
+                <View className="w-1.5 h-1.5 rounded-full bg-red-500 ml-1.5" />
+              </View>
+              <TouchableOpacity
+                onPress={() => showFieldInfo('condition')}
+                className="w-7 h-7 rounded-full bg-gray-50 items-center justify-center"
+                activeOpacity={0.7}
+              >
+                <Ionicons name="information-circle-outline" size={18} color="#6b7280" />
+              </TouchableOpacity>
+            </View>
+            <View className="flex-row gap-2.5">
+              {[
+                { value: 'new', label: 'New', icon: 'sparkles' },
+                { value: 'refurbished', label: 'Refurbished', icon: 'construct' },
+                { value: 'used', label: 'Used', icon: 'time' },
+              ].map((cond) => (
                 <TouchableOpacity
-                  key={cond}
-                  onPress={() => setCondition(cond as any)}
-                  className={`flex-1 py-3 rounded-xl ${
-                    condition === cond ? 'bg-pink-500' : 'bg-gray-100'
+                  key={cond.value}
+                  onPress={() => setCondition(cond.value as any)}
+                  className={`flex-1 py-3.5 rounded-xl border ${
+                    condition === cond.value 
+                      ? 'bg-pink-500 border-pink-500' 
+                      : 'bg-gray-50 border-gray-200'
                   }`}
+                  activeOpacity={0.7}
                 >
-                  <Text
-                    className={`text-center text-sm font-semibold capitalize ${
-                      condition === cond ? 'text-white' : 'text-gray-700'
-                    }`}
-                  >
-                    {cond}
-                  </Text>
+                  <View className="items-center">
+                    <Ionicons 
+                      name={cond.icon as any} 
+                      size={18} 
+                      color={condition === cond.value ? '#fff' : '#6b7280'} 
+                    />
+                    <Text
+                      className={`text-sm font-semibold mt-1 ${
+                        condition === cond.value ? 'text-white' : 'text-gray-700'
+                      }`}
+                    >
+                      {cond.label}
+                    </Text>
+                  </View>
                 </TouchableOpacity>
               ))}
             </View>
           </View>
-
-          <View className="mb-4">
-            <Text className="text-gray-700 text-sm font-semibold mb-2">SKU</Text>
-            <TextInput
-              className="bg-gray-50 px-4 py-3 rounded-xl text-gray-900"
-              placeholder="Product SKU (optional)"
-              value={sku}
-              onChangeText={setSku}
-            />
-          </View>
-
-          <View>
-            <Text className="text-gray-700 text-sm font-semibold mb-2">Weight (kg)</Text>
-            <TextInput
-              className="bg-gray-50 px-4 py-3 rounded-xl text-gray-900"
-              placeholder="e.g., 0.5"
-              value={weight}
-              onChangeText={setWeight}
-              keyboardType="decimal-pad"
-            />
-          </View>
         </View>
 
-        {}
-        <View className="bg-white rounded-2xl p-4 mb-4">
-          <Text className="text-gray-900 text-base font-bold mb-4">Pricing & Stock</Text>
+        {/* Pricing & Stock Card */}
+        <View 
+          className="bg-white rounded-3xl p-5 mb-5"
+          style={{
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: 0.05,
+            shadowRadius: 12,
+            elevation: 3,
+          }}
+        >
+          <View className="flex-row items-center mb-5">
+            <View className="w-8 h-8 rounded-full bg-green-100 items-center justify-center mr-2.5">
+              <Ionicons name="cash" size={16} color="#10b981" />
+            </View>
+            <Text className="text-gray-900 text-lg font-bold">Pricing & Stock</Text>
+          </View>
 
-          <View className="flex-row mb-4" style={{ gap: 12 }}>
-            <View className="flex-1">
-              <Text className="text-gray-700 text-sm font-semibold mb-2">Price (₦) *</Text>
+          {/* Selling Price */}
+          <View className="mb-5">
+            <View className="flex-row items-center justify-between mb-2.5">
+              <View className="flex-row items-center">
+                <Text className="text-gray-700 text-sm font-semibold">Selling Price (₦)</Text>
+                <View className="w-1.5 h-1.5 rounded-full bg-red-500 ml-1.5" />
+              </View>
+              <TouchableOpacity
+                onPress={() => showFieldInfo('sellingPrice')}
+                className="w-7 h-7 rounded-full bg-gray-50 items-center justify-center"
+                activeOpacity={0.7}
+              >
+                <Ionicons name="information-circle-outline" size={18} color="#6b7280" />
+              </TouchableOpacity>
+            </View>
+            <View className="flex-row items-center bg-gray-50 rounded-xl overflow-hidden">
+              <View className="bg-gray-100 px-4 py-3.5">
+                <Text className="text-gray-600 font-semibold">₦</Text>
+              </View>
               <TextInput
-                className="bg-gray-50 px-4 py-3 rounded-xl text-gray-900"
+                className="flex-1 px-4 py-3.5 text-gray-900 text-base font-semibold"
                 placeholder="0.00"
+                placeholderTextColor="#9ca3af"
                 value={price}
                 onChangeText={setPrice}
                 keyboardType="decimal-pad"
               />
             </View>
+          </View>
 
-            <View className="flex-1">
-              <Text className="text-gray-700 text-sm font-semibold mb-2">Compare Price (₦)</Text>
+          {/* Original Price */}
+          <View className="mb-5">
+            <View className="flex-row items-center justify-between mb-2.5">
+              <Text className="text-gray-700 text-sm font-semibold">Original Price (₦)</Text>
+              <TouchableOpacity
+                onPress={() => showFieldInfo('originalPrice')}
+                className="w-7 h-7 rounded-full bg-gray-50 items-center justify-center"
+                activeOpacity={0.7}
+              >
+                <Ionicons name="information-circle-outline" size={18} color="#6b7280" />
+              </TouchableOpacity>
+            </View>
+            <View className="flex-row items-center bg-gray-50 rounded-xl overflow-hidden">
+              <View className="bg-gray-100 px-4 py-3.5">
+                <Text className="text-gray-600 font-semibold">₦</Text>
+              </View>
               <TextInput
-                className="bg-gray-50 px-4 py-3 rounded-xl text-gray-900"
+                className="flex-1 px-4 py-3.5 text-gray-900 text-base"
                 placeholder="0.00"
+                placeholderTextColor="#9ca3af"
                 value={compareAtPrice}
                 onChangeText={setCompareAtPrice}
                 keyboardType="decimal-pad"
               />
             </View>
+            {compareAtPrice && parseFloat(compareAtPrice) > parseFloat(price || '0') && (
+              <View className="flex-row items-center mt-2 px-1">
+                <Ionicons name="trending-down" size={14} color="#10b981" />
+                <Text className="text-green-600 text-xs font-semibold ml-1">
+                  {Math.round(((parseFloat(compareAtPrice) - parseFloat(price)) / parseFloat(compareAtPrice)) * 100)}% discount
+                </Text>
+              </View>
+            )}
           </View>
 
-          <View className="flex-row" style={{ gap: 12 }}>
+          {/* Stock Row */}
+          <View className="flex-row gap-3">
             <View className="flex-1">
-              <Text className="text-gray-700 text-sm font-semibold mb-2">Stock Quantity *</Text>
+              <View className="flex-row items-center justify-between mb-2.5">
+                <View className="flex-row items-center">
+                  <Text className="text-gray-700 text-sm font-semibold">Stock</Text>
+                  <View className="w-1.5 h-1.5 rounded-full bg-red-500 ml-1.5" />
+                </View>
+                <TouchableOpacity
+                  onPress={() => showFieldInfo('stock')}
+                  className="w-7 h-7 rounded-full bg-gray-50 items-center justify-center"
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="information-circle-outline" size={18} color="#6b7280" />
+                </TouchableOpacity>
+              </View>
               <TextInput
-                className="bg-gray-50 px-4 py-3 rounded-xl text-gray-900"
+                className="bg-gray-50 px-4 py-3.5 rounded-xl text-gray-900 text-base font-semibold"
                 placeholder="0"
+                placeholderTextColor="#9ca3af"
                 value={stock}
                 onChangeText={setStock}
                 keyboardType="number-pad"
@@ -711,10 +1052,20 @@ const pickImages = async () => {
             </View>
 
             <View className="flex-1">
-              <Text className="text-gray-700 text-sm font-semibold mb-2">Low Stock Alert</Text>
+              <View className="flex-row items-center justify-between mb-2.5">
+                <Text className="text-gray-700 text-sm font-semibold">Low Alert</Text>
+                <TouchableOpacity
+                  onPress={() => showFieldInfo('lowStock')}
+                  className="w-7 h-7 rounded-full bg-gray-50 items-center justify-center"
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="information-circle-outline" size={18} color="#6b7280" />
+                </TouchableOpacity>
+              </View>
               <TextInput
-                className="bg-gray-50 px-4 py-3 rounded-xl text-gray-900"
+                className="bg-gray-50 px-4 py-3.5 rounded-xl text-gray-900 text-base"
                 placeholder="10"
+                placeholderTextColor="#9ca3af"
                 value={lowStockThreshold}
                 onChangeText={setLowStockThreshold}
                 keyboardType="number-pad"
@@ -723,88 +1074,153 @@ const pickImages = async () => {
           </View>
         </View>
 
-        {}
-        <View className="bg-white rounded-2xl p-4 mb-4">
-          <Text className="text-gray-900 text-base font-bold mb-4">Delivery Options *</Text>
+        {/* Delivery Options Card */}
+        <View 
+          className="bg-white rounded-3xl p-5"
+          style={{
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: 0.05,
+            shadowRadius: 12,
+            elevation: 3,
+          }}
+        >
+          <View className="flex-row items-center mb-5">
+            <View className="w-8 h-8 rounded-full bg-blue-100 items-center justify-center mr-2.5">
+              <Ionicons name="car" size={16} color="#3b82f6" />
+            </View>
+            <Text className="text-gray-900 text-lg font-bold">Delivery Options</Text>
+          </View>
 
+          {/* Home Delivery */}
           <TouchableOpacity
             onPress={() => setHomeDelivery(!homeDelivery)}
-            className="flex-row items-center justify-between mb-4 p-3 bg-gray-50 rounded-xl"
+            className="mb-4"
+            activeOpacity={0.7}
           >
-            <View className="flex-row items-center">
-              <Ionicons name="home" size={24} color="#eb278d" />
-              <Text className="text-gray-900 text-sm font-semibold ml-3">Home Delivery</Text>
-            </View>
-            <View
-              className={`w-6 h-6 rounded-full border-2 items-center justify-center ${
-                homeDelivery ? 'border-pink-500 bg-pink-500' : 'border-gray-300'
-              }`}
-            >
-              {homeDelivery && <Ionicons name="checkmark" size={16} color="#fff" />}
+            <View className="flex-row items-start justify-between p-4 bg-gray-50 rounded-2xl">
+              <View className="flex-row items-start flex-1">
+                <View className={`w-11 h-11 rounded-xl items-center justify-center mr-3 ${
+                  homeDelivery ? 'bg-pink-100' : 'bg-gray-200'
+                }`}>
+                  <Ionicons 
+                    name="home" 
+                    size={22} 
+                    color={homeDelivery ? '#eb278d' : '#9ca3af'} 
+                  />
+                </View>
+                <View className="flex-1">
+                  <Text className="text-gray-900 text-base font-semibold mb-1">
+                    Home Delivery
+                  </Text>
+                  <Text className="text-gray-500 text-xs leading-5">
+                    Deliver to customer's address. Fee calculated by distance.
+                  </Text>
+                </View>
+              </View>
+              <TouchableOpacity
+                onPress={() => showFieldInfo('homeDelivery')}
+                className="w-7 h-7 rounded-full bg-white items-center justify-center ml-2"
+                activeOpacity={0.7}
+              >
+                <Ionicons name="information-circle-outline" size={18} color="#6b7280" />
+              </TouchableOpacity>
+              <View
+                className={`w-6 h-6 rounded-full border-2 items-center justify-center ml-3 ${
+                  homeDelivery ? 'border-pink-500 bg-pink-500' : 'border-gray-300 bg-white'
+                }`}
+              >
+                {homeDelivery && <Ionicons name="checkmark" size={14} color="#fff" />}
+              </View>
             </View>
           </TouchableOpacity>
 
           {homeDelivery && (
-            <View className="ml-9 mb-4">
-              <View className="flex-row" style={{ gap: 12 }}>
-                <View className="flex-1">
-                  <Text className="text-gray-700 text-sm font-semibold mb-2">Delivery Fee (₦)</Text>
-                  <TextInput
-                    className="bg-gray-50 px-4 py-3 rounded-xl text-gray-900"
-                    placeholder="0.00"
-                    value={deliveryFee}
-                    onChangeText={setDeliveryFee}
-                    keyboardType="decimal-pad"
-                  />
-                </View>
-
-                <View className="flex-1">
-                  <Text className="text-gray-700 text-sm font-semibold mb-2">Est. Days</Text>
-                  <TextInput
-                    className="bg-gray-50 px-4 py-3 rounded-xl text-gray-900"
-                    placeholder="3"
-                    value={estimatedDeliveryDays}
-                    onChangeText={setEstimatedDeliveryDays}
-                    keyboardType="number-pad"
-                  />
+            <View className="ml-14 mb-4 pr-4">
+              <View className="flex-row items-center justify-between mb-2.5">
+                <Text className="text-gray-700 text-sm font-semibold">
+                  Estimated Delivery Time
+                </Text>
+                <TouchableOpacity
+                  onPress={() => showFieldInfo('deliveryDays')}
+                  className="w-7 h-7 rounded-full bg-gray-50 items-center justify-center"
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="information-circle-outline" size={18} color="#6b7280" />
+                </TouchableOpacity>
+              </View>
+              <View className="flex-row items-center bg-gray-50 rounded-xl overflow-hidden">
+                <TextInput
+                  className="flex-1 px-4 py-3.5 text-gray-900 text-base"
+                  placeholder="3"
+                  placeholderTextColor="#9ca3af"
+                  value={estimatedDeliveryDays}
+                  onChangeText={setEstimatedDeliveryDays}
+                  keyboardType="number-pad"
+                />
+                <View className="bg-gray-100 px-4 py-3.5">
+                  <Text className="text-gray-600 font-medium">days</Text>
                 </View>
               </View>
             </View>
           )}
 
+          {/* Pickup Option */}
           <TouchableOpacity
             onPress={() => setPickup(!pickup)}
-            className="flex-row items-center justify-between p-3 bg-gray-50 rounded-xl"
+            activeOpacity={0.7}
           >
-            <View className="flex-row items-center">
-              <Ionicons name="storefront" size={24} color="#eb278d" />
-              <Text className="text-gray-900 text-sm font-semibold ml-3">Pickup Available</Text>
-            </View>
-            <View
-              className={`w-6 h-6 rounded-full border-2 items-center justify-center ${
-                pickup ? 'border-pink-500 bg-pink-500' : 'border-gray-300'
-              }`}
-            >
-              {pickup && <Ionicons name="checkmark" size={16} color="#fff" />}
+            <View className="flex-row items-start justify-between p-4 bg-gray-50 rounded-2xl">
+              <View className="flex-row items-start flex-1">
+                <View className={`w-11 h-11 rounded-xl items-center justify-center mr-3 ${
+                  pickup ? 'bg-pink-100' : 'bg-gray-200'
+                }`}>
+                  <Ionicons 
+                    name="storefront" 
+                    size={22} 
+                    color={pickup ? '#eb278d' : '#9ca3af'} 
+                  />
+                </View>
+                <View className="flex-1">
+                  <Text className="text-gray-900 text-base font-semibold mb-1">
+                    Pickup Available
+                  </Text>
+                  <Text className="text-gray-500 text-xs leading-5">
+                    Customers can collect from your location. No delivery fee.
+                  </Text>
+                </View>
+              </View>
+              <TouchableOpacity
+                onPress={() => showFieldInfo('pickup')}
+                className="w-7 h-7 rounded-full bg-white items-center justify-center ml-2"
+                activeOpacity={0.7}
+              >
+                <Ionicons name="information-circle-outline" size={18} color="#6b7280" />
+              </TouchableOpacity>
+              <View
+                className={`w-6 h-6 rounded-full border-2 items-center justify-center ml-3 ${
+                  pickup ? 'border-pink-500 bg-pink-500' : 'border-gray-300 bg-white'
+                }`}
+              >
+                {pickup && <Ionicons name="checkmark" size={14} color="#fff" />}
+              </View>
             </View>
           </TouchableOpacity>
         </View>
-
-        <View className="h-24" />
       </ScrollView>
 
-      {}
+      {/* Save Button */}
       <View
-        className="bg-white px-5 py-4 border-t border-gray-100"
+        className="absolute bottom-0 left-0 right-0 bg-white px-5 pt-4 pb-6 border-t border-gray-100"
         style={{
           ...Platform.select({
             ios: {
               shadowColor: '#000',
               shadowOffset: { width: 0, height: -4 },
               shadowOpacity: 0.1,
-              shadowRadius: 8,
+              shadowRadius: 12,
             },
-            android: { elevation: 8 },
+            android: { elevation: 12 },
           }),
         }}
       >
@@ -817,14 +1233,33 @@ const pickImages = async () => {
             colors={['#eb278d', '#f472b6']}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 0 }}
-            className="py-4 rounded-2xl items-center"
+            className="py-4 rounded-2xl"
+            style={{
+              shadowColor: '#eb278d',
+              shadowOffset: { width: 0, height: 4 },
+              shadowOpacity: 0.3,
+              shadowRadius: 8,
+              elevation: 8,
+            }}
           >
             {loading ? (
-              <ActivityIndicator size="small" color="#fff" />
+              <View className="flex-row items-center justify-center">
+                <ActivityIndicator size="small" color="#fff" />
+                <Text className="text-white text-base font-bold ml-2">
+                  {isEdit ? 'Updating...' : 'Creating...'}
+                </Text>
+              </View>
             ) : (
-              <Text className="text-white text-lg font-bold">
-                {isEdit ? 'Update Product' : 'Create Product'}
-              </Text>
+              <View className="flex-row items-center justify-center">
+                <Ionicons 
+                  name={isEdit ? 'checkmark-circle' : 'add-circle'} 
+                  size={22} 
+                  color="#fff" 
+                />
+                <Text className="text-white text-base font-bold ml-2">
+                  {isEdit ? 'Update Product' : 'Create Product'}
+                </Text>
+              </View>
             )}
           </LinearGradient>
         </TouchableOpacity>

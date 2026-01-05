@@ -113,7 +113,8 @@ const PrivacySecurityScreen: React.FC = () => {
         const result = await LocalAuthentication.authenticateAsync({
           promptMessage: `Enable ${biometricsType || 'biometric'} authentication`,
           cancelLabel: 'Cancel',
-          disableDeviceFallback: false,
+          disableDeviceFallback: true,  // ✅ Force Face ID/biometric only, no PIN fallback
+          fallbackLabel: '',  // Hide fallback option
         });
 
         if (result.success) {
@@ -226,15 +227,7 @@ const PrivacySecurityScreen: React.FC = () => {
       disabled: !biometricsAvailable || loading || preferencesLoading,
       onToggle: handleBiometricsToggle,
     },
-    {
-      icon: 'shield-checkmark',
-      title: 'Two-Factor Authentication',
-      subtitle: 'Add an extra layer of security',
-      type: 'switch',
-      value: twoFactorEnabled,
-      disabled: loading || preferencesLoading,
-      onToggle: () => setTwoFactorEnabled(!twoFactorEnabled),
-    },
+   
     {
       icon: 'lock-closed',
       title: 'Change Password',
@@ -335,7 +328,7 @@ const PrivacySecurityScreen: React.FC = () => {
             </View>
 
             {}
-            <View className="px-5 pt-5">
+            {/* <View className="px-5 pt-5">
               <Text className="text-[13px] font-semibold text-gray-500 uppercase tracking-wider mb-2 ml-1">
                 Privacy
               </Text>
@@ -376,7 +369,7 @@ const PrivacySecurityScreen: React.FC = () => {
                   <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
                 </TouchableOpacity>
               </View>
-            </View>
+            </View> */}
 
             {}
             <View className="mx-5 mt-5 bg-blue-50 rounded-xl px-4 py-3 flex-row">

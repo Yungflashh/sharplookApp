@@ -4,6 +4,8 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
+import { Image } from 'react-native';
+
 
 const {
   width: SCREEN_WIDTH
@@ -21,17 +23,21 @@ interface MenuSection {
   title?: string;
   items: MenuItem[];
 }
+
 interface ClientSidebarProps {
   visible: boolean;
   onClose: () => void;
   userName?: string;
   userEmail?: string;
+  userAvatar?: string;
 }
 const ClientSidebar: React.FC<ClientSidebarProps> = ({
   visible,
   onClose,
   userName = 'Kayode',
-  userEmail = 'kayode@example.com'
+  userEmail = 'kayode@example.com',
+    userAvatar  
+
 }) => {
   const slideAnim = useRef(new Animated.Value(DRAWER_WIDTH)).current;
   const overlayOpacity = useRef(new Animated.Value(0)).current;
@@ -61,26 +67,19 @@ const ClientSidebar: React.FC<ClientSidebarProps> = ({
     }
   }, [visible]);
   const menuSections: MenuSection[] = [{
-    items: [{
-      id: 'home',
-      title: 'Home',
-      icon: 'home',
-      onPress: () => {
-        console.log('Home');
-        onClose();
-      }
-    }, {
+    items: [
+     {
       id: 'bookings',
       title: 'My Bookings',
       icon: 'calendar',
       onPress: () => {
-        console.log('Bookings');
+        navigation.navigate("Bookings");
         onClose();
       }
     }, {
-      id: 'favorites',
-      title: 'Favorites',
-      icon: 'heart',
+      id: 'Transactions',
+      title: 'Wallet & Transactions',
+      icon: 'Card',
       onPress: () => {
         navigation.navigate("Transactions");
         onClose();
@@ -96,44 +95,11 @@ const ClientSidebar: React.FC<ClientSidebarProps> = ({
         navigation.navigate("Referrals")
         onClose();
       }
-    }, {
-      id: 'spa',
-      title: 'Body Treatment & Spa',
-      icon: 'flower',
-      iconFamily: 'material',
-      onPress: () => {
-        console.log('Spa');
-        onClose();
-      }
-    }, {
-      id: 'skincare',
-      title: 'Skincare',
-      icon: 'water',
-      onPress: () => {
-        console.log('Skincare');
-        onClose();
-      }
-    }, {
-      id: 'makeup',
-      title: 'Makeup',
-      icon: 'brush',
-      iconFamily: 'material',
-      onPress: () => {
-        console.log('Makeup');
-        onClose();
-      }
-    }]
+    },
+     ]
   }, {
     title: 'ACCOUNT',
-    items: [{
-      id: 'profile',
-      title: 'My Profile',
-      icon: 'person',
-      onPress: () => {
-        console.log('Profile');
-        onClose();
-      }
-    }, {
+    items: [ {
       id: 'orders',
       title: 'My Orders',
       icon: 'receipt',
@@ -141,23 +107,18 @@ const ClientSidebar: React.FC<ClientSidebarProps> = ({
           navigation.navigate("CustomerOrders")
         onClose();
       }
-    }, {
-      id: 'wallet',
-      title: 'Wallet',
-      icon: 'wallet',
+    },
+    
+    {
+      id: 'offers',
+      title: 'My Offers',
+      icon: 'offer',
       onPress: () => {
-        console.log('Wallet');
+          navigation.navigate("MyOffers")
         onClose();
       }
-    }, {
-      id: 'settings',
-      title: 'Settings',
-      icon: 'settings',
-      onPress: () => {
-        console.log('Settings');
-        onClose();
-      }
-    }]
+    }  
+  ]
   }, {
     title: 'SUPPORT',
     items: [{
@@ -165,26 +126,10 @@ const ClientSidebar: React.FC<ClientSidebarProps> = ({
       title: 'Help Center',
       icon: 'help-circle',
       onPress: () => {
-        console.log('Help');
+        navigation.navigate("HelpCenter");
         onClose();
       }
-    }, {
-      id: 'contact',
-      title: 'Contact Us',
-      icon: 'call',
-      onPress: () => {
-        console.log('Contact');
-        onClose();
-      }
-    }, {
-      id: 'about',
-      title: 'About Sharplook',
-      icon: 'information-circle',
-      onPress: () => {
-        console.log('About');
-        onClose();
-      }
-    }]
+    },]
   }];
   const renderIcon = (iconFamily: string = 'ionicons', iconName: string, size: number = 22, color: string = '#6b7280') => {
     if (iconFamily === 'material') {
@@ -247,10 +192,18 @@ const ClientSidebar: React.FC<ClientSidebarProps> = ({
               <View className="px-6">
                 <View className="flex-row items-center">
                   <View className="w-16 h-16 rounded-full bg-white/20 items-center justify-center mr-4">
-                    <View className="w-14 h-14 rounded-full bg-white items-center justify-center">
-                      <Ionicons name="person" size={28} color="#eb278d" />
-                    </View>
-                  </View>
+  {userAvatar ? (
+    <Image 
+      source={{ uri: userAvatar }} 
+      className="w-16 h-16 rounded-full"
+      style={{ width: 64, height: 64, borderRadius: 32 }}
+    />
+  ) : (
+    <View className="w-14 h-14 rounded-full bg-white items-center justify-center">
+      <Ionicons name="person" size={28} color="#eb278d" />
+    </View>
+  )}
+</View>
                   <View className="flex-1">
                     <Text className="text-white text-xl font-bold" numberOfLines={1}>
                       Hello {userName}
@@ -261,23 +214,7 @@ const ClientSidebar: React.FC<ClientSidebarProps> = ({
                   </View>
                 </View>
 
-                {}
-                <View className="flex-row mt-6 pt-5 border-t border-white/20">
-                  <View className="flex-1 items-center">
-                    <Text className="text-white text-xl font-bold">0</Text>
-                    <Text className="text-white/80 text-xs mt-1">Bookings</Text>
-                  </View>
-                  <View className="w-px bg-white/20" />
-                  <View className="flex-1 items-center">
-                    <Text className="text-white text-xl font-bold">0</Text>
-                    <Text className="text-white/80 text-xs mt-1">Favorites</Text>
-                  </View>
-                  <View className="w-px bg-white/20" />
-                  <View className="flex-1 items-center">
-                    <Text className="text-white text-xl font-bold">0</Text>
-                    <Text className="text-white/80 text-xs mt-1">Reviews</Text>
-                  </View>
-                </View>
+               
               </View>
             </LinearGradient>
 
@@ -306,7 +243,7 @@ const ClientSidebar: React.FC<ClientSidebarProps> = ({
                 </View>)}
 
               {}
-              <View className="px-6 pb-6 pt-2">
+              {/* <View className="px-6 pb-6 pt-2">
                 <TouchableOpacity className="flex-row items-center justify-center bg-red-50 py-3.5 rounded-xl border border-red-200" activeOpacity={0.7} onPress={() => {
                 console.log('Logout');
                 onClose();
@@ -314,7 +251,7 @@ const ClientSidebar: React.FC<ClientSidebarProps> = ({
                   <Ionicons name="log-out-outline" size={20} color="#ef4444" />
                   <Text className="text-red-500 font-semibold ml-2">Logout</Text>
                 </TouchableOpacity>
-              </View>
+              </View> */}
 
               {}
               <View className="items-center pb-6 px-6">

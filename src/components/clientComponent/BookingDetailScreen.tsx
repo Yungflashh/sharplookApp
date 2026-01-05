@@ -7,7 +7,6 @@ import {
   ActivityIndicator,
   Alert,
   Image,
-  Linking,
   Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -16,10 +15,9 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '@/types/navigation.types';
-import { bookingAPI, handleAPIError,sharpPayAPI } from '@/api/api';
+import { bookingAPI, handleAPIError } from '@/api/api';
 import { getStoredUser } from '@/utils/authHelper';
-import PaymentMethodModal from '@/components/clientComponent/PaymentMethodModal';
-import callService from '@/services/call.service';
+import CancelBookingModal from '@/components/ui/CancelBookingModal';
 
 type BookingDetailNavigationProp = NativeStackNavigationProp<RootStackParamList, 'BookingDetail'>;
 type BookingDetailRouteProp = RouteProp<RootStackParamList, 'BookingDetail'>;
@@ -89,8 +87,10 @@ interface BookingDetail {
   distanceCharge: number;
   totalAmount: number;
   status: string;
-  paymentStatus: string;
+  paymentStatus: 'pending' | 'escrowed' | 'released' | 'refunded' | 'partially_refunded';
   paymentReference?: string;
+  paymentExpiresAt?: string;
+  cancellationPenalty?: number;
   clientNotes?: string;
   vendorNotes?: string;
   createdAt: string;
@@ -116,8 +116,7 @@ const BookingDetailScreen: React.FC = () => {
   const [booking, setBooking] = useState<BookingDetail | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [isVendor, setIsVendor] = useState(false);
-  const [showPaymentModal, setShowPaymentModal] = useState(false);
-
+  const [showCancelModal, setShowCancelModal] = useState(false);
 
   useEffect(() => {
     loadCurrentUser();
@@ -158,6 +157,22 @@ const BookingDetailScreen: React.FC = () => {
   useEffect(() => {
     fetchBookingDetails();
   }, [bookingId]);
+
+  // Auto-refresh for pending Paystack payments
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    
+    if (booking?.paymentStatus === 'pending' && booking?.paymentExpiresAt) {
+      // Poll every 5 seconds for payment status updates
+      interval = setInterval(() => {
+        fetchBookingDetails();
+      }, 5000);
+    }
+    
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [booking?.paymentStatus, booking?.paymentExpiresAt]);
 
   const getServiceInfo = () => {
     if (!booking) return null;
@@ -242,11 +257,43 @@ const BookingDetailScreen: React.FC = () => {
     }
   };
 
+  const getPaymentStatusInfo = (paymentStatus: string) => {
+    switch (paymentStatus) {
+      case 'pending':
+        return { bg: '#fef3c7', text: '#92400e', label: 'Payment Pending', icon: 'time' };
+      case 'escrowed':
+        return { bg: '#dbeafe', text: '#1e40af', label: 'Payment Secured', icon: 'shield-checkmark' };
+      case 'released':
+        return { bg: '#d1fae5', text: '#065f46', label: 'Payment Released', icon: 'checkmark-circle' };
+      case 'refunded':
+        return { bg: '#e0e7ff', text: '#3730a3', label: 'Fully Refunded', icon: 'refresh-circle' };
+      case 'partially_refunded':
+        return { bg: '#fef3c7', text: '#92400e', label: 'Partially Refunded', icon: 'alert-circle' };
+      default:
+        return { bg: '#f3f4f6', text: '#374151', label: paymentStatus, icon: 'help-circle' };
+    }
+  };
+
   const formatStatus = (status: string) => {
     return status
       .split('_')
       .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
       .join(' ');
+  };
+
+  const getTimeUntilExpiry = () => {
+    if (!booking?.paymentExpiresAt) return null;
+    
+    const expiresAt = new Date(booking.paymentExpiresAt);
+    const now = new Date();
+    const diff = expiresAt.getTime() - now.getTime();
+    
+    if (diff <= 0) return 'Expired';
+    
+    const minutes = Math.floor(diff / 60000);
+    const seconds = Math.floor((diff % 60000) / 1000);
+    
+    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
   };
 
   const handleCreateDispute = () => {
@@ -292,21 +339,6 @@ const BookingDetailScreen: React.FC = () => {
     }
   };
 
-  const handleCall = async () => {
-    const otherParty = getOtherParty();
-    if (!otherParty?.data?._id) {
-      Alert.alert('Error', 'User information not available');
-      return;
-    }
-
-    try {
-      await callService.initiateCall(otherParty.data._id, 'voice');
-    } catch (error) {
-      console.error('Error initiating call:', error);
-      Alert.alert('Error', 'Failed to initiate call');
-    }
-  };
-
   const handleMessage = () => {
     const otherParty = getOtherParty();
     if (!booking || !otherParty) {
@@ -314,46 +346,71 @@ const BookingDetailScreen: React.FC = () => {
       return;
     }
 
-    
     navigation.navigate('ChatDetail', {
       otherUserId: otherParty.data._id,
-      otherUserName: otherParty.type === 'vendor'
-        ? otherParty.data?.vendorProfile?.businessName ||
-          `${otherParty.data?.firstName} ${otherParty.data?.lastName}`
-        : `${otherParty.data?.firstName} ${otherParty.data?.lastName}`,
+      otherUserName:
+        otherParty.type === 'vendor'
+          ? otherParty.data?.vendorProfile?.businessName ||
+            `${otherParty.data?.firstName} ${otherParty.data?.lastName}`
+          : `${otherParty.data?.firstName} ${otherParty.data?.lastName}`,
       otherUserAvatar: otherParty.data?.avatar,
     });
   };
 
-  const handleCancelBooking = () => {
-    Alert.prompt(
-      'Cancel Booking',
-      'Please provide a reason for cancellation:',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Confirm',
-          style: 'destructive',
-          onPress: async (reason) => {
-            try {
-              setActionLoading(true);
-              const response = await bookingAPI.cancelBooking(bookingId, reason);
+  const handleCancelBooking = async (reason: string) => {
+    if (!booking) return;
 
-              if (response.success) {
-                Alert.alert('Success', 'Booking cancelled successfully');
-                fetchBookingDetails();
-              }
-            } catch (error) {
-              const apiError = handleAPIError(error);
-              Alert.alert('Error', apiError.message || 'Failed to cancel booking');
-            } finally {
-              setActionLoading(false);
-            }
+    // Calculate time until appointment for warning
+    const appointmentDate = new Date(booking.scheduledDate);
+    if (booking.scheduledTime) {
+      const [hours, minutes] = booking.scheduledTime.split(':').map(Number);
+      appointmentDate.setHours(hours, minutes, 0, 0);
+    }
+    const now = new Date();
+    const minutesUntilAppointment = Math.floor((appointmentDate.getTime() - now.getTime()) / 60000);
+
+    // Show penalty warning if within 59 minutes
+    if (minutesUntilAppointment < 59 && minutesUntilAppointment > 0 && !isVendor) {
+      const penaltyAmount = booking.totalAmount * 0.2;
+      const refundAmount = booking.totalAmount * 0.8;
+
+      Alert.alert(
+        '⚠️ Cancellation Penalty',
+        `Your appointment is in ${minutesUntilAppointment} minutes.\n\nCancelling now will result in a 20% penalty:\n• Penalty: ${formatPrice(penaltyAmount)}\n• Refund: ${formatPrice(refundAmount)}\n\nDo you want to proceed?`,
+        [
+          { text: 'Keep Booking', style: 'cancel' },
+          {
+            text: 'Cancel Anyway',
+            style: 'destructive',
+            onPress: () => processCancellation(reason),
           },
-        },
-      ],
-      'plain-text'
-    );
+        ]
+      );
+    } else {
+      processCancellation(reason);
+    }
+  };
+
+  const processCancellation = async (reason: string) => {
+    try {
+      setActionLoading(true);
+      const response = await bookingAPI.cancelBooking(bookingId, reason);
+
+      if (response.success) {
+        const message = response.data.penaltyApplied
+          ? `Booking cancelled. A 20% penalty (${formatPrice(response.data.penaltyAmount || 0)}) was applied. Refund: ${formatPrice(response.data.refundAmount || 0)}`
+          : 'Booking cancelled successfully. Full refund has been processed.';
+
+        Alert.alert('Booking Cancelled', message);
+        setShowCancelModal(false);
+        fetchBookingDetails();
+      }
+    } catch (error) {
+      const apiError = handleAPIError(error);
+      Alert.alert('Error', apiError.message || 'Failed to cancel booking');
+    } finally {
+      setActionLoading(false);
+    }
   };
 
   const handleMarkComplete = () => {
@@ -385,67 +442,109 @@ const BookingDetailScreen: React.FC = () => {
     );
   };
 
+  const renderPaymentPendingBanner = () => {
+    if (!booking || booking.paymentStatus !== 'pending') return null;
+
+    const timeRemaining = getTimeUntilExpiry();
+
+    return (
+      <View className="bg-amber-50 border-2 border-amber-300 rounded-2xl p-4 mb-4">
+        <View className="flex-row items-center mb-2">
+          <Ionicons name="time" size={24} color="#f59e0b" />
+          <Text className="ml-2 text-amber-800 font-bold text-base">
+            Payment Pending
+          </Text>
+        </View>
+        <Text className="text-amber-700 text-sm mb-2">
+          Complete your payment on Paystack to confirm this booking.
+        </Text>
+        {timeRemaining && timeRemaining !== 'Expired' && (
+          <View className="bg-amber-100 rounded-lg p-2 flex-row items-center justify-center">
+            <Ionicons name="hourglass" size={16} color="#92400e" />
+            <Text className="ml-2 text-amber-900 font-bold">
+              Expires in: {timeRemaining}
+            </Text>
+          </View>
+        )}
+        {timeRemaining === 'Expired' && (
+          <View className="bg-red-100 rounded-lg p-2 flex-row items-center justify-center">
+            <Ionicons name="close-circle" size={16} color="#dc2626" />
+            <Text className="ml-2 text-red-700 font-bold">
+              Payment window expired. Booking will be cancelled.
+            </Text>
+          </View>
+        )}
+      </View>
+    );
+  };
+
+  const renderRefundInfo = () => {
+    if (!booking) return null;
+
+    if (booking.paymentStatus === 'refunded') {
+      return (
+        <View className="bg-indigo-50 border-2 border-indigo-200 rounded-2xl p-4 mb-4">
+          <View className="flex-row items-center mb-2">
+            <Ionicons name="refresh-circle" size={24} color="#4f46e5" />
+            <Text className="ml-2 text-indigo-800 font-bold text-base">
+              Full Refund Processed
+            </Text>
+          </View>
+          <Text className="text-indigo-700 text-sm">
+            {formatPrice(booking.totalAmount)} has been refunded to your wallet.
+          </Text>
+        </View>
+      );
+    }
+
+    if (booking.paymentStatus === 'partially_refunded' && booking.cancellationPenalty) {
+      const refundAmount = booking.totalAmount - booking.cancellationPenalty;
+      return (
+        <View className="bg-amber-50 border-2 border-amber-200 rounded-2xl p-4 mb-4">
+          <View className="flex-row items-center mb-2">
+            <Ionicons name="alert-circle" size={24} color="#f59e0b" />
+            <Text className="ml-2 text-amber-800 font-bold text-base">
+              Partial Refund (Penalty Applied)
+            </Text>
+          </View>
+          <View className="gap-1">
+            <Text className="text-amber-700 text-sm">
+              • Original Amount: {formatPrice(booking.totalAmount)}
+            </Text>
+            <Text className="text-red-600 text-sm font-medium">
+              • Cancellation Penalty (20%): -{formatPrice(booking.cancellationPenalty)}
+            </Text>
+            <Text className="text-green-700 text-sm font-bold">
+              • Refunded to Wallet: {formatPrice(refundAmount)}
+            </Text>
+          </View>
+        </View>
+      );
+    }
+
+    return null;
+  };
+
   const renderActionButtons = () => {
     if (!booking) return null;
 
     const status = booking.status.toLowerCase();
     const serviceInfo = getServiceInfo();
 
+    // Don't show action buttons if payment is still pending (Paystack redirect)
+    if (booking.paymentStatus === 'pending') {
+      return (
+        <View className="bg-gray-100 rounded-2xl p-4">
+          <Text className="text-gray-600 text-center text-sm">
+            Complete payment to unlock booking actions
+          </Text>
+        </View>
+      );
+    }
+
     return (
       <View style={{ gap: 12 }}>
-        {}
-        {status === 'pending' && booking.paymentStatus !== 'escrowed' && !isVendor && (
-          <TouchableOpacity
-            onPress={() => navigation.navigate('Payment', { bookingId: booking._id })}
-            disabled={actionLoading}
-            activeOpacity={0.8}
-          >
-            <LinearGradient
-              colors={['#eb278d', '#f472b6']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              className="py-4 rounded-2xl"
-              style={{
-                shadowColor: '#eb278d',
-                shadowOffset: { width: 0, height: 4 },
-                shadowOpacity: 0.3,
-                shadowRadius: 8,
-                elevation: 4,
-              }}
-            >
-             {status === 'pending' && booking.paymentStatus !== 'escrowed' && !isVendor && (
-  <TouchableOpacity
-    onPress={() => setShowPaymentModal(true)} 
-    disabled={actionLoading}
-    activeOpacity={0.8}
-  >
-    <LinearGradient
-      colors={['#eb278d', '#f472b6']}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 1, y: 1 }}
-      className="py-4 rounded-2xl"
-      style={{
-        shadowColor: '#eb278d',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.3,
-        shadowRadius: 8,
-        elevation: 4,
-      }}
-    >
-      <View className="flex-row items-center justify-center">
-        <Ionicons name="card" size={20} color="#fff" />
-        <Text className="ml-2 text-white text-center font-bold text-base">
-          Complete Payment
-        </Text>
-      </View>
-    </LinearGradient>
-  </TouchableOpacity>
-)}
-            </LinearGradient>
-          </TouchableOpacity>
-        )}
-
-        {}
+        {/* Mark Complete Button */}
         {['accepted', 'in_progress'].includes(status) && !isVendor && (
           <TouchableOpacity
             onPress={handleMarkComplete}
@@ -477,7 +576,7 @@ const BookingDetailScreen: React.FC = () => {
           </TouchableOpacity>
         )}
 
-        {}
+        {/* Leave Review Button */}
         {status === 'completed' && !booking.hasReview && !isVendor && (
           <TouchableOpacity
             onPress={() =>
@@ -504,7 +603,7 @@ const BookingDetailScreen: React.FC = () => {
           </TouchableOpacity>
         )}
 
-        {}
+        {/* Review Submitted Button */}
         {status === 'completed' && booking.hasReview && !isVendor && (
           <TouchableOpacity
             onPress={() => {
@@ -518,10 +617,10 @@ const BookingDetailScreen: React.FC = () => {
           </TouchableOpacity>
         )}
 
-        {}
-        {['pending', 'accepted'].includes(status) && (
+        {/* Cancel Booking Button */}
+        {['pending', 'accepted'].includes(status) && booking.paymentStatus === 'escrowed' && (
           <TouchableOpacity
-            onPress={handleCancelBooking}
+            onPress={() => setShowCancelModal(true)}
             disabled={actionLoading}
             className="bg-red-500 py-4 rounded-2xl"
             style={{
@@ -541,7 +640,7 @@ const BookingDetailScreen: React.FC = () => {
           </TouchableOpacity>
         )}
 
-        {}
+        {/* Dispute Buttons */}
         {['accepted', 'in_progress', 'completed'].includes(status) && (
           <>
             {booking.hasDispute ? (
@@ -599,12 +698,13 @@ const BookingDetailScreen: React.FC = () => {
   }
 
   const statusColors = getStatusColor(booking.status);
+  const paymentStatusInfo = getPaymentStatusInfo(booking.paymentStatus);
   const otherParty = getOtherParty();
   const serviceInfo = getServiceInfo();
 
   return (
     <SafeAreaView className="flex-1 bg-gray-50" edges={['top']}>
-      {}
+      {/* Header */}
       <LinearGradient
         colors={['#eb278d', '#f472b6']}
         start={{ x: 0, y: 0 }}
@@ -625,7 +725,7 @@ const BookingDetailScreen: React.FC = () => {
             <View className="w-10" />
           </View>
 
-          {}
+          {/* Status Badge */}
           <View className="flex-row items-center justify-between">
             <View
               className="px-4 py-2 rounded-full"
@@ -651,7 +751,13 @@ const BookingDetailScreen: React.FC = () => {
 
       <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
         <View className="px-5 py-4" style={{ gap: 16 }}>
-          {}
+          {/* Payment Pending Banner */}
+          {renderPaymentPendingBanner()}
+
+          {/* Refund Info */}
+          {renderRefundInfo()}
+
+          {/* Active Dispute Alert */}
           {booking.hasDispute && (
             <TouchableOpacity
               onPress={handleViewDispute}
@@ -671,7 +777,7 @@ const BookingDetailScreen: React.FC = () => {
             </TouchableOpacity>
           )}
 
-          {}
+          {/* Service Card */}
           <View
             className="bg-white rounded-3xl overflow-hidden"
             style={{
@@ -725,7 +831,7 @@ const BookingDetailScreen: React.FC = () => {
             </View>
           </View>
 
-          {}
+          {/* Other Party Info */}
           {otherParty && (
             <View
               className="bg-white rounded-3xl p-5"
@@ -774,55 +880,28 @@ const BookingDetailScreen: React.FC = () => {
                       </Text>
                     </View>
                   )}
-
-                  {otherParty.type === 'client' && (
-                    <View className="mt-1 flex-row items-center">
-                      <Ionicons name="mail" size={14} color="#6b7280" />
-                      <Text className="ml-1 text-sm text-gray-600">
-                        {otherParty.data?.email || 'No email'}
-                      </Text>
-                    </View>
-                  )}
                 </View>
               </View>
 
-              <View className="flex-row" style={{ gap: 12 }}>
-                <TouchableOpacity
-                  onPress={() => handleCall(otherParty.data?.phone)}
-                  className="flex-1 bg-green-500 py-3 rounded-xl flex-row items-center justify-center"
-                  style={{
-                    shadowColor: '#10b981',
-                    shadowOffset: { width: 0, height: 2 },
-                    shadowOpacity: 0.2,
-                    shadowRadius: 4,
-                    elevation: 2,
-                  }}
-                  activeOpacity={0.8}
-                >
-                  <Ionicons name="call" size={18} color="#fff" />
-                  <Text className="ml-2 font-bold text-white">Call</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  onPress={handleMessage}
-                  className="flex-1 bg-blue-500 py-3 rounded-xl flex-row items-center justify-center"
-                  style={{
-                    shadowColor: '#3b82f6',
-                    shadowOffset: { width: 0, height: 2 },
-                    shadowOpacity: 0.2,
-                    shadowRadius: 4,
-                    elevation: 2,
-                  }}
-                  activeOpacity={0.8}
-                >
-                  <Ionicons name="chatbubble" size={18} color="#fff" />
-                  <Text className="text-white font-bold ml-2">Message</Text>
-                </TouchableOpacity>
-              </View>
+              <TouchableOpacity
+                onPress={handleMessage}
+                className="bg-blue-500 py-3 rounded-xl flex-row items-center justify-center"
+                style={{
+                  shadowColor: '#3b82f6',
+                  shadowOffset: { width: 0, height: 2 },
+                  shadowOpacity: 0.2,
+                  shadowRadius: 4,
+                  elevation: 2,
+                }}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="chatbubble" size={18} color="#fff" />
+                <Text className="text-white font-bold ml-2">Message</Text>
+              </TouchableOpacity>
             </View>
           )}
 
-          {}
+          {/* Schedule Card */}
           <View
             className="bg-white rounded-3xl p-5"
             style={{
@@ -871,7 +950,7 @@ const BookingDetailScreen: React.FC = () => {
             </View>
           </View>
 
-          {}
+          {/* Price Card */}
           <View
             className="bg-white rounded-3xl p-5"
             style={{
@@ -905,6 +984,15 @@ const BookingDetailScreen: React.FC = () => {
                 </View>
               )}
 
+              {booking.cancellationPenalty && booking.cancellationPenalty > 0 && (
+                <View className="flex-row items-center justify-between">
+                  <Text className="font-medium text-red-600">Cancellation Penalty</Text>
+                  <Text className="font-bold text-red-600">
+                    -{formatPrice(booking.cancellationPenalty)}
+                  </Text>
+                </View>
+              )}
+
               <View className="flex-row items-center justify-between border-t-2 border-gray-100 pt-3">
                 <Text className="text-base font-bold text-gray-900">Total Amount</Text>
                 <Text className="text-xl font-bold text-pink-600">
@@ -912,39 +1000,33 @@ const BookingDetailScreen: React.FC = () => {
                 </Text>
               </View>
 
+              {/* Payment Status */}
               <View className="bg-gray-50 rounded-xl p-3 flex-row justify-between items-center mt-2">
-                <Text className="text-gray-600 font-medium">Payment Status</Text>
+                <View className="flex-row items-center">
+                  <Ionicons 
+                    name={paymentStatusInfo.icon as any} 
+                    size={18} 
+                    color={paymentStatusInfo.text} 
+                  />
+                  <Text className="text-gray-600 font-medium ml-2">Payment Status</Text>
+                </View>
                 <View
                   className="px-3 py-1.5 rounded-full"
-                  style={{
-                    backgroundColor:
-                      booking.paymentStatus === 'escrowed'
-                        ? '#dbeafe'
-                        : booking.paymentStatus === 'released'
-                        ? '#d1fae5'
-                        : '#fef3c7',
-                  }}
+                  style={{ backgroundColor: paymentStatusInfo.bg }}
                 >
                   <Text
                     className="font-bold text-xs"
-                    style={{
-                      color:
-                        booking.paymentStatus === 'escrowed'
-                          ? '#1e40af'
-                          : booking.paymentStatus === 'released'
-                          ? '#065f46'
-                          : '#92400e',
-                    }}
+                    style={{ color: paymentStatusInfo.text }}
                   >
-                    {formatStatus(booking.paymentStatus)}
+                    {paymentStatusInfo.label}
                   </Text>
                 </View>
               </View>
             </View>
           </View>
 
-          {}
-          {(booking.clientNotes || booking.vendorNotes) && (
+          {/* Notes Card */}
+          {(booking.clientNotes || booking.vendorNotes || booking.cancellationReason) && (
             <View
               className="bg-white rounded-3xl p-5"
               style={{
@@ -972,7 +1054,7 @@ const BookingDetailScreen: React.FC = () => {
               )}
 
               {booking.vendorNotes && (
-                <View className="rounded-xl bg-pink-50 p-4">
+                <View className="mb-3 rounded-xl bg-pink-50 p-4">
                   <View className="mb-2 flex-row items-center">
                     <Ionicons name="briefcase" size={20} color="#eb278d" />
                     <Text className="ml-2 text-sm font-bold text-pink-900">Vendor Notes:</Text>
@@ -980,25 +1062,31 @@ const BookingDetailScreen: React.FC = () => {
                   <Text className="leading-5 text-gray-700">{booking.vendorNotes}</Text>
                 </View>
               )}
+
+              {booking.cancellationReason && (
+                <View className="rounded-xl bg-red-50 p-4">
+                  <View className="mb-2 flex-row items-center">
+                    <Ionicons name="close-circle" size={20} color="#dc2626" />
+                    <Text className="ml-2 text-sm font-bold text-red-900">Cancellation Reason:</Text>
+                  </View>
+                  <Text className="leading-5 text-gray-700">{booking.cancellationReason}</Text>
+                </View>
+              )}
             </View>
           )}
 
-          {}
+          {/* Action Buttons */}
           {renderActionButtons()}
-          <PaymentMethodModal
-  visible={showPaymentModal}
-  onClose={() => setShowPaymentModal(false)}
-  bookingId={booking?._id || ''}
-  bookingAmount={booking?.totalAmount || 0}
-  onPaymentSuccess={() => {
-    fetchBookingDetails(); 
-  }}
-  onNavigateToPaystack={() => {
-    navigation.navigate('Payment', { bookingId: booking?._id });
-  }}
-/>
         </View>
       </ScrollView>
+
+      {/* Cancel Modal */}
+      <CancelBookingModal
+        visible={showCancelModal}
+        onClose={() => setShowCancelModal(false)}
+        onConfirm={handleCancelBooking}
+        loading={actionLoading}
+      />
     </SafeAreaView>
   );
 };

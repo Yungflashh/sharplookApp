@@ -1,7 +1,7 @@
 import { io, Socket } from 'socket.io-client';
 import { getStoredToken } from '@/utils/authHelper';
 
-const SOCKET_URL = 'https://sharplook-be.onrender.com';
+const SOCKET_URL = 'https://sharplook-backend-qay8.onrender.com';
 
 class SocketService {
   private socket: Socket | null = null;

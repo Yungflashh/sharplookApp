@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, TextInput } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, TextInput, Linking } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
@@ -51,20 +51,23 @@ const HelpCenterScreen: React.FC = () => {
   const filteredFAQs = faqs.filter(faq => faq.question.toLowerCase().includes(searchQuery.toLowerCase()) || faq.answer.toLowerCase().includes(searchQuery.toLowerCase()) || faq.category.toLowerCase().includes(searchQuery.toLowerCase()));
   const categories = Array.from(new Set(faqs.map(faq => faq.category)));
   const quickActions = [{
-    icon: 'chatbubbles',
-    title: 'Live Chat',
-    subtitle: 'Chat with support',
-    color: '#3b82f6'
+    icon: 'logo-whatsapp',
+    title: 'WhatsApp Us',
+    subtitle: '+234 706 696 5448',
+    color: '#25D366',
+    onPress: () => Linking.openURL('https://wa.me/2347066965448')
   }, {
     icon: 'mail',
     title: 'Email Us',
-    subtitle: 'support@sharplook.com',
-    color: '#10b981'
+    subtitle: 'hello@sharplook.beauty',
+    color: '#10b981',
+    onPress: () => Linking.openURL('mailto:hello@sharplook.beauty')
   }, {
     icon: 'call',
     title: 'Call Us',
-    subtitle: '+234 800 000 0000',
-    color: '#f59e0b'
+    subtitle: '+234 706 696 5448',
+    color: '#f59e0b',
+    onPress: () => Linking.openURL('tel:+2347066965448')
   }];
   return <SafeAreaView className="flex-1 bg-gray-50" edges={['top']}>
       {}
@@ -97,7 +100,7 @@ const HelpCenterScreen: React.FC = () => {
             Contact Support
           </Text>
           <View className="flex-row justify-between">
-            {quickActions.map((action, index) => <TouchableOpacity key={index} className="flex-1 bg-white rounded-xl p-4 mx-1 shadow-sm items-center" activeOpacity={0.7}>
+            {quickActions.map((action, index) => <TouchableOpacity key={index} className="flex-1 bg-white rounded-xl p-4 mx-1 shadow-sm items-center" activeOpacity={0.7} onPress={action.onPress}>
                 <View className="w-12 h-12 rounded-full items-center justify-center mb-2" style={{
               backgroundColor: `${action.color}20`
             }}>

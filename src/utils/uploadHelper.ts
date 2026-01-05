@@ -1,6 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import RNFetchBlob from 'rn-fetch-blob';
+import ReactNativeBlobUtil from 'react-native-blob-util';
+
 const API_BASE_URL = 'https://sharplook-be.onrender.com/api/v1';
+
 interface UploadServiceData {
   name: string;
   description: string;
@@ -15,9 +17,11 @@ interface UploadServiceData {
     radius: number;
   };
 }
+
 export const uploadService = async (serviceData: UploadServiceData, images?: any[]): Promise<any> => {
   try {
     const token = await AsyncStorage.getItem('accessToken');
+    
     const formData: any[] = [{
       name: 'name',
       data: serviceData.name
@@ -43,6 +47,7 @@ export const uploadService = async (serviceData: UploadServiceData, images?: any
       name: 'serviceArea',
       data: JSON.stringify(serviceData.serviceArea)
     }];
+
     if (images && images.length > 0) {
       for (let i = 0; i < images.length; i++) {
         const image = images[i];
@@ -52,18 +57,27 @@ export const uploadService = async (serviceData: UploadServiceData, images?: any
             name: 'images',
             filename: image.name || `service_image_${i}.jpg`,
             type: image.type || 'image/jpeg',
-            data: RNFetchBlob.wrap(uri)
+            data: ReactNativeBlobUtil.wrap(uri)
           });
         }
       }
     }
+
     console.log('📤 Uploading service with', images?.length || 0, 'images');
-    const response = await RNFetchBlob.fetch('POST', `${API_BASE_URL}/services`, {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'multipart/form-data'
-    }, formData);
+
+    const response = await ReactNativeBlobUtil.fetch(
+      'POST', 
+      `${API_BASE_URL}/services`, 
+      {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'multipart/form-data'
+      }, 
+      formData
+    );
+
     const jsonResponse = response.json();
     console.log('✅ Service created:', jsonResponse);
+
     return {
       success: jsonResponse.success,
       data: jsonResponse.data,
@@ -74,10 +88,12 @@ export const uploadService = async (serviceData: UploadServiceData, images?: any
     throw error;
   }
 };
+
 export const updateServiceWithImages = async (serviceId: string, serviceData: any, images?: any[]): Promise<any> => {
   try {
     const token = await AsyncStorage.getItem('accessToken');
     const formData: any[] = [];
+
     Object.keys(serviceData).forEach(key => {
       const value = serviceData[key];
       if (key === 'serviceArea' && typeof value === 'object') {
@@ -100,6 +116,7 @@ export const updateServiceWithImages = async (serviceId: string, serviceData: an
         });
       }
     });
+
     if (images && images.length > 0) {
       for (let i = 0; i < images.length; i++) {
         const image = images[i];
@@ -109,18 +126,27 @@ export const updateServiceWithImages = async (serviceId: string, serviceData: an
             name: 'images',
             filename: image.name || `service_image_${i}.jpg`,
             type: image.type || 'image/jpeg',
-            data: RNFetchBlob.wrap(uri)
+            data: ReactNativeBlobUtil.wrap(uri)
           });
         }
       }
     }
+
     console.log('📤 Updating service with', images?.length || 0, 'images');
-    const response = await RNFetchBlob.fetch('PUT', `${API_BASE_URL}/services/${serviceId}`, {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'multipart/form-data'
-    }, formData);
+
+    const response = await ReactNativeBlobUtil.fetch(
+      'PUT', 
+      `${API_BASE_URL}/services/${serviceId}`, 
+      {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'multipart/form-data'
+      }, 
+      formData
+    );
+
     const jsonResponse = response.json();
     console.log('✅ Service updated:', jsonResponse);
+
     return {
       success: jsonResponse.success,
       data: jsonResponse.data,

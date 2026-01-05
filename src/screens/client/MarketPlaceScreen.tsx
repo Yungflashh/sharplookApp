@@ -21,7 +21,7 @@ import { RootStackParamList } from '@/types/navigation.types';
 import { productAPI, cartAPI, categoriesAPI, handleAPIError } from '@/api/api';
 
 const { width } = Dimensions.get('window');
-const PRODUCT_CARD_WIDTH = (width - 48) / 2; 
+const PRODUCT_CARD_WIDTH = (width - 48) / 2;
 
 type MarketplaceNavigationProp = NativeStackNavigationProp<RootStackParamList, 'Main'>;
 
@@ -66,8 +66,7 @@ const MarketplaceScreen: React.FC = () => {
   
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [products, setProducts] = useState<Product[]>([]);
-  const [featuredProducts, setFeaturedProducts] = useState<Product[]>([]);
+  const [allProducts, setAllProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [cartCount, setCartCount] = useState(0);
   
@@ -80,88 +79,143 @@ const MarketplaceScreen: React.FC = () => {
   const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
 
+  const fetchAllProducts = async (pageNum: number = 1, append: boolean = false) => {
+  console.log('\n🔵 ========== FETCHING PRODUCTS ==========');
+  console.log('📊 Parameters:', { pageNum, append, selectedCategory, searchQuery, sortBy, sortOrder });
   
-  const fetchProducts = async (pageNum: number = 1, append: boolean = false) => {
-    try {
-      if (pageNum === 1) setLoading(true);
-      else setLoadingMore(true);
+  try {
+    if (pageNum === 1) setLoading(true);
+    else setLoadingMore(true);
 
-      const params: any = {
-        page: pageNum,
-        limit: 20,
-        sortBy,
-        sortOrder,
-      };
-
-      if (selectedCategory) {
-        params.category = selectedCategory;
-      }
-
-      if (searchQuery) {
-        params.search = searchQuery;
-      }
-
-      const response = await productAPI.getAllProducts(params);
-
-      if (response.success) {
-        const newProducts = response.data.products || [];
-
-        if (append) {
-          setProducts(prev => [...prev, ...newProducts]);
-        } else {
-          setProducts(newProducts);
+    // Fetch featured products (only on first page)
+    let featuredProducts: Product[] = [];
+    if (pageNum === 1) {
+      console.log('\n⭐ Fetching FEATURED products...');
+      try {
+        const featuredResponse = await productAPI.getFeaturedProducts(20);
+        console.log('📥 Featured Response:', JSON.stringify(featuredResponse, null, 2));
+        
+        if (featuredResponse.success) {
+          // ✅ FIX: Handle both response formats
+          featuredProducts = Array.isArray(featuredResponse.data) 
+            ? featuredResponse.data 
+            : (featuredResponse.data.products || []);
+          
+          console.log(`✅ Featured Products Count: ${featuredProducts.length}`);
+          if (featuredProducts.length > 0) {
+            console.log('📸 First Featured Product:', featuredProducts[0].name);
+          }
         }
-
-        setHasMore(newProducts.length === 20);
-        setPage(pageNum);
+      } catch (featuredError) {
+        console.error('❌ Featured Products Error:', featuredError);
       }
-    } catch (error) {
-      const apiError = handleAPIError(error);
-      console.error('Fetch products error:', apiError);
-      Alert.alert('Error', apiError.message);
-    } finally {
-      setLoading(false);
-      setLoadingMore(false);
     }
-  };
 
-  
-  const fetchFeaturedProducts = async () => {
-    try {
-      const response = await productAPI.getFeaturedProducts(10);
-      if (response.success) {
-        setFeaturedProducts(response.data.products || []);
+    // Fetch regular products
+    console.log('\n🛍️ Fetching REGULAR products...');
+    const params: any = {
+      page: pageNum,
+      limit: 20,
+      sortBy,
+      sortOrder,
+    };
+
+    if (selectedCategory) {
+      params.category = selectedCategory;
+    }
+
+    if (searchQuery) {
+      params.search = searchQuery;
+    }
+
+    console.log('📤 Request Params:', params);
+
+    const response = await productAPI.getAllProducts(params);
+    console.log('📥 Regular Products Response:', JSON.stringify(response, null, 2));
+
+    if (response.success) {
+      // ✅ FIX: Handle both response formats
+      const regularProducts = Array.isArray(response.data) 
+        ? response.data 
+        : (response.data.products || []);
+      
+      console.log(`✅ Regular Products Count: ${regularProducts.length}`);
+      
+      if (regularProducts.length > 0) {
+        console.log('📸 First Regular Product:', regularProducts[0].name);
       }
-    } catch (error) {
-      console.error('Fetch featured products error:', error);
-    }
-  };
 
-  
+      let combinedProducts: Product[] = [];
+
+      if (pageNum === 1) {
+        console.log('\n🔄 Combining products (Page 1)...');
+        console.log(`📊 Featured: ${featuredProducts.length}, Regular: ${regularProducts.length}`);
+        
+        // Remove duplicates
+        const featuredIds = new Set(featuredProducts.map(p => p._id));
+        const uniqueRegularProducts = regularProducts.filter(
+          (p: Product) => !featuredIds.has(p._id)
+        );
+        
+        combinedProducts = [...featuredProducts, ...uniqueRegularProducts];
+        console.log(`✅ Total Combined Products: ${combinedProducts.length}`);
+      } else {
+        combinedProducts = regularProducts;
+      }
+
+      console.log('\n💾 Setting state...');
+      if (append) {
+        setAllProducts(prev => [...prev, ...combinedProducts]);
+      } else {
+        setAllProducts(combinedProducts);
+      }
+
+      setHasMore(regularProducts.length === 20);
+      setPage(pageNum);
+      
+      console.log('✅ State updated successfully');
+    }
+  } catch (error) {
+    console.error('\n❌❌❌ FETCH PRODUCTS ERROR ❌❌❌');
+    console.error('Error:', error);
+    const apiError = handleAPIError(error);
+    Alert.alert('Error', apiError.message);
+  } finally {
+    console.log('\n🏁 Fetch complete');
+    setLoading(false);
+    setLoadingMore(false);
+  }
+};
+
+  // Fetch categories
   const fetchCategories = async () => {
+    console.log('🏷️ Fetching categories...');
     try {
       const response = await categoriesAPI.getActiveCategories();
+      console.log('📥 Categories Response:', response);
       if (response.success) {
         setCategories(response.data || []);
+        console.log(`✅ Categories loaded: ${response.data?.length || 0}`);
       }
     } catch (error) {
-      console.error('Fetch categories error:', error);
+      console.error('❌ Fetch categories error:', error);
     }
   };
 
-  
+  // Update cart count
   const updateCartCount = async () => {
     try {
       const count = await cartAPI.getCartCount();
       setCartCount(count);
+      console.log(`🛒 Cart count: ${count}`);
     } catch (error) {
-      console.error('Update cart count error:', error);
+      console.error('❌ Update cart count error:', error);
     }
   };
 
   useEffect(() => {
-    fetchProducts();
-    fetchFeaturedProducts();
+    console.log('🚀 Initial load...');
+    fetchAllProducts();
     fetchCategories();
     updateCartCount();
   }, []);
@@ -173,14 +227,17 @@ const MarketplaceScreen: React.FC = () => {
   );
 
   useEffect(() => {
-    fetchProducts(1, false);
+    console.log('🔄 Filters changed, reloading products...');
+    console.log('Filters:', { selectedCategory, sortBy, sortOrder });
+    fetchAllProducts(1, false);
   }, [selectedCategory, sortBy, sortOrder]);
 
-  
+  // Debounced search
   useEffect(() => {
     const timer = setTimeout(() => {
       if (searchQuery !== undefined) {
-        fetchProducts(1, false);
+        console.log('🔍 Search query changed:', searchQuery);
+        fetchAllProducts(1, false);
       }
     }, 500);
 
@@ -188,17 +245,18 @@ const MarketplaceScreen: React.FC = () => {
   }, [searchQuery]);
 
   const onRefresh = useCallback(() => {
+    console.log('🔄 Refreshing...');
     setRefreshing(true);
     Promise.all([
-      fetchProducts(1, false),
-      fetchFeaturedProducts(),
+      fetchAllProducts(1, false),
       updateCartCount(),
     ]).finally(() => setRefreshing(false));
   }, []);
 
   const loadMore = () => {
     if (!loadingMore && hasMore) {
-      fetchProducts(page + 1, true);
+      console.log(`⬇️ Loading more products (page ${page + 1})...`);
+      fetchAllProducts(page + 1, true);
     }
   };
 
@@ -226,14 +284,14 @@ const MarketplaceScreen: React.FC = () => {
     return Math.round(((compareAt - price) / compareAt) * 100);
   };
 
-  const renderProductCard = (product: Product) => {
+  const renderProductCard = (product: Product, index: number) => {
     const discount = product.compareAtPrice 
       ? calculateDiscount(product.finalPrice, product.compareAtPrice)
       : 0;
 
     return (
       <TouchableOpacity
-        key={product._id}
+        key={`${product._id}-${index}`}
         onPress={() => navigation.navigate('ProductDetail', { productId: product._id })}
         style={{ width: PRODUCT_CARD_WIDTH, marginBottom: 16 }}
         activeOpacity={0.9}
@@ -252,7 +310,7 @@ const MarketplaceScreen: React.FC = () => {
             }),
           }}
         >
-          {}
+          {/* Image */}
           <View className="relative">
             <Image
               source={{ uri: product.images[0] }}
@@ -260,9 +318,18 @@ const MarketplaceScreen: React.FC = () => {
               resizeMode="cover"
             />
 
-            {}
+            {/* Badges */}
             <View className="absolute top-2 left-2 right-2 flex-row justify-between">
-              {product.isSponsored && (
+              {product.isFeatured && (
+                <View className="bg-yellow-500 px-2 py-1 rounded-lg">
+                  <View className="flex-row items-center">
+                    <Ionicons name="star" size={10} color="#fff" />
+                    <Text className="text-white text-[10px] font-bold ml-1">FEATURED</Text>
+                  </View>
+                </View>
+              )}
+              
+              {product.isSponsored && !product.isFeatured && (
                 <View className="bg-purple-500 px-2 py-1 rounded-lg">
                   <Text className="text-white text-[10px] font-bold">SPONSORED</Text>
                 </View>
@@ -275,7 +342,7 @@ const MarketplaceScreen: React.FC = () => {
               )}
             </View>
 
-            {}
+            {/* Favorite */}
             <TouchableOpacity
               className="absolute bottom-2 right-2 w-8 h-8 rounded-full bg-white/90 items-center justify-center"
               onPress={() => {}}
@@ -283,7 +350,7 @@ const MarketplaceScreen: React.FC = () => {
               <Ionicons name="heart-outline" size={18} color="#eb278d" />
             </TouchableOpacity>
 
-            {}
+            {/* Stock warning */}
             {product.stock < 10 && (
               <View className="absolute bottom-2 left-2">
                 <View className="bg-orange-500 px-2 py-1 rounded-lg">
@@ -295,19 +362,19 @@ const MarketplaceScreen: React.FC = () => {
             )}
           </View>
 
-          {}
+          {/* Product Info */}
           <View className="p-3">
-            {}
+            {/* Brand/Category */}
             <Text className="text-gray-500 text-[10px] font-medium mb-1" numberOfLines={1}>
               {product.brand || product.category.name}
             </Text>
 
-            {}
+            {/* Name */}
             <Text className="text-gray-900 text-sm font-bold mb-2" numberOfLines={2}>
               {product.name}
             </Text>
 
-            {}
+            {/* Rating */}
             {product.totalRatings > 0 && (
               <View className="flex-row items-center mb-2">
                 <Ionicons name="star" size={12} color="#fbbf24" />
@@ -320,7 +387,7 @@ const MarketplaceScreen: React.FC = () => {
               </View>
             )}
 
-            {}
+            {/* Price & Cart */}
             <View className="flex-row items-center justify-between mb-2">
               <View>
                 <Text className="text-pink-600 text-lg font-bold">
@@ -344,7 +411,7 @@ const MarketplaceScreen: React.FC = () => {
               )}
             </View>
 
-            {}
+            {/* Condition */}
             {product.condition && (
               <View className="flex-row items-center">
                 <View className="w-2 h-2 rounded-full bg-green-500 mr-1" />
@@ -353,70 +420,6 @@ const MarketplaceScreen: React.FC = () => {
                 </Text>
               </View>
             )}
-          </View>
-        </View>
-      </TouchableOpacity>
-    );
-  };
-
-  const renderFeaturedProduct = (product: Product) => {
-    const discount = product.compareAtPrice 
-      ? calculateDiscount(product.finalPrice, product.compareAtPrice)
-      : 0;
-
-    return (
-      <TouchableOpacity
-        key={product._id}
-        onPress={() => navigation.navigate('ProductDetail', { productId: product._id })}
-        className="mr-4"
-        style={{ width: 280 }}
-        activeOpacity={0.9}
-      >
-        <View
-          className="bg-white rounded-2xl overflow-hidden"
-          style={{
-            ...Platform.select({
-              ios: {
-                shadowColor: '#000',
-                shadowOffset: { width: 0, height: 2 },
-                shadowOpacity: 0.1,
-                shadowRadius: 8,
-              },
-              android: { elevation: 3 },
-            }),
-          }}
-        >
-          <View className="relative">
-            <Image
-              source={{ uri: product.images[0] }}
-              style={{ width: '100%', height: 180 }}
-              resizeMode="cover"
-            />
-
-            {discount > 0 && (
-              <View className="absolute top-3 right-3 bg-red-500 px-3 py-1.5 rounded-xl">
-                <Text className="text-white text-xs font-bold">-{discount}%</Text>
-              </View>
-            )}
-
-            <LinearGradient
-              colors={['transparent', 'rgba(0,0,0,0.7)']}
-              className="absolute bottom-0 left-0 right-0 p-4"
-            >
-              <Text className="text-white text-base font-bold mb-1" numberOfLines={1}>
-                {product.name}
-              </Text>
-              <View className="flex-row items-center">
-                <Text className="text-white text-lg font-bold">
-                  {formatPrice(product.finalPrice)}
-                </Text>
-                {product.compareAtPrice && (
-                  <Text className="text-white/70 text-sm line-through ml-2">
-                    {formatPrice(product.compareAtPrice)}
-                  </Text>
-                )}
-              </View>
-            </LinearGradient>
           </View>
         </View>
       </TouchableOpacity>
@@ -434,9 +437,19 @@ const MarketplaceScreen: React.FC = () => {
     );
   }
 
+  // Log current state
+  console.log('🖼️ RENDER - All Products Count:', allProducts.length);
+  
+  // Separate featured and regular products for display
+  const featuredProducts = allProducts.filter(p => p.isFeatured);
+  const regularProducts = allProducts.filter(p => !p.isFeatured);
+  
+  console.log('🖼️ RENDER - Featured Count:', featuredProducts.length);
+  console.log('🖼️ RENDER - Regular Count:', regularProducts.length);
+
   return (
     <SafeAreaView className="flex-1 bg-gray-50" edges={['top']}>
-      {}
+      {/* Header */}
       <LinearGradient
         colors={['#eb278d', '#f472b6']}
         start={{ x: 0, y: 0 }}
@@ -448,11 +461,11 @@ const MarketplaceScreen: React.FC = () => {
             <View>
               <Text className="text-white text-2xl font-bold">Marketplace</Text>
               <Text className="text-white/80 text-sm">
-                {products.length} products available
+                {allProducts.length} products available
               </Text>
             </View>
 
-            {}
+            {/* Cart */}
             <TouchableOpacity
               onPress={() => navigation.navigate('Cart')}
               className="relative"
@@ -470,7 +483,7 @@ const MarketplaceScreen: React.FC = () => {
             </TouchableOpacity>
           </View>
 
-          {}
+          {/* Search */}
           <View className="flex-row items-center bg-white/20 rounded-2xl px-4 py-3 mb-4">
             <Ionicons name="search" size={20} color="#fff" />
             <TextInput
@@ -487,7 +500,7 @@ const MarketplaceScreen: React.FC = () => {
             )}
           </View>
 
-          {}
+          {/* Categories */}
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -545,28 +558,8 @@ const MarketplaceScreen: React.FC = () => {
         }}
         scrollEventThrottle={400}
       >
-        {}
-        {featuredProducts.length > 0 && (
-          <View className="mt-5 mb-6">
-            <View className="px-5 mb-3 flex-row items-center justify-between">
-              <Text className="text-lg font-bold text-gray-900">Featured Products</Text>
-              <TouchableOpacity>
-                <Text className="text-pink-600 text-sm font-semibold">See all</Text>
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={{ paddingHorizontal: 20 }}
-            >
-              {featuredProducts.map(renderFeaturedProduct)}
-            </ScrollView>
-          </View>
-        )}
-
-        {}
-        <View className="px-5 mb-4">
+        {/* Sort Options */}
+        <View className="px-5 mt-5 mb-4">
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -622,32 +615,52 @@ const MarketplaceScreen: React.FC = () => {
           </ScrollView>
         </View>
 
-        {}
-        <View className="px-5 pb-5">
-          <View className="flex-row flex-wrap justify-between">
-            {products.map(renderProductCard)}
+        {/* Featured Products Section */}
+        {featuredProducts.length > 0 && (
+          <View className="mb-5">
+            <View className="px-5 mb-3 flex-row items-center">
+              <Ionicons name="star" size={20} color="#fbbf24" />
+              <Text className="text-lg font-bold text-gray-900 ml-2">Featured Products</Text>
+            </View>
+            <View className="px-5">
+              <View className="flex-row flex-wrap justify-between">
+                {featuredProducts.map((product, index) => renderProductCard(product, index))}
+              </View>
+            </View>
           </View>
+        )}
 
-          {loadingMore && (
-            <View className="py-4">
-              <ActivityIndicator size="small" color="#eb278d" />
+        {/* All Products Section */}
+        {regularProducts.length > 0 && (
+          <View className="px-5 pb-5">
+            {featuredProducts.length > 0 && (
+              <Text className="text-lg font-bold text-gray-900 mb-3">All Products</Text>
+            )}
+            <View className="flex-row flex-wrap justify-between">
+              {regularProducts.map((product, index) => renderProductCard(product, index))}
             </View>
-          )}
+          </View>
+        )}
 
-          {!hasMore && products.length > 10 && (
-            <Text className="text-center text-gray-400 text-sm py-4">
-              No more products
-            </Text>
-          )}
+        {loadingMore && (
+          <View className="py-4">
+            <ActivityIndicator size="small" color="#eb278d" />
+          </View>
+        )}
 
-          {products.length === 0 && !loading && (
-            <View className="items-center justify-center py-20">
-              <Ionicons name="cube-outline" size={64} color="#d1d5db" />
-              <Text className="text-gray-500 text-lg font-bold mt-4">No products found</Text>
-              <Text className="text-gray-400 text-sm mt-2">Try adjusting your filters</Text>
-            </View>
-          )}
-        </View>
+        {!hasMore && allProducts.length > 10 && (
+          <Text className="text-center text-gray-400 text-sm py-4">
+            No more products
+          </Text>
+        )}
+
+        {allProducts.length === 0 && !loading && (
+          <View className="items-center justify-center py-20">
+            <Ionicons name="cube-outline" size={64} color="#d1d5db" />
+            <Text className="text-gray-500 text-lg font-bold mt-4">No products found</Text>
+            <Text className="text-gray-400 text-sm mt-2">Try adjusting your filters</Text>
+          </View>
+        )}
       </ScrollView>
     </SafeAreaView>
   );

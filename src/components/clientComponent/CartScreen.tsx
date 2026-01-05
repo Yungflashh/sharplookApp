@@ -378,21 +378,7 @@ const CartScreen: React.FC = () => {
           <ScrollView className="flex-1 px-5 pt-5" showsVerticalScrollIndicator={false}>
             {cart.map(renderCartItem)}
 
-            {/* Delivery Note */}
-            <View className="bg-blue-50 p-4 rounded-2xl mb-4">
-              <View className="flex-row items-start">
-                <Ionicons name="information-circle" size={20} color="#3b82f6" />
-                <View className="flex-1 ml-3">
-                  <Text className="text-blue-900 text-sm font-semibold mb-1">
-                    Multiple Sellers
-                  </Text>
-                  <Text className="text-blue-700 text-xs leading-5">
-                    Your cart contains items from different sellers. You'll complete separate
-                    orders for each seller during checkout.
-                  </Text>
-                </View>
-              </View>
-            </View>
+            
 
             <View className="h-32" />
           </ScrollView>

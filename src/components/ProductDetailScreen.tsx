@@ -469,7 +469,7 @@ const ProductDetailScreen: React.FC = () => {
 
           {/* Seller Info */}
           <TouchableOpacity
-            onPress={() => navigation.navigate('VendorPublicProfile', { vendorId: product.seller._id })}
+            onPress={() => navigation.navigate('VendorDetail', { vendorId: product.seller._id })}
             className="bg-gray-50 p-4 rounded-2xl mb-6"
           >
             <Text className="text-gray-900 text-base font-bold mb-3">Sold by:</Text>

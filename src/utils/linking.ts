@@ -1,6 +1,21 @@
 import * as Linking from 'expo-linking';
 import { useEffect } from 'react';
-import { useNavigation } from '@react-navigation/native';
+import { createNavigationContainerRef } from '@react-navigation/native';
+import type { RootStackParamList } from '@/types/navigation.types';
+
+// Create a navigation ref that can be used outside of components
+export const navigationRef = createNavigationContainerRef<RootStackParamList>();
+
+// Helper function to navigate using the ref
+export function navigate(name: keyof RootStackParamList, params?: any) {
+  if (navigationRef.isReady()) {
+    navigationRef.navigate(name, params);
+  } else {
+    // If navigation isn't ready yet, wait and retry
+    setTimeout(() => navigate(name, params), 100);
+  }
+}
+
 export const linking = {
   prefixes: ['sharpLook://', 'https://sharpLook.com', 'https://*.sharpLook.com'],
   config: {
@@ -66,8 +81,11 @@ export const linking = {
     }
   }
 };
+
 export const useDeepLinking = () => {
-  const navigation = useNavigation();
+  // REMOVED: const navigation = useNavigation(); - This was causing the crash!
+  // Now using navigationRef instead
+
   useEffect(() => {
     const getInitialURL = async () => {
       const initialUrl = await Linking.getInitialURL();
@@ -76,58 +94,53 @@ export const useDeepLinking = () => {
         handleDeepLink(initialUrl);
       }
     };
-    const subscription = Linking.addEventListener('url', ({
-      url
-    }) => {
+
+    const subscription = Linking.addEventListener('url', ({ url }) => {
       console.log('Deep link URL:', url);
       handleDeepLink(url);
     });
+
     getInitialURL();
+
     return () => {
       subscription.remove();
     };
   }, []);
+
   const handleDeepLink = (url: string) => {
     console.log('Handling deep link:', url);
-    const {
-      hostname,
-      path,
-      queryParams
-    } = Linking.parse(url);
-    console.log('Parsed:', {
-      hostname,
-      path,
-      queryParams
-    });
+    const { hostname, path, queryParams } = Linking.parse(url);
+    console.log('Parsed:', { hostname, path, queryParams });
+
+    // Payment verification - let the app handle naturally
     if (path?.includes('payment/verify') || path?.includes('payment') || queryParams?.reference) {
       console.log('Payment verification callback detected');
       return;
     }
+
+    // Booking detail
     if (path?.includes('bookings/') && !path?.includes('payment')) {
       const bookingId = path.split('bookings/')[1]?.split('/')[0];
       if (bookingId) {
-        navigation.navigate('BookingDetail' as never, {
-          bookingId
-        } as never);
+        navigate('BookingDetail', { bookingId });
       }
       return;
     }
+
+    // Vendor detail
     if (path?.includes('vendors/')) {
       const vendorId = path.split('vendors/')[1]?.split('/')[0];
       if (vendorId) {
-        navigation.navigate('VendorDetail' as never, {
-          vendorId
-        } as never);
+        navigate('VendorDetail', { vendorId });
       }
       return;
     }
+
+    // Chat detail
     if (path?.includes('chat/')) {
       const vendorId = path.split('chat/')[1]?.split('/')[0];
       if (vendorId) {
-        navigation.navigate('ChatDetail' as never, {
-          vendorId,
-          vendorName: 'Vendor'
-        } as never);
+        navigate('ChatDetail', { vendorId, vendorName: 'Vendor' });
       }
       return;
     }

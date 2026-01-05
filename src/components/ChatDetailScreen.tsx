@@ -97,6 +97,12 @@ const ChatDetailScreen: React.FC = () => {
   const [isOtherUserTyping, setIsOtherUserTyping] = useState(false);
   const [isOtherUserOnline, setIsOtherUserOnline] = useState(false);
   const [otherUserActivity, setOtherUserActivity] = useState<UserActivity>('offline');
+  
+  // Audio playback state
+  const [playingAudioId, setPlayingAudioId] = useState<string | null>(null);
+  const [audioProgress, setAudioProgress] = useState<{ [key: string]: number }>({});
+  const [audioDurations, setAudioDurations] = useState<{ [key: string]: number }>({});
+  const soundRef = useRef<Audio.Sound | null>(null);
 
   const flatListRef = useRef<FlatList>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -514,7 +520,7 @@ const ChatDetailScreen: React.FC = () => {
     }
   };
 
-  const handleSendMessage = async (mediaUri?: string, mediaType?: string) => {
+  const handleSendMessage = async (mediaUri?: string, mediaType?: string, fileObject?: any) => {
     if ((!inputText.trim() && !mediaUri) || !conversationId || !currentUserId) return;
 
     const messageText = inputText.trim();
@@ -552,10 +558,16 @@ const ChatDetailScreen: React.FC = () => {
       }
 
       if (mediaUri) {
-        const uploadResponse = await messageAPI.uploadAttachment({
+        // Use fileObject if provided, otherwise create from mediaUri
+        const uploadFile = fileObject || {
           uri: mediaUri,
-          type: mediaType,
-        });
+          type: mediaType === 'audio' ? 'audio/m4a' : mediaType,
+          name: `${mediaType}_${Date.now()}.${mediaType === 'audio' ? 'm4a' : 'jpg'}`,
+        };
+
+        console.log('📤 Uploading file:', uploadFile);
+
+        const uploadResponse = await messageAPI.uploadAttachment(uploadFile);
 
         if (uploadResponse.success) {
           messageData.attachments = [{
@@ -696,7 +708,19 @@ const ChatDetailScreen: React.FC = () => {
       }
       
       if (uri) {
-        await handleSendMessage(uri, 'audio');
+        // Get the actual filename from the URI
+        const filename = uri.split('/').pop() || `audio_${Date.now()}.m4a`;
+        
+        // Create proper audio file object
+        // IMPORTANT: Do not set type here, let FormData handle it
+        const audioFile = {
+          uri,
+          name: filename,
+          type: 'audio/x-m4a', // Correct MIME type for m4a files
+        };
+        
+        console.log('🎤 Uploading audio file:', audioFile);
+        await handleSendMessage(audioFile.uri, 'audio', audioFile);
       }
       
       setRecording(null);
@@ -777,6 +801,134 @@ const ChatDetailScreen: React.FC = () => {
     }
   };
 
+  // Audio playback functions
+  const playAudio = async (audioUrl: string, messageId: string) => {
+    try {
+      // If already playing this audio, pause it
+      if (playingAudioId === messageId) {
+        await pauseAudio();
+        return;
+      }
+
+      // Stop any currently playing audio
+      if (soundRef.current) {
+        await soundRef.current.stopAsync();
+        await soundRef.current.unloadAsync();
+        soundRef.current = null;
+      }
+
+      // Set audio mode
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: false,
+        playsInSilentModeIOS: true,
+        staysActiveInBackground: true,
+        shouldDuckAndroid: true,
+      });
+
+      console.log('🎵 Loading audio:', audioUrl);
+
+      // Create and load new sound
+      const { sound, status } = await Audio.Sound.createAsync(
+        { uri: audioUrl },
+        { shouldPlay: true },
+        onPlaybackStatusUpdate(messageId)
+      );
+
+      soundRef.current = sound;
+      setPlayingAudioId(messageId);
+
+      // Set duration if available
+      if (status.isLoaded && status.durationMillis) {
+        setAudioDurations(prev => ({
+          ...prev,
+          [messageId]: status.durationMillis / 1000
+        }));
+      }
+
+      console.log('✅ Audio playing');
+    } catch (error) {
+      console.error('❌ Error playing audio:', error);
+      Alert.alert('Error', 'Failed to play audio message');
+      setPlayingAudioId(null);
+    }
+  };
+
+  const pauseAudio = async () => {
+    try {
+      if (soundRef.current) {
+        await soundRef.current.pauseAsync();
+        setPlayingAudioId(null);
+      }
+    } catch (error) {
+      console.error('Error pausing audio:', error);
+    }
+  };
+
+  const onPlaybackStatusUpdate = (messageId: string) => (status: any) => {
+    if (status.isLoaded) {
+      // Update progress
+      if (status.durationMillis) {
+        const progress = status.positionMillis / status.durationMillis;
+        setAudioProgress(prev => ({
+          ...prev,
+          [messageId]: progress
+        }));
+
+        // Update duration
+        setAudioDurations(prev => ({
+          ...prev,
+          [messageId]: status.durationMillis / 1000
+        }));
+      }
+
+      // Handle playback finish
+      if (status.didJustFinish) {
+        setPlayingAudioId(null);
+        setAudioProgress(prev => ({
+          ...prev,
+          [messageId]: 0
+        }));
+      }
+    }
+  };
+
+  // Cleanup audio on unmount
+  useEffect(() => {
+    return () => {
+      if (soundRef.current) {
+        soundRef.current.unloadAsync();
+      }
+    };
+  }, []);
+
+  // Scroll to bottom when keyboard opens
+  useEffect(() => {
+    const keyboardDidShowListener = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      (e) => {
+        // Scroll with a delay to ensure keyboard is fully shown
+        setTimeout(() => {
+          flatListRef.current?.scrollToEnd({ animated: true });
+        }, Platform.OS === 'ios' ? 0 : 100);
+      }
+    );
+
+    const keyboardDidHideListener = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      () => {
+        // Optional: scroll when keyboard hides
+        setTimeout(() => {
+          flatListRef.current?.scrollToEnd({ animated: true });
+        }, 100);
+      }
+    );
+
+    return () => {
+      keyboardDidShowListener.remove();
+      keyboardDidHideListener.remove();
+    };
+  }, []);
+
   const renderMessage = ({ item }: { item: Message }) => {
     const isMyMessage = item.sender._id === currentUserId;
     const isHighlighted = item._id === highlightedMessageId;
@@ -790,6 +942,10 @@ const ChatDetailScreen: React.FC = () => {
         onScrollToReply={scrollToMessage}
         otherUser={otherUser}
         formatMessageTime={formatMessageTime}
+        playingAudioId={playingAudioId}
+        audioProgress={audioProgress}
+        audioDurations={audioDurations}
+        onPlayAudio={playAudio}
       />
     );
   };
@@ -974,9 +1130,9 @@ const ChatDetailScreen: React.FC = () => {
   return (
     <SafeAreaView className="flex-1 bg-gray-50" edges={['top']}>
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
         className="flex-1"
-        keyboardVerticalOffset={0}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
       >
         {}
         <LinearGradient
@@ -1043,14 +1199,6 @@ const ChatDetailScreen: React.FC = () => {
             </TouchableOpacity>
 
             <TouchableOpacity
-              onPress={() => handleCall('video')}
-              className="w-10 h-10 rounded-full bg-white/20 items-center justify-center ml-2"
-              activeOpacity={0.7}
-            >
-              <Ionicons name="videocam" size={22} color="#fff" />
-            </TouchableOpacity>
-            
-            <TouchableOpacity
               onPress={() => handleCall('voice')}
               className="w-10 h-10 rounded-full bg-white/20 items-center justify-center ml-2"
               activeOpacity={0.7}
@@ -1070,6 +1218,7 @@ const ChatDetailScreen: React.FC = () => {
           contentContainerStyle={{ 
             paddingVertical: 12,
             paddingHorizontal: 4,
+            paddingBottom: 20, // Extra padding at bottom for keyboard
             flexGrow: 1,
           }}
           inverted={false}
@@ -1077,6 +1226,9 @@ const ChatDetailScreen: React.FC = () => {
           onEndReachedThreshold={0.1}
           showsVerticalScrollIndicator={false}
           extraData={`${isOtherUserTyping}-${highlightedMessageId}`}
+          maintainVisibleContentPosition={{
+            minIndexForVisible: 0,
+          }}
           onScrollToIndexFailed={(info) => {
             
             const wait = new Promise(resolve => setTimeout(resolve, 500));
@@ -1191,6 +1343,12 @@ const ChatDetailScreen: React.FC = () => {
                 returnKeyType="send"
                 onSubmitEditing={() => handleSendMessage()}
                 blurOnSubmit={false}
+                onFocus={() => {
+                  // Android needs more time for keyboard animation
+                  setTimeout(() => {
+                    flatListRef.current?.scrollToEnd({ animated: true });
+                  }, Platform.OS === 'ios' ? 250 : 400);
+                }}
               />
             </View>
 
@@ -1273,30 +1431,51 @@ const SwipeableMessage: React.FC<{
   onScrollToReply: (messageId: string) => void;
   otherUser: any;
   formatMessageTime: (date: string) => string;
-}> = ({ message, isMyMessage, isHighlighted, onReply, onScrollToReply, otherUser, formatMessageTime }) => {
+  playingAudioId: string | null;
+  audioProgress: { [key: string]: number };
+  audioDurations: { [key: string]: number };
+  onPlayAudio: (url: string, messageId: string) => void;
+}> = ({ 
+  message, 
+  isMyMessage, 
+  isHighlighted, 
+  onReply, 
+  onScrollToReply, 
+  otherUser, 
+  formatMessageTime,
+  playingAudioId,
+  audioProgress,
+  audioDurations,
+  onPlayAudio
+}) => {
   const translateX = useRef(new Animated.Value(0)).current;
 
   const panResponder = useRef(
     PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
+      onStartShouldSetPanResponder: () => false,
       onMoveShouldSetPanResponder: (_, gestureState) => {
-        return Math.abs(gestureState.dx) > 5;
+        // Only trigger if horizontal swipe is more than 15px and more horizontal than vertical
+        return Math.abs(gestureState.dx) > 15 && Math.abs(gestureState.dx) > Math.abs(gestureState.dy) * 2;
       },
       onPanResponderMove: (_, gestureState) => {
         if (isMyMessage) {
-          if (gestureState.dx < 0 && gestureState.dx > -80) {
-            translateX.setValue(gestureState.dx);
+          // Swipe left for my messages
+          if (gestureState.dx < 0 && gestureState.dx > -100) {
+            translateX.setValue(gestureState.dx * 0.6); // Add resistance
           }
         } else {
-          if (gestureState.dx > 0 && gestureState.dx < 80) {
-            translateX.setValue(gestureState.dx);
+          // Swipe right for other messages
+          if (gestureState.dx > 0 && gestureState.dx < 100) {
+            translateX.setValue(gestureState.dx * 0.6); // Add resistance
           }
         }
       },
       onPanResponderRelease: (_, gestureState) => {
-        const threshold = 40;
+        const threshold = 60; // Increased threshold
+        const velocity = Math.abs(gestureState.vx);
         
-        if (Math.abs(gestureState.dx) > threshold) {
+        // Trigger reply if swipe is far enough OR fast enough
+        if (Math.abs(gestureState.dx) > threshold || velocity > 0.5) {
           onReply();
         }
         
@@ -1309,6 +1488,16 @@ const SwipeableMessage: React.FC<{
       },
     })
   ).current;
+
+  const formatDuration = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const isPlaying = playingAudioId === message._id;
+  const progress = audioProgress[message._id] || 0;
+  const duration = audioDurations[message._id] || 0;
 
   return (
     <Animated.View
@@ -1406,13 +1595,35 @@ const SwipeableMessage: React.FC<{
                     />
                   )}
                   {message.attachments[0].type === 'audio' && (
-                    <View className="flex-row items-center py-2 px-2">
-                      <Ionicons name="play-circle" size={36} color="#fff" />
-                      <View className="ml-2 flex-1">
-                        <Text className="text-white font-medium">Voice message</Text>
-                        <Text className="text-white/70 text-xs">Tap to play</Text>
+                    <TouchableOpacity
+                      onPress={() => onPlayAudio(message.attachments![0].url, message._id)}
+                      activeOpacity={0.7}
+                      className="bg-white/10 rounded-2xl p-3 min-w-[200px]"
+                    >
+                      <View className="flex-row items-center">
+                        <View className="w-10 h-10 rounded-full bg-white/20 items-center justify-center mr-3">
+                          <Ionicons 
+                            name={isPlaying ? "pause" : "play"} 
+                            size={20} 
+                            color="#fff" 
+                          />
+                        </View>
+                        <View className="flex-1">
+                          <View className="flex-row items-center justify-between mb-1.5">
+                            <Text className="text-white font-semibold text-sm">Voice Message</Text>
+                            <Text className="text-white/80 text-xs">
+                              {duration > 0 ? formatDuration(duration * (1 - progress)) : '0:00'}
+                            </Text>
+                          </View>
+                          <View className="h-1 bg-white/20 rounded-full overflow-hidden">
+                            <View 
+                              className="h-full bg-white/60 rounded-full" 
+                              style={{ width: `${progress * 100}%` }}
+                            />
+                          </View>
+                        </View>
                       </View>
-                    </View>
+                    </TouchableOpacity>
                   )}
                 </View>
               )}
@@ -1468,13 +1679,35 @@ const SwipeableMessage: React.FC<{
                     />
                   )}
                   {message.attachments[0].type === 'audio' && (
-                    <View className="flex-row items-center py-2 px-2">
-                      <Ionicons name="play-circle" size={36} color="#eb278d" />
-                      <View className="ml-2 flex-1">
-                        <Text className="text-gray-900 font-medium">Voice message</Text>
-                        <Text className="text-gray-500 text-xs">Tap to play</Text>
+                    <TouchableOpacity
+                      onPress={() => onPlayAudio(message.attachments![0].url, message._id)}
+                      activeOpacity={0.7}
+                      className="bg-pink-50 rounded-2xl p-3 min-w-[200px]"
+                    >
+                      <View className="flex-row items-center">
+                        <View className="w-10 h-10 rounded-full bg-pink-100 items-center justify-center mr-3">
+                          <Ionicons 
+                            name={isPlaying ? "pause" : "play"} 
+                            size={20} 
+                            color="#eb278d" 
+                          />
+                        </View>
+                        <View className="flex-1">
+                          <View className="flex-row items-center justify-between mb-1.5">
+                            <Text className="text-gray-900 font-semibold text-sm">Voice Message</Text>
+                            <Text className="text-gray-500 text-xs">
+                              {duration > 0 ? formatDuration(duration * (1 - progress)) : '0:00'}
+                            </Text>
+                          </View>
+                          <View className="h-1 bg-pink-200 rounded-full overflow-hidden">
+                            <View 
+                              className="h-full bg-pink-500 rounded-full" 
+                              style={{ width: `${progress * 100}%` }}
+                            />
+                          </View>
+                        </View>
                       </View>
-                    </View>
+                    </TouchableOpacity>
                   )}
                 </View>
               )}

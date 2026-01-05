@@ -93,7 +93,6 @@ const PLAN_OPTIONS: PlanOption[] = [
   },
 ];
 
-
 const subscriptionAPI = {
   getMySubscription: async () => {
     const response = await api.get('/subscriptions/my-subscription');
@@ -102,6 +101,11 @@ const subscriptionAPI = {
 
   createSubscription: async (plan: 'in_shop' | 'home_service' | 'both') => {
     const response = await api.post('/subscriptions', { plan });
+    return response.data;
+  },
+
+  paySubscription: async (subscriptionId: string) => {
+    const response = await api.post(`/subscriptions/${subscriptionId}/pay`);
     return response.data;
   },
 
@@ -114,6 +118,11 @@ const subscriptionAPI = {
     const response = await api.put(`/subscriptions/${subscriptionId}/change-plan`, { plan });
     return response.data;
   },
+
+  getWalletBalance: async () => {
+    const response = await api.get('/payments/wallet/balance');
+    return response.data;
+  },
 };
 
 const SubscriptionScreen: React.FC = () => {
@@ -121,6 +130,7 @@ const SubscriptionScreen: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [subscription, setSubscription] = useState<Subscription | null>(null);
+  const [walletBalance, setWalletBalance] = useState<number>(0);
   const [showPlanModal, setShowPlanModal] = useState(false);
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<PlanOption | null>(null);
@@ -146,19 +156,32 @@ const SubscriptionScreen: React.FC = () => {
     }
   };
 
+  const fetchWalletBalance = async () => {
+    try {
+      const response = await subscriptionAPI.getWalletBalance();
+      if (response.success) {
+        setWalletBalance(response.data.balance || 0);
+      }
+    } catch (error) {
+      console.error('Failed to fetch wallet balance:', error);
+    }
+  };
+
   useEffect(() => {
     fetchSubscription();
+    fetchWalletBalance();
   }, []);
 
   useFocusEffect(
     useCallback(() => {
       fetchSubscription();
+      fetchWalletBalance();
     }, [])
   );
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
-    fetchSubscription().finally(() => setRefreshing(false));
+    Promise.all([fetchSubscription(), fetchWalletBalance()]).finally(() => setRefreshing(false));
   }, []);
 
   const handleCreateSubscription = async (plan: PlanOption) => {
@@ -169,7 +192,17 @@ const SubscriptionScreen: React.FC = () => {
       if (response.success) {
         setSubscription(response.data.subscription);
         setShowPlanModal(false);
-        Alert.alert('Success', 'Subscription created successfully!');
+        
+        // If it's a paid plan, show payment option
+        if (plan.monthlyFee > 0) {
+          Alert.alert(
+            'Subscription Created',
+            'Your subscription has been created. Please pay to activate it.',
+            [{ text: 'OK' }]
+          );
+        } else {
+          Alert.alert('Success', 'Subscription created and activated successfully!');
+        }
       }
     } catch (error) {
       const apiError = handleAPIError(error);
@@ -177,6 +210,58 @@ const SubscriptionScreen: React.FC = () => {
     } finally {
       setActionLoading(false);
     }
+  };
+
+  const handlePaySubscription = async () => {
+    if (!subscription) return;
+
+    // Check balance first
+    if (walletBalance < subscription.monthlyFee) {
+      Alert.alert(
+        'Insufficient Balance',
+        `You need ₦${(subscription.monthlyFee - walletBalance).toLocaleString()} more to pay for this subscription.`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Fund Wallet',
+            onPress: () => navigation.navigate('WalletFunding' as any),
+          },
+        ]
+      );
+      return;
+    }
+
+    Alert.alert(
+      'Confirm Payment',
+      `Pay ₦${subscription.monthlyFee.toLocaleString()} from your wallet to activate your subscription?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Pay Now',
+          onPress: async () => {
+            try {
+              setActionLoading(true);
+              const response = await subscriptionAPI.paySubscription(subscription._id);
+
+              if (response.success) {
+                setSubscription(response.data.subscription);
+                await fetchWalletBalance(); // Refresh balance
+                Alert.alert(
+                  'Success!',
+                  'Your subscription has been activated.',
+                  [{ text: 'OK' }]
+                );
+              }
+            } catch (error) {
+              const apiError = handleAPIError(error);
+              Alert.alert('Payment Failed', apiError.message || 'Could not process payment');
+            } finally {
+              setActionLoading(false);
+            }
+          },
+        },
+      ]
+    );
   };
 
   const handleChangePlan = async (plan: PlanOption) => {
@@ -319,7 +404,7 @@ const SubscriptionScreen: React.FC = () => {
         activeOpacity={isCurrentPlan ? 1 : 0.7}
         disabled={isCurrentPlan}
       >
-        {}
+        {/* Header */}
         <View className="flex-row items-start justify-between mb-3">
           <View className="flex-row items-center">
             <View
@@ -358,7 +443,7 @@ const SubscriptionScreen: React.FC = () => {
           )}
         </View>
 
-        {}
+        {/* Pricing */}
         <View className="bg-gray-50 rounded-xl p-3 mb-3">
           <View className="flex-row items-baseline">
             {plan.monthlyFee > 0 ? (
@@ -377,7 +462,7 @@ const SubscriptionScreen: React.FC = () => {
           </View>
         </View>
 
-        {}
+        {/* Features */}
         <View className="gap-2">
           {plan.features.map((feature, index) => (
             <View key={index} className="flex-row items-center">
@@ -406,7 +491,7 @@ const SubscriptionScreen: React.FC = () => {
           elevation: 3,
         }}
       >
-        {}
+        {/* Header */}
         <View className="flex-row items-start justify-between mb-4">
           <View className="flex-row items-center">
             <View className="w-14 h-14 rounded-full bg-pink-100 items-center justify-center">
@@ -444,7 +529,7 @@ const SubscriptionScreen: React.FC = () => {
           </View>
         </View>
 
-        {}
+        {/* Stats */}
         <View className="flex-row gap-3 mb-4">
           <View className="flex-1 bg-gray-50 rounded-xl p-3">
             <Text className="text-xs text-gray-500 mb-1">Monthly Fee</Text>
@@ -460,7 +545,7 @@ const SubscriptionScreen: React.FC = () => {
           </View>
         </View>
 
-        {}
+        {/* Details */}
         <View className="gap-3 mb-4">
           <View className="flex-row items-center justify-between py-2 border-b border-gray-100">
             <View className="flex-row items-center">
@@ -537,7 +622,77 @@ const SubscriptionScreen: React.FC = () => {
           </View>
         </View>
 
-        {}
+        {/* Pending Payment Section */}
+        {subscription.status === 'pending' && subscription.monthlyFee > 0 && (
+          <View className="mb-4">
+            {/* Wallet Balance Card */}
+            <View className="bg-gray-50 rounded-xl p-4 mb-3">
+              <View className="flex-row items-center justify-between">
+                <View className="flex-row items-center">
+                  <Ionicons name="wallet-outline" size={20} color="#6b7280" />
+                  <Text className="text-sm text-gray-600 ml-2">Wallet Balance</Text>
+                </View>
+                <Text
+                  className={`text-lg font-bold ${
+                    walletBalance >= subscription.monthlyFee ? 'text-green-600' : 'text-red-600'
+                  }`}
+                >
+                  ₦{walletBalance.toLocaleString()}
+                </Text>
+              </View>
+            </View>
+
+            {/* Insufficient Balance Warning */}
+            {walletBalance < subscription.monthlyFee && (
+              <View className="bg-red-50 rounded-xl p-4 mb-3 border border-red-200">
+                <View className="flex-row items-center mb-2">
+                  <Ionicons name="warning" size={20} color="#dc2626" />
+                  <Text className="text-red-800 font-semibold ml-2">Insufficient Balance</Text>
+                </View>
+                <Text className="text-red-700 text-sm mb-3">
+                  You need ₦{(subscription.monthlyFee - walletBalance).toLocaleString()} more to
+                  pay for this subscription.
+                </Text>
+                <TouchableOpacity
+                  className="bg-red-600 py-2 rounded-lg"
+                  onPress={() => navigation.navigate('WalletFunding' as any)}
+                  activeOpacity={0.7}
+                >
+                  <Text className="text-white text-center font-semibold">Fund Wallet</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {/* Payment Button */}
+            <TouchableOpacity
+              className={`py-3 rounded-xl items-center ${
+                walletBalance >= subscription.monthlyFee && !actionLoading
+                  ? 'bg-pink-600'
+                  : 'bg-gray-300'
+              }`}
+              onPress={handlePaySubscription}
+              disabled={walletBalance < subscription.monthlyFee || actionLoading}
+              activeOpacity={0.7}
+            >
+              {actionLoading ? (
+                <View className="flex-row items-center">
+                  <ActivityIndicator size="small" color="#fff" />
+                  <Text className="text-white font-semibold ml-2">Processing...</Text>
+                </View>
+              ) : (
+                <Text
+                  className={`font-semibold ${
+                    walletBalance >= subscription.monthlyFee ? 'text-white' : 'text-gray-500'
+                  }`}
+                >
+                  Pay Now - {formatPrice(subscription.monthlyFee)}
+                </Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Action Buttons for Active Subscription */}
         {subscription.status === 'active' && (
           <View className="flex-row gap-3">
             <TouchableOpacity
@@ -556,16 +711,6 @@ const SubscriptionScreen: React.FC = () => {
               <Text className="text-gray-700 font-semibold">Cancel</Text>
             </TouchableOpacity>
           </View>
-        )}
-
-        {subscription.status === 'pending' && subscription.monthlyFee > 0 && (
-          <TouchableOpacity
-            className="bg-pink-600 py-3 rounded-xl items-center"
-            onPress={() => Alert.alert('Info', 'Payment feature coming soon!')}
-            activeOpacity={0.7}
-          >
-            <Text className="text-white font-semibold">Pay Now - {formatPrice(subscription.monthlyFee)}</Text>
-          </TouchableOpacity>
         )}
       </View>
     );
@@ -603,7 +748,7 @@ const SubscriptionScreen: React.FC = () => {
         onRequestClose={() => setShowPlanModal(false)}
       >
         <SafeAreaView className="flex-1 bg-gray-50">
-          {}
+          {/* Header */}
           <View className="bg-white px-5 py-4 border-b border-gray-100 flex-row items-center justify-between">
             <View>
               <Text className="text-xl font-bold text-gray-900">
@@ -624,12 +769,12 @@ const SubscriptionScreen: React.FC = () => {
             </TouchableOpacity>
           </View>
 
-          {}
+          {/* Plans */}
           <ScrollView className="flex-1 px-5 py-4">
             {PLAN_OPTIONS.map((plan) => renderPlanCard(plan, isChangePlan))}
           </ScrollView>
 
-          {}
+          {/* Footer */}
           <View className="bg-white px-5 py-4 border-t border-gray-100">
             <TouchableOpacity
               className={`py-4 rounded-xl items-center ${
@@ -798,30 +943,6 @@ const SubscriptionScreen: React.FC = () => {
                     : 'Your Hybrid plan offers maximum flexibility with both in-shop and home service options.'}
                 </Text>
               </View>
-
-              {/* Need Help */}
-              <TouchableOpacity
-                className="flex-row items-center justify-between bg-white rounded-2xl p-4"
-                style={{
-                  shadowColor: '#000',
-                  shadowOffset: { width: 0, height: 1 },
-                  shadowOpacity: 0.05,
-                  shadowRadius: 2,
-                  elevation: 2,
-                }}
-                activeOpacity={0.7}
-              >
-                <View className="flex-row items-center">
-                  <View className="w-10 h-10 rounded-full bg-gray-100 items-center justify-center">
-                    <Ionicons name="help-circle-outline" size={24} color="#6b7280" />
-                  </View>
-                  <View className="ml-3">
-                    <Text className="font-semibold text-gray-900">Need Help?</Text>
-                    <Text className="text-sm text-gray-500">Contact support</Text>
-                  </View>
-                </View>
-                <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
-              </TouchableOpacity>
             </>
           ) : (
             renderNoSubscription()

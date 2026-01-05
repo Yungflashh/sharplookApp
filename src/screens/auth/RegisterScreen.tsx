@@ -357,7 +357,7 @@ const validateReferralCode = async (code: string) => {
             [
               {
                 text: 'OK',
-                onPress: () => navigation.navigate('VendorProfileSetup')
+                onPress: () => navigation.navigate('Login')
               }
             ]
           );
@@ -425,7 +425,7 @@ const validateReferralCode = async (code: string) => {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {}
+          {/* Logo */}
           <View className="items-center mb-8">
             <Image
               source={require('@/assets/logo.png')}
@@ -434,7 +434,7 @@ const validateReferralCode = async (code: string) => {
             />
           </View>
 
-          {}
+          {/* Title */}
           <View className="mb-6">
             <Text className="text-3xl font-bold text-center text-black mb-2">
               Create Your Account
@@ -444,7 +444,7 @@ const validateReferralCode = async (code: string) => {
             </Text>
           </View>
 
-          {}
+          {/* General Error Message */}
           {generalError ? (
             <View className="bg-red-50 border border-red-200 rounded-xl p-4 mb-6 flex-row items-start">
               <Ionicons
@@ -457,7 +457,7 @@ const validateReferralCode = async (code: string) => {
             </View>
           ) : null}
 
-          {}
+          {/* Name Inputs */}
           <View className="flex-row gap-3">
             <Input
               containerClassName="flex-1 mb-0"
@@ -488,7 +488,7 @@ const validateReferralCode = async (code: string) => {
             />
           </View>
 
-          {}
+          {/* Email Input */}
           <Input
             label="Enter E-mail Address"
             placeholder=""
@@ -504,7 +504,7 @@ const validateReferralCode = async (code: string) => {
             editable={!loading}
           />
 
-          {}
+          {/* Phone Input */}
           <PhoneInput
             label="Enter Phone Number"
             placeholder="8123456789"
@@ -520,7 +520,7 @@ const validateReferralCode = async (code: string) => {
             onCountryCodePress={() => setShowCountryPicker(true)}
           />
 
-          {}
+          {/* Password Input */}
           <PasswordInput
             label="Password"
             placeholder=""
@@ -534,7 +534,7 @@ const validateReferralCode = async (code: string) => {
             editable={!loading}
           />
 
-          {}
+          {/* Confirm Password Input */}
           <PasswordInput
             label="Confirm Password"
             placeholder=""
@@ -548,7 +548,7 @@ const validateReferralCode = async (code: string) => {
             editable={!loading}
           />
 
-          {}
+          {/* Location Section */}
           <View className="mb-4">
             <Text className="text-sm font-semibold text-gray-700 mb-2">
               Location (required)
@@ -606,7 +606,7 @@ const validateReferralCode = async (code: string) => {
             </Text>
           </View>
 
-          {}
+          {/* Referral Code Section */}
           <View className="mb-4">
             <Text className="text-sm font-semibold text-gray-700 mb-2">
               Referral Code (Optional)
@@ -662,7 +662,7 @@ const validateReferralCode = async (code: string) => {
               </View>
             </View>
 
-            {}
+            {/* Success Message */}
             {referralCodeValid === true && referrerName && (
               <View className="bg-green-50 border border-green-200 rounded-xl p-3 mt-3 flex-row items-start">
                 <Ionicons name="gift" size={20} color="#10B981" style={{ marginTop: 1 }} />
@@ -671,7 +671,7 @@ const validateReferralCode = async (code: string) => {
                     Valid Referral Code! 🎉
                   </Text>
                   <Text className="text-green-600 text-xs">
-                    Referred by {referrerName}. You`ll get bonus rewards on your first booking!
+                    Referred by {referrerName}. You'll get bonus rewards on your first booking!
                   </Text>
                 </View>
               </View>
@@ -706,8 +706,18 @@ const validateReferralCode = async (code: string) => {
               label={
                 <Text className="text-sm text-gray-700 flex-1">
                   By signing up, you agree to our{' '}
-                  <Text className="text-pink-500 font-semibold">Privacy Policy</Text> and{' '}
-                  <Text className="text-pink-500 font-semibold">Terms of Use</Text>
+                  <Text 
+                    className="text-pink-500 font-semibold"
+                    onPress={() => navigation.navigate('TermsPrivacyAuthScreen', { type: 'privacy' })}
+                  >
+                    Privacy Policy
+                  </Text>{' and '}
+                  <Text 
+                    className="text-pink-500 font-semibold"
+                    onPress={() => navigation.navigate('TermsPrivacyAuthScreen', { type: 'terms' })}
+                  >
+                    Terms of Use
+                  </Text>
                 </Text>
               }
               containerClassName="mb-3"
@@ -731,19 +741,6 @@ const validateReferralCode = async (code: string) => {
             Create Account
           </Button>
 
-          {/* Social Login Divider */}
-          <View className="flex-row items-center mb-6">
-            <View className="flex-1 h-px bg-pink-200" />
-            <Text className="px-4 text-sm text-gray-700">or sign up with</Text>
-            <View className="flex-1 h-px bg-pink-200" />
-          </View>
-
-          {/* Social Login Buttons */}
-          <View className="flex-row justify-center items-center gap-4 mb-8">
-            <SocialLoginButton platform="google" size="lg" />
-            <SocialLoginButton platform="facebook" size="lg" />
-            <SocialLoginButton platform="apple" size="lg" />
-          </View>
 
           {/* Login Link */}
           <View className="flex-row justify-center items-center">

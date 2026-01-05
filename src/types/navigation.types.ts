@@ -51,6 +51,8 @@ export type RootStackParamList = {
   Payment: {
     bookingId: string;
     amount: number;
+     authorizationUrl?: string;  // NEW: Pre-generated URL from booking creation
+  reference?: string; 
   };
   CreateReview: {
     bookingId: string;
@@ -117,10 +119,12 @@ export type RootStackParamList = {
   };
 };
 export type AuthStackParamList = {
-  Login: undefined;
+  Login: { message?: string } | undefined;
   Register: undefined;
   ForgotPassword: undefined;
   VendorLogin: undefined;
+    VerifyOtp: { email: string };  // Make sure this exists
+
   VendorProfileSetup: undefined;
 };
 export type ClientTabParamList = {

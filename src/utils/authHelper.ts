@@ -1,5 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { authAPI, handleAPIError } from '@/api/api';
+import { getFCMToken, getDeviceInfo } from './fcm'; // ✅ NEW IMPORT
+
 interface User {
   _id: string;
   firstName: string;
@@ -13,6 +15,7 @@ interface User {
   walletBalance: number;
   [key: string]: any;
 }
+
 interface LoginResponse {
   success: boolean;
   message: string;
@@ -23,32 +26,77 @@ interface LoginResponse {
     refreshToken: string;
   };
 }
+
 interface AuthResult {
   success: boolean;
   isVendor?: boolean;
   user?: User;
   error?: string;
 }
+
+/**
+ * Login user with FCM token registration
+ * ✅ UPDATED: Now includes automatic FCM token registration for push notifications
+ */
 export const loginUser = async (email: string, password: string): Promise<AuthResult> => {
   try {
-    const response: LoginResponse = await authAPI.login(email, password);
+    // ✅ STEP 1: Get FCM token (non-blocking - won't fail login if unavailable)
+    let fcmToken: string | null = null;
+    let deviceType: 'ios' | 'android' | 'web' = 'android';
+    let deviceName: string = 'Unknown Device';
+
+    try {
+      console.log('📱 Getting FCM token for login...');
+      fcmToken = await getFCMToken();
+      const deviceInfo = getDeviceInfo();
+      deviceType = deviceInfo.deviceType;
+      deviceName = deviceInfo.deviceName;
+
+      if (fcmToken) {
+        console.log('✅ FCM token retrieved for login');
+      } else {
+        console.log('⚠️ No FCM token available (push notifications may not work)');
+      }
+    } catch (fcmError) {
+      // Don't fail login if FCM fails
+      console.error('⚠️ FCM error (continuing with login):', fcmError);
+    }
+
+    // ✅ STEP 2: Login with FCM token
+    console.log('🔐 Authenticating with backend...');
+    console.log('📱 Device info:', { deviceType, deviceName, hasFcmToken: !!fcmToken });
+
+    const response: LoginResponse = await authAPI.login(
+      email,
+      password,
+      fcmToken || undefined,  // ✅ Send FCM token
+      deviceType,             // ✅ Send device type
+      deviceName              // ✅ Send device name
+    );
+
     if (response.success) {
       const {
         user,
         accessToken,
         refreshToken
       } = response.data;
+
+      // Save tokens and user data
       await AsyncStorage.setItem('accessToken', accessToken);
       await AsyncStorage.setItem('refreshToken', refreshToken);
       await AsyncStorage.setItem('userData', JSON.stringify(user));
       await AsyncStorage.setItem('isAuthenticated', 'true');
+
       const isVendor = user.isVendor === true;
-      console.log('Login successful:', {
+
+      console.log('✅ Login successful:', {
         userId: user._id,
         email: user.email,
         isVendor: isVendor,
-        role: user.role
+        role: user.role,
+        fcmTokenRegistered: !!fcmToken, // ✅ Log FCM registration status
       });
+
       return {
         success: true,
         isVendor: isVendor,
@@ -70,6 +118,7 @@ export const loginUser = async (email: string, password: string): Promise<AuthRe
     console.error('❌ Login Error Data:', error?.response?.data);
     console.error('❌ Login Error Status:', error?.response?.status);
     console.error('❌ Login Error Headers:', error?.response?.headers);
+
     const apiError = handleAPIError(error);
     console.error('❌ Login API Error (Processed):', {
       message: apiError.message,
@@ -79,12 +128,18 @@ export const loginUser = async (email: string, password: string): Promise<AuthRe
       fieldErrors: apiError.fieldErrors,
       isValidationError: apiError.isValidationError
     });
+
     return {
       success: false,
       error: apiError.message
     };
   }
 };
+
+/**
+ * Register user
+ * Note: Can also be updated to include FCM token if needed in the future
+ */
 export const registerUser = async (userData: {
   firstName: string;
   lastName: string;
@@ -94,6 +149,7 @@ export const registerUser = async (userData: {
 }): Promise<AuthResult> => {
   try {
     const response = await authAPI.register(userData);
+
     if (response.success) {
       if (response.data.accessToken) {
         const {
@@ -101,16 +157,19 @@ export const registerUser = async (userData: {
           accessToken,
           refreshToken
         } = response.data;
+
         await AsyncStorage.setItem('accessToken', accessToken);
         await AsyncStorage.setItem('refreshToken', refreshToken);
         await AsyncStorage.setItem('userData', JSON.stringify(user));
         await AsyncStorage.setItem('isAuthenticated', 'true');
+
         return {
           success: true,
           isVendor: user.isVendor || false,
           user
         };
       }
+
       return {
         success: true
       };
@@ -130,6 +189,7 @@ export const registerUser = async (userData: {
     console.error('❌ Registration Error Data:', error?.response?.data);
     console.error('❌ Registration Error Status:', error?.response?.status);
     console.error('❌ Registration Error Headers:', error?.response?.headers);
+
     const apiError = handleAPIError(error);
     console.error('❌ Registration API Error (Processed):', {
       message: apiError.message,
@@ -139,33 +199,47 @@ export const registerUser = async (userData: {
       fieldErrors: apiError.fieldErrors,
       isValidationError: apiError.isValidationError
     });
+
     return {
       success: false,
       error: apiError.message
     };
   }
 };
+
+/**
+ * Logout user
+ */
 export const logoutUser = async (): Promise<AuthResult> => {
   try {
     await authAPI.logout();
     await AsyncStorage.multiRemove(['accessToken', 'refreshToken', 'userData', 'isAuthenticated']);
+
     return {
       success: true
     };
   } catch (error) {
     console.error('❌ Logout Error:', error);
+
+    // Clear local storage even if API fails
     await AsyncStorage.multiRemove(['accessToken', 'refreshToken', 'userData', 'isAuthenticated']);
+
     const apiError = handleAPIError(error);
     console.error('❌ Logout API Error:', {
       message: apiError.message,
       isNetworkError: apiError.isNetworkError
     });
+
     return {
       success: true,
       error: apiError.message
     };
   }
 };
+
+/**
+ * Check authentication status
+ */
 export const checkAuthStatus = async (): Promise<{
   isAuthenticated: boolean;
   isVendor: boolean;
@@ -174,6 +248,7 @@ export const checkAuthStatus = async (): Promise<{
   try {
     const accessToken = await AsyncStorage.getItem('accessToken');
     const userData = await AsyncStorage.getItem('userData');
+
     if (accessToken && userData) {
       const user: User = JSON.parse(userData);
       return {
@@ -182,6 +257,7 @@ export const checkAuthStatus = async (): Promise<{
         user
       };
     }
+
     return {
       isAuthenticated: false,
       isVendor: false,
@@ -196,6 +272,10 @@ export const checkAuthStatus = async (): Promise<{
     };
   }
 };
+
+/**
+ * Complete onboarding
+ */
 export const completeOnboarding = async (): Promise<{
   success: boolean;
 }> => {
@@ -211,6 +291,10 @@ export const completeOnboarding = async (): Promise<{
     };
   }
 };
+
+/**
+ * Check onboarding status
+ */
 export const checkOnboardingStatus = async (): Promise<boolean> => {
   try {
     const status = await AsyncStorage.getItem('onboardingComplete');
@@ -220,6 +304,10 @@ export const checkOnboardingStatus = async (): Promise<boolean> => {
     return false;
   }
 };
+
+/**
+ * Update stored user
+ */
 export const updateStoredUser = async (user: User): Promise<void> => {
   try {
     await AsyncStorage.setItem('userData', JSON.stringify(user));
@@ -227,6 +315,10 @@ export const updateStoredUser = async (user: User): Promise<void> => {
     console.error('Error updating stored user:', error);
   }
 };
+
+/**
+ * Get stored user
+ */
 export const getStoredUser = async (): Promise<User | null> => {
   try {
     const userData = await AsyncStorage.getItem('userData');
@@ -237,7 +329,9 @@ export const getStoredUser = async (): Promise<User | null> => {
   }
 };
 
-
+/**
+ * Get stored token
+ */
 export const getStoredToken = async (): Promise<string | null> => {
   try {
     const accessToken = await AsyncStorage.getItem('accessToken');

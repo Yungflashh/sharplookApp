@@ -65,67 +65,65 @@ const PaymentMethodModal: React.FC<PaymentMethodModalProps> = ({
     }
   };
 
-  const handlePayFromWallet = async () => {
-    if (!canPayFromWallet) {
-      Alert.alert(
-        'Insufficient Balance',
-        `You need ₦${shortfall.toLocaleString()} more in your wallet. Would you like to fund your wallet?`,
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Fund Wallet',
-            onPress: () => {
-              onClose();
-              
-              
-              Alert.alert('Fund Wallet', 'Wallet funding feature coming soon!');
-            },
-          },
-        ]
-      );
-      return;
-    }
-
+ const handlePayFromWallet = async () => {
+  if (!canPayFromWallet) {
     Alert.alert(
-      'Confirm Payment',
-      `Pay ₦${bookingAmount.toLocaleString()} from your wallet?`,
+      'Insufficient Balance',
+      `You need ₦${shortfall.toLocaleString()} more in your wallet. Would you like to fund your wallet?`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Pay Now',
-          onPress: async () => {
-            try {
-              setPaying(true);
-
-              
-              const response = await bookingAPI.payFromWallet({ bookingId });
-
-              if (response.success) {
-                Alert.alert(
-                  'Success! 🎉',
-                  'Payment successful! Your booking is now confirmed.',
-                  [
-                    {
-                      text: 'OK',
-                      onPress: () => {
-                        onClose();
-                        onPaymentSuccess();
-                      },
-                    },
-                  ]
-                );
-              }
-            } catch (error) {
-              const apiError = handleAPIError(error);
-              Alert.alert('Payment Failed', apiError.message);
-            } finally {
-              setPaying(false);
-            }
+          text: 'Fund Wallet',
+          onPress: () => {
+            onClose();
+            Alert.alert('Fund Wallet', 'Wallet funding feature coming soon!');
           },
         },
       ]
     );
-  };
+    return;
+  }
+
+  Alert.alert(
+    'Confirm Payment',
+    `Pay ₦${bookingAmount.toLocaleString()} from your wallet?`,
+    [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Pay Now',
+        onPress: async () => {
+          try {
+            setPaying(true);
+
+            // ✅ FIX: Send bookingId as a string, not as an object
+            const response = await bookingAPI.payFromWallet(bookingId);
+
+            if (response.success) {
+              Alert.alert(
+                'Success! 🎉',
+                'Payment successful! Your booking is now confirmed.',
+                [
+                  {
+                    text: 'OK',
+                    onPress: () => {
+                      onClose();
+                      onPaymentSuccess();
+                    },
+                  },
+                ]
+              );
+            }
+          } catch (error) {
+            const apiError = handleAPIError(error);
+            Alert.alert('Payment Failed', apiError.message);
+          } finally {
+            setPaying(false);
+          }
+        },
+      },
+    ]
+  );
+};
 
   const handlePayWithCard = () => {
     

@@ -632,13 +632,22 @@ const CustomerOrdersScreen: React.FC = () => {
         end={{ x: 1, y: 1 }}
         className="pb-4"
       >
-        <View className="px-5 pt-4">
+<View className="px-5 pt-4">
           <View className="flex-row items-center justify-between mb-4">
-            <View>
-              <Text className="text-white text-2xl font-bold mb-1">My Orders</Text>
-              <Text className="text-white/80 text-sm">
-                {filteredOrders.length} {filteredOrders.length === 1 ? 'order' : 'orders'}
-              </Text>
+            <View className="flex-row items-center flex-1">
+              <TouchableOpacity
+                onPress={() => navigation.goBack()}
+                className="w-10 h-10 rounded-full bg-white/20 items-center justify-center mr-3"
+                activeOpacity={0.7}
+              >
+                <Ionicons name="chevron-back" size={24} color="#fff" />
+              </TouchableOpacity>
+              <View>
+                <Text className="text-white text-2xl font-bold mb-1">My Orders</Text>
+                <Text className="text-white/80 text-sm">
+                  {filteredOrders.length} {filteredOrders.length === 1 ? 'order' : 'orders'}
+                </Text>
+              </View>
             </View>
           </View>
 
