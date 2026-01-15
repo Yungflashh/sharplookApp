@@ -60,6 +60,7 @@ import ChangeWithdrawalPinScreen from '@/components/clientComponent/ProfleSettin
 import SubscriptionScreen from '@/components/vendorComponent/SubscriptionScreen';
 import DisputeOrderDetailScreen from '@/components/DisputeOrderDetailScreen';
 import TermsPrivacyScreen from '@/components/TermsPrivacyScreen';
+import SharedContentScreen from '@/screens/shared/SharedContentScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -280,6 +281,13 @@ const RootNavigator = () => {
           <Stack.Screen 
             name="TermsPrivacy" 
             component={TermsPrivacyScreen}  
+            options={{
+              animation: 'slide_from_right',
+            }} 
+          />
+           <Stack.Screen 
+            name="SharedContent" 
+            component={SharedContentScreen}  
             options={{
               animation: 'slide_from_right',
             }} 

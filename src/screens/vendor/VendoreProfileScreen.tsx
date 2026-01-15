@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, Dimensions, Switch, Platform, Image } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, Dimensions, Switch, Platform, Image, Share, Alert } from 'react-native';
 import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { getStoredUser, logoutUser } from '@/utils/authHelper';
@@ -159,6 +159,40 @@ const VendorProfileScreen: React.FC = () => {
     }
   };
 
+ const handleShareProfile = async () => {
+  if (!user?._id) {
+    Alert.alert('Error', 'Unable to share profile at this time');
+    return;
+  }
+
+  try {
+    // Deep link that will open the app if installed
+    const deepLink = `sharpLook://vendor/${user._id}`;
+    const businessName = user?.vendorProfile?.businessName || 'My Store';
+    
+    // Create platform-specific message
+    const message = Platform.OS === 'ios'
+      ? `Check out ${businessName} on sharpLook!`
+      : `Check out ${businessName} on sharpLook!\n\nOpen in app: ${deepLink}`;
+    
+    const result = await Share.share({
+      message,
+      url: Platform.OS === 'ios' ? deepLink : undefined,
+      title: `${businessName} Profile`,
+    });
+    
+    if (result.action === Share.sharedAction) {
+      console.log('✅ Profile shared successfully');
+      // Optionally show success message
+      // Alert.alert('Success', 'Profile shared!');
+    } else if (result.action === Share.dismissedAction) {
+      console.log('Share dismissed');
+    }
+  } catch (error) {
+    console.error('❌ Error sharing profile:', error);
+    Alert.alert('Error', 'Failed to share profile. Please try again.');
+  }
+};
   const stats: Stat[] = [];
 
   const profileSections: MenuSection[] = [
@@ -172,6 +206,13 @@ const VendorProfileScreen: React.FC = () => {
           iconFamily: 'material',
           onPress: () => navigation.navigate('VendorStoreSettings'),
         },
+        // {
+        //   icon: 'share-social-outline',
+        //   title: 'Share Profile',
+        //   subtitle: 'Share your profile with customers',
+        //   iconFamily: 'ionicons',
+        //   onPress: handleShareProfile,
+        // },
       ],
     },
     {

@@ -77,7 +77,14 @@ export const linking = {
       Message: 'messages',
       Notification: 'notifications',
       Chat: 'chats',
-      Cart: 'cart'
+      Cart: 'cart',
+      SharedContent: {
+        path: 'share/:type/:id',
+        parse: {
+          type: (type: string) => type,
+          id: (id: string) => id
+        }
+      }
     }
   }
 };

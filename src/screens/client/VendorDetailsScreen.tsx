@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, RefreshControl, ActivityIndicator, Dimensions, Image, Linking, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, RefreshControl, ActivityIndicator, Dimensions, Image, Linking, Alert, Share } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -141,8 +141,35 @@ const handleMessageVendor = () => {
     });
   }
 };
-  const handleShareVendor = () => {
-    console.log('Share vendor:', vendorId);
+  const handleShareVendor = async () => {
+    if (!vendor) return;
+
+    const url = `https://sharplook.com/vendors/${vendorId}`;
+    const message = `Check out ${vendor.vendorProfile.businessName} on SharpLook!`;
+
+    try {
+      const result = await Share.share({
+        message: `${message}\n${url}`,
+        url, 
+        title: `Share ${vendor.vendorProfile.businessName}`,
+      });
+
+      if (result.action === Share.sharedAction) {
+        if (result.activityType) {
+          // Shared with activity type of result.activityType
+          console.log('Shared via:', result.activityType);
+        } else {
+          // Shared
+          console.log('Shared successfully');
+        }
+      } else if (result.action === Share.dismissedAction) {
+        // Dismissed
+        console.log('Share dismissed');
+      }
+    } catch (error: any) {
+      Alert.alert('Error', 'Failed to share vendor profile.');
+      console.error('Share error:', error.message);
+    }
   };
   const handleBookService = (serviceId: string) => {
     const service = services.find(s => s._id === serviceId);

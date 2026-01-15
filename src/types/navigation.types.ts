@@ -32,7 +32,7 @@ export type RootStackParamList = {
       isActive?: boolean;
     };
     vendor: {
-      _id: string;
+      _id:string;
       vendorProfile: {
         businessName: string;
         vendorType: string;
@@ -74,7 +74,7 @@ export type RootStackParamList = {
   Marketplace: undefined;
   AddProduct: undefined;
   EditProduct: undefined;
-  ProductDetail: undefined;
+  ProductDetail: { productId: string };
   Checkout: undefined;
   Analytics: undefined;
   MyProducts: undefined;
@@ -117,6 +117,19 @@ export type RootStackParamList = {
     callType: 'voice' | 'video';
     offer?: any; 
   };
+  SharedContent: {
+    type: 'vendor' | 'product';
+    id: string;
+  };
+  Referrals: undefined;
+  ReferralLeaderboard: undefined;
+  ApplyReferralCode: undefined;
+  ReferralDetail: undefined;
+  WalletPayment: undefined;
+  ChangeWithdrawalPin: undefined;
+  Subsriptions: undefined;
+  DisputeOrderDetail: undefined;
+  TermsPrivacy: undefined;
 };
 export type AuthStackParamList = {
   Login: { message?: string } | undefined;

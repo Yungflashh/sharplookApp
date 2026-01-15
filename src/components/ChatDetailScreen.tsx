@@ -376,49 +376,48 @@ const ChatDetailScreen: React.FC = () => {
   };
 
   const initializeConversation = async () => {
-  try {
-    
-    if (!otherUserId) {
-      console.error('❌ No otherUserId provided');
-      Alert.alert('Error', 'Invalid user. Please go back and try again.');
-      navigation.goBack();
-      return;
-    }
-
-    if (!currentUserId) {
-      console.error('❌ No currentUserId - user not authenticated');
-      Alert.alert('Error', 'You must be logged in to view messages.');
-      return;
-    }
-
-    setLoading(true);
-    console.log('🔄 Initializing conversation with user:', otherUserId);
-
-    const convResponse = await messageAPI.getOrCreateConversation(otherUserId);
-    
-    if (convResponse.success) {
-      const conversation = convResponse.data.conversation || convResponse.data;
-      setConversationId(conversation._id);
-
-      const other = conversation.participants.find(
-        (p: any) => p._id.toString() !== currentUserId
-      );
-      if (other) {
-        setOtherUser(other);
-        setIsOtherUserOnline(other.isOnline || false);
-        setOtherUserActivity(other.isOnline ? 'online' : 'offline');
+    try {
+      if (!otherUserId) {
+        console.error('❌ No otherUserId provided');
+        Alert.alert('Error', 'Invalid user. Please go back and try again.');
+        navigation.goBack();
+        return;
       }
 
-      await loadMessages(conversation._id);
+      if (!currentUserId) {
+        console.error('❌ No currentUserId - user not authenticated');
+        Alert.alert('Error', 'You must be logged in to view messages.');
+        return;
+      }
+
+      setLoading(true);
+      console.log('🔄 Initializing conversation with user:', otherUserId);
+
+      const convResponse = await messageAPI.getOrCreateConversation(otherUserId);
+      
+      if (convResponse.success) {
+        const conversation = convResponse.data.conversation || convResponse.data;
+        setConversationId(conversation._id);
+
+        const other = conversation.participants.find(
+          (p: any) => p._id.toString() !== currentUserId
+        );
+        if (other) {
+          setOtherUser(other);
+          setIsOtherUserOnline(other.isOnline || false);
+          setOtherUserActivity(other.isOnline ? 'online' : 'offline');
+        }
+
+        await loadMessages(conversation._id);
+      }
+    } catch (error) {
+      const apiError = handleAPIError(error);
+      console.error('Initialize conversation error:', apiError);
+      Alert.alert('Error', apiError.message || 'Failed to load conversation');
+    } finally {
+      setLoading(false);
     }
-  } catch (error) {
-    const apiError = handleAPIError(error);
-    console.error('Initialize conversation error:', apiError);
-    Alert.alert('Error', apiError.message || 'Failed to load conversation');
-  } finally {
-    setLoading(false);
-  }
-};
+  };
 
   const loadMessages = async (convId: string, pageNum: number = 1) => {
     try {
@@ -462,43 +461,41 @@ const ChatDetailScreen: React.FC = () => {
   };
 
   const handleCall = async (type: 'voice' | 'video') => {
-  if (!otherUserId) return;
+    if (!otherUserId) return;
 
-  try {
-    console.log(`📞 ${type === 'voice' ? '🎤' : '📹'} Initiating ${type} call`);
-    console.log('   - Other user ID:', otherUserId);
-    console.log('   - Conversation ID:', conversationId);
+    try {
+      console.log(`📞 ${type === 'voice' ? '🎤' : '📹'} Initiating ${type} call`);
+      console.log('   - Other user ID:', otherUserId);
+      console.log('   - Conversation ID:', conversationId);
 
-    
-    await callService.initiateCall(
-      otherUserId,
-      type,
-      undefined, 
-      conversationId || undefined
-    );
+      await callService.initiateCall(
+        otherUserId,
+        type,
+        undefined, 
+        conversationId || undefined
+      );
 
-    console.log('   ✅ Call initiation sent to backend');
-    console.log('   - Navigating to OngoingCall screen...');
+      console.log('   ✅ Call initiation sent to backend');
+      console.log('   - Navigating to OngoingCall screen...');
 
-    
-    navigation.navigate('OngoingCall', {
-      callId: undefined, 
-      callType: type,
-      isOutgoing: true,
-      otherUser: {
-        _id: otherUserId,
-        firstName: otherUser?.firstName || otherUserName?.split(' ')[0] || 'User',
-        lastName: otherUser?.lastName || otherUserName?.split(' ')[1] || '',
-        avatar: otherUser?.avatar || otherUserAvatar
-      }
-    });
+      navigation.navigate('OngoingCall', {
+        callId: undefined, 
+        callType: type,
+        isOutgoing: true,
+        otherUser: {
+          _id: otherUserId,
+          firstName: otherUser?.firstName || otherUserName?.split(' ')[0] || 'User',
+          lastName: otherUser?.lastName || otherUserName?.split(' ')[1] || '',
+          avatar: otherUser?.avatar || otherUserAvatar
+        }
+      });
 
-    console.log('   ✅ Navigation complete');
-  } catch (error) {
-    console.error('❌ Error initiating call:', error);
-    Alert.alert('Error', 'Failed to initiate call. Please try again.');
-  }
-};
+      console.log('   ✅ Navigation complete');
+    } catch (error) {
+      console.error('❌ Error initiating call:', error);
+      Alert.alert('Error', 'Failed to initiate call. Please try again.');
+    }
+  };
 
   const handleTextChange = (text: string) => {
     setInputText(text);
@@ -558,7 +555,6 @@ const ChatDetailScreen: React.FC = () => {
       }
 
       if (mediaUri) {
-        // Use fileObject if provided, otherwise create from mediaUri
         const uploadFile = fileObject || {
           uri: mediaUri,
           type: mediaType === 'audio' ? 'audio/m4a' : mediaType,
@@ -708,15 +704,12 @@ const ChatDetailScreen: React.FC = () => {
       }
       
       if (uri) {
-        // Get the actual filename from the URI
         const filename = uri.split('/').pop() || `audio_${Date.now()}.m4a`;
         
-        // Create proper audio file object
-        // IMPORTANT: Do not set type here, let FormData handle it
         const audioFile = {
           uri,
           name: filename,
-          type: 'audio/x-m4a', // Correct MIME type for m4a files
+          type: 'audio/x-m4a',
         };
         
         console.log('🎤 Uploading audio file:', audioFile);
@@ -782,18 +775,15 @@ const ChatDetailScreen: React.FC = () => {
           viewPosition: 0.5, 
         });
         
-        
         setHighlightedMessageId(messageId);
         setTimeout(() => {
           setHighlightedMessageId(null);
         }, 2000); 
       } catch (error) {
-        
         console.log('ScrollToIndex failed, trying alternative method');
         flatListRef.current?.scrollToEnd({ animated: true });
       }
     } else {
-      
       Alert.alert(
         'Message Not Found',
         'The original message might have been deleted or is not loaded yet.'
@@ -804,20 +794,17 @@ const ChatDetailScreen: React.FC = () => {
   // Audio playback functions
   const playAudio = async (audioUrl: string, messageId: string) => {
     try {
-      // If already playing this audio, pause it
       if (playingAudioId === messageId) {
         await pauseAudio();
         return;
       }
 
-      // Stop any currently playing audio
       if (soundRef.current) {
         await soundRef.current.stopAsync();
         await soundRef.current.unloadAsync();
         soundRef.current = null;
       }
 
-      // Set audio mode
       await Audio.setAudioModeAsync({
         allowsRecordingIOS: false,
         playsInSilentModeIOS: true,
@@ -827,7 +814,6 @@ const ChatDetailScreen: React.FC = () => {
 
       console.log('🎵 Loading audio:', audioUrl);
 
-      // Create and load new sound
       const { sound, status } = await Audio.Sound.createAsync(
         { uri: audioUrl },
         { shouldPlay: true },
@@ -837,7 +823,6 @@ const ChatDetailScreen: React.FC = () => {
       soundRef.current = sound;
       setPlayingAudioId(messageId);
 
-      // Set duration if available
       if (status.isLoaded && status.durationMillis) {
         setAudioDurations(prev => ({
           ...prev,
@@ -866,7 +851,6 @@ const ChatDetailScreen: React.FC = () => {
 
   const onPlaybackStatusUpdate = (messageId: string) => (status: any) => {
     if (status.isLoaded) {
-      // Update progress
       if (status.durationMillis) {
         const progress = status.positionMillis / status.durationMillis;
         setAudioProgress(prev => ({
@@ -874,14 +858,12 @@ const ChatDetailScreen: React.FC = () => {
           [messageId]: progress
         }));
 
-        // Update duration
         setAudioDurations(prev => ({
           ...prev,
           [messageId]: status.durationMillis / 1000
         }));
       }
 
-      // Handle playback finish
       if (status.didJustFinish) {
         setPlayingAudioId(null);
         setAudioProgress(prev => ({
@@ -892,7 +874,6 @@ const ChatDetailScreen: React.FC = () => {
     }
   };
 
-  // Cleanup audio on unmount
   useEffect(() => {
     return () => {
       if (soundRef.current) {
@@ -901,12 +882,10 @@ const ChatDetailScreen: React.FC = () => {
     };
   }, []);
 
-  // Scroll to bottom when keyboard opens
   useEffect(() => {
     const keyboardDidShowListener = Keyboard.addListener(
       Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
       (e) => {
-        // Scroll with a delay to ensure keyboard is fully shown
         setTimeout(() => {
           flatListRef.current?.scrollToEnd({ animated: true });
         }, Platform.OS === 'ios' ? 0 : 100);
@@ -916,7 +895,6 @@ const ChatDetailScreen: React.FC = () => {
     const keyboardDidHideListener = Keyboard.addListener(
       Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
       () => {
-        // Optional: scroll when keyboard hides
         setTimeout(() => {
           flatListRef.current?.scrollToEnd({ animated: true });
         }, 100);
@@ -1008,10 +986,8 @@ const ChatDetailScreen: React.FC = () => {
         <View className="px-4 py-3">
           <View className="bg-pink-50 rounded-2xl overflow-hidden">
             <View className="flex-row items-center p-3">
-              {}
               <View className="w-1 h-full absolute left-0 bg-pink-500" />
               
-              {}
               <View className="ml-3 w-10 h-10 rounded-full bg-white items-center justify-center overflow-hidden mr-3"
                 style={{
                   shadowColor: '#000',
@@ -1034,7 +1010,6 @@ const ChatDetailScreen: React.FC = () => {
                 )}
               </View>
 
-              {}
               <View className="flex-1">
                 <View className="flex-row items-center mb-1">
                   <Ionicons name="arrow-undo" size={12} color="#eb278d" />
@@ -1047,7 +1022,6 @@ const ChatDetailScreen: React.FC = () => {
                 </Text>
               </View>
 
-              {}
               <TouchableOpacity
                 onPress={() => setReplyingTo(null)}
                 className="w-7 h-7 rounded-full bg-white items-center justify-center ml-3"
@@ -1130,11 +1104,11 @@ const ChatDetailScreen: React.FC = () => {
   return (
     <SafeAreaView className="flex-1 bg-gray-50" edges={['top']}>
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         className="flex-1"
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+        keyboardVerticalOffset={0}
       >
-        {}
+        {/* Header */}
         <LinearGradient
           colors={['#eb278d', '#f472b6']}
           start={{ x: 0, y: 0 }}
@@ -1147,69 +1121,69 @@ const ChatDetailScreen: React.FC = () => {
             elevation: 8,
           }}
         >
-        <View className="px-4 py-3">
-          <View className="flex-row items-center">
-            <TouchableOpacity
-              onPress={() => navigation.goBack()}
-              className="w-10 h-10 rounded-full bg-white/20 items-center justify-center mr-3"
-              activeOpacity={0.7}
-            >
-              <Ionicons name="chevron-back" size={24} color="#fff" />
-            </TouchableOpacity>
+          <View className="px-4 py-3">
+            <View className="flex-row items-center">
+              <TouchableOpacity
+                onPress={() => navigation.goBack()}
+                className="w-10 h-10 rounded-full bg-white/20 items-center justify-center mr-3"
+                activeOpacity={0.7}
+              >
+                <Ionicons name="chevron-back" size={24} color="#fff" />
+              </TouchableOpacity>
 
-            <TouchableOpacity 
-              className="flex-row items-center flex-1"
-              activeOpacity={0.7}
-            >
-              <View className="relative mr-3">
-                <View className="w-11 h-11 rounded-full bg-white/30 items-center justify-center overflow-hidden"
-                  style={{
-                    shadowColor: '#000',
-                    shadowOffset: { width: 0, height: 2 },
-                    shadowOpacity: 0.2,
-                    shadowRadius: 3,
-                    elevation: 3,
-                  }}
-                >
-                  {(otherUser?.avatar || otherUserAvatar) ? (
-                    <Image
-                      source={{ uri: otherUser?.avatar || otherUserAvatar }}
-                      className="w-11 h-11"
-                      resizeMode="cover"
-                    />
-                  ) : (
-                    <Ionicons name="person" size={22} color="#fff" />
+              <TouchableOpacity 
+                className="flex-row items-center flex-1"
+                activeOpacity={0.7}
+              >
+                <View className="relative mr-3">
+                  <View className="w-11 h-11 rounded-full bg-white/30 items-center justify-center overflow-hidden"
+                    style={{
+                      shadowColor: '#000',
+                      shadowOffset: { width: 0, height: 2 },
+                      shadowOpacity: 0.2,
+                      shadowRadius: 3,
+                      elevation: 3,
+                    }}
+                  >
+                    {(otherUser?.avatar || otherUserAvatar) ? (
+                      <Image
+                        source={{ uri: otherUser?.avatar || otherUserAvatar }}
+                        className="w-11 h-11"
+                        resizeMode="cover"
+                      />
+                    ) : (
+                      <Ionicons name="person" size={22} color="#fff" />
+                    )}
+                  </View>
+                  
+                  {isOtherUserOnline && (
+                    <View className="absolute bottom-0 right-0 w-3.5 h-3.5 rounded-full bg-green-400 border-2 border-white" />
                   )}
                 </View>
-                
-                {isOtherUserOnline && (
-                  <View className="absolute bottom-0 right-0 w-3.5 h-3.5 rounded-full bg-green-400 border-2 border-white" />
-                )}
-              </View>
 
-              <View className="flex-1">
-                <Text className="text-white font-bold text-lg">
-                  {otherUser?.firstName && otherUser?.lastName
-                    ? `${otherUser.firstName} ${otherUser.lastName}`
-                    : otherUserName || 'User'}
-                </Text>
-                
-                {renderUserStatus()}
-              </View>
-            </TouchableOpacity>
+                <View className="flex-1">
+                  <Text className="text-white font-bold text-lg">
+                    {otherUser?.firstName && otherUser?.lastName
+                      ? `${otherUser.firstName} ${otherUser.lastName}`
+                      : otherUserName || 'User'}
+                  </Text>
+                  
+                  {renderUserStatus()}
+                </View>
+              </TouchableOpacity>
 
-            <TouchableOpacity
-              onPress={() => handleCall('voice')}
-              className="w-10 h-10 rounded-full bg-white/20 items-center justify-center ml-2"
-              activeOpacity={0.7}
-            >
-              <Ionicons name="call" size={20} color="#fff" />
-            </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => handleCall('voice')}
+                className="w-10 h-10 rounded-full bg-white/20 items-center justify-center ml-2"
+                activeOpacity={0.7}
+              >
+                <Ionicons name="call" size={20} color="#fff" />
+              </TouchableOpacity>
+            </View>
           </View>
-        </View>
-      </LinearGradient>
+        </LinearGradient>
 
-        {}
+        {/* Messages List */}
         <FlatList
           ref={flatListRef}
           data={messages}
@@ -1218,7 +1192,7 @@ const ChatDetailScreen: React.FC = () => {
           contentContainerStyle={{ 
             paddingVertical: 12,
             paddingHorizontal: 4,
-            paddingBottom: 20, // Extra padding at bottom for keyboard
+            paddingBottom: 20,
             flexGrow: 1,
           }}
           inverted={false}
@@ -1230,7 +1204,6 @@ const ChatDetailScreen: React.FC = () => {
             minIndexForVisible: 0,
           }}
           onScrollToIndexFailed={(info) => {
-            
             const wait = new Promise(resolve => setTimeout(resolve, 500));
             wait.then(() => {
               flatListRef.current?.scrollToIndex({ 
@@ -1241,124 +1214,127 @@ const ChatDetailScreen: React.FC = () => {
             });
           }}
           ListEmptyComponent={
-          <View className="flex-1 items-center justify-center py-20">
-            <View className="w-24 h-24 rounded-full bg-pink-100 items-center justify-center mb-4">
-              <Ionicons name="chatbubbles" size={48} color="#eb278d" />
+            <View className="flex-1 items-center justify-center py-20">
+              <View className="w-24 h-24 rounded-full bg-pink-100 items-center justify-center mb-4">
+                <Ionicons name="chatbubbles" size={48} color="#eb278d" />
+              </View>
+              <Text className="text-gray-900 font-bold text-xl mb-2">
+                Start the conversation
+              </Text>
+              <Text className="text-gray-500 text-center px-12 text-sm">
+                Send a message to begin chatting with {otherUser?.firstName || 'this user'}
+              </Text>
             </View>
-            <Text className="text-gray-900 font-bold text-xl mb-2">
-              Start the conversation
-            </Text>
-            <Text className="text-gray-500 text-center px-12 text-sm">
-              Send a message to begin chatting with {otherUser?.firstName || 'this user'}
-            </Text>
-          </View>
-        }
-        ListHeaderComponent={
-          loadingMore ? (
-            <View className="py-4 items-center">
-              <ActivityIndicator size="small" color="#eb278d" />
-            </View>
-          ) : null
-        }
-      />
+          }
+          ListHeaderComponent={
+            loadingMore ? (
+              <View className="py-4 items-center">
+                <ActivityIndicator size="small" color="#eb278d" />
+              </View>
+            ) : null
+          }
+        />
 
-        {}
+        {/* Reply Preview */}
         {renderReplyPreview()}
 
-        {}
+        {/* Media Preview */}
         {renderMediaPreview()}
 
-        {}
+        {/* Recording UI */}
         {isRecording && (
-        <View className="bg-gradient-to-r from-red-50 to-pink-50 border-t border-red-100">
-          <View className="px-4 py-4">
-            <View className="flex-row items-center justify-between">
-              <View className="flex-row items-center flex-1">
-                <View className="w-12 h-12 rounded-full bg-red-500 items-center justify-center mr-3">
-                  <Ionicons name="mic" size={24} color="#fff" />
+          <View className="bg-gradient-to-r from-red-50 to-pink-50 border-t border-red-100">
+            <View className="px-4 py-4">
+              <View className="flex-row items-center justify-between">
+                <View className="flex-row items-center flex-1">
+                  <View className="w-12 h-12 rounded-full bg-red-500 items-center justify-center mr-3">
+                    <Ionicons name="mic" size={24} color="#fff" />
+                  </View>
+                  <View className="flex-1">
+                    <Text className="text-red-600 font-bold text-base">Recording...</Text>
+                    <Text className="text-red-400 text-xs mt-0.5">Release to send</Text>
+                  </View>
                 </View>
-                <View className="flex-1">
-                  <Text className="text-red-600 font-bold text-base">Recording...</Text>
-                  <Text className="text-red-400 text-xs mt-0.5">Release to send</Text>
-                </View>
-              </View>
 
-              <View className="flex-row" style={{ gap: 8 }}>
-                <TouchableOpacity
-                  onPress={cancelRecording}
-                  className="px-5 py-2.5 rounded-full bg-white border border-gray-200"
-                  activeOpacity={0.7}
-                >
-                  <Text className="text-gray-700 font-bold text-sm">Cancel</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  onPress={stopRecording}
-                  activeOpacity={0.7}
-                >
-                  <LinearGradient
-                    colors={['#eb278d', '#f472b6']}
-                    className="px-6 py-2.5 rounded-full"
+                <View className="flex-row" style={{ gap: 8 }}>
+                  <TouchableOpacity
+                    onPress={cancelRecording}
+                    className="px-5 py-2.5 rounded-full bg-white border border-gray-200"
+                    activeOpacity={0.7}
                   >
-                    <Text className="text-white font-bold text-sm">Send</Text>
-                  </LinearGradient>
-                </TouchableOpacity>
+                    <Text className="text-gray-700 font-bold text-sm">Cancel</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    onPress={stopRecording}
+                    activeOpacity={0.7}
+                  >
+                    <LinearGradient
+                      colors={['#eb278d', '#f472b6']}
+                      className="px-6 py-2.5 rounded-full"
+                    >
+                      <Text className="text-white font-bold text-sm">Send</Text>
+                    </LinearGradient>
+                  </TouchableOpacity>
+                </View>
               </View>
             </View>
           </View>
-        </View>
         )}
 
-        {}
+        {/* Input Area */}
         <View
-        className="bg-white border-t border-gray-100"
-        style={{
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: -4 },
-          shadowOpacity: 0.05,
-          shadowRadius: 12,
-          elevation: 12,
-        }}
-      >
-        <View className="px-4 py-3">
-          <View className="flex-row items-end">
-            <TouchableOpacity
-              onPress={() => setShowAttachmentMenu(true)}
-              className="w-11 h-11 rounded-full bg-gray-100 items-center justify-center mr-2"
-              activeOpacity={0.7}
-            >
-              <Ionicons name="add" size={26} color="#6b7280" />
-            </TouchableOpacity>
-
-            <View className="flex-1 bg-gray-100 rounded-3xl overflow-hidden">
-              <TextInput
-                value={inputText}
-                onChangeText={handleTextChange}
-                placeholder="Message..."
-                placeholderTextColor="#9ca3af"
-                className="px-5 py-3 text-gray-900 text-base"
-                multiline
-                maxLength={1000}
-                style={{ maxHeight: 100 }}
-                returnKeyType="send"
-                onSubmitEditing={() => handleSendMessage()}
-                blurOnSubmit={false}
-                onFocus={() => {
-                  // Android needs more time for keyboard animation
-                  setTimeout(() => {
-                    flatListRef.current?.scrollToEnd({ animated: true });
-                  }, Platform.OS === 'ios' ? 250 : 400);
-                }}
-              />
-            </View>
-
-            {inputText.trim() || selectedMedia ? (
+          className="bg-white border-t border-gray-100"
+          style={{
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: -4 },
+            shadowOpacity: 0.05,
+            shadowRadius: 12,
+            elevation: 12,
+            paddingBottom: Platform.OS === 'ios' ? 0 : 0,
+          }}
+        >
+          <View className="px-4 py-3">
+            <View className="flex-row items-end">
               <TouchableOpacity
-                onPress={() => {
-                  if (selectedMedia) {
-                    handleSendMessage(selectedMedia.uri, selectedMedia.type || 'image');
-                  } else {
-                    handleSendMessage();
+                onPress={() => setShowAttachmentMenu(true)}
+                className="w-11 h-11 rounded-full bg-gray-100 items-center justify-center mr-2"
+                activeOpacity={0.7}
+              >
+                <Ionicons name="add" size={26} color="#6b7280" />
+              </TouchableOpacity>
+
+              <View className="flex-1 bg-gray-100 rounded-3xl overflow-hidden">
+                <TextInput
+                  value={inputText}
+                  onChangeText={handleTextChange}
+                  placeholder="Message..."
+                  placeholderTextColor="#9ca3af"
+                  className="px-5 py-3 text-gray-900 text-base"
+                  multiline
+                  maxLength={1000}
+                  style={{ 
+                    maxHeight: 100,
+                    minHeight: 44,
+                  }}
+                  returnKeyType="send"
+                  onSubmitEditing={() => handleSendMessage()}
+                  blurOnSubmit={false}
+                  onFocus={() => {
+                    setTimeout(() => {
+                      flatListRef.current?.scrollToEnd({ animated: true });
+                    }, Platform.OS === 'ios' ? 250 : 400);
+                  }}
+                />
+              </View>
+
+              {inputText.trim() || selectedMedia ? (
+                <TouchableOpacity
+                  onPress={() => {
+                    if (selectedMedia) {
+                      handleSendMessage(selectedMedia.uri, selectedMedia.type || 'image');
+                    } else {
+                      handleSendMessage();
                     }
                   }}
                   disabled={sending}
@@ -1408,15 +1384,15 @@ const ChatDetailScreen: React.FC = () => {
           </View>
         </View>
 
-        {}
+        {/* Attachment Menu Modal */}
         <AttachmentMenuModal
-        visible={showAttachmentMenu}
-        onClose={() => setShowAttachmentMenu(false)}
-        onPickImage={handlePickImage}
-        onTakePhoto={handleTakePhoto}
-        onPickVideo={handlePickVideo}
-        onPickDocument={handlePickDocument}
-      />
+          visible={showAttachmentMenu}
+          onClose={() => setShowAttachmentMenu(false)}
+          onPickImage={handlePickImage}
+          onTakePhoto={handleTakePhoto}
+          onPickVideo={handlePickVideo}
+          onPickDocument={handlePickDocument}
+        />
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -1454,27 +1430,23 @@ const SwipeableMessage: React.FC<{
     PanResponder.create({
       onStartShouldSetPanResponder: () => false,
       onMoveShouldSetPanResponder: (_, gestureState) => {
-        // Only trigger if horizontal swipe is more than 15px and more horizontal than vertical
         return Math.abs(gestureState.dx) > 15 && Math.abs(gestureState.dx) > Math.abs(gestureState.dy) * 2;
       },
       onPanResponderMove: (_, gestureState) => {
         if (isMyMessage) {
-          // Swipe left for my messages
           if (gestureState.dx < 0 && gestureState.dx > -100) {
-            translateX.setValue(gestureState.dx * 0.6); // Add resistance
+            translateX.setValue(gestureState.dx * 0.6);
           }
         } else {
-          // Swipe right for other messages
           if (gestureState.dx > 0 && gestureState.dx < 100) {
-            translateX.setValue(gestureState.dx * 0.6); // Add resistance
+            translateX.setValue(gestureState.dx * 0.6);
           }
         }
       },
       onPanResponderRelease: (_, gestureState) => {
-        const threshold = 60; // Increased threshold
+        const threshold = 60;
         const velocity = Math.abs(gestureState.vx);
         
-        // Trigger reply if swipe is far enough OR fast enough
         if (Math.abs(gestureState.dx) > threshold || velocity > 0.5) {
           onReply();
         }
@@ -1502,227 +1474,235 @@ const SwipeableMessage: React.FC<{
   return (
     <Animated.View
       {...panResponder.panHandlers}
-      style={{ transform: [{ translateX }] }}
-      className={`mb-3 px-3 ${isMyMessage ? 'items-end' : 'items-start'}`}
+      style={{ 
+        transform: [{ translateX }],
+        width: '100%',
+      }}
+      className="mb-3 px-3"
     >
-      <View className="flex-row items-end max-w-[85%]">
-        {!isMyMessage && (
-          <View 
-            className="w-8 h-8 rounded-full bg-pink-400 items-center justify-center mr-2 overflow-hidden"
-            style={{
-              shadowColor: '#000',
-              shadowOffset: { width: 0, height: 1 },
-              shadowOpacity: 0.1,
-              shadowRadius: 2,
-              elevation: 2,
-            }}
-          >
-            {otherUser?.avatar ? (
-              <Image
-                source={{ uri: otherUser.avatar }}
-                className="w-8 h-8"
-                resizeMode="cover"
-              />
-            ) : (
-              <Ionicons name="person" size={16} color="#fff" />
-            )}
-          </View>
-        )}
-
-        <View
-          className={`rounded-3xl overflow-hidden ${
-            isMyMessage ? 'rounded-br-md' : 'rounded-bl-md'
-          } ${isHighlighted ? 'bg-yellow-100' : ''}`}
-          style={
-            isMyMessage
-              ? {
-                  shadowColor: '#eb278d',
-                  shadowOffset: { width: 0, height: 2 },
-                  shadowOpacity: 0.15,
-                  shadowRadius: 4,
-                  elevation: 3,
-                  ...(isHighlighted && {
-                    shadowColor: '#fbbf24',
-                    shadowOpacity: 0.4,
-                    shadowRadius: 8,
-                    elevation: 8,
-                  })
-                }
-              : {
-                  shadowColor: '#000',
-                  shadowOffset: { width: 0, height: 1 },
-                  shadowOpacity: 0.08,
-                  shadowRadius: 3,
-                  elevation: 2,
-                  ...(isHighlighted && {
-                    shadowColor: '#fbbf24',
-                    shadowOpacity: 0.4,
-                    shadowRadius: 8,
-                    elevation: 8,
-                  })
-                }
-          }
-        >
-          {isMyMessage ? (
-            <LinearGradient
-              colors={['#eb278d', '#f472b6']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              className="px-4 py-2.5"
+      <View className={`flex-row ${isMyMessage ? 'justify-end' : 'justify-start'}`}>
+        <View className={`flex-row items-end ${isMyMessage ? 'flex-row-reverse' : 'flex-row'}`} style={{ maxWidth: '85%' }}>
+          {!isMyMessage && (
+            <View 
+              className="w-8 h-8 rounded-full bg-pink-400 items-center justify-center overflow-hidden"
+              style={{
+                marginRight: 8,
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 1 },
+                shadowOpacity: 0.1,
+                shadowRadius: 2,
+                elevation: 2,
+              }}
             >
-              {message.replyTo && (
-                <TouchableOpacity 
-                  onPress={() => onScrollToReply(message.replyTo!._id)}
-                  activeOpacity={0.7}
-                  className="mb-2 pb-2 border-b border-white/20"
-                >
-                  <Text className="text-white/80 text-xs font-medium mb-0.5">
-                    ↩ {message.replyTo.sender.firstName}
-                  </Text>
-                  <Text className="text-white/70 text-xs italic" numberOfLines={1}>
-                    {message.replyTo.text}
-                  </Text>
-                </TouchableOpacity>
+              {otherUser?.avatar ? (
+                <Image
+                  source={{ uri: otherUser.avatar }}
+                  className="w-8 h-8"
+                  resizeMode="cover"
+                />
+              ) : (
+                <Ionicons name="person" size={16} color="#fff" />
               )}
-
-              {message.attachments && message.attachments.length > 0 && (
-                <View className="mb-2">
-                  {message.attachments[0].type === 'image' && (
-                    <Image
-                      source={{ uri: message.attachments[0].url }}
-                      className="w-52 h-52 rounded-2xl"
-                      resizeMode="cover"
-                    />
-                  )}
-                  {message.attachments[0].type === 'audio' && (
-                    <TouchableOpacity
-                      onPress={() => onPlayAudio(message.attachments![0].url, message._id)}
-                      activeOpacity={0.7}
-                      className="bg-white/10 rounded-2xl p-3 min-w-[200px]"
-                    >
-                      <View className="flex-row items-center">
-                        <View className="w-10 h-10 rounded-full bg-white/20 items-center justify-center mr-3">
-                          <Ionicons 
-                            name={isPlaying ? "pause" : "play"} 
-                            size={20} 
-                            color="#fff" 
-                          />
-                        </View>
-                        <View className="flex-1">
-                          <View className="flex-row items-center justify-between mb-1.5">
-                            <Text className="text-white font-semibold text-sm">Voice Message</Text>
-                            <Text className="text-white/80 text-xs">
-                              {duration > 0 ? formatDuration(duration * (1 - progress)) : '0:00'}
-                            </Text>
-                          </View>
-                          <View className="h-1 bg-white/20 rounded-full overflow-hidden">
-                            <View 
-                              className="h-full bg-white/60 rounded-full" 
-                              style={{ width: `${progress * 100}%` }}
-                            />
-                          </View>
-                        </View>
-                      </View>
-                    </TouchableOpacity>
-                  )}
-                </View>
-              )}
-
-              {message.text && (
-                <Text className="text-white text-base leading-5">
-                  {message.text}
-                </Text>
-              )}
-
-              <View className="flex-row items-center justify-end mt-1.5">
-                <Text className="text-white/80 text-xs">
-                  {formatMessageTime(message.createdAt)}
-                </Text>
-
-                <View className="ml-1">
-                  {(message.status === 'sent' || !message.status) && (
-                    <Ionicons name="checkmark" size={14} color="rgba(255, 255, 255, 0.8)" />
-                  )}
-                  {message.status === 'delivered' && (
-                    <Ionicons name="checkmark-done" size={14} color="rgba(255, 255, 255, 0.8)" />
-                  )}
-                  {message.status === 'read' && (
-                    <Ionicons name="checkmark-done" size={14} color="#60a5fa" />
-                  )}
-                </View>
-              </View>
-            </LinearGradient>
-          ) : (
-            <View className="bg-white px-4 py-2.5">
-              {message.replyTo && (
-                <TouchableOpacity 
-                  onPress={() => onScrollToReply(message.replyTo!._id)}
-                  activeOpacity={0.7}
-                  className="mb-2 pb-2 border-b border-gray-200"
-                >
-                  <Text className="text-pink-600 text-xs font-medium mb-0.5">
-                    ↩ {message.replyTo.sender.firstName}
-                  </Text>
-                  <Text className="text-gray-500 text-xs italic" numberOfLines={1}>
-                    {message.replyTo.text}
-                  </Text>
-                </TouchableOpacity>
-              )}
-
-              {message.attachments && message.attachments.length > 0 && (
-                <View className="mb-2">
-                  {message.attachments[0].type === 'image' && (
-                    <Image
-                      source={{ uri: message.attachments[0].url }}
-                      className="w-52 h-52 rounded-2xl"
-                      resizeMode="cover"
-                    />
-                  )}
-                  {message.attachments[0].type === 'audio' && (
-                    <TouchableOpacity
-                      onPress={() => onPlayAudio(message.attachments![0].url, message._id)}
-                      activeOpacity={0.7}
-                      className="bg-pink-50 rounded-2xl p-3 min-w-[200px]"
-                    >
-                      <View className="flex-row items-center">
-                        <View className="w-10 h-10 rounded-full bg-pink-100 items-center justify-center mr-3">
-                          <Ionicons 
-                            name={isPlaying ? "pause" : "play"} 
-                            size={20} 
-                            color="#eb278d" 
-                          />
-                        </View>
-                        <View className="flex-1">
-                          <View className="flex-row items-center justify-between mb-1.5">
-                            <Text className="text-gray-900 font-semibold text-sm">Voice Message</Text>
-                            <Text className="text-gray-500 text-xs">
-                              {duration > 0 ? formatDuration(duration * (1 - progress)) : '0:00'}
-                            </Text>
-                          </View>
-                          <View className="h-1 bg-pink-200 rounded-full overflow-hidden">
-                            <View 
-                              className="h-full bg-pink-500 rounded-full" 
-                              style={{ width: `${progress * 100}%` }}
-                            />
-                          </View>
-                        </View>
-                      </View>
-                    </TouchableOpacity>
-                  )}
-                </View>
-              )}
-
-              {message.text && (
-                <Text className="text-gray-900 text-base leading-5">
-                  {message.text}
-                </Text>
-              )}
-
-              <Text className="text-gray-500 text-xs mt-1.5">
-                {formatMessageTime(message.createdAt)}
-              </Text>
             </View>
           )}
+
+          <View
+            className={`rounded-3xl overflow-hidden ${
+              isMyMessage ? 'rounded-br-md' : 'rounded-bl-md'
+            } ${isHighlighted ? 'bg-yellow-100' : ''}`}
+            style={
+              isMyMessage
+                ? {
+                    shadowColor: '#eb278d',
+                    shadowOffset: { width: 0, height: 2 },
+                    shadowOpacity: 0.15,
+                    shadowRadius: 4,
+                    elevation: 3,
+                    ...(isHighlighted && {
+                      shadowColor: '#fbbf24',
+                      shadowOpacity: 0.4,
+                      shadowRadius: 8,
+                      elevation: 8,
+                    })
+                  }
+                : {
+                    shadowColor: '#000',
+                    shadowOffset: { width: 0, height: 1 },
+                    shadowOpacity: 0.08,
+                    shadowRadius: 3,
+                    elevation: 2,
+                    ...(isHighlighted && {
+                      shadowColor: '#fbbf24',
+                      shadowOpacity: 0.4,
+                      shadowRadius: 8,
+                      elevation: 8,
+                    })
+                  }
+            }
+          >
+            {isMyMessage ? (
+              <LinearGradient
+                colors={['#eb278d', '#f472b6']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                className="px-4 py-2.5"
+              >
+                {message.replyTo && (
+                  <TouchableOpacity 
+                    onPress={() => onScrollToReply(message.replyTo!._id)}
+                    activeOpacity={0.7}
+                    className="mb-2 pb-2 border-b border-white/20"
+                  >
+                    <Text className="text-white/80 text-xs font-medium mb-0.5">
+                      ↩ {message.replyTo.sender.firstName}
+                    </Text>
+                    <Text className="text-white/70 text-xs italic" numberOfLines={1}>
+                      {message.replyTo.text}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+
+                {message.attachments && message.attachments.length > 0 && (
+                  <View className="mb-2">
+                    {message.attachments[0].type === 'image' && (
+                      <Image
+                        source={{ uri: message.attachments[0].url }}
+                        style={{ width: 200, height: 200, borderRadius: 16 }}
+                        resizeMode="cover"
+                      />
+                    )}
+                    {message.attachments[0].type === 'audio' && (
+                      <TouchableOpacity
+                        onPress={() => onPlayAudio(message.attachments![0].url, message._id)}
+                        activeOpacity={0.7}
+                        className="bg-white/10 rounded-2xl p-3"
+                        style={{ minWidth: 200 }}
+                      >
+                        <View className="flex-row items-center">
+                          <View className="w-10 h-10 rounded-full bg-white/20 items-center justify-center mr-3">
+                            <Ionicons 
+                              name={isPlaying ? "pause" : "play"} 
+                              size={20} 
+                              color="#fff" 
+                            />
+                          </View>
+                          <View className="flex-1">
+                            <View className="flex-row items-center justify-between mb-1.5">
+                              <Text className="text-white font-semibold text-sm">Voice Message</Text>
+                              <Text className="text-white/80 text-xs">
+                                {duration > 0 ? formatDuration(duration * (1 - progress)) : '0:00'}
+                              </Text>
+                            </View>
+                            <View className="h-1 bg-white/20 rounded-full overflow-hidden">
+                              <View 
+                                className="h-full bg-white/60 rounded-full" 
+                                style={{ width: `${progress * 100}%` }}
+                              />
+                            </View>
+                          </View>
+                        </View>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                )}
+
+                {message.text && (
+                  <Text className="text-white text-base leading-5" style={{ flexShrink: 1 }}>
+                    {message.text}
+                  </Text>
+                )}
+
+                <View className="flex-row items-center justify-end mt-1.5">
+                  <Text className="text-white/80 text-xs">
+                    {formatMessageTime(message.createdAt)}
+                  </Text>
+
+                  <View className="ml-1">
+                    {(message.status === 'sent' || !message.status) && (
+                      <Ionicons name="checkmark" size={14} color="rgba(255, 255, 255, 0.8)" />
+                    )}
+                    {message.status === 'delivered' && (
+                      <Ionicons name="checkmark-done" size={14} color="rgba(255, 255, 255, 0.8)" />
+                    )}
+                    {message.status === 'read' && (
+                      <Ionicons name="checkmark-done" size={14} color="#60a5fa" />
+                    )}
+                  </View>
+                </View>
+              </LinearGradient>
+            ) : (
+              <View className="bg-white px-4 py-2.5">
+                {message.replyTo && (
+                  <TouchableOpacity 
+                    onPress={() => onScrollToReply(message.replyTo!._id)}
+                    activeOpacity={0.7}
+                    className="mb-2 pb-2 border-b border-gray-200"
+                  >
+                    <Text className="text-pink-600 text-xs font-medium mb-0.5">
+                      ↩ {message.replyTo.sender.firstName}
+                    </Text>
+                    <Text className="text-gray-500 text-xs italic" numberOfLines={1}>
+                      {message.replyTo.text}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+
+                {message.attachments && message.attachments.length > 0 && (
+                  <View className="mb-2">
+                    {message.attachments[0].type === 'image' && (
+                      <Image
+                        source={{ uri: message.attachments[0].url }}
+                        style={{ width: 200, height: 200, borderRadius: 16 }}
+                        resizeMode="cover"
+                      />
+                    )}
+                    {message.attachments[0].type === 'audio' && (
+                      <TouchableOpacity
+                        onPress={() => onPlayAudio(message.attachments![0].url, message._id)}
+                        activeOpacity={0.7}
+                        className="bg-pink-50 rounded-2xl p-3"
+                        style={{ minWidth: 200 }}
+                      >
+                        <View className="flex-row items-center">
+                          <View className="w-10 h-10 rounded-full bg-pink-100 items-center justify-center mr-3">
+                            <Ionicons 
+                              name={isPlaying ? "pause" : "play"} 
+                              size={20} 
+                              color="#eb278d" 
+                            />
+                          </View>
+                          <View className="flex-1">
+                            <View className="flex-row items-center justify-between mb-1.5">
+                              <Text className="text-gray-900 font-semibold text-sm">Voice Message</Text>
+                              <Text className="text-gray-500 text-xs">
+                                {duration > 0 ? formatDuration(duration * (1 - progress)) : '0:00'}
+                              </Text>
+                            </View>
+                            <View className="h-1 bg-pink-200 rounded-full overflow-hidden">
+                              <View 
+                                className="h-full bg-pink-500 rounded-full" 
+                                style={{ width: `${progress * 100}%` }}
+                              />
+                            </View>
+                          </View>
+                        </View>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                )}
+
+                {message.text && (
+                  <Text className="text-gray-900 text-base leading-5" style={{ flexShrink: 1 }}>
+                    {message.text}
+                  </Text>
+                )}
+
+                <Text className="text-gray-500 text-xs mt-1.5">
+                  {formatMessageTime(message.createdAt)}
+                </Text>
+              </View>
+            )}
+          </View>
         </View>
       </View>
     </Animated.View>

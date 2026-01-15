@@ -448,31 +448,29 @@ const VendorDashboardScreen: React.FC = () => {
           <Text className="text-lg font-bold text-gray-800">Dashboard</Text>
           
           <View className="flex-row items-center gap-3">
-            <TouchableOpacity 
-              className="relative w-10 h-10 items-center justify-center" 
-              activeOpacity={0.7} 
-              onPress={() => navigation.navigate('ChatList')}
-            >
-              <Ionicons name="chatbubble-ellipses-outline" size={24} color="#eb278d" />
-              {unreadMessagesCount > 0 ? (
-                <View
-                  className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] bg-pink-500 rounded-full items-center justify-center px-1"
-                  style={{
-                    shadowColor: '#eb278d',
-                    shadowOffset: { width: 0, height: 2 },
-                    shadowOpacity: 0.3,
-                    shadowRadius: 3,
-                    elevation: 4,
-                  }}
-                >
-                  <Text className="text-white text-[10px] font-bold">
-                    {unreadMessagesCount > 99 ? '99+' : unreadMessagesCount}
-                  </Text>
-                </View>
-              ) : (
-                <View className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white" />
-              )}
-            </TouchableOpacity>
+        <TouchableOpacity 
+  className="relative w-10 h-10 items-center justify-center" 
+  activeOpacity={0.7} 
+  onPress={() => navigation.navigate('ChatList')}
+>
+  <Ionicons name="chatbubble-ellipses-outline" size={24} color="#eb278d" />
+  {unreadMessagesCount > 0 && (
+    <View
+      className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] bg-pink-500 rounded-full items-center justify-center px-1"
+      style={{
+        shadowColor: '#eb278d',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.3,
+        shadowRadius: 3,
+        elevation: 4,
+      }}
+    >
+      <Text className="text-white text-[10px] font-bold">
+        {unreadMessagesCount > 99 ? '99+' : unreadMessagesCount}
+      </Text>
+    </View>
+  )}
+</TouchableOpacity>
             
             <TouchableOpacity 
               className="relative w-10 h-10 items-center justify-center" 

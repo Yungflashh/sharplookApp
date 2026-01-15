@@ -10,7 +10,16 @@
     "experiments": {
       "tsconfigPaths": true
     },
-    "plugins": [],
+    "plugins": [
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/sharplooklogo.png",
+          "color": "#FF6B35",
+          "sounds": []
+        }
+      ]
+    ],
     "orientation": "portrait",
     "icon": "./assets/app-icon.png",
     "userInterfaceStyle": "light",
@@ -32,11 +41,6 @@
             "CFBundleURLSchemes": [
               "sharpLook"
             ]
-          },
-          {
-            "CFBundleURLSchemes": [
-              "sharpLook"
-            ]
           }
         ],
         "ITSAppUsesNonExemptEncryption": false
@@ -47,22 +51,9 @@
         "foregroundImage": "./assets/app-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "com.sharpLook.app",
+      "package": "com.sharplook.app",
       "versionCode": 47,
       "intentFilters": [
-        {
-          "action": "VIEW",
-          "autoVerify": true,
-          "data": [
-            {
-              "scheme": "sharpLook"
-            }
-          ],
-          "category": [
-            "BROWSABLE",
-            "DEFAULT"
-          ]
-        },
         {
           "action": "VIEW",
           "autoVerify": true,

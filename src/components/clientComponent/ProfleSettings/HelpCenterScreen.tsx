@@ -59,9 +59,9 @@ const HelpCenterScreen: React.FC = () => {
   }, {
     icon: 'mail',
     title: 'Email Us',
-    subtitle: 'hello@sharplook.beauty',
+    subtitle: 'sharplookcustomercare@gmail.com',
     color: '#10b981',
-    onPress: () => Linking.openURL('mailto:hello@sharplook.beauty')
+    onPress: () => Linking.openURL('mailto:sharplookcustomercare@gmail.com')
   }, {
     icon: 'call',
     title: 'Call Us',

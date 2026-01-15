@@ -458,11 +458,22 @@ const MarketplaceScreen: React.FC = () => {
       >
         <View className="px-5 pt-4">
           <View className="flex-row items-center justify-between mb-4">
-            <View>
-              <Text className="text-white text-2xl font-bold">Marketplace</Text>
-              <Text className="text-white/80 text-sm">
-                {allProducts.length} products available
-              </Text>
+            {/* Back Button & Title */}
+            <View className="flex-row items-center flex-1">
+              <TouchableOpacity
+                onPress={() => navigation.goBack()}
+                className="w-10 h-10 rounded-full bg-white/20 items-center justify-center mr-3"
+                activeOpacity={0.7}
+              >
+                <Ionicons name="arrow-back" size={24} color="#fff" />
+              </TouchableOpacity>
+              
+              <View className="flex-1">
+                <Text className="text-white text-2xl font-bold">Marketplace</Text>
+                <Text className="text-white/80 text-sm">
+                  {allProducts.length} products available
+                </Text>
+              </View>
             </View>
 
             {/* Cart */}
