@@ -1172,13 +1172,14 @@ const ChatDetailScreen: React.FC = () => {
                 </View>
               </TouchableOpacity>
 
-              <TouchableOpacity
+              {/* Call icon commented out */}
+              {/* <TouchableOpacity
                 onPress={() => handleCall('voice')}
                 className="w-10 h-10 rounded-full bg-white/20 items-center justify-center ml-2"
                 activeOpacity={0.7}
               >
                 <Ionicons name="call" size={20} color="#fff" />
-              </TouchableOpacity>
+              </TouchableOpacity> */}
             </View>
           </View>
         </LinearGradient>

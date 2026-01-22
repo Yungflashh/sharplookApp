@@ -18,7 +18,8 @@
           "color": "#FF6B35",
           "sounds": []
         }
-      ]
+      ],
+      "expo-tracking-transparency"
     ],
     "orientation": "portrait",
     "icon": "./assets/app-icon.png",
@@ -43,7 +44,8 @@
             ]
           }
         ],
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSUserTrackingUsageDescription": "We use your data to provide personalized beauty and wellness services and improve your experience."
       }
     },
     "android": {
@@ -51,7 +53,7 @@
         "foregroundImage": "./assets/app-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "com.sharplook.app",
+      "package": "com.inuud.sharplook",
       "versionCode": 47,
       "intentFilters": [
         {
