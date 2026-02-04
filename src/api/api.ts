@@ -1,6 +1,6 @@
 import axios, { AxiosInstance, AxiosError, InternalAxiosRequestConfig } from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-const API_BASE_URL = 'https://sharplook-backend-qay8.onrender.com/api/v1';
+const API_BASE_URL = 'https://sharplook-backend-prod.onrender.com/api/v1';
 const api: AxiosInstance = axios.create({
   baseURL: API_BASE_URL,
   timeout: 30000,
