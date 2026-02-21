@@ -19,7 +19,12 @@
           "sounds": []
         }
       ],
-      "expo-tracking-transparency"
+      [
+        "expo-tracking-transparency",
+        {
+          "userTrackingPermission": "We use your data to provide personalized beauty and wellness services, show you relevant product recommendations, and improve your experience with SharpLook."
+        }
+      ]
     ],
     "orientation": "portrait",
     "icon": "./assets/app-icon.png",
@@ -35,7 +40,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.techtrove.sharplook",
-      "buildNumber": "20",
+      "buildNumber": "21",
       "infoPlist": {
         "CFBundleURLTypes": [
           {
@@ -45,7 +50,12 @@
           }
         ],
         "ITSAppUsesNonExemptEncryption": false,
-        "NSUserTrackingUsageDescription": "We use your data to provide personalized beauty and wellness services and improve your experience."
+        "NSUserTrackingUsageDescription": "We use your data to provide personalized beauty and wellness services, show you relevant product recommendations, and improve your experience with SharpLook.",
+        "NSCameraUsageDescription": "SharpLook needs camera access so you can take photos of beauty products to list them in your vendor store. For example, snap a picture of a skincare product you're selling to show it to potential buyers.",
+        "NSPhotoLibraryUsageDescription": "SharpLook needs access to your photo library so you can select existing images of your beauty products for your vendor listings. For example, choose a product photo from your gallery to include in your store.",
+        "NSPhotoLibraryAddUsageDescription": "SharpLook needs permission to save photos to your library so you can keep copies of product images and receipts. For example, save a photo of your purchase confirmation for your records.",
+        "NSMicrophoneUsageDescription": "SharpLook needs microphone access so you can record video demonstrations of your beauty products for potential buyers. For example, record a video review showing how a makeup product applies.",
+        "NSLocationWhenInUseUsageDescription": "SharpLook needs your location to show you nearby beauty vendors and salons, and to calculate accurate shipping costs. For example, we'll display beauty stores within 10 miles of you and estimate delivery times for products."
       }
     },
     "android": {
@@ -69,6 +79,14 @@
             "DEFAULT"
           ]
         }
+      ],
+      "permissions": [
+        "CAMERA",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "RECORD_AUDIO"
       ]
     },
     "extra": {
