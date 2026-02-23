@@ -17,7 +17,7 @@ export function navigate(name: keyof RootStackParamList, params?: any) {
 }
 
 export const linking = {
-  prefixes: ['sharpLook://', 'https://sharpLook.com', 'https://*.sharpLook.com'],
+  prefixes: ['lookReal://', 'https://lookReal.com', 'https://*.lookReal.com'],
   config: {
     screens: {
       Splash: 'splash',

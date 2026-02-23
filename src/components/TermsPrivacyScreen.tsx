@@ -32,7 +32,7 @@ export default function TermsPrivacyScreen({ navigation, route, initialTab, onBa
   };
 
   const handleEmailPress = () => {
-    Linking.openURL("mailto:hello@sharplook.beauty");
+    Linking.openURL("mailto:support@lookreal.beauty");
   };
 
   const handleWhatsAppPress = () => {
@@ -69,15 +69,15 @@ export default function TermsPrivacyScreen({ navigation, route, initialTab, onBa
       </View>
 
       <Text style={styles.introText}>
-        Please read these terms carefully before using SharpLook. By using our app, you agree to be bound by these terms.
+        Please read these terms carefully before using LookReal. By using our app, you agree to be bound by these terms.
       </Text>
 
       <SectionCard title="1. Acceptance of Terms" icon="checkmark-circle-outline">
-        By downloading, installing, or using the SharpLook mobile application ("App"), you agree to be bound by these Terms of Service. If you do not agree to these Terms, please do not use the App. SharpLook is operated by FranBoss Dammy Nigeria Limited, a company incorporated under the laws of Nigeria.
+        By downloading, installing, or using the LookReal mobile application ("App"), you agree to be bound by these Terms of Service. If you do not agree to these Terms, please do not use the App. LookReal is operated by FranBoss Dammy Nigeria Limited, a company incorporated under the laws of Nigeria.
       </SectionCard>
 
       <SectionCard title="2. Description of Service" icon="information-circle-outline">
-        SharpLook is a platform that connects users with beauty and wellness professionals, including hairstylists, barbers, nail technicians, pedicurists, and massage therapists based on their location. We facilitate bookings between users and service providers but are not responsible for the actual services rendered.
+        LookReal is a platform that connects users with beauty and wellness professionals, including hairstylists, barbers, nail technicians, pedicurists, and massage therapists based on their location. We facilitate bookings between users and service providers but are not responsible for the actual services rendered.
       </SectionCard>
 
       <SectionCard title="3. User Accounts" icon="person-outline">
@@ -85,7 +85,7 @@ export default function TermsPrivacyScreen({ navigation, route, initialTab, onBa
       </SectionCard>
 
       <SectionCard title="4. Bookings and Payments" icon="card-outline">
-        When you book a service through SharpLook, you enter into a direct agreement with the service provider. Payment is processed through our third-party payment processors. Cancellation and refund policies vary by service provider and are displayed at the time of booking. SharpLook charges a service fee for facilitating bookings.
+        When you book a service through LookReal, you enter into a direct agreement with the service provider. Payment is processed through our third-party payment processors. Cancellation and refund policies vary by service provider and are displayed at the time of booking. LookReal charges a service fee for facilitating bookings.
       </SectionCard>
 
       <SectionCard title="5. Cancellation Policies" icon="time-outline">
@@ -95,9 +95,9 @@ export default function TermsPrivacyScreen({ navigation, route, initialTab, onBa
       </SectionCard>
 
       <SectionCard title="6. Platform Integrity and Off-Platform Transactions" icon="alert-circle-outline">
-        PROHIBITED CONDUCT: Any attempt by service providers to use SharpLook for fraudulent activities, scams, or deceptive practices will result in immediate account termination and may be reported to relevant authorities.
+        PROHIBITED CONDUCT: Any attempt by service providers to use LookReal for fraudulent activities, scams, or deceptive practices will result in immediate account termination and may be reported to relevant authorities.
         {'\n\n'}
-        OFF-PLATFORM ARRANGEMENTS: Service providers are strictly prohibited from soliciting clients to conduct transactions outside the SharpLook platform. Similarly, clients should not agree to or initiate arrangements to meet or transact with service providers outside of SharpLook's booking system. Any services rendered or payments made outside our platform are not covered by SharpLook's policies, protections, or support. SharpLook shall not be liable for any disputes, damages, injuries, or losses arising from off-platform transactions. Violations of this policy may result in account suspension or permanent ban for both parties involved.
+        OFF-PLATFORM ARRANGEMENTS: Service providers are strictly prohibited from soliciting clients to conduct transactions outside the LookReal platform. Similarly, clients should not agree to or initiate arrangements to meet or transact with service providers outside of LookReal's booking system. Any services rendered or payments made outside our platform are not covered by LookReal's policies, protections, or support. LookReal shall not be liable for any disputes, damages, injuries, or losses arising from off-platform transactions. Violations of this policy may result in account suspension or permanent ban for both parties involved.
       </SectionCard>
 
       <SectionCard title="7. User Conduct" icon="shield-checkmark-outline">
@@ -105,7 +105,7 @@ export default function TermsPrivacyScreen({ navigation, route, initialTab, onBa
       </SectionCard>
 
       <SectionCard title="8. Service Provider Terms" icon="briefcase-outline">
-        Service providers on SharpLook are independent contractors and not employees of FranBoss Dammy Nigeria Limited. SharpLook does not guarantee the quality, safety, or legality of services offered. Service providers are responsible for complying with all applicable laws and regulations.
+        Service providers on LookReal are independent contractors and not employees of FranBoss Dammy Nigeria Limited. LookReal does not guarantee the quality, safety, or legality of services offered. Service providers are responsible for complying with all applicable laws and regulations.
       </SectionCard>
 
       <SectionCard title="9. Intellectual Property" icon="bulb-outline">
@@ -113,7 +113,7 @@ export default function TermsPrivacyScreen({ navigation, route, initialTab, onBa
       </SectionCard>
 
       <SectionCard title="10. Limitation of Liability" icon="alert-circle-outline">
-        To the maximum extent permitted by law, SharpLook and FranBoss Dammy Nigeria Limited shall not be liable for any indirect, incidental, special, consequential, or punitive damages arising from your use of the App or services booked through the App. Our total liability shall not exceed the amount you paid through the App in the past 12 months.
+        To the maximum extent permitted by law, LookReal and FranBoss Dammy Nigeria Limited shall not be liable for any indirect, incidental, special, consequential, or punitive damages arising from your use of the App or services booked through the App. Our total liability shall not exceed the amount you paid through the App in the past 12 months.
       </SectionCard>
 
       <SectionCard title="11. Termination" icon="close-circle-outline">
@@ -170,8 +170,8 @@ export default function TermsPrivacyScreen({ navigation, route, initialTab, onBa
         Your privacy is important to us. This policy explains how we collect, use, and protect your personal information.
       </Text>
 
-      <SectionCard title="About SharpLook" icon="information-circle-outline">
-        Welcome to SharpLook, a mobile application developed by FranBoss Dammy Nigeria Limited. We seamlessly connect users with hairstylists, barbers, nail technicians, pedicurists and massage therapists based on their location. We are committed to protecting your privacy and ensuring the security of your personal data in compliance with the Nigeria Data Protection Act (2023).
+      <SectionCard title="About LookReal" icon="information-circle-outline">
+        Welcome to LookReal, a mobile application developed by FranBoss Dammy Nigeria Limited. We seamlessly connect users with hairstylists, barbers, nail technicians, pedicurists and massage therapists based on their location. We are committed to protecting your privacy and ensuring the security of your personal data in compliance with the Nigeria Data Protection Act (2023).
       </SectionCard>
 
       <SectionCard title="Data Controller" icon="business-outline">
@@ -317,7 +317,7 @@ export default function TermsPrivacyScreen({ navigation, route, initialTab, onBa
         
         {/* Footer */}
         <View style={styles.footer}>
-          <Text style={styles.footerText}>© 2025 SharpLook by FranBoss Dammy Nigeria Limited</Text>
+          <Text style={styles.footerText}>© 2025 LookReal by FranBoss Dammy Nigeria Limited</Text>
           <Text style={styles.footerSubtext}>All rights reserved</Text>
         </View>
       </ScrollView>

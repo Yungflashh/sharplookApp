@@ -290,7 +290,7 @@ const ClientProfileScreen: React.FC = () => {
           {}
           <View className="items-center py-5 mt-2">
             <Text className="text-xs text-gray-400 mb-1">Version 1.0.0</Text>
-            <Text className="text-[11px] text-gray-400">© 2024 Sharplook</Text>
+            <Text className="text-[11px] text-gray-400">© 2024 LookReal</Text>
           </View>
         </View>
       </ScrollView>

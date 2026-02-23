@@ -682,7 +682,7 @@ const ClientDashboardScreen: React.FC = () => {
             <Text className="text-2xl font-bold text-gray-900">
               Hello {getUserDisplayName()}
             </Text>
-            <Text className="text-sm text-gray-500 mt-0.5">Welcome to Sharplook</Text>
+            <Text className="text-sm text-gray-500 mt-0.5">Welcome to LookReal</Text>
           </View>
 
           <View className="flex-row items-center gap-3">

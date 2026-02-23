@@ -132,7 +132,7 @@ const ReferralScreen = ({ navigation }: any) => {
 
   const shareReferralCode = async () => {
     try {
-      const message = `Join Sharplook and get amazing Services! Use my referral code: ${referralCode}\n\nDownload the app now!`;
+      const message = `Join LookReal and get amazing Services! Use my referral code: ${referralCode}\n\nDownload the app now!`;
       await Share.share({
         message,
       });

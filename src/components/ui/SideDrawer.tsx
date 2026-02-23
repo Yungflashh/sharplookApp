@@ -68,7 +68,7 @@ const SideDrawer: React.FC<SideDrawerProps> = ({
             </TouchableOpacity>
 
             {}
-            <Text style={styles.versionText}>SharpLook v1.0.0</Text>
+            <Text style={styles.versionText}>LookReal v1.0.0</Text>
           </ScrollView>
         </View>
       </View>

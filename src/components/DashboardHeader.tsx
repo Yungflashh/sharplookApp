@@ -52,7 +52,7 @@ const DashboardHeader: React.FC<DashboardHeaderProps> = ({
       </View>
 
       <View style={styles.welcomeSection}>
-        <Text style={styles.welcomeText}>Welcome to SharpLook</Text>
+        <Text style={styles.welcomeText}>Welcome to LookReal</Text>
         <Text style={styles.userName}>{userName}</Text>
       </View>
     </View>;

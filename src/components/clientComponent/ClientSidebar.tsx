@@ -256,7 +256,7 @@ const ClientSidebar: React.FC<ClientSidebarProps> = ({
               {}
               <View className="items-center pb-6 px-6">
                 <Text className="text-gray-400 text-xs">Version 1.0.0</Text>
-                <Text className="text-gray-400 text-[10px] mt-1">© 2024 Sharplook</Text>
+                <Text className="text-gray-400 text-[10px] mt-1">© 2024 LookReal</Text>
               </View>
             </ScrollView>
           </SafeAreaView>

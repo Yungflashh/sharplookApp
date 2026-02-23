@@ -1,15 +1,15 @@
 
-# Sharplook App
+# LookReal App
 
-Sharplook is a client-to-vendor booking platform designed to connect clients with trusted service providers. The platform makes it simple for users to discover, book, and manage appointments with vendors across various service categories. It is built with React Native using Expo, offering a fast, responsive, and user-friendly mobile experience.
+LookReal is a client-to-vendor booking platform designed to connect clients with trusted service providers. The platform makes it simple for users to discover, book, and manage appointments with vendors across various service categories. It is built with React Native using Expo, offering a fast, responsive, and user-friendly mobile experience.
 
 ---
 
 ## Overview
 
-The Sharplook App serves as a bridge between clients and vendors. Clients can search for vendors, view their profiles, check availability, and make bookings directly through the app. Vendors, on the other hand, can manage their bookings, respond to client requests, and showcase their services and portfolios.
+The LookReal App serves as a bridge between clients and vendors. Clients can search for vendors, view their profiles, check availability, and make bookings directly through the app. Vendors, on the other hand, can manage their bookings, respond to client requests, and showcase their services and portfolios.
 
-The goal of Sharplook is to make professional services easily accessible while providing vendors with a modern digital platform to reach and serve their clients more efficiently.
+The goal of LookReal is to make professional services easily accessible while providing vendors with a modern digital platform to reach and serve their clients more efficiently.
 
 ---
 
@@ -25,7 +25,7 @@ This will launch the Expo development environment, allowing you to preview the a
 
 ## Folder Structure
 
-The Sharplook project follows a well-organized folder structure for scalability and clarity. Each folder has a specific purpose to ensure clean, maintainable, and easily understandable code.
+The LookReal project follows a well-organized folder structure for scalability and clarity. Each folder has a specific purpose to ensure clean, maintainable, and easily understandable code.
 
 * **src/**: Contains all the main source code for the application.
 
@@ -51,7 +51,7 @@ This structure ensures a clear separation of concerns, making it easier for deve
 
 ## Technology Stack
 
-The Sharplook App is built using modern and reliable technologies to ensure high performance and maintainability.
+The LookReal App is built using modern and reliable technologies to ensure high performance and maintainability.
 
 * Framework: React Native (Expo)
 * Language: TypeScript
@@ -74,7 +74,7 @@ The Sharplook App is built using modern and reliable technologies to ensure high
 
 ## Contribution Guide
 
-Developers working on the Sharplook App should follow these steps when contributing:
+Developers working on the LookReal App should follow these steps when contributing:
 
 1. Fork the repository to your local workspace.
 2. Create a new feature branch named after the feature you are working on (for example, `feature/vendor-dashboard`).
@@ -113,7 +113,7 @@ Developers working on the Sharplook App should follow these steps when contribut
 
 
 
-# Sharplook App
+# LookReal App
 
 A client-to-vendor booking platform.
 

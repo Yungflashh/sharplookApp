@@ -340,7 +340,7 @@ const AddEditProductScreen: React.FC = () => {
       console.log('🖼️ Existing images:', existingImages.length);
 
       const token = await AsyncStorage.getItem('accessToken');
-      const API_BASE_URL = 'https://sharplook-be.onrender.com/api/v1';
+      const API_BASE_URL = 'https://sharplook-backend-production.onrender.com/api/v1';
 
       if (!token) {
         throw new Error('No authentication token found. Please login again.');

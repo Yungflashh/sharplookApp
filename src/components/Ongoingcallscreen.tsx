@@ -430,7 +430,7 @@ const OngoingCallScreen: React.FC = () => {
         ref={(ref) => {
           if (ref) webrtcService.setWebViewRef(ref);
         }}
-        source={{ html: webrtcHtml, baseUrl: 'https://sharplook.com' }}
+        source={{ html: webrtcHtml, baseUrl: 'https://sharplook-backend-production.onrender.com' }}
         onMessage={(event) => webrtcService.handleWebViewMessage(event)}
         onLoadEnd={onWebViewLoad}
         style={callType === 'video' ? styles.webViewVideo : styles.webViewHidden}

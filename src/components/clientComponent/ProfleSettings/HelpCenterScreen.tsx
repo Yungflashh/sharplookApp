@@ -59,9 +59,9 @@ const HelpCenterScreen: React.FC = () => {
   }, {
     icon: 'mail',
     title: 'Email Us',
-    subtitle: 'sharplookcustomercare@gmail.com',
+    subtitle: 'support@lookreal.beauty',
     color: '#10b981',
-    onPress: () => Linking.openURL('mailto:sharplookcustomercare@gmail.com')
+    onPress: () => Linking.openURL('mailto:support@lookreal.beauty')
   }, {
     icon: 'call',
     title: 'Call Us',

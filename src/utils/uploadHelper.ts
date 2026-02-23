@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import ReactNativeBlobUtil from 'react-native-blob-util';
 
-const API_BASE_URL = 'https://sharplook-be.onrender.com/api/v1';
+const API_BASE_URL = 'https://sharplook-backend-production.onrender.com/api/v1';
 
 interface UploadServiceData {
   name: string;

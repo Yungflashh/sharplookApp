@@ -725,7 +725,7 @@ const SubscriptionScreen: React.FC = () => {
         No Active Subscription
       </Text>
       <Text className="text-gray-600 text-center mb-6 px-4">
-        Choose a plan to start accepting bookings and grow your business on SharpLook
+        Choose a plan to start accepting bookings and grow your business on LookReal
       </Text>
       <TouchableOpacity
         className="bg-pink-600 px-8 py-4 rounded-xl"

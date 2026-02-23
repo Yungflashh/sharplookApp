@@ -167,13 +167,13 @@ const VendorProfileScreen: React.FC = () => {
 
   try {
     // Deep link that will open the app if installed
-    const deepLink = `sharpLook://vendor/${user._id}`;
+    const deepLink = `lookReal://vendor/${user._id}`;
     const businessName = user?.vendorProfile?.businessName || 'My Store';
     
     // Create platform-specific message
     const message = Platform.OS === 'ios'
-      ? `Check out ${businessName} on sharpLook!`
-      : `Check out ${businessName} on sharpLook!\n\nOpen in app: ${deepLink}`;
+      ? `Check out ${businessName} on LookReal!`
+      : `Check out ${businessName} on LookReal!\n\nOpen in app: ${deepLink}`;
     
     const result = await Share.share({
       message,

@@ -170,8 +170,8 @@ const ProductDetailScreen: React.FC = () => {
 
     try {
       await Share.share({
-        message: `Check out ${product.name} on sharpLook!`,
-        url: `https://sharplook.com/share/product/${product._id}`,
+        message: `Check out ${product.name} on LookReal!`,
+        url: `https://lookreal.com/share/product/${product._id}`,
       });
     } catch (error) {
       console.error('Share error:', error);

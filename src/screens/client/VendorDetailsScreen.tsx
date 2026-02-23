@@ -144,8 +144,8 @@ const handleMessageVendor = () => {
   const handleShareVendor = async () => {
     if (!vendor) return;
 
-    const url = `https://sharplook.com/vendors/${vendorId}`;
-    const message = `Check out ${vendor.vendorProfile.businessName} on SharpLook!`;
+    const url = `https://lookreal.com/vendors/${vendorId}`;
+    const message = `Check out ${vendor.vendorProfile.businessName} on LookReal!`;
 
     try {
       const result = await Share.share({
