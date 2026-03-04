@@ -1,9 +1,9 @@
 {
   "expo": {
-    "name": "sharpLook",
-    "slug": "sharpLook",
+    "name": "LookReal",
+    "slug": "LookReal",
     "version": "1.2.0",
-    "scheme": "sharpLook",
+    "scheme": "LookReal",
     "web": {
       "favicon": "./assets/favicon.png"
     },
@@ -14,7 +14,7 @@
       [
         "expo-notifications",
         {
-          "icon": "./assets/sharplooklogo.png",
+          "icon": "./assets/app-icon.png",
           "color": "#FF6B35",
           "sounds": []
         }
@@ -22,7 +22,7 @@
       [
         "expo-tracking-transparency",
         {
-          "userTrackingPermission": "We use your data to provide personalized beauty and wellness services, show you relevant product recommendations, and improve your experience with SharpLook."
+          "userTrackingPermission": "We use your data to provide personalized beauty and wellness services, show you relevant product recommendations, and improve your experience with LookReal."
         }
       ]
     ],
@@ -30,7 +30,7 @@
     "icon": "./assets/app-icon.png",
     "userInterfaceStyle": "light",
     "splash": {
-      "image": "./assets/sharplooklogo.png",
+      "image": "./assets/app-icon.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
@@ -45,17 +45,17 @@
         "CFBundleURLTypes": [
           {
             "CFBundleURLSchemes": [
-              "sharpLook"
+              "LookReal"
             ]
           }
         ],
         "ITSAppUsesNonExemptEncryption": false,
-        "NSUserTrackingUsageDescription": "We use your data to provide personalized beauty and wellness services, show you relevant product recommendations, and improve your experience with SharpLook.",
-        "NSCameraUsageDescription": "SharpLook needs camera access so you can take photos of beauty products to list them in your vendor store. For example, snap a picture of a skincare product you're selling to show it to potential buyers.",
-        "NSPhotoLibraryUsageDescription": "SharpLook needs access to your photo library so you can select existing images of your beauty products for your vendor listings. For example, choose a product photo from your gallery to include in your store.",
-        "NSPhotoLibraryAddUsageDescription": "SharpLook needs permission to save photos to your library so you can keep copies of product images and receipts. For example, save a photo of your purchase confirmation for your records.",
-        "NSMicrophoneUsageDescription": "SharpLook needs microphone access so you can record video demonstrations of your beauty products for potential buyers. For example, record a video review showing how a makeup product applies.",
-        "NSLocationWhenInUseUsageDescription": "SharpLook needs your location to show you nearby beauty vendors and salons, and to calculate accurate shipping costs. For example, we'll display beauty stores within 10 miles of you and estimate delivery times for products."
+        "NSUserTrackingUsageDescription": "We use your data to provide personalized beauty and wellness services, show you relevant product recommendations, and improve your experience with LookReal.",
+        "NSCameraUsageDescription": "LookReal needs camera access so you can take photos of beauty products to list them in your vendor store. For example, snap a picture of a skincare product you're selling to show it to potential buyers.",
+        "NSPhotoLibraryUsageDescription": "LookReal needs access to your photo library so you can select existing images of your beauty products for your vendor listings. For example, choose a product photo from your gallery to include in your store.",
+        "NSPhotoLibraryAddUsageDescription": "LookReal needs permission to save photos to your library so you can keep copies of product images and receipts. For example, save a photo of your purchase confirmation for your records.",
+        "NSMicrophoneUsageDescription": "LookReal needs microphone access so you can record video demonstrations of your beauty products for potential buyers. For example, record a video review showing how a makeup product applies.",
+        "NSLocationWhenInUseUsageDescription": "LookReal needs your location to show you nearby beauty vendors and salons, and to calculate accurate shipping costs. For example, we'll display beauty stores within 10 miles of you and estimate delivery times for products."
       }
     },
     "android": {
@@ -71,7 +71,7 @@
           "autoVerify": true,
           "data": [
             {
-              "scheme": "sharpLook"
+              "scheme": "LookReal"
             }
           ],
           "category": [
@@ -86,19 +86,20 @@
         "WRITE_EXTERNAL_STORAGE",
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",
-        "RECORD_AUDIO"
+        "RECORD_AUDIO",
+        "com.google.android.gms.permission.AD_ID"
       ]
-    },
-    "extra": {
-      "eas": {
-        "projectId": "2ac05c34-9b63-48bc-8f96-af019c5f2f0c"
-      }
     },
     "runtimeVersion": {
       "policy": "appVersion"
     },
     "updates": {
       "url": "https://u.expo.dev/2ac05c34-9b63-48bc-8f96-af019c5f2f0c"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "6a6fc629-797c-4054-b04c-aeccbc956c41"
+      }
     }
   }
 }
