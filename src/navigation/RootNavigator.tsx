@@ -79,8 +79,8 @@ const RootNavigator = () => {
         navigate('IncomingCall', {
           call: data.call,
           caller: data.caller,
-          callType: data.callType || 'voice',
-          offer: data.offer  
+          callType: data.type || data.call?.type || 'voice',
+          offer: data.offer
         });
       }
     };

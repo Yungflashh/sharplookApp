@@ -2,13 +2,14 @@
 
 import { WebView } from 'react-native-webview';
 
-type WebRTCEvent = 
+type WebRTCEvent =
   | { type: 'localStream'; data: { id: string } }
   | { type: 'remoteStream'; data: { id: string } }
   | { type: 'iceCandidate'; data: any }
   | { type: 'offer'; data: any }
   | { type: 'answer'; data: any }
   | { type: 'error'; data: { message: string } }
+  | { type: 'connectionState'; data: { state: string } }
   | { type: 'muteStatus'; data: { muted: boolean } }
   | { type: 'videoStatus'; data: { enabled: boolean } };
 

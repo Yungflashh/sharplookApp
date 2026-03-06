@@ -1,7 +1,21 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, RefreshControl, ActivityIndicator, Dimensions, Image, Linking, Alert, Share } from 'react-native';
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  ScrollView,
+  RefreshControl,
+  ActivityIndicator,
+  Dimensions,
+  Image,
+  Alert,
+  Share,
+  Platform,
+  StatusBar,
+  Animated,
+} from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -9,15 +23,33 @@ import { RootStackParamList } from '@/types/navigation.types';
 import { vendorAPI, handleAPIError } from '@/api/api';
 import ServiceCard from '@/components/clientComponent/ServiceCard';
 import ReviewCard from '@/components/clientComponent/ReviewCard';
-import callService from '@/services/call.service';
 
-const {
-  width: SCREEN_WIDTH,
-  height: SCREEN_HEIGHT
-} = Dimensions.get('window');
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-type VendorDetailScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'VendorDetail'>;
-type VendorDetailScreenRouteProp = RouteProp<RootStackParamList, 'VendorDetail'>;
+// ─── Brand Tokens ─────────────────────────────────────────────────────────────
+const BRAND = {
+  primary: '#E04079',
+  primaryLight: '#F08BAC',
+  primarySoft: '#FEF0F5',
+  primaryMuted: '#FCDCE9',
+  accent: '#7C3AED',
+  gold: '#F59E0B',
+  surface: '#FFFFFF',
+  surfaceAlt: '#F9FAFB',
+  border: '#F3F4F6',
+  borderStrong: '#E5E7EB',
+  textPrimary: '#111827',
+  textSecondary: '#6B7280',
+  textMuted: '#9CA3AF',
+  success: '#10B981',
+  successSoft: '#D1FAE5',
+  blue: '#3B82F6',
+  blueSoft: '#DBEAFE',
+};
+
+// ─── Types ───────────────────────────────────────────────────────────────────
+type Nav = NativeStackNavigationProp<RootStackParamList, 'VendorDetail'>;
+type RouteP = RouteProp<RootStackParamList, 'VendorDetail'>;
 
 interface VendorData {
   _id: string;
@@ -36,26 +68,188 @@ interface VendorData {
     totalRatings: number;
     completedBookings: number;
     isVerified: boolean;
-    categories: Array<{
-      _id: string;
-      name: string;
-      icon: string;
-    }>;
-    location?: {
-      address: string;
-      city: string;
-      state: string;
-    };
+    categories: Array<{ _id: string; name: string; icon: string }>;
+    location?: { address: string; city: string; state: string };
     serviceRadius?: number;
   };
 }
 
+// ─── Sub-components ───────────────────────────────────────────────────────────
+
+const StarRow: React.FC<{ rating: number; size?: number }> = ({ rating, size = 14 }) => (
+  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+    {[1, 2, 3, 4, 5].map((s) => (
+      <Ionicons
+        key={s}
+        name={s <= Math.round(rating) ? 'star' : 'star-outline'}
+        size={size}
+        color={s <= Math.round(rating) ? BRAND.gold : BRAND.borderStrong}
+        style={{ marginRight: 1 }}
+      />
+    ))}
+  </View>
+);
+
+const StatPill: React.FC<{
+  icon: keyof typeof Ionicons.glyphMap;
+  value: string | number;
+  label: string;
+  color: string;
+  bg: string;
+}> = ({ icon, value, label, color, bg }) => (
+  <View
+    style={{
+      flex: 1,
+      backgroundColor: BRAND.surface,
+      borderRadius: 16,
+      paddingVertical: 16,
+      alignItems: 'center',
+      borderWidth: 1,
+      borderColor: BRAND.border,
+      ...Platform.select({
+        ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 6 },
+        android: { elevation: 2 },
+      }),
+    }}
+  >
+    <View
+      style={{
+        width: 36,
+        height: 36,
+        borderRadius: 11,
+        backgroundColor: bg,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginBottom: 8,
+      }}
+    >
+      <Ionicons name={icon} size={18} color={color} />
+    </View>
+    <Text style={{ fontSize: 20, fontWeight: '800', color: BRAND.textPrimary, letterSpacing: -0.5 }}>
+      {value}
+    </Text>
+    <Text style={{ fontSize: 11, color: BRAND.textMuted, marginTop: 2, fontWeight: '500' }}>{label}</Text>
+  </View>
+);
+
+const TabBar: React.FC<{
+  tabs: string[];
+  active: string;
+  onChange: (t: any) => void;
+}> = ({ tabs, active, onChange }) => (
+  <View
+    style={{
+      flexDirection: 'row',
+      marginHorizontal: 20,
+      backgroundColor: BRAND.surfaceAlt,
+      borderRadius: 14,
+      padding: 4,
+      borderWidth: 1,
+      borderColor: BRAND.border,
+    }}
+  >
+    {tabs.map((tab) => {
+      const isActive = active === tab;
+      return (
+        <TouchableOpacity
+          key={tab}
+          onPress={() => onChange(tab)}
+          activeOpacity={0.75}
+          style={{
+            flex: 1,
+            paddingVertical: 9,
+            borderRadius: 11,
+            alignItems: 'center',
+            backgroundColor: isActive ? BRAND.surface : 'transparent',
+            ...Platform.select({
+              ios: isActive
+                ? { shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.08, shadowRadius: 4 }
+                : {},
+              android: isActive ? { elevation: 2 } : {},
+            }),
+          }}
+        >
+          <Text
+            style={{
+              fontSize: 13,
+              fontWeight: isActive ? '700' : '500',
+              color: isActive ? BRAND.primary : BRAND.textMuted,
+              textTransform: 'capitalize',
+              letterSpacing: 0.1,
+            }}
+          >
+            {tab}
+          </Text>
+        </TouchableOpacity>
+      );
+    })}
+  </View>
+);
+
+const InfoRow: React.FC<{
+  icon: keyof typeof Ionicons.glyphMap;
+  text: string;
+  sub?: string;
+  iconColor?: string;
+  iconBg?: string;
+}> = ({ icon, text, sub, iconColor = BRAND.primary, iconBg = BRAND.primarySoft }) => (
+  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+    <View
+      style={{
+        width: 38,
+        height: 38,
+        borderRadius: 12,
+        backgroundColor: iconBg,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginRight: 12,
+      }}
+    >
+      <Ionicons name={icon} size={18} color={iconColor} />
+    </View>
+    <View style={{ flex: 1 }}>
+      <Text style={{ fontSize: 14, fontWeight: '600', color: BRAND.textPrimary }}>{text}</Text>
+      {sub && <Text style={{ fontSize: 12, color: BRAND.textSecondary, marginTop: 1 }}>{sub}</Text>}
+    </View>
+  </View>
+);
+
+const SectionCard: React.FC<{ title: string; children: React.ReactNode; action?: React.ReactNode }> = ({
+  title,
+  children,
+  action,
+}) => (
+  <View
+    style={{
+      backgroundColor: BRAND.surface,
+      borderRadius: 20,
+      padding: 18,
+      marginBottom: 14,
+      borderWidth: 1,
+      borderColor: BRAND.border,
+      ...Platform.select({
+        ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8 },
+        android: { elevation: 2 },
+      }),
+    }}
+  >
+    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+      <Text style={{ fontSize: 16, fontWeight: '700', color: BRAND.textPrimary, letterSpacing: -0.2 }}>
+        {title}
+      </Text>
+      {action}
+    </View>
+    {children}
+  </View>
+);
+
+// ─── Main Screen ──────────────────────────────────────────────────────────────
 const VendorDetailScreen: React.FC = () => {
-  const navigation = useNavigation<VendorDetailScreenNavigationProp>();
-  const route = useRoute<VendorDetailScreenRouteProp>();
-  const {
-    vendorId
-  } = route.params;
+  const navigation = useNavigation<Nav>();
+  const route = useRoute<RouteP>();
+  const { vendorId } = route.params;
+  const insets = useSafeAreaInsets();
+
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [vendor, setVendor] = useState<VendorData | null>(null);
@@ -65,498 +259,801 @@ const VendorDetailScreen: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'about' | 'services' | 'reviews'>('about');
   const [isFavorite, setIsFavorite] = useState(false);
 
+  const scrollY = new Animated.Value(0);
+
   const fetchVendorDetails = async () => {
     try {
       setLoading(true);
       const response = await vendorAPI.getVendorDetail(vendorId);
-      console.log('🔍 Full API Response:', JSON.stringify(response, null, 2));
       if (response.success || response.data?.success) {
-        const responseData = response.data?.data || response.data;
-        setVendor(responseData.vendor);
-        setServices(responseData.services || []);
-        setReviews(responseData.reviews || []);
-        setStats(responseData.stats);
+        const d = response.data?.data || response.data;
+        setVendor(d.vendor);
+        setServices(d.services || []);
+        setReviews(d.reviews || []);
+        setStats(d.stats);
       }
     } catch (error) {
-      const apiError = handleAPIError(error);
-      console.error('❌ Vendor detail fetch error:', apiError);
+      console.error('Vendor detail fetch error:', handleAPIError(error));
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    fetchVendorDetails();
-  }, [vendorId]);
+  useEffect(() => { fetchVendorDetails(); }, [vendorId]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
-    fetchVendorDetails().finally(() => {
-      setRefreshing(false);
-    });
+    fetchVendorDetails().finally(() => setRefreshing(false));
   }, [vendorId]);
 
-  const handleFavoriteToggle = () => {
-    setIsFavorite(!isFavorite);
-  };
-
-  const handleCallVendor = async () => {
-    if (vendor) {
-      try {
-        navigation.navigate('OngoingCall', {
-          callType: 'voice',
-          isOutgoing: true,
-          otherUser: {
-            _id: vendor._id,
-            firstName: vendor.firstName,
-            lastName: vendor.lastName,
-            avatar: vendor.avatar,
-          },
-        });
-      } catch (error) {
-        console.error('Error initiating call:', error);
-        Alert.alert('Error', 'Failed to initiate call');
-      }
-    }
-  };
-const handleMessageVendor = () => {
-  if (vendor) {
-    console.log('📨 Opening chat with vendor:', {
-      _id: vendor._id,
-      businessName: vendor.vendorProfile.businessName,
-      avatar: vendor.avatar
-    });
-
-    
-    if (!vendor._id) {
-      console.error('❌ Vendor ID is missing!');
-      Alert.alert('Error', 'Cannot open chat - vendor information is incomplete');
-      return;
-    }
-
-    navigation.navigate('ChatDetail', {
-      otherUserId: vendor._id,  
-      otherUserName: vendor.vendorProfile.businessName,  
-      otherUserAvatar: vendor.avatar,  
-    });
-  }
-};
   const handleShareVendor = async () => {
     if (!vendor) return;
-
-    const url = `https://lookreal.com/vendors/${vendorId}`;
-    const message = `Check out ${vendor.vendorProfile.businessName} on LookReal!`;
-
     try {
-      const result = await Share.share({
-        message: `${message}\n${url}`,
-        url, 
-        title: `Share ${vendor.vendorProfile.businessName}`,
+      await Share.share({
+        message: `Check out ${vendor.vendorProfile.businessName} on LookReal!\nhttps://lookreal.com/vendors/${vendorId}`,
+        url: `https://lookreal.com/vendors/${vendorId}`,
+        title: vendor.vendorProfile.businessName,
       });
-
-      if (result.action === Share.sharedAction) {
-        if (result.activityType) {
-          // Shared with activity type of result.activityType
-          console.log('Shared via:', result.activityType);
-        } else {
-          // Shared
-          console.log('Shared successfully');
-        }
-      } else if (result.action === Share.dismissedAction) {
-        // Dismissed
-        console.log('Share dismissed');
-      }
-    } catch (error: any) {
-      Alert.alert('Error', 'Failed to share vendor profile.');
-      console.error('Share error:', error.message);
-    }
+    } catch { Alert.alert('Error', 'Failed to share vendor profile.'); }
   };
+
+  const handleMessageVendor = () => {
+    if (!vendor?._id) { Alert.alert('Error', 'Cannot open chat — vendor information is incomplete'); return; }
+    navigation.navigate('ChatDetail', {
+      otherUserId: vendor._id,
+      otherUserName: vendor.vendorProfile.businessName,
+      otherUserAvatar: vendor.avatar,
+    });
+  };
+
   const handleBookService = (serviceId: string) => {
-    const service = services.find(s => s._id === serviceId);
-    if (service && vendor) {
-      if (service.isActive === false) {
-        Alert.alert('Service Unavailable', 'This service is currently not available. Please contact the vendor for more information.', [{
-          text: 'OK'
-        }]);
-        return;
-      }
-      navigation.navigate('CreateBooking', {
-        service: {
-          _id: service._id,
-          name: service.name,
-          description: service.description,
-          basePrice: service.basePrice,
-          duration: service.duration,
-          category: service.category,
-          isActive: service.isActive
+    const service = services.find((s) => s._id === serviceId);
+    if (!service || !vendor) return;
+    if (service.isActive === false) {
+      Alert.alert('Service Unavailable', 'This service is currently not available.');
+      return;
+    }
+    navigation.navigate('CreateBooking', {
+      service: {
+        _id: service._id,
+        name: service.name,
+        description: service.description,
+        basePrice: service.basePrice,
+        duration: service.duration,
+        category: service.category,
+        isActive: service.isActive,
+      },
+      vendor: {
+        _id: vendor._id,
+        vendorProfile: {
+          businessName: vendor.vendorProfile.businessName,
+          vendorType: vendor.vendorProfile.vendorType,
+          location: vendor.vendorProfile.location,
         },
-        vendor: {
-          _id: vendor._id,
-          vendorProfile: {
-            businessName: vendor.vendorProfile.businessName,
-            vendorType: vendor.vendorProfile.vendorType,
-            location: vendor.vendorProfile.location
-          }
-        }
-      });
-    }
+      },
+    });
   };
-  const renderStars = (rating: number) => {
-    return <View className="flex-row items-center">
-        {[1, 2, 3, 4, 5].map(star => <Ionicons key={star} name={star <= rating ? 'star' : 'star-outline'} size={16} color={star <= rating ? '#fbbf24' : '#d1d5db'} />)}
-      </View>;
-  };
+
   const formatVendorType = (type: string) => {
-    switch (type) {
-      case 'home_service':
-        return 'Home Service';
-      case 'in_shop':
-        return 'In-Shop';
-      case 'both':
-        return 'Home & In-Shop';
-      default:
-        return 'Service Available';
-    }
+    const map: Record<string, string> = {
+      home_service: 'Home Service',
+      in_shop: 'In-Shop',
+      both: 'Home & In-Shop',
+    };
+    return map[type] || 'Service Available';
   };
+
+  // ── Loading ────────────────────────────────────────────────────────────────
   if (loading) {
-    return <SafeAreaView className="flex-1 bg-gray-50">
-        <View className="flex-1 items-center justify-center">
-          <ActivityIndicator size="large" color="#eb278d" />
-          <Text className="text-gray-400 text-sm mt-4">Loading vendor details...</Text>
+    return (
+      <SafeAreaView style={{ flex: 1, backgroundColor: BRAND.surfaceAlt }}>
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+          <ActivityIndicator size="large" color={BRAND.primary} />
+          <Text style={{ color: BRAND.textMuted, fontSize: 14, marginTop: 12, fontWeight: '500' }}>
+            Loading vendor details…
+          </Text>
         </View>
-      </SafeAreaView>;
+      </SafeAreaView>
+    );
   }
+
   if (!vendor) {
-    return <SafeAreaView className="flex-1 bg-gray-50">
-        <View className="flex-1 items-center justify-center p-5">
-          <Ionicons name="alert-circle-outline" size={64} color="#d1d5db" />
-          <Text className="text-gray-400 text-lg font-semibold mt-4">Vendor not found</Text>
-          <TouchableOpacity className="mt-6 bg-pink-500 px-6 py-3 rounded-xl" onPress={() => navigation.goBack()}>
-            <Text className="text-white font-semibold">Go Back</Text>
+    return (
+      <SafeAreaView style={{ flex: 1, backgroundColor: BRAND.surfaceAlt }}>
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+          <View
+            style={{
+              width: 80,
+              height: 80,
+              borderRadius: 24,
+              backgroundColor: BRAND.surfaceAlt,
+              borderWidth: 1,
+              borderColor: BRAND.border,
+              alignItems: 'center',
+              justifyContent: 'center',
+              marginBottom: 16,
+            }}
+          >
+            <Ionicons name="alert-circle-outline" size={40} color={BRAND.textMuted} />
+          </View>
+          <Text style={{ fontSize: 18, fontWeight: '700', color: BRAND.textPrimary, marginBottom: 6 }}>
+            Vendor not found
+          </Text>
+          <Text style={{ fontSize: 14, color: BRAND.textSecondary, textAlign: 'center', marginBottom: 24 }}>
+            This vendor profile doesn't exist or has been removed.
+          </Text>
+          <TouchableOpacity
+            onPress={() => navigation.goBack()}
+            activeOpacity={0.8}
+            style={{
+              backgroundColor: BRAND.primary,
+              paddingHorizontal: 24,
+              paddingVertical: 12,
+              borderRadius: 14,
+            }}
+          >
+            <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>Go Back</Text>
           </TouchableOpacity>
         </View>
-      </SafeAreaView>;
+      </SafeAreaView>
+    );
   }
-  return <SafeAreaView className="flex-1 bg-gray-50" edges={['top']}>
-      {}
-      <View className="relative">
-        {}
-        <LinearGradient colors={['#eb278d', '#f472b6']} start={{
-        x: 0,
-        y: 0
-      }} end={{
-        x: 1,
-        y: 1
-      }} className="w-full h-64">
-          {vendor.avatar ? <Image source={{
-          uri: vendor.avatar
-        }} className="w-full h-full" resizeMode="cover" /> : <View className="flex-1 items-center justify-center">
-              <Ionicons name="person" size={80} color="rgba(255,255,255,0.5)" />
-            </View>}
-        </LinearGradient>
 
-        {}
-        <View className="absolute top-4 left-0 right-0 flex-row items-center justify-between px-5">
-          <TouchableOpacity className="w-10 h-10 rounded-full bg-white/90 items-center justify-center" onPress={() => navigation.goBack()}>
-            <Ionicons name="arrow-back" size={24} color="#1f2937" />
-          </TouchableOpacity>
+  const heroHeight = 260;
 
-          <View className="flex-row items-center gap-3">
-            <TouchableOpacity className="w-10 h-10 rounded-full bg-white/90 items-center justify-center" onPress={handleShareVendor}>
-              <Ionicons name="share-outline" size={22} color="#1f2937" />
+  // ─────────────────────────────────────────────────────────────────────────
+  return (
+    <View style={{ flex: 1, backgroundColor: BRAND.surfaceAlt }}>
+      <StatusBar barStyle="light-content" />
+
+      {/* ── HERO ──────────────────────────────────────────────────────────── */}
+      <View style={{ height: heroHeight, position: 'relative' }}>
+        {vendor.avatar ? (
+          <Image source={{ uri: vendor.avatar }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
+        ) : (
+          <LinearGradient
+            colors={[BRAND.primary, '#B5315F']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={{ flex: 1 }}
+          >
+            <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+              <Text style={{ fontSize: 64, fontWeight: '800', color: 'rgba(255,255,255,0.3)' }}>
+                {vendor.vendorProfile.businessName.charAt(0)}
+              </Text>
+            </View>
+          </LinearGradient>
+        )}
+
+        {/* Gradient overlay at bottom */}
+        <LinearGradient
+          colors={['transparent', 'rgba(0,0,0,0.55)']}
+          style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 130 }}
+        />
+
+        {/* Top nav row */}
+        <SafeAreaView edges={['top']} style={{ position: 'absolute', top: 0, left: 0, right: 0 }}>
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              paddingHorizontal: 16,
+              paddingTop: 8,
+            }}
+          >
+            <TouchableOpacity
+              onPress={() => navigation.goBack()}
+              activeOpacity={0.85}
+              style={{
+                width: 40,
+                height: 40,
+                borderRadius: 13,
+                backgroundColor: 'rgba(0,0,0,0.35)',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <Ionicons name="arrow-back" size={22} color="#fff" />
             </TouchableOpacity>
 
-            <TouchableOpacity className="w-10 h-10 rounded-full bg-white/90 items-center justify-center" onPress={handleFavoriteToggle}>
-              <Ionicons name={isFavorite ? 'heart' : 'heart-outline'} size={22} color="#eb278d" />
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {}
-        {vendor.isOnline && <View className="absolute top-4 left-1/2 -ml-12">
-            <View className="bg-green-500 px-3 py-1.5 rounded-full flex-row items-center">
-              <View className="w-2 h-2 bg-white rounded-full mr-2" />
-              <Text className="text-white text-xs font-bold">Online Now</Text>
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              <TouchableOpacity
+                onPress={handleShareVendor}
+                activeOpacity={0.85}
+                style={{
+                  width: 40,
+                  height: 40,
+                  borderRadius: 13,
+                  backgroundColor: 'rgba(0,0,0,0.35)',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Ionicons name="share-outline" size={20} color="#fff" />
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => setIsFavorite(!isFavorite)}
+                activeOpacity={0.85}
+                style={{
+                  width: 40,
+                  height: 40,
+                  borderRadius: 13,
+                  backgroundColor: isFavorite ? 'rgba(212,38,122,0.75)' : 'rgba(0,0,0,0.35)',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Ionicons name={isFavorite ? 'heart' : 'heart-outline'} size={20} color="#fff" />
+              </TouchableOpacity>
             </View>
-          </View>}
+          </View>
+        </SafeAreaView>
 
-        {}
-        <View className="absolute bottom-0 left-0 right-0 px-5">
-          <View className="bg-white rounded-3xl p-5 shadow-lg">
-            <View className="flex-row items-start justify-between">
-              <View className="flex-1">
-                <View className="flex-row items-center gap-2 mb-2">
-                  <Text className="text-2xl font-bold text-gray-900">
-                    {vendor.vendorProfile?.businessName || `${vendor.firstName} ${vendor.lastName}`}
+        {/* Online badge */}
+        {vendor.isOnline && (
+          <View style={{ position: 'absolute', top: 56 + insets.top, alignSelf: 'center' }}>
+            <View
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                backgroundColor: BRAND.success,
+                paddingHorizontal: 12,
+                paddingVertical: 5,
+                borderRadius: 20,
+                borderWidth: 1.5,
+                borderColor: 'rgba(255,255,255,0.5)',
+              }}
+            >
+              <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#fff', marginRight: 6 }} />
+              <Text style={{ color: '#fff', fontSize: 11, fontWeight: '700', letterSpacing: 0.3 }}>Online Now</Text>
+            </View>
+          </View>
+        )}
+      </View>
+
+      {/* ── PROFILE CARD (overlaps hero) ──────────────────────────────────── */}
+      <View
+        style={{
+          marginTop: -28,
+          marginHorizontal: 16,
+          backgroundColor: BRAND.surface,
+          borderRadius: 22,
+          padding: 18,
+          borderWidth: 1,
+          borderColor: BRAND.border,
+          ...Platform.select({
+            ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.1, shadowRadius: 16 },
+            android: { elevation: 8 },
+          }),
+          zIndex: 10,
+        }}
+      >
+        {/* Name + verified */}
+        <View style={{ flexDirection: 'row', alignItems: 'flex-start', marginBottom: 8 }}>
+          <View style={{ flex: 1 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginBottom: 4 }}>
+              <Text
+                style={{
+                  fontSize: 21,
+                  fontWeight: '800',
+                  color: BRAND.textPrimary,
+                  letterSpacing: -0.4,
+                  flexShrink: 1,
+                }}
+                numberOfLines={2}
+              >
+                {vendor.vendorProfile?.businessName || `${vendor.firstName} ${vendor.lastName}`}
+              </Text>
+              {vendor.vendorProfile.isVerified && (
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    backgroundColor: BRAND.successSoft,
+                    paddingHorizontal: 7,
+                    paddingVertical: 3,
+                    borderRadius: 8,
+                  }}
+                >
+                  <Ionicons name="checkmark-circle" size={13} color={BRAND.success} />
+                  <Text style={{ fontSize: 10, color: BRAND.success, fontWeight: '700', marginLeft: 3 }}>
+                    Verified
                   </Text>
-                  {vendor.vendorProfile.isVerified && <Ionicons name="checkmark-circle" size={24} color="#10b981" />}
                 </View>
-
-                <View className="flex-row items-center gap-4 mb-3">
-                  <View className="flex-row items-center gap-1">
-                    {renderStars(vendor.vendorProfile.rating)}
-                    <Text className="text-sm font-bold text-gray-900 ml-2">
-                      {vendor.vendorProfile.rating.toFixed(1)}
-                    </Text>
-                    <Text className="text-sm text-gray-500">
-                      ({vendor.vendorProfile.totalRatings})
-                    </Text>
-                  </View>
-                </View>
-
-                <View className="flex-row items-center gap-2">
-                  <Ionicons name="location" size={16} color="#6b7280" />
-                  <Text className="text-sm text-gray-600">
-                    {formatVendorType(vendor.vendorProfile.vendorType)}
-                  </Text>
-                </View>
-
-                {vendor.vendorProfile?.location?.address && <View className="flex-row items-center gap-2 mt-1">
-                    <Ionicons name="location-outline" size={16} color="#6b7280" />
-                    <Text className="text-sm text-gray-600 flex-1" numberOfLines={1}>
-                      {vendor.vendorProfile.location.city}, {vendor.vendorProfile.location.state}
-                    </Text>
-                  </View>}
-              </View>
+              )}
             </View>
 
-            {}
-            {vendor.vendorProfile.categories && vendor.vendorProfile.categories.length > 0 && <View className="flex-row flex-wrap gap-2 mt-4">
-                {vendor.vendorProfile.categories.map(category => <View key={category._id} className="bg-pink-50 px-3 py-1.5 rounded-full">
-                    <Text className="text-pink-600 text-xs font-semibold">
-                      {category.name}
-                    </Text>
-                  </View>)}
-              </View>}
-          </View>
-        </View>
-      </View>
+            {/* Rating row */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10 }}>
+              <StarRow rating={vendor.vendorProfile.rating} size={14} />
+              <Text style={{ fontSize: 13, fontWeight: '700', color: BRAND.textPrimary, marginLeft: 6 }}>
+                {vendor.vendorProfile.rating.toFixed(1)}
+              </Text>
+              <Text style={{ fontSize: 12, color: BRAND.textMuted, marginLeft: 4 }}>
+                ({vendor.vendorProfile.totalRatings} reviews)
+              </Text>
+            </View>
 
-      {}
-      <View className="flex-row px-5 mt-20 gap-3">
-        <View className="flex-1 bg-white rounded-2xl p-4 items-center">
-          <Ionicons name="checkmark-done" size={24} color="#10b981" />
-          <Text className="text-2xl font-bold text-gray-900 mt-2">
-            {vendor.vendorProfile.completedBookings}
-          </Text>
-          <Text className="text-xs text-gray-500 mt-1">Completed</Text>
-        </View>
-
-        <View className="flex-1 bg-white rounded-2xl p-4 items-center">
-          <Ionicons name="briefcase" size={24} color="#3b82f6" />
-          <Text className="text-2xl font-bold text-gray-900 mt-2">
-            {stats?.totalServices || 0}
-          </Text>
-          <Text className="text-xs text-gray-500 mt-1">Services</Text>
-        </View>
-
-        <View className="flex-1 bg-white rounded-2xl p-4 items-center">
-          <Ionicons name="chatbubbles" size={24} color="#f59e0b" />
-          <Text className="text-2xl font-bold text-gray-900 mt-2">
-            {stats?.totalReviews || 0}
-          </Text>
-          <Text className="text-xs text-gray-500 mt-1">Reviews</Text>
-        </View>
-      </View>
-
-      {}
-      <View className="flex-row px-5 mt-6 gap-3">
-        {(['about', 'services', 'reviews'] as const).map(tab => <TouchableOpacity key={tab} className={`flex-1 py-3 rounded-xl ${activeTab === tab ? 'bg-pink-500' : 'bg-white'}`} onPress={() => setActiveTab(tab)} activeOpacity={0.7}>
-            <Text className={`text-center font-semibold capitalize ${activeTab === tab ? 'text-white' : 'text-gray-600'}`}>
-              {tab}
-            </Text>
-          </TouchableOpacity>)}
-      </View>
-
-      {}
-      <ScrollView className="flex-1 px-5 mt-4" showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#eb278d" colors={['#eb278d']} />}>
-        {}
-        {activeTab === 'about' && <View className="pb-32">
-            {}
-            {vendor.vendorProfile.businessDescription && <View className="bg-white rounded-2xl p-5 mb-4">
-                <Text className="text-lg font-bold text-gray-900 mb-3">About</Text>
-                <Text className="text-gray-600 leading-6">
-                  {vendor.vendorProfile.businessDescription}
+            {/* Meta info */}
+            <View style={{ gap: 5 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Ionicons name="storefront-outline" size={13} color={BRAND.textMuted} style={{ marginRight: 5 }} />
+                <Text style={{ fontSize: 12, color: BRAND.textSecondary, fontWeight: '500' }}>
+                  {formatVendorType(vendor.vendorProfile.vendorType)}
                 </Text>
-              </View>}
-
-            {/* Location Information */}
-            {vendor.vendorProfile.location && <View className="bg-white rounded-2xl p-5 mb-4">
-              <Text className="text-lg font-bold text-gray-900 mb-4">Location</Text>
-              
-              <View className="flex-row items-center">
-                <View className="w-10 h-10 rounded-full bg-pink-100 items-center justify-center mr-3">
-                  <Ionicons name="location" size={20} color="#eb278d" />
-                </View>
-                <View className="flex-1">
-                  <Text className="text-sm font-semibold text-gray-900">
-                    {vendor.vendorProfile.location.address}
-                  </Text>
-                  <Text className="text-sm text-gray-600 mt-1">
+              </View>
+              {vendor.vendorProfile?.location?.city && (
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <Ionicons name="location-outline" size={13} color={BRAND.textMuted} style={{ marginRight: 5 }} />
+                  <Text style={{ fontSize: 12, color: BRAND.textSecondary, fontWeight: '500' }}>
                     {vendor.vendorProfile.location.city}, {vendor.vendorProfile.location.state}
                   </Text>
                 </View>
-              </View>
-            </View>}
+              )}
+            </View>
+          </View>
+        </View>
 
-            {}
-            {vendor.vendorProfile.serviceRadius && <View className="bg-white rounded-2xl p-5">
-                <View className="flex-row items-center justify-between">
-                  <View className="flex-row items-center">
-                    <Ionicons name="navigate-circle" size={24} color="#eb278d" />
-                    <Text className="text-base font-bold text-gray-900 ml-3">
-                      Service Radius
-                    </Text>
-                  </View>
-                  <Text className="text-lg font-bold text-pink-600">
+        {/* Category chips */}
+        {vendor.vendorProfile.categories?.length > 0 && (
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: BRAND.border }}>
+            {vendor.vendorProfile.categories.map((cat) => (
+              <View
+                key={cat._id}
+                style={{
+                  backgroundColor: BRAND.primarySoft,
+                  paddingHorizontal: 10,
+                  paddingVertical: 4,
+                  borderRadius: 8,
+                  borderWidth: 1,
+                  borderColor: BRAND.primaryMuted,
+                }}
+              >
+                <Text style={{ fontSize: 11, color: BRAND.primary, fontWeight: '600' }}>{cat.name}</Text>
+              </View>
+            ))}
+          </View>
+        )}
+      </View>
+
+      {/* ── STAT PILLS ────────────────────────────────────────────────────── */}
+      <View
+        style={{
+          flexDirection: 'row',
+          paddingHorizontal: 16,
+          marginTop: 14,
+          gap: 10,
+        }}
+      >
+        <StatPill
+          icon="checkmark-done-outline"
+          value={vendor.vendorProfile.completedBookings}
+          label="Completed"
+          color={BRAND.success}
+          bg={BRAND.successSoft}
+        />
+        <StatPill
+          icon="briefcase-outline"
+          value={stats?.totalServices || 0}
+          label="Services"
+          color={BRAND.blue}
+          bg={BRAND.blueSoft}
+        />
+        <StatPill
+          icon="chatbubbles-outline"
+          value={stats?.totalReviews || 0}
+          label="Reviews"
+          color={BRAND.gold}
+          bg="#FEF3C7"
+        />
+      </View>
+
+      {/* ── TABS ──────────────────────────────────────────────────────────── */}
+      <View style={{ marginTop: 16, marginBottom: 12 }}>
+        <TabBar
+          tabs={['about', 'services', 'reviews']}
+          active={activeTab}
+          onChange={setActiveTab}
+        />
+      </View>
+
+      {/* ── TAB CONTENT ───────────────────────────────────────────────────── */}
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 110 }}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={BRAND.primary} colors={[BRAND.primary]} />
+        }
+      >
+        {/* ── ABOUT ──────────────────────────────────────────────────────── */}
+        {activeTab === 'about' && (
+          <View style={{ paddingTop: 4 }}>
+            {vendor.vendorProfile.businessDescription && (
+              <SectionCard title="About">
+                <Text style={{ fontSize: 14, color: BRAND.textSecondary, lineHeight: 22 }}>
+                  {vendor.vendorProfile.businessDescription}
+                </Text>
+              </SectionCard>
+            )}
+
+            {vendor.vendorProfile.location && (
+              <SectionCard title="Location">
+                <InfoRow
+                  icon="location"
+                  text={vendor.vendorProfile.location.address}
+                  sub={`${vendor.vendorProfile.location.city}, ${vendor.vendorProfile.location.state}`}
+                />
+              </SectionCard>
+            )}
+
+            {vendor.vendorProfile.serviceRadius && (
+              <View
+                style={{
+                  backgroundColor: BRAND.surface,
+                  borderRadius: 20,
+                  padding: 16,
+                  borderWidth: 1,
+                  borderColor: BRAND.border,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  ...Platform.select({
+                    ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8 },
+                    android: { elevation: 2 },
+                  }),
+                }}
+              >
+                <InfoRow
+                  icon="navigate-circle-outline"
+                  text="Service Radius"
+                  sub="Maximum coverage distance"
+                />
+                <View
+                  style={{
+                    backgroundColor: BRAND.primarySoft,
+                    paddingHorizontal: 12,
+                    paddingVertical: 6,
+                    borderRadius: 10,
+                    borderWidth: 1,
+                    borderColor: BRAND.primaryMuted,
+                  }}
+                >
+                  <Text style={{ fontSize: 15, fontWeight: '800', color: BRAND.primary }}>
                     {vendor.vendorProfile.serviceRadius} km
                   </Text>
                 </View>
-              </View>}
-          </View>}
+              </View>
+            )}
 
-        {}
-        {activeTab === 'services' && <View className="pb-32">
-            {services.length > 0 ? <View className="space-y-4">
-                {services.map(service => <ServiceCard key={service._id} service={service} onPress={() => handleBookService(service._id)} />)}
-              </View> : <View className="bg-white rounded-2xl p-8 items-center">
-                <Ionicons name="briefcase-outline" size={64} color="#d1d5db" />
-                <Text className="text-gray-400 text-lg font-semibold mt-4">
-                  No services available
-                </Text>
-                <Text className="text-gray-300 text-sm mt-2">
-                  This vendor hasn't added services yet
-                </Text>
-              </View>}
-          </View>}
+          
+          </View>
+        )}
 
-        {}
-        {activeTab === 'reviews' && <View className="pb-32">
-            {reviews.length > 0 ? <>
-                {}
-                <View className="bg-white rounded-2xl p-5 mb-4">
-                  <View className="flex-row items-center justify-between mb-4">
-                    <Text className="text-lg font-bold text-gray-900">
+        {/* ── SERVICES ───────────────────────────────────────────────────── */}
+        {activeTab === 'services' && (
+          <View style={{ paddingTop: 4 }}>
+            {services.length > 0 ? (
+              <View style={{ gap: 12 }}>
+                {services.map((service) => (
+                  <ServiceCard
+                    key={service._id}
+                    service={service}
+                    onPress={() => handleBookService(service._id)}
+                  />
+                ))}
+              </View>
+            ) : (
+              <View
+                style={{
+                  backgroundColor: BRAND.surface,
+                  borderRadius: 20,
+                  padding: 40,
+                  alignItems: 'center',
+                  borderWidth: 1,
+                  borderColor: BRAND.border,
+                }}
+              >
+                <View
+                  style={{
+                    width: 72,
+                    height: 72,
+                    borderRadius: 22,
+                    backgroundColor: BRAND.surfaceAlt,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    marginBottom: 14,
+                    borderWidth: 1,
+                    borderColor: BRAND.border,
+                  }}
+                >
+                  <Ionicons name="briefcase-outline" size={34} color={BRAND.textMuted} />
+                </View>
+                <Text style={{ fontSize: 16, fontWeight: '700', color: BRAND.textPrimary, marginBottom: 6 }}>
+                  No services yet
+                </Text>
+                <Text style={{ fontSize: 13, color: BRAND.textMuted, textAlign: 'center', lineHeight: 19 }}>
+                  This vendor hasn't added any services yet.
+                </Text>
+              </View>
+            )}
+          </View>
+        )}
+
+        {/* ── REVIEWS ────────────────────────────────────────────────────── */}
+        {activeTab === 'reviews' && (
+          <View style={{ paddingTop: 4 }}>
+            {reviews.length > 0 ? (
+              <>
+                {/* Rating summary */}
+                <View
+                  style={{
+                    backgroundColor: BRAND.surface,
+                    borderRadius: 20,
+                    padding: 18,
+                    marginBottom: 14,
+                    borderWidth: 1,
+                    borderColor: BRAND.border,
+                    ...Platform.select({
+                      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8 },
+                      android: { elevation: 2 },
+                    }),
+                  }}
+                >
+                  <View
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      marginBottom: 14,
+                    }}
+                  >
+                    <Text style={{ fontSize: 16, fontWeight: '700', color: BRAND.textPrimary }}>
                       Customer Reviews
                     </Text>
-                    <TouchableOpacity onPress={() => navigation.navigate('Reviews', {
-                userId: vendor._id,
-                type: 'vendor'
-              })} className="flex-row items-center" activeOpacity={0.7}>
-                      <Text className="text-pink-600 font-semibold mr-1">
-                        See All
-                      </Text>
-                      <Ionicons name="chevron-forward" size={18} color="#eb278d" />
+                    <TouchableOpacity
+                      onPress={() => navigation.navigate('Reviews', { userId: vendor._id, type: 'vendor' })}
+                      activeOpacity={0.7}
+                      style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        backgroundColor: BRAND.primarySoft,
+                        paddingHorizontal: 10,
+                        paddingVertical: 5,
+                        borderRadius: 20,
+                      }}
+                    >
+                      <Text style={{ fontSize: 12, color: BRAND.primary, fontWeight: '600' }}>See All</Text>
+                      <Ionicons name="chevron-forward" size={13} color={BRAND.primary} style={{ marginLeft: 2 }} />
                     </TouchableOpacity>
                   </View>
 
-                  {}
-                  {vendor.vendorProfile && <View className="flex-row items-center justify-between bg-pink-50 rounded-xl p-4 mb-4">
-                      <View className="items-center">
-                        <Text className="text-4xl font-bold text-pink-600">
-                          {(vendor.vendorProfile.rating || 0).toFixed(1)}
-                        </Text>
-                        <View className="flex-row mt-1">
-                          {renderStars(Math.round(vendor.vendorProfile.rating || 0))}
-                        </View>
-                        <Text className="text-sm text-gray-600 mt-1">
-                          {vendor.vendorProfile.totalRatings || 0} reviews
-                        </Text>
-                      </View>
+                  <View
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      backgroundColor: BRAND.surfaceAlt,
+                      borderRadius: 14,
+                      padding: 14,
+                      borderWidth: 1,
+                      borderColor: BRAND.border,
+                    }}
+                  >
+                    {/* Big score */}
+                    <View style={{ alignItems: 'center', marginRight: 20, minWidth: 72 }}>
+                      <Text style={{ fontSize: 44, fontWeight: '800', color: BRAND.primary, letterSpacing: -2 }}>
+                        {(vendor.vendorProfile.rating || 0).toFixed(1)}
+                      </Text>
+                      <StarRow rating={Math.round(vendor.vendorProfile.rating || 0)} size={13} />
+                      <Text style={{ fontSize: 11, color: BRAND.textMuted, marginTop: 4, fontWeight: '500' }}>
+                        {vendor.vendorProfile.totalRatings || 0} reviews
+                      </Text>
+                    </View>
 
-                      {stats && <View className="flex-1 ml-6">
-                          <Text className="text-xs font-semibold text-gray-700 mb-2">
-                            Rating Distribution
-                          </Text>
-                          {[5, 4, 3, 2, 1].map(rating => {
-                  const count = reviews.filter((r: any) => r.rating === rating).length || 0;
-                  const percentage = reviews.length ? count / reviews.length * 100 : 0;
-                  return <View key={rating} className="flex-row items-center gap-2 mb-1">
-                                <Text className="text-xs text-gray-600 w-6">
-                                  {rating}★
-                                </Text>
-                                <View className="flex-1 h-1.5 bg-gray-200 rounded-full overflow-hidden">
-                                  <View className="h-full bg-yellow-400" style={{
-                        width: `${percentage}%`
-                      }} />
-                                </View>
-                                <Text className="text-xs text-gray-600 w-6 text-right">
-                                  {count}
-                                </Text>
-                              </View>;
-                })}
-                        </View>}
-                    </View>}
+                    {/* Bars */}
+                    <View style={{ flex: 1 }}>
+                      {[5, 4, 3, 2, 1].map((star) => {
+                        const count = reviews.filter((r: any) => r.rating === star).length;
+                        const pct = reviews.length ? (count / reviews.length) * 100 : 0;
+                        return (
+                          <View key={star} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 5 }}>
+                            <Text style={{ fontSize: 11, color: BRAND.textMuted, width: 20, fontWeight: '600' }}>
+                              {star}★
+                            </Text>
+                            <View
+                              style={{
+                                flex: 1,
+                                height: 6,
+                                backgroundColor: BRAND.borderStrong,
+                                borderRadius: 3,
+                                overflow: 'hidden',
+                                marginHorizontal: 8,
+                              }}
+                            >
+                              <View
+                                style={{
+                                  width: `${pct}%`,
+                                  height: '100%',
+                                  backgroundColor: pct > 0 ? BRAND.gold : 'transparent',
+                                  borderRadius: 3,
+                                }}
+                              />
+                            </View>
+                            <Text style={{ fontSize: 11, color: BRAND.textMuted, width: 18, textAlign: 'right', fontWeight: '500' }}>
+                              {count}
+                            </Text>
+                          </View>
+                        );
+                      })}
+                    </View>
+                  </View>
                 </View>
 
-                {}
-                <Text className="text-base font-bold text-gray-900 mb-3 px-1">
+                {/* Recent reviews */}
+                <Text style={{ fontSize: 14, fontWeight: '700', color: BRAND.textPrimary, marginBottom: 10 }}>
                   Recent Reviews
                 </Text>
-                <View className="space-y-4">
-                  {reviews.slice(0, 3).map(review => <ReviewCard key={review._id} review={review} />)}
+                <View style={{ gap: 10 }}>
+                  {reviews.slice(0, 3).map((review) => (
+                    <ReviewCard key={review._id} review={review} />
+                  ))}
                 </View>
 
-                {}
-                {reviews.length > 3 && <TouchableOpacity onPress={() => navigation.navigate('Reviews', {
-            userId: vendor._id,
-            type: 'vendor'
-          })} className="bg-white rounded-2xl p-4 mt-4 border-2 border-pink-500" activeOpacity={0.7}>
-                    <Text className="text-pink-600 font-bold text-center">
+                {reviews.length > 3 && (
+                  <TouchableOpacity
+                    onPress={() => navigation.navigate('Reviews', { userId: vendor._id, type: 'vendor' })}
+                    activeOpacity={0.8}
+                    style={{
+                      marginTop: 12,
+                      backgroundColor: BRAND.surface,
+                      borderRadius: 14,
+                      paddingVertical: 14,
+                      alignItems: 'center',
+                      borderWidth: 1.5,
+                      borderColor: BRAND.primary,
+                    }}
+                  >
+                    <Text style={{ color: BRAND.primary, fontWeight: '700', fontSize: 14 }}>
                       View All {reviews.length} Reviews
                     </Text>
-                  </TouchableOpacity>}
-              </> : <View className="bg-white rounded-2xl p-8 items-center">
-                <Ionicons name="chatbubbles-outline" size={64} color="#d1d5db" />
-                <Text className="text-gray-400 text-lg font-semibold mt-4">
+                  </TouchableOpacity>
+                )}
+              </>
+            ) : (
+              <View
+                style={{
+                  backgroundColor: BRAND.surface,
+                  borderRadius: 20,
+                  padding: 40,
+                  alignItems: 'center',
+                  borderWidth: 1,
+                  borderColor: BRAND.border,
+                }}
+              >
+                <View
+                  style={{
+                    width: 72,
+                    height: 72,
+                    borderRadius: 22,
+                    backgroundColor: BRAND.surfaceAlt,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    marginBottom: 14,
+                    borderWidth: 1,
+                    borderColor: BRAND.border,
+                  }}
+                >
+                  <Ionicons name="chatbubbles-outline" size={34} color={BRAND.textMuted} />
+                </View>
+                <Text style={{ fontSize: 16, fontWeight: '700', color: BRAND.textPrimary, marginBottom: 6 }}>
                   No reviews yet
                 </Text>
-                <Text className="text-gray-300 text-sm mt-2 text-center">
-                  {stats?.totalReviews > 0 ? 'Reviews are being loaded...' : 'Be the first to review this vendor'}
+                <Text style={{ fontSize: 13, color: BRAND.textMuted, textAlign: 'center', lineHeight: 19 }}>
+                  Be the first to review this vendor
                 </Text>
-                {stats?.totalReviews > 0 && <TouchableOpacity onPress={() => fetchVendorDetails()} className="mt-4 bg-pink-500 px-6 py-3 rounded-xl" activeOpacity={0.7}>
-                    <Text className="text-white font-semibold">Refresh Reviews</Text>
-                  </TouchableOpacity>}
-              </View>}
-          </View>}
+                {stats?.totalReviews > 0 && (
+                  <TouchableOpacity
+                    onPress={fetchVendorDetails}
+                    activeOpacity={0.8}
+                    style={{
+                      marginTop: 16,
+                      backgroundColor: BRAND.primary,
+                      paddingHorizontal: 22,
+                      paddingVertical: 10,
+                      borderRadius: 22,
+                    }}
+                  >
+                    <Text style={{ color: '#fff', fontWeight: '700', fontSize: 13 }}>Refresh Reviews</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            )}
+          </View>
+        )}
       </ScrollView>
 
-      {/* Bottom Action Bar */}
-      <View className="absolute bottom-0 left-0 right-0 bg-white border-t border-gray-100 px-5 py-4">
-        <View className="flex-row gap-3">
-          <TouchableOpacity className="w-14 h-14 rounded-2xl bg-gray-100 items-center justify-center" onPress={handleMessageVendor} activeOpacity={0.7}>
-            <Ionicons name="chatbubble-ellipses" size={24} color="#eb278d" />
-          </TouchableOpacity>
+      {/* ── BOTTOM ACTION BAR ─────────────────────────────────────────────── */}
+      <View
+        style={{
+          position: 'absolute',
+          bottom: 0,
+          left: 0,
+          right: 0,
+          backgroundColor: BRAND.surface,
+          paddingHorizontal: 16,
+          paddingTop: 12,
+          paddingBottom: insets.bottom + 12,
+          borderTopWidth: 1,
+          borderTopColor: BRAND.border,
+          flexDirection: 'row',
+          gap: 10,
+          ...Platform.select({
+            ios: { shadowColor: '#000', shadowOffset: { width: 0, height: -3 }, shadowOpacity: 0.06, shadowRadius: 10 },
+            android: { elevation: 10 },
+          }),
+        }}
+      >
+        {/* Message button */}
+        <TouchableOpacity
+          onPress={handleMessageVendor}
+          activeOpacity={0.8}
+          style={{
+            width: 52,
+            height: 52,
+            borderRadius: 16,
+            backgroundColor: BRAND.primarySoft,
+            alignItems: 'center',
+            justifyContent: 'center',
+            borderWidth: 1.5,
+            borderColor: BRAND.primaryMuted,
+          }}
+        >
+          <Ionicons name="chatbubble-ellipses-outline" size={22} color={BRAND.primary} />
+        </TouchableOpacity>
 
-          <TouchableOpacity className="flex-1 h-14 rounded-2xl items-center justify-center" style={{
-          backgroundColor: '#eb278d',
-          shadowColor: '#eb278d',
-          shadowOffset: {
-            width: 0,
-            height: 4
-          },
-          shadowOpacity: 0.3,
-          shadowRadius: 8,
-          elevation: 6
-        }} onPress={() => {
-          if (services.length > 0) {
+        {/* Book / CTA */}
+        <TouchableOpacity
+          onPress={() => {
+            if (services.length === 0) {
+              Alert.alert('No Services', 'This vendor has not added any services yet.');
+              return;
+            }
             if (activeTab === 'services') {
               handleBookService(services[0]._id);
             } else {
               setActiveTab('services');
             }
-          } else {
-            Alert.alert('No Services', 'This vendor has not added any services yet.', [{
-              text: 'OK'
-            }]);
-          }
-        }} activeOpacity={0.8}>
-            <Text className="text-white text-base font-bold">
+          }}
+          activeOpacity={0.85}
+          style={{ flex: 1 }}
+        >
+          <LinearGradient
+            colors={[BRAND.primary, '#B5315F']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={{
+              height: 52,
+              borderRadius: 16,
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexDirection: 'row',
+              gap: 8,
+            }}
+          >
+            <Ionicons
+              name={activeTab === 'services' && services.length > 0 ? 'calendar-outline' : 'grid-outline'}
+              size={18}
+              color="#fff"
+            />
+            <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700', letterSpacing: 0.1 }}>
               {activeTab === 'services' && services.length > 0 ? 'Select Service' : 'Book Now'}
             </Text>
-          </TouchableOpacity>
-        </View>
+          </LinearGradient>
+        </TouchableOpacity>
       </View>
-    </SafeAreaView>;
+    </View>
+  );
 };
+
 export default VendorDetailScreen;

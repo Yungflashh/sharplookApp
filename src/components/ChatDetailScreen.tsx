@@ -15,9 +15,10 @@ import {
   Animated,
   PanResponder,
   ScrollView,
+  StatusBar,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation, useRoute, RouteProp, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -30,133 +31,109 @@ import { Audio } from 'expo-av';
 import socketService from '@/services/socket.service';
 import callService from '@/services/call.service';
 
-type ChatDetailNavigationProp = NativeStackNavigationProp<RootStackParamList, 'ChatDetail'>;
-type ChatDetailRouteProp = RouteProp<RootStackParamList, 'ChatDetail'>;
+// ─── Brand Tokens ─────────────────────────────────────────────────────────────
+const BRAND = {
+  primary: '#E04079',
+  primaryDark: '#B5315F',
+  primaryLight: '#F08BAC',
+  primarySoft: '#FEF0F5',
+  primaryMuted: '#FCDCE9',
+  blue: '#3B82F6',
+  blueSoft: '#DBEAFE',
+  green: '#10B981',
+  greenSoft: '#D1FAE5',
+  surface: '#FFFFFF',
+  surfaceAlt: '#F9FAFB',
+  border: '#F3F4F6',
+  borderStrong: '#E5E7EB',
+  textPrimary: '#111827',
+  textSecondary: '#6B7280',
+  textMuted: '#9CA3AF',
+  // Chat-specific
+  myBubble: '#E04079',
+  myBubbleDark: '#B5315F',
+  theirBubble: '#FFFFFF',
+  chatBg: '#F3F4F6',
+};
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+type Nav    = NativeStackNavigationProp<RootStackParamList, 'ChatDetail'>;
+type RouteP = RouteProp<RootStackParamList, 'ChatDetail'>;
+type UserActivity = 'typing' | 'recording' | 'uploading' | 'online' | 'offline';
 
 interface Message {
   _id: string;
-  sender: {
-    _id: string;
-    firstName: string;
-    lastName: string;
-    avatar?: string;
-  };
-  receiver: {
-    _id: string;
-    firstName: string;
-    lastName: string;
-    avatar?: string;
-  };
+  sender: { _id: string; firstName: string; lastName: string; avatar?: string };
+  receiver: { _id: string; firstName: string; lastName: string; avatar?: string };
   messageType: 'text' | 'image' | 'file' | 'audio' | 'video';
   text?: string;
-  attachments?: Array<{
-    url: string;
-    type: string;
-    name?: string;
-  }>;
+  attachments?: Array<{ url: string; type: string; name?: string }>;
   status: 'sent' | 'delivered' | 'read';
   readAt?: string;
   deliveredAt?: string;
   createdAt: string;
-  replyTo?: {
-    _id: string;
-    text: string;
-    sender: {
-      firstName: string;
-      lastName: string;
-    };
-  };
+  replyTo?: { _id: string; text: string; sender: { firstName: string; lastName: string } };
 }
 
-type UserActivity = 'typing' | 'recording' | 'uploading' | 'online' | 'offline';
-
+// ─── Main Screen ──────────────────────────────────────────────────────────────
 const ChatDetailScreen: React.FC = () => {
-  const navigation = useNavigation<ChatDetailNavigationProp>();
-  const route = useRoute<ChatDetailRouteProp>();
+  const navigation = useNavigation<Nav>();
+  const route = useRoute<RouteP>();
   const { otherUserId, otherUserName, otherUserAvatar } = route.params;
+  const insets = useSafeAreaInsets();
 
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [sending, setSending] = useState(false);
-  const [inputText, setInputText] = useState('');
-  const [conversationId, setConversationId] = useState<string | null>(null);
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
-  const [page, setPage] = useState(1);
-  const [hasMore, setHasMore] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [otherUser, setOtherUser] = useState<any>(null);
-  
-  const [replyingTo, setReplyingTo] = useState<Message | null>(null);
+  const [messages, setMessages]                   = useState<Message[]>([]);
+  const [loading, setLoading]                     = useState(true);
+  const [sending, setSending]                     = useState(false);
+  const [inputText, setInputText]                 = useState('');
+  const [conversationId, setConversationId]       = useState<string | null>(null);
+  const [currentUserId, setCurrentUserId]         = useState<string | null>(null);
+  const [page, setPage]                           = useState(1);
+  const [hasMore, setHasMore]                     = useState(true);
+  const [loadingMore, setLoadingMore]             = useState(false);
+  const [otherUser, setOtherUser]                 = useState<any>(null);
+  const [replyingTo, setReplyingTo]               = useState<Message | null>(null);
   const [showAttachmentMenu, setShowAttachmentMenu] = useState(false);
-  const [recording, setRecording] = useState<Audio.Recording | null>(null);
-  const [isRecording, setIsRecording] = useState(false);
-  const [selectedMedia, setSelectedMedia] = useState<any>(null);
-  
+  const [recording, setRecording]                 = useState<Audio.Recording | null>(null);
+  const [isRecording, setIsRecording]             = useState(false);
+  const [selectedMedia, setSelectedMedia]         = useState<any>(null);
   const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
-  
   const [isOtherUserTyping, setIsOtherUserTyping] = useState(false);
   const [isOtherUserOnline, setIsOtherUserOnline] = useState(false);
   const [otherUserActivity, setOtherUserActivity] = useState<UserActivity>('offline');
-  
-  // Audio playback state
-  const [playingAudioId, setPlayingAudioId] = useState<string | null>(null);
-  const [audioProgress, setAudioProgress] = useState<{ [key: string]: number }>({});
-  const [audioDurations, setAudioDurations] = useState<{ [key: string]: number }>({});
+  const [inputHeight, setInputHeight]             = useState(44);
+
+  // Audio
+  const [playingAudioId, setPlayingAudioId]       = useState<string | null>(null);
+  const [audioProgress, setAudioProgress]         = useState<Record<string, number>>({});
+  const [audioDurations, setAudioDurations]       = useState<Record<string, number>>({});
   const soundRef = useRef<Audio.Sound | null>(null);
 
-  const flatListRef = useRef<FlatList>(null);
+  const flatListRef      = useRef<FlatList>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const shouldScrollToEnd = useRef(true);
+  const hasScrolledOnLoad = useRef(false);
 
+  // ── Socket setup ──────────────────────────────────────────────────────────
   useEffect(() => {
     if (!conversationId || !currentUserId) return;
-
-    console.log('🔌 Setting up socket for conversation:', conversationId);
-
     socketService.joinConversation(conversationId);
 
-    socketService.onJoinedConversation((data) => {
-      console.log('✅ Joined conversation room:', data.conversationId);
-    });
-
     socketService.onMessageReceived((data) => {
-      console.log('📨 NEW MESSAGE RECEIVED:', data);
-      
       const newMessage = data.message;
-      
       setMessages((prev) => {
-        const exists = prev.some(m => m._id === newMessage._id);
-        if (exists) {
-          console.log('ℹ️ Message already exists, skipping');
-          return prev;
-        }
-        
-        console.log('✅ Adding new message to list in real-time');
+        if (prev.some((m) => m._id === newMessage._id)) return prev;
         return [...prev, newMessage];
       });
-
-      setTimeout(() => {
-        flatListRef.current?.scrollToEnd({ animated: true });
-      }, 100);
-
-      if (newMessage.sender._id !== currentUserId) {
+      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
+      if (newMessage.sender._id !== currentUserId)
         socketService.markMessageAsDelivered(newMessage._id);
-        console.log('✓ Marked as delivered (user online, received message)');
-      }
     });
 
     socketService.onMessageStatus((data) => {
-      console.log('📊 Message status update:', data);
-      
       setMessages((prev) =>
         prev.map((msg) =>
           msg._id === data.messageId
-            ? {
-                ...msg,
-                status: data.status,
-                readAt: data.readAt || msg.readAt,
-                deliveredAt: data.deliveredAt || msg.deliveredAt,
-              }
+            ? { ...msg, status: data.status, readAt: data.readAt || msg.readAt, deliveredAt: data.deliveredAt || msg.deliveredAt }
             : msg
         )
       );
@@ -164,10 +141,8 @@ const ChatDetailScreen: React.FC = () => {
 
     socketService.onTypingStart((data) => {
       if (data.conversationId === conversationId && data.userId !== currentUserId) {
-        console.log('⌨️ Other user started typing');
         setIsOtherUserTyping(true);
         setOtherUserActivity('typing');
-        
         setTimeout(() => {
           setIsOtherUserTyping(false);
           setOtherUserActivity(isOtherUserOnline ? 'online' : 'offline');
@@ -177,107 +152,54 @@ const ChatDetailScreen: React.FC = () => {
 
     socketService.onTypingStop((data) => {
       if (data.conversationId === conversationId && data.userId !== currentUserId) {
-        console.log('🛑 Other user stopped typing');
         setIsOtherUserTyping(false);
         setOtherUserActivity(isOtherUserOnline ? 'online' : 'offline');
       }
     });
 
-    socketService.on('recording:start', (data: any) => {
-      if (data.conversationId === conversationId && data.userId !== currentUserId) {
-        console.log('🎤 Other user started recording');
-        setOtherUserActivity('recording');
-      }
-    });
-
-    socketService.on('recording:stop', (data: any) => {
-      if (data.conversationId === conversationId && data.userId !== currentUserId) {
-        console.log('🛑 Other user stopped recording');
-        setOtherUserActivity(isOtherUserOnline ? 'online' : 'offline');
-      }
-    });
-
-    socketService.on('uploading:start', (data: any) => {
-      if (data.conversationId === conversationId && data.userId !== currentUserId) {
-        console.log('📤 Other user started uploading');
-        setOtherUserActivity('uploading');
-      }
-    });
-
-    socketService.on('uploading:stop', (data: any) => {
-      if (data.conversationId === conversationId && data.userId !== currentUserId) {
-        console.log('✅ Other user finished uploading');
-        setOtherUserActivity(isOtherUserOnline ? 'online' : 'offline');
-      }
-    });
-
-    socketService.onMessageReaction((data) => {
-      setMessages((prev) =>
-        prev.map((msg) =>
-          msg._id === data.messageId
-            ? { ...msg, reactions: data.reactions }
-            : msg
-        )
-      );
-    });
-
-    socketService.onMessageDeleted((data) => {
-      setMessages((prev) =>
-        prev.filter((msg) => msg._id !== data.messageId)
-      );
+    ['recording:start', 'recording:stop', 'uploading:start', 'uploading:stop'].forEach((evt) => {
+      socketService.on(evt, (data: any) => {
+        if (data.conversationId === conversationId && data.userId !== currentUserId) {
+          if (evt === 'recording:start') setOtherUserActivity('recording');
+          else if (evt === 'uploading:start') setOtherUserActivity('uploading');
+          else setOtherUserActivity(isOtherUserOnline ? 'online' : 'offline');
+        }
+      });
     });
 
     socketService.onConversationRead((data) => {
       if (data.conversationId === conversationId && data.readBy !== currentUserId) {
         setMessages((prev) =>
           prev.map((msg) =>
-            msg.sender._id === currentUserId
-              ? { ...msg, status: 'read' as const }
-              : msg
+            msg.sender._id === currentUserId ? { ...msg, status: 'read' as const } : msg
           )
         );
       }
     });
 
     return () => {
-      console.log('🚪 Leaving conversation and cleaning up');
       socketService.leaveConversation(conversationId);
-      socketService.removeListener('message:received');
-      socketService.removeListener('message:status');
-      socketService.removeListener('typing:start');
-      socketService.removeListener('typing:stop');
-      socketService.removeListener('recording:start');
-      socketService.removeListener('recording:stop');
-      socketService.removeListener('uploading:start');
-      socketService.removeListener('uploading:stop');
-      socketService.removeListener('message:reaction');
-      socketService.removeListener('message:deleted');
-      socketService.removeListener('conversation:read');
-      socketService.removeListener('joined:conversation');
+      ['message:received','message:status','typing:start','typing:stop','recording:start',
+       'recording:stop','uploading:start','uploading:stop','message:reaction',
+       'message:deleted','conversation:read','joined:conversation'].forEach((e) =>
+        socketService.removeListener(e)
+      );
     };
   }, [conversationId, currentUserId, isOtherUserOnline]);
 
   useEffect(() => {
     if (!otherUserId) return;
-
     socketService.requestUserStatus([otherUserId]);
-
     socketService.onUserStatusResponse((statuses) => {
-      const userStatus = statuses.find(s => s.userId === otherUserId);
-      if (userStatus) {
-        setIsOtherUserOnline(userStatus.isOnline);
-        setOtherUserActivity(userStatus.isOnline ? 'online' : 'offline');
-      }
+      const s = statuses.find((s) => s.userId === otherUserId);
+      if (s) { setIsOtherUserOnline(s.isOnline); setOtherUserActivity(s.isOnline ? 'online' : 'offline'); }
     });
-
     socketService.onUserStatus((data) => {
       if (data.userId === otherUserId) {
-        console.log('🟢 User status:', data.isOnline ? 'online' : 'offline');
         setIsOtherUserOnline(data.isOnline);
         setOtherUserActivity(data.isOnline ? 'online' : 'offline');
       }
     });
-
     return () => {
       socketService.removeListener('user:status');
       socketService.removeListener('user:status:response');
@@ -286,77 +208,46 @@ const ChatDetailScreen: React.FC = () => {
 
   useFocusEffect(
     useCallback(() => {
-      console.log('🔄 Chat screen focused - ensuring socket connected');
-      
-      if (!socketService.isSocketConnected()) {
-        console.log('🔌 Reconnecting socket...');
-        socketService.connect();
-      }
-
+      if (!socketService.isSocketConnected()) socketService.connect();
       if (conversationId) {
         socketService.joinConversation(conversationId);
-        
-        console.log('👁️ Marking received messages as read');
-        
-        messages.forEach((message) => {
-          if (
-            message.sender._id !== currentUserId && 
-            message.status !== 'read'
-          ) {
-            console.log('  📖 Marking message as read:', message._id);
-            socketService.markMessageAsRead(message._id);
-          }
+        messages.forEach((msg) => {
+          if (msg.sender._id !== currentUserId && msg.status !== 'read')
+            socketService.markMessageAsRead(msg._id);
         });
-        
         socketService.markConversationAsRead(conversationId);
-        console.log('✅ Conversation marked as read');
       }
-
-      return () => {
-        console.log('👋 Chat screen unfocused');
-      };
     }, [conversationId, messages, currentUserId])
   );
 
-  useEffect(() => {
-    loadCurrentUser();
-    requestPermissions();
-  }, []);
+  // ── Init ──────────────────────────────────────────────────────────────────
+  useEffect(() => { loadCurrentUser(); requestPermissions(); }, []);
+  useEffect(() => { if (currentUserId) initializeConversation(); }, [currentUserId]);
 
-  useEffect(() => {
-    if (currentUserId) {
-      initializeConversation();
-    }
-  }, [currentUserId]);
-
-  
-  const hasScrolledOnLoad = useRef(false);
-  
   useEffect(() => {
     if (messages.length > 0 && !loading && !hasScrolledOnLoad.current) {
-      
-      const scrollToBottom = () => {
-        flatListRef.current?.scrollToEnd({ animated: false });
-      };
-
-      
-      scrollToBottom();
-
-      
-      const timer1 = setTimeout(scrollToBottom, 100);
-      const timer2 = setTimeout(scrollToBottom, 300);
-      const timer3 = setTimeout(scrollToBottom, 500);
-      
-      
+      flatListRef.current?.scrollToEnd({ animated: false });
+      const t1 = setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 150);
+      const t2 = setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 400);
       hasScrolledOnLoad.current = true;
-      
-      return () => {
-        clearTimeout(timer1);
-        clearTimeout(timer2);
-        clearTimeout(timer3);
-      };
+      return () => { clearTimeout(t1); clearTimeout(t2); };
     }
   }, [messages.length, loading]);
+
+  // iOS keyboard handling — scroll to bottom when keyboard shows
+  useEffect(() => {
+    const show = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      () => setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), Platform.OS === 'ios' ? 50 : 100)
+    );
+    const hide = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      () => setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100)
+    );
+    return () => { show.remove(); hide.remove(); };
+  }, []);
+
+  useEffect(() => () => { soundRef.current?.unloadAsync(); }, []);
 
   const requestPermissions = async () => {
     await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -366,193 +257,98 @@ const ChatDetailScreen: React.FC = () => {
 
   const loadCurrentUser = async () => {
     try {
-      const userData = await getStoredUser();
-      if (userData) {
-        setCurrentUserId(userData._id);
-      }
-    } catch (error) {
-      console.error('Error loading user:', error);
-    }
+      const user = await getStoredUser();
+      if (user) setCurrentUserId(user._id);
+    } catch (e) { console.error('Error loading user:', e); }
   };
 
   const initializeConversation = async () => {
+    if (!otherUserId || !currentUserId) return;
     try {
-      if (!otherUserId) {
-        console.error('❌ No otherUserId provided');
-        Alert.alert('Error', 'Invalid user. Please go back and try again.');
-        navigation.goBack();
-        return;
-      }
-
-      if (!currentUserId) {
-        console.error('❌ No currentUserId - user not authenticated');
-        Alert.alert('Error', 'You must be logged in to view messages.');
-        return;
-      }
-
       setLoading(true);
-      console.log('🔄 Initializing conversation with user:', otherUserId);
-
-      const convResponse = await messageAPI.getOrCreateConversation(otherUserId);
-      
-      if (convResponse.success) {
-        const conversation = convResponse.data.conversation || convResponse.data;
-        setConversationId(conversation._id);
-
-        const other = conversation.participants.find(
-          (p: any) => p._id.toString() !== currentUserId
-        );
-        if (other) {
-          setOtherUser(other);
-          setIsOtherUserOnline(other.isOnline || false);
-          setOtherUserActivity(other.isOnline ? 'online' : 'offline');
-        }
-
-        await loadMessages(conversation._id);
+      const res = await messageAPI.getOrCreateConversation(otherUserId);
+      if (res.success) {
+        const conv = res.data.conversation || res.data;
+        setConversationId(conv._id);
+        const other = conv.participants.find((p: any) => p._id.toString() !== currentUserId);
+        if (other) { setOtherUser(other); setIsOtherUserOnline(other.isOnline || false); setOtherUserActivity(other.isOnline ? 'online' : 'offline'); }
+        await loadMessages(conv._id);
       }
     } catch (error) {
-      const apiError = handleAPIError(error);
-      console.error('Initialize conversation error:', apiError);
-      Alert.alert('Error', apiError.message || 'Failed to load conversation');
-    } finally {
-      setLoading(false);
-    }
+      Alert.alert('Error', handleAPIError(error).message || 'Failed to load conversation');
+    } finally { setLoading(false); }
   };
 
-  const loadMessages = async (convId: string, pageNum: number = 1) => {
+  const loadMessages = async (convId: string, pageNum = 1) => {
     try {
-      if (pageNum === 1) {
-        setLoading(true);
-      } else {
-        setLoadingMore(true);
-      }
-
-      const response = await messageAPI.getMessages(convId, {
-        page: pageNum,
-        limit: 50,
-      });
-
-      if (response.success) {
-        const newMessages = response.data.messages || response.data;
-
-        if (pageNum === 1) {
-          setMessages(newMessages);
-          setTimeout(() => {
-            flatListRef.current?.scrollToEnd({ animated: false });
-          }, 100);
-        } else {
-          setMessages((prev) => [...newMessages, ...prev]);
-        }
-
-        setHasMore(newMessages.length === 50);
+      pageNum === 1 ? setLoading(true) : setLoadingMore(true);
+      const res = await messageAPI.getMessages(convId, { page: pageNum, limit: 50 });
+      if (res.success) {
+        const newMsgs = res.data.messages || res.data;
+        pageNum === 1
+          ? setMessages(newMsgs)
+          : setMessages((prev) => [...newMsgs, ...prev]);
+        setHasMore(newMsgs.length === 50);
         setPage(pageNum);
-
-        if (conversationId) {
-          socketService.markConversationAsRead(convId);
-        }
+        if (pageNum === 1) setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 100);
+        socketService.markConversationAsRead(convId);
       }
-    } catch (error) {
-      const apiError = handleAPIError(error);
-      console.error('Load messages error:', apiError);
-    } finally {
-      setLoading(false);
-      setLoadingMore(false);
-    }
+    } catch (e) { console.error('Load messages error:', e); }
+    finally { setLoading(false); setLoadingMore(false); }
   };
 
+  // ── Call handler ──────────────────────────────────────────────────────────
   const handleCall = async (type: 'voice' | 'video') => {
     if (!otherUserId) return;
-
     try {
-      console.log(`📞 ${type === 'voice' ? '🎤' : '📹'} Initiating ${type} call`);
-      console.log('   - Other user ID:', otherUserId);
-      console.log('   - Conversation ID:', conversationId);
-
-      await callService.initiateCall(
-        otherUserId,
-        type,
-        undefined, 
-        conversationId || undefined
-      );
-
-      console.log('   ✅ Call initiation sent to backend');
-      console.log('   - Navigating to OngoingCall screen...');
-
+      console.log('📞 [ChatDetail] Calling otherUserId:', otherUserId, 'currentUserId:', currentUserId, 'conversationId:', conversationId);
+      await callService.initiateCall(otherUserId, type, undefined, conversationId || undefined);
       navigation.navigate('OngoingCall', {
-        callId: undefined, 
+        callId: undefined,
         callType: type,
         isOutgoing: true,
         otherUser: {
           _id: otherUserId,
           firstName: otherUser?.firstName || otherUserName?.split(' ')[0] || 'User',
-          lastName: otherUser?.lastName || otherUserName?.split(' ')[1] || '',
-          avatar: otherUser?.avatar || otherUserAvatar
-        }
+          lastName:  otherUser?.lastName  || otherUserName?.split(' ')[1] || '',
+          avatar:    otherUser?.avatar    || otherUserAvatar,
+        },
       });
-
-      console.log('   ✅ Navigation complete');
     } catch (error) {
-      console.error('❌ Error initiating call:', error);
       Alert.alert('Error', 'Failed to initiate call. Please try again.');
     }
   };
 
+  // ── Typing ────────────────────────────────────────────────────────────────
   const handleTextChange = (text: string) => {
     setInputText(text);
-
     if (!conversationId) return;
-
-    if (typingTimeoutRef.current) {
-      clearTimeout(typingTimeoutRef.current);
-    }
-
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     if (text.length > 0) {
       socketService.startTyping(conversationId);
-
-      typingTimeoutRef.current = setTimeout(() => {
-        socketService.stopTyping(conversationId);
-      }, 3000);
+      typingTimeoutRef.current = setTimeout(() => socketService.stopTyping(conversationId), 3000);
     } else {
       socketService.stopTyping(conversationId);
     }
   };
 
+  // ── Send ──────────────────────────────────────────────────────────────────
   const handleSendMessage = async (mediaUri?: string, mediaType?: string, fileObject?: any) => {
     if ((!inputText.trim() && !mediaUri) || !conversationId || !currentUserId) return;
-
     const messageText = inputText.trim();
     setInputText('');
+    setInputHeight(44);
     Keyboard.dismiss();
-
-    if (conversationId) {
-      socketService.stopTyping(conversationId);
-    }
-
-    if (typingTimeoutRef.current) {
-      clearTimeout(typingTimeoutRef.current);
-    }
+    if (conversationId) socketService.stopTyping(conversationId);
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
 
     try {
       setSending(true);
+      if (mediaUri) socketService.emit('uploading:start', conversationId);
 
-      if (mediaUri) {
-        console.log('📤 Emitting uploading:start');
-        socketService.emit('uploading:start', conversationId);
-      }
-
-      let messageData: any = {
-        receiverId: otherUserId,
-        messageType: mediaType || 'text',
-      };
-
-      if (messageText) {
-        messageData.text = messageText;
-      }
-
-      if (replyingTo) {
-        messageData.replyTo = replyingTo._id;
-        setReplyingTo(null);
-      }
+      let messageData: any = { receiverId: otherUserId, messageType: mediaType || 'text' };
+      if (messageText) messageData.text = messageText;
+      if (replyingTo) { messageData.replyTo = replyingTo._id; setReplyingTo(null); }
 
       if (mediaUri) {
         const uploadFile = fileObject || {
@@ -560,1303 +356,844 @@ const ChatDetailScreen: React.FC = () => {
           type: mediaType === 'audio' ? 'audio/m4a' : mediaType,
           name: `${mediaType}_${Date.now()}.${mediaType === 'audio' ? 'm4a' : 'jpg'}`,
         };
-
-        console.log('📤 Uploading file:', uploadFile);
-
-        const uploadResponse = await messageAPI.uploadAttachment(uploadFile);
-
-        if (uploadResponse.success) {
-          messageData.attachments = [{
-            url: uploadResponse.data.url,
-            type: mediaType,
-            name: uploadResponse.data.name,
-            size: uploadResponse.data.size,
-          }];
+        const uploadRes = await messageAPI.uploadAttachment(uploadFile);
+        if (uploadRes.success) {
+          messageData.attachments = [{ url: uploadRes.data.url, type: mediaType, name: uploadRes.data.name, size: uploadRes.data.size }];
         }
-
-        console.log('✅ Emitting uploading:stop');
         socketService.emit('uploading:stop', conversationId);
       }
 
-      const response = await messageAPI.sendMessage(messageData);
-
-      if (response.success) {
-        console.log('✅ Message sent successfully');
-      }
+      await messageAPI.sendMessage(messageData);
     } catch (error) {
-      const apiError = handleAPIError(error);
-      console.error('Send message error:', apiError);
-      Alert.alert('Error', apiError.message || 'Failed to send message');
-      
-      if (mediaUri && conversationId) {
-        socketService.emit('uploading:stop', conversationId);
-      }
-    } finally {
-      setSending(false);
-      setSelectedMedia(null);
-    }
+      Alert.alert('Error', handleAPIError(error).message || 'Failed to send message');
+      if (mediaUri && conversationId) socketService.emit('uploading:stop', conversationId);
+    } finally { setSending(false); setSelectedMedia(null); }
   };
 
+  // ── Media pickers ─────────────────────────────────────────────────────────
   const handlePickImage = async () => {
-    try {
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        quality: 0.8,
-      });
-
-      if (!result.canceled && result.assets[0]) {
-        setSelectedMedia(result.assets[0]);
-        setShowAttachmentMenu(false);
-      }
-    } catch (error) {
-      console.error('Pick image error:', error);
-    }
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: true, quality: 0.8 });
+    if (!result.canceled && result.assets[0]) { setSelectedMedia(result.assets[0]); setShowAttachmentMenu(false); }
   };
-
   const handleTakePhoto = async () => {
-    try {
-      const result = await ImagePicker.launchCameraAsync({
-        allowsEditing: true,
-        quality: 0.8,
-      });
-
-      if (!result.canceled && result.assets[0]) {
-        setSelectedMedia(result.assets[0]);
-        setShowAttachmentMenu(false);
-      }
-    } catch (error) {
-      console.error('Take photo error:', error);
-    }
+    const result = await ImagePicker.launchCameraAsync({ allowsEditing: true, quality: 0.8 });
+    if (!result.canceled && result.assets[0]) { setSelectedMedia(result.assets[0]); setShowAttachmentMenu(false); }
   };
-
   const handlePickVideo = async () => {
-    try {
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Videos,
-        allowsEditing: true,
-        quality: 0.8,
-      });
-
-      if (!result.canceled && result.assets[0]) {
-        setSelectedMedia(result.assets[0]);
-        setShowAttachmentMenu(false);
-      }
-    } catch (error) {
-      console.error('Pick video error:', error);
-    }
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Videos, allowsEditing: true, quality: 0.8 });
+    if (!result.canceled && result.assets[0]) { setSelectedMedia(result.assets[0]); setShowAttachmentMenu(false); }
   };
-
   const handlePickDocument = async () => {
-    try {
-      const result = await DocumentPicker.getDocumentAsync({
-        type: '*/*',
-        copyToCacheDirectory: true,
-      });
-
-      if (result.type === 'success') {
-        setSelectedMedia(result);
-        setShowAttachmentMenu(false);
-      }
-    } catch (error) {
-      console.error('Pick document error:', error);
-    }
+    const result = await DocumentPicker.getDocumentAsync({ type: '*/*', copyToCacheDirectory: true });
+    if (result.type === 'success') { setSelectedMedia(result); setShowAttachmentMenu(false); }
   };
 
+  // ── Recording ─────────────────────────────────────────────────────────────
   const startRecording = async () => {
     try {
-      if (conversationId) {
-        console.log('🎤 Emitting recording:start');
-        socketService.emit('recording:start', conversationId);
-      }
-
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: true,
-        playsInSilentModeIOS: true,
-      });
-
-      const { recording } = await Audio.Recording.createAsync(
-        Audio.RecordingOptionsPresets.HIGH_QUALITY
-      );
-
-      setRecording(recording);
-      setIsRecording(true);
-    } catch (error) {
-      console.error('Start recording error:', error);
-      
-      if (conversationId) {
-        socketService.emit('recording:stop', conversationId);
-      }
-    }
+      if (conversationId) socketService.emit('recording:start', conversationId);
+      await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true });
+      const { recording } = await Audio.Recording.createAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
+      setRecording(recording); setIsRecording(true);
+    } catch (e) { if (conversationId) socketService.emit('recording:stop', conversationId); }
   };
-
   const stopRecording = async () => {
     if (!recording) return;
-
     try {
       setIsRecording(false);
       await recording.stopAndUnloadAsync();
       const uri = recording.getURI();
-      
-      if (conversationId) {
-        console.log('🛑 Emitting recording:stop');
-        socketService.emit('recording:stop', conversationId);
-      }
-      
-      if (uri) {
-        const filename = uri.split('/').pop() || `audio_${Date.now()}.m4a`;
-        
-        const audioFile = {
-          uri,
-          name: filename,
-          type: 'audio/x-m4a',
-        };
-        
-        console.log('🎤 Uploading audio file:', audioFile);
-        await handleSendMessage(audioFile.uri, 'audio', audioFile);
-      }
-      
+      if (conversationId) socketService.emit('recording:stop', conversationId);
+      if (uri) await handleSendMessage(uri, 'audio', { uri, name: `audio_${Date.now()}.m4a`, type: 'audio/x-m4a' });
       setRecording(null);
-    } catch (error) {
-      console.error('Stop recording error:', error);
+    } catch (e) { console.error('Stop recording error:', e); }
+  };
+  const cancelRecording = async () => {
+    if (recording) {
+      try { await recording.stopAndUnloadAsync(); } catch {}
+      setRecording(null); setIsRecording(false);
+      if (conversationId) socketService.emit('recording:stop', conversationId);
     }
   };
 
-  const cancelRecording = async () => {
-    if (recording) {
-      try {
-        await recording.stopAndUnloadAsync();
-        setRecording(null);
-        setIsRecording(false);
-        
-        if (conversationId) {
-          socketService.emit('recording:stop', conversationId);
-        }
-      } catch (error) {
-        console.error('Cancel recording error:', error);
-      }
+  // ── Audio playback ────────────────────────────────────────────────────────
+  const onPlaybackStatusUpdate = (messageId: string) => (status: any) => {
+    if (!status.isLoaded) return;
+    if (status.durationMillis) {
+      setAudioProgress((p) => ({ ...p, [messageId]: status.positionMillis / status.durationMillis }));
+      setAudioDurations((p) => ({ ...p, [messageId]: status.durationMillis / 1000 }));
     }
+    if (status.didJustFinish) { setPlayingAudioId(null); setAudioProgress((p) => ({ ...p, [messageId]: 0 })); }
+  };
+
+  const playAudio = async (audioUrl: string, messageId: string) => {
+    try {
+      if (playingAudioId === messageId) { await soundRef.current?.pauseAsync(); setPlayingAudioId(null); return; }
+      if (soundRef.current) { await soundRef.current.stopAsync(); await soundRef.current.unloadAsync(); soundRef.current = null; }
+      await Audio.setAudioModeAsync({ allowsRecordingIOS: false, playsInSilentModeIOS: true, staysActiveInBackground: true, shouldDuckAndroid: true });
+      const { sound, status } = await Audio.Sound.createAsync({ uri: audioUrl }, { shouldPlay: true }, onPlaybackStatusUpdate(messageId));
+      soundRef.current = sound;
+      setPlayingAudioId(messageId);
+      if ((status as any).isLoaded && (status as any).durationMillis)
+        setAudioDurations((p) => ({ ...p, [messageId]: (status as any).durationMillis / 1000 }));
+    } catch { Alert.alert('Error', 'Failed to play audio message'); setPlayingAudioId(null); }
+  };
+
+  // ── Scroll to reply ───────────────────────────────────────────────────────
+  const scrollToMessage = (messageId: string) => {
+    const idx = messages.findIndex((m) => m._id === messageId);
+    if (idx === -1) { Alert.alert('Not Found', 'The original message may have been deleted.'); return; }
+    try {
+      flatListRef.current?.scrollToIndex({ index: idx, animated: true, viewPosition: 0.5 });
+      setHighlightedMessageId(messageId);
+      setTimeout(() => setHighlightedMessageId(null), 2000);
+    } catch { flatListRef.current?.scrollToEnd({ animated: true }); }
   };
 
   const handleLoadMore = () => {
-    if (!loadingMore && hasMore && conversationId) {
-      loadMessages(conversationId, page + 1);
-    }
+    if (!loadingMore && hasMore && conversationId) loadMessages(conversationId, page + 1);
   };
 
   const formatMessageTime = (dateString: string) => {
     const date = new Date(dateString);
-    const now = new Date();
-    const diff = now.getTime() - date.getTime();
-    const minutes = Math.floor(diff / 60000);
+    const diff = Date.now() - date.getTime();
+    const mins = Math.floor(diff / 60000);
     const hours = Math.floor(diff / 3600000);
     const days = Math.floor(diff / 86400000);
-
-    if (minutes < 1) return 'Just now';
-    if (minutes < 60) return `${minutes}m ago`;
-    if (hours < 24) return `${hours}h ago`;
+    if (mins < 1) return 'now';
+    if (mins < 60) return `${mins}m`;
+    if (hours < 24) return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
     if (days === 1) return 'Yesterday';
-    if (days < 7) return `${days}d ago`;
-
-    return date.toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-    });
+    if (days < 7) return date.toLocaleDateString('en-US', { weekday: 'short' });
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   };
 
-  const scrollToMessage = (messageId: string) => {
-    const messageIndex = messages.findIndex(msg => msg._id === messageId);
-    
-    if (messageIndex !== -1) {
-      try {
-        flatListRef.current?.scrollToIndex({
-          index: messageIndex,
-          animated: true,
-          viewPosition: 0.5, 
-        });
-        
-        setHighlightedMessageId(messageId);
-        setTimeout(() => {
-          setHighlightedMessageId(null);
-        }, 2000); 
-      } catch (error) {
-        console.log('ScrollToIndex failed, trying alternative method');
-        flatListRef.current?.scrollToEnd({ animated: true });
-      }
-    } else {
-      Alert.alert(
-        'Message Not Found',
-        'The original message might have been deleted or is not loaded yet.'
-      );
-    }
-  };
-
-  // Audio playback functions
-  const playAudio = async (audioUrl: string, messageId: string) => {
-    try {
-      if (playingAudioId === messageId) {
-        await pauseAudio();
-        return;
-      }
-
-      if (soundRef.current) {
-        await soundRef.current.stopAsync();
-        await soundRef.current.unloadAsync();
-        soundRef.current = null;
-      }
-
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: false,
-        playsInSilentModeIOS: true,
-        staysActiveInBackground: true,
-        shouldDuckAndroid: true,
-      });
-
-      console.log('🎵 Loading audio:', audioUrl);
-
-      const { sound, status } = await Audio.Sound.createAsync(
-        { uri: audioUrl },
-        { shouldPlay: true },
-        onPlaybackStatusUpdate(messageId)
-      );
-
-      soundRef.current = sound;
-      setPlayingAudioId(messageId);
-
-      if (status.isLoaded && status.durationMillis) {
-        setAudioDurations(prev => ({
-          ...prev,
-          [messageId]: status.durationMillis / 1000
-        }));
-      }
-
-      console.log('✅ Audio playing');
-    } catch (error) {
-      console.error('❌ Error playing audio:', error);
-      Alert.alert('Error', 'Failed to play audio message');
-      setPlayingAudioId(null);
-    }
-  };
-
-  const pauseAudio = async () => {
-    try {
-      if (soundRef.current) {
-        await soundRef.current.pauseAsync();
-        setPlayingAudioId(null);
-      }
-    } catch (error) {
-      console.error('Error pausing audio:', error);
-    }
-  };
-
-  const onPlaybackStatusUpdate = (messageId: string) => (status: any) => {
-    if (status.isLoaded) {
-      if (status.durationMillis) {
-        const progress = status.positionMillis / status.durationMillis;
-        setAudioProgress(prev => ({
-          ...prev,
-          [messageId]: progress
-        }));
-
-        setAudioDurations(prev => ({
-          ...prev,
-          [messageId]: status.durationMillis / 1000
-        }));
-      }
-
-      if (status.didJustFinish) {
-        setPlayingAudioId(null);
-        setAudioProgress(prev => ({
-          ...prev,
-          [messageId]: 0
-        }));
-      }
-    }
-  };
-
-  useEffect(() => {
-    return () => {
-      if (soundRef.current) {
-        soundRef.current.unloadAsync();
-      }
-    };
-  }, []);
-
-  useEffect(() => {
-    const keyboardDidShowListener = Keyboard.addListener(
-      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
-      (e) => {
-        setTimeout(() => {
-          flatListRef.current?.scrollToEnd({ animated: true });
-        }, Platform.OS === 'ios' ? 0 : 100);
-      }
-    );
-
-    const keyboardDidHideListener = Keyboard.addListener(
-      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
-      () => {
-        setTimeout(() => {
-          flatListRef.current?.scrollToEnd({ animated: true });
-        }, 100);
-      }
-    );
-
-    return () => {
-      keyboardDidShowListener.remove();
-      keyboardDidHideListener.remove();
-    };
-  }, []);
-
-  const renderMessage = ({ item }: { item: Message }) => {
-    const isMyMessage = item.sender._id === currentUserId;
-    const isHighlighted = item._id === highlightedMessageId;
-
-    return (
-      <SwipeableMessage
-        message={item}
-        isMyMessage={isMyMessage}
-        isHighlighted={isHighlighted}
-        onReply={() => setReplyingTo(item)}
-        onScrollToReply={scrollToMessage}
-        otherUser={otherUser}
-        formatMessageTime={formatMessageTime}
-        playingAudioId={playingAudioId}
-        audioProgress={audioProgress}
-        audioDurations={audioDurations}
-        onPlayAudio={playAudio}
-      />
-    );
-  };
-
-  const renderMediaPreview = () => {
-    if (!selectedMedia) return null;
-
-    return (
-      <View className="bg-white border-t border-gray-100" style={{
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: -2 },
-        shadowOpacity: 0.05,
-        shadowRadius: 4,
-        elevation: 4,
-      }}>
-        <View className="px-4 py-3">
-          <View className="bg-gray-50 rounded-2xl p-3 flex-row items-center">
-            {selectedMedia.uri && (
-              <Image
-                source={{ uri: selectedMedia.uri }}
-                className="w-14 h-14 rounded-xl mr-3"
-                resizeMode="cover"
-              />
-            )}
-            <View className="flex-1">
-              <Text className="text-gray-900 font-semibold text-sm" numberOfLines={1}>
-                {selectedMedia.name || 'Selected media'}
-              </Text>
-              <Text className="text-gray-400 text-xs mt-0.5">
-                Ready to send
-              </Text>
-            </View>
-
-            <TouchableOpacity
-              onPress={() => setSelectedMedia(null)}
-              className="w-8 h-8 rounded-full bg-gray-200 items-center justify-center ml-2"
-              activeOpacity={0.7}
-            >
-              <Ionicons name="close" size={18} color="#6b7280" />
-            </TouchableOpacity>
-          </View>
-        </View>
-      </View>
-    );
-  };
-
-  const renderReplyPreview = () => {
-    if (!replyingTo) return null;
-
-    const isReplyingToMe = replyingTo.sender._id === currentUserId;
-
-    return (
-      <View className="bg-white border-t border-gray-100" style={{
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: -2 },
-        shadowOpacity: 0.05,
-        shadowRadius: 4,
-        elevation: 4,
-      }}>
-        <View className="px-4 py-3">
-          <View className="bg-pink-50 rounded-2xl overflow-hidden">
-            <View className="flex-row items-center p-3">
-              <View className="w-1 h-full absolute left-0 bg-pink-500" />
-              
-              <View className="ml-3 w-10 h-10 rounded-full bg-white items-center justify-center overflow-hidden mr-3"
-                style={{
-                  shadowColor: '#000',
-                  shadowOffset: { width: 0, height: 1 },
-                  shadowOpacity: 0.1,
-                  shadowRadius: 2,
-                  elevation: 2,
-                }}
-              >
-                {isReplyingToMe ? (
-                  <Ionicons name="person" size={18} color="#eb278d" />
-                ) : replyingTo.sender.avatar ? (
-                  <Image
-                    source={{ uri: replyingTo.sender.avatar }}
-                    className="w-10 h-10"
-                    resizeMode="cover"
-                  />
-                ) : (
-                  <Ionicons name="person" size={18} color="#eb278d" />
-                )}
-              </View>
-
-              <View className="flex-1">
-                <View className="flex-row items-center mb-1">
-                  <Ionicons name="arrow-undo" size={12} color="#eb278d" />
-                  <Text className="text-pink-600 font-bold text-xs ml-1">
-                    Replying to {isReplyingToMe ? 'yourself' : replyingTo.sender.firstName}
-                  </Text>
-                </View>
-                <Text className="text-gray-700 text-sm font-medium" numberOfLines={2}>
-                  {replyingTo.text || '📎 Attachment'}
-                </Text>
-              </View>
-
-              <TouchableOpacity
-                onPress={() => setReplyingTo(null)}
-                className="w-7 h-7 rounded-full bg-white items-center justify-center ml-3"
-                activeOpacity={0.7}
-                style={{
-                  shadowColor: '#000',
-                  shadowOffset: { width: 0, height: 1 },
-                  shadowOpacity: 0.1,
-                  shadowRadius: 2,
-                  elevation: 2,
-                }}
-              >
-                <Ionicons name="close" size={16} color="#6b7280" />
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </View>
-    );
-  };
-
+  // ── Status indicator ──────────────────────────────────────────────────────
   const renderUserStatus = () => {
     switch (otherUserActivity) {
       case 'typing':
         return (
-          <View className="flex-row items-center mt-1">
-            <View className="flex-row items-center mr-1.5">
-              <View className="w-1.5 h-1.5 rounded-full bg-white/90 mr-0.5" />
-              <View className="w-1.5 h-1.5 rounded-full bg-white/70 mr-0.5" />
-              <View className="w-1.5 h-1.5 rounded-full bg-white/50" />
-            </View>
-            <Text className="text-white/95 text-xs font-medium">typing...</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
+            {[0, 1, 2].map((i) => (
+              <View key={i} style={{ width: 4, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.85)', marginRight: 2, opacity: 1 - i * 0.2 }} />
+            ))}
+            <Text style={{ color: 'rgba(255,255,255,0.9)', fontSize: 11, fontWeight: '500', marginLeft: 2 }}>typing…</Text>
           </View>
         );
-
       case 'recording':
         return (
-          <View className="flex-row items-center mt-1">
-            <View className="w-2 h-2 rounded-full bg-red-400 mr-1.5" />
-            <Ionicons name="mic" size={11} color="rgba(255,255,255,0.95)" />
-            <Text className="text-white/95 text-xs font-medium ml-1">recording...</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
+            <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#F87171', marginRight: 5 }} />
+            <Text style={{ color: 'rgba(255,255,255,0.9)', fontSize: 11, fontWeight: '500' }}>recording…</Text>
           </View>
         );
-
       case 'uploading':
         return (
-          <View className="flex-row items-center mt-1">
-            <ActivityIndicator size="small" color="rgba(255,255,255,0.95)" />
-            <Text className="text-white/95 text-xs font-medium ml-1.5">sending...</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
+            <ActivityIndicator size="small" color="rgba(255,255,255,0.9)" style={{ marginRight: 5, transform: [{ scale: 0.7 }] }} />
+            <Text style={{ color: 'rgba(255,255,255,0.9)', fontSize: 11, fontWeight: '500' }}>sending…</Text>
           </View>
         );
-
       case 'online':
         return (
-          <View className="flex-row items-center mt-1">
-            <View className="w-2 h-2 rounded-full bg-green-400 mr-1.5" />
-            <Text className="text-white/90 text-xs font-medium">Active now</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
+            <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#34D399', marginRight: 5 }} />
+            <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 11, fontWeight: '500' }}>Active now</Text>
           </View>
         );
-
-      case 'offline':
       default:
-        return (
-          <Text className="text-white/75 text-xs mt-1">Tap to view info</Text>
-        );
+        return <Text style={{ color: 'rgba(255,255,255,0.65)', fontSize: 11, marginTop: 2 }}>Offline</Text>;
     }
   };
 
+  // ── Loading ────────────────────────────────────────────────────────────────
   if (loading) {
     return (
-      <SafeAreaView className="flex-1 bg-white">
-        <View className="flex-1 items-center justify-center">
-          <ActivityIndicator size="large" color="#eb278d" />
-          <Text className="text-gray-500 text-sm mt-4 font-medium">Loading messages...</Text>
+      <SafeAreaView style={{ flex: 1, backgroundColor: BRAND.surface }}>
+        <StatusBar barStyle="dark-content" />
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+          <ActivityIndicator size="large" color={BRAND.primary} />
+          <Text style={{ color: BRAND.textMuted, fontSize: 14, marginTop: 12, fontWeight: '500' }}>Loading messages…</Text>
         </View>
       </SafeAreaView>
     );
   }
 
+  const displayName = otherUser?.firstName && otherUser?.lastName
+    ? `${otherUser.firstName} ${otherUser.lastName}`
+    : otherUserName || 'User';
+  const avatarUri = otherUser?.avatar || otherUserAvatar;
+
+  // ─────────────────────────────────────────────────────────────────────────
   return (
-    <SafeAreaView className="flex-1 bg-gray-50" edges={['top']}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: BRAND.chatBg }} edges={['top']}>
+      <StatusBar barStyle="light-content" backgroundColor={BRAND.primary} />
+
       <KeyboardAvoidingView
+        style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        className="flex-1"
-        keyboardVerticalOffset={0}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
       >
-        {/* Header */}
+        {/* ── HEADER ─────────────────────────────────────────────────────── */}
         <LinearGradient
-          colors={['#eb278d', '#f472b6']}
+          colors={[BRAND.primary, BRAND.primaryDark]}
           start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
+          end={{ x: 1, y: 0 }}
           style={{
-            shadowColor: '#eb278d',
-            shadowOffset: { width: 0, height: 4 },
-            shadowOpacity: 0.3,
-            shadowRadius: 8,
-            elevation: 8,
+            paddingHorizontal: 12,
+            paddingTop: 8,
+            paddingBottom: 12,
+            ...Platform.select({
+              ios: { shadowColor: BRAND.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8 },
+              android: { elevation: 8 },
+            }),
           }}
         >
-          <View className="px-4 py-3">
-            <View className="flex-row items-center">
-              <TouchableOpacity
-                onPress={() => navigation.goBack()}
-                className="w-10 h-10 rounded-full bg-white/20 items-center justify-center mr-3"
-                activeOpacity={0.7}
-              >
-                <Ionicons name="chevron-back" size={24} color="#fff" />
-              </TouchableOpacity>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            {/* Back */}
+            <TouchableOpacity
+              onPress={() => navigation.goBack()}
+              activeOpacity={0.75}
+              style={{
+                width: 38, height: 38, borderRadius: 12,
+                backgroundColor: 'rgba(255,255,255,0.18)',
+                alignItems: 'center', justifyContent: 'center',
+                marginRight: 10,
+              }}
+            >
+              <Ionicons name="arrow-back" size={20} color="#fff" />
+            </TouchableOpacity>
 
-              <TouchableOpacity 
-                className="flex-row items-center flex-1"
-                activeOpacity={0.7}
-              >
-                <View className="relative mr-3">
-                  <View className="w-11 h-11 rounded-full bg-white/30 items-center justify-center overflow-hidden"
-                    style={{
-                      shadowColor: '#000',
-                      shadowOffset: { width: 0, height: 2 },
-                      shadowOpacity: 0.2,
-                      shadowRadius: 3,
-                      elevation: 3,
-                    }}
-                  >
-                    {(otherUser?.avatar || otherUserAvatar) ? (
-                      <Image
-                        source={{ uri: otherUser?.avatar || otherUserAvatar }}
-                        className="w-11 h-11"
-                        resizeMode="cover"
-                      />
-                    ) : (
-                      <Ionicons name="person" size={22} color="#fff" />
-                    )}
-                  </View>
-                  
-                  {isOtherUserOnline && (
-                    <View className="absolute bottom-0 right-0 w-3.5 h-3.5 rounded-full bg-green-400 border-2 border-white" />
+            {/* Avatar + name */}
+            <TouchableOpacity style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }} activeOpacity={0.85}>
+              <View style={{ position: 'relative', marginRight: 10 }}>
+                <View
+                  style={{
+                    width: 42, height: 42, borderRadius: 21,
+                    backgroundColor: 'rgba(255,255,255,0.25)',
+                    alignItems: 'center', justifyContent: 'center',
+                    overflow: 'hidden',
+                    borderWidth: 2, borderColor: 'rgba(255,255,255,0.4)',
+                  }}
+                >
+                  {avatarUri ? (
+                    <Image source={{ uri: avatarUri }} style={{ width: 42, height: 42 }} resizeMode="cover" />
+                  ) : (
+                    <Text style={{ fontSize: 16, fontWeight: '700', color: '#fff' }}>
+                      {displayName.charAt(0).toUpperCase()}
+                    </Text>
                   )}
                 </View>
+                {isOtherUserOnline && (
+                  <View
+                    style={{
+                      position: 'absolute', bottom: 1, right: 1,
+                      width: 11, height: 11, borderRadius: 6,
+                      backgroundColor: '#34D399',
+                      borderWidth: 2, borderColor: BRAND.primary,
+                    }}
+                  />
+                )}
+              </View>
 
-                <View className="flex-1">
-                  <Text className="text-white font-bold text-lg">
-                    {otherUser?.firstName && otherUser?.lastName
-                      ? `${otherUser.firstName} ${otherUser.lastName}`
-                      : otherUserName || 'User'}
-                  </Text>
-                  
-                  {renderUserStatus()}
-                </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: '#fff', fontSize: 16, fontWeight: '700', letterSpacing: -0.2 }} numberOfLines={1}>
+                  {displayName}
+                </Text>
+                {renderUserStatus()}
+              </View>
+            </TouchableOpacity>
+
+            {/* Call buttons */}
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              <TouchableOpacity
+                onPress={() => handleCall('voice')}
+                activeOpacity={0.75}
+                style={{
+                  width: 38, height: 38, borderRadius: 12,
+                  backgroundColor: 'rgba(255,255,255,0.18)',
+                  alignItems: 'center', justifyContent: 'center',
+                }}
+              >
+                <Ionicons name="call-outline" size={18} color="#fff" />
               </TouchableOpacity>
 
-              {/* Call icon commented out */}
-              {/* <TouchableOpacity
-                onPress={() => handleCall('voice')}
-                className="w-10 h-10 rounded-full bg-white/20 items-center justify-center ml-2"
-                activeOpacity={0.7}
+              <TouchableOpacity
+                onPress={() => handleCall('video')}
+                activeOpacity={0.75}
+                style={{
+                  width: 38, height: 38, borderRadius: 12,
+                  backgroundColor: 'rgba(255,255,255,0.18)',
+                  alignItems: 'center', justifyContent: 'center',
+                }}
               >
-                <Ionicons name="call" size={20} color="#fff" />
-              </TouchableOpacity> */}
+                <Ionicons name="videocam-outline" size={18} color="#fff" />
+              </TouchableOpacity>
             </View>
           </View>
         </LinearGradient>
 
-        {/* Messages List */}
+        {/* ── MESSAGES ───────────────────────────────────────────────────── */}
         <FlatList
           ref={flatListRef}
           data={messages}
-          renderItem={renderMessage}
+          renderItem={({ item }) => (
+            <SwipeableMessage
+              message={item}
+              isMyMessage={item.sender._id === currentUserId}
+              isHighlighted={item._id === highlightedMessageId}
+              onReply={() => setReplyingTo(item)}
+              onScrollToReply={scrollToMessage}
+              otherUser={otherUser}
+              formatMessageTime={formatMessageTime}
+              playingAudioId={playingAudioId}
+              audioProgress={audioProgress}
+              audioDurations={audioDurations}
+              onPlayAudio={playAudio}
+            />
+          )}
           keyExtractor={(item) => item._id}
-          contentContainerStyle={{ 
-            paddingVertical: 12,
-            paddingHorizontal: 4,
-            paddingBottom: 20,
-            flexGrow: 1,
-          }}
-          inverted={false}
+          contentContainerStyle={{ paddingVertical: 12, paddingHorizontal: 8, paddingBottom: 8, flexGrow: 1 }}
           onEndReached={handleLoadMore}
-          onEndReachedThreshold={0.1}
+          onEndReachedThreshold={0.15}
           showsVerticalScrollIndicator={false}
           extraData={`${isOtherUserTyping}-${highlightedMessageId}`}
-          maintainVisibleContentPosition={{
-            minIndexForVisible: 0,
-          }}
+          maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
           onScrollToIndexFailed={(info) => {
-            const wait = new Promise(resolve => setTimeout(resolve, 500));
-            wait.then(() => {
-              flatListRef.current?.scrollToIndex({ 
-                index: info.index, 
-                animated: true,
-                viewPosition: 0.5 
-              });
-            });
+            setTimeout(() => flatListRef.current?.scrollToIndex({ index: info.index, animated: true, viewPosition: 0.5 }), 500);
           }}
+          ListHeaderComponent={loadingMore ? (
+            <View style={{ paddingVertical: 12, alignItems: 'center' }}>
+              <ActivityIndicator size="small" color={BRAND.primary} />
+            </View>
+          ) : null}
           ListEmptyComponent={
-            <View className="flex-1 items-center justify-center py-20">
-              <View className="w-24 h-24 rounded-full bg-pink-100 items-center justify-center mb-4">
-                <Ionicons name="chatbubbles" size={48} color="#eb278d" />
+            <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 80, paddingHorizontal: 32 }}>
+              <View style={{ width: 80, height: 80, borderRadius: 24, backgroundColor: BRAND.primarySoft, alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
+                <Ionicons name="chatbubbles-outline" size={38} color={BRAND.primary} />
               </View>
-              <Text className="text-gray-900 font-bold text-xl mb-2">
-                Start the conversation
+              <Text style={{ fontSize: 18, fontWeight: '800', color: BRAND.textPrimary, marginBottom: 6, letterSpacing: -0.3 }}>
+                No messages yet
               </Text>
-              <Text className="text-gray-500 text-center px-12 text-sm">
-                Send a message to begin chatting with {otherUser?.firstName || 'this user'}
+              <Text style={{ fontSize: 13, color: BRAND.textMuted, textAlign: 'center', lineHeight: 19 }}>
+                Say hello to {otherUser?.firstName || 'this user'}!
               </Text>
             </View>
           }
-          ListHeaderComponent={
-            loadingMore ? (
-              <View className="py-4 items-center">
-                <ActivityIndicator size="small" color="#eb278d" />
-              </View>
-            ) : null
-          }
         />
 
-        {/* Reply Preview */}
-        {renderReplyPreview()}
-
-        {/* Media Preview */}
-        {renderMediaPreview()}
-
-        {/* Recording UI */}
-        {isRecording && (
-          <View className="bg-gradient-to-r from-red-50 to-pink-50 border-t border-red-100">
-            <View className="px-4 py-4">
-              <View className="flex-row items-center justify-between">
-                <View className="flex-row items-center flex-1">
-                  <View className="w-12 h-12 rounded-full bg-red-500 items-center justify-center mr-3">
-                    <Ionicons name="mic" size={24} color="#fff" />
-                  </View>
-                  <View className="flex-1">
-                    <Text className="text-red-600 font-bold text-base">Recording...</Text>
-                    <Text className="text-red-400 text-xs mt-0.5">Release to send</Text>
-                  </View>
-                </View>
-
-                <View className="flex-row" style={{ gap: 8 }}>
-                  <TouchableOpacity
-                    onPress={cancelRecording}
-                    className="px-5 py-2.5 rounded-full bg-white border border-gray-200"
-                    activeOpacity={0.7}
-                  >
-                    <Text className="text-gray-700 font-bold text-sm">Cancel</Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    onPress={stopRecording}
-                    activeOpacity={0.7}
-                  >
-                    <LinearGradient
-                      colors={['#eb278d', '#f472b6']}
-                      className="px-6 py-2.5 rounded-full"
-                    >
-                      <Text className="text-white font-bold text-sm">Send</Text>
-                    </LinearGradient>
-                  </TouchableOpacity>
-                </View>
+        {/* ── TYPING INDICATOR ───────────────────────────────────────────── */}
+        {isOtherUserTyping && (
+          <View style={{ paddingHorizontal: 16, paddingBottom: 4 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: BRAND.primarySoft, alignItems: 'center', justifyContent: 'center' }}>
+                <Ionicons name="person" size={13} color={BRAND.primary} />
+              </View>
+              <View style={{ backgroundColor: BRAND.surface, borderRadius: 16, paddingHorizontal: 12, paddingVertical: 8, flexDirection: 'row', alignItems: 'center', gap: 3, borderWidth: 1, borderColor: BRAND.border }}>
+                {[0, 1, 2].map((i) => (
+                  <View key={i} style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: BRAND.textMuted }} />
+                ))}
               </View>
             </View>
           </View>
         )}
 
-        {/* Input Area */}
-        <View
-          className="bg-white border-t border-gray-100"
-          style={{
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: -4 },
-            shadowOpacity: 0.05,
-            shadowRadius: 12,
-            elevation: 12,
-            paddingBottom: Platform.OS === 'ios' ? 0 : 0,
-          }}
-        >
-          <View className="px-4 py-3">
-            <View className="flex-row items-end">
-              <TouchableOpacity
-                onPress={() => setShowAttachmentMenu(true)}
-                className="w-11 h-11 rounded-full bg-gray-100 items-center justify-center mr-2"
-                activeOpacity={0.7}
-              >
-                <Ionicons name="add" size={26} color="#6b7280" />
-              </TouchableOpacity>
-
-              <View className="flex-1 bg-gray-100 rounded-3xl overflow-hidden">
-                <TextInput
-                  value={inputText}
-                  onChangeText={handleTextChange}
-                  placeholder="Message..."
-                  placeholderTextColor="#9ca3af"
-                  className="px-5 py-3 text-gray-900 text-base"
-                  multiline
-                  maxLength={1000}
-                  style={{ 
-                    maxHeight: 100,
-                    minHeight: 44,
-                  }}
-                  returnKeyType="send"
-                  onSubmitEditing={() => handleSendMessage()}
-                  blurOnSubmit={false}
-                  onFocus={() => {
-                    setTimeout(() => {
-                      flatListRef.current?.scrollToEnd({ animated: true });
-                    }, Platform.OS === 'ios' ? 250 : 400);
-                  }}
-                />
+        {/* ── REPLY PREVIEW ──────────────────────────────────────────────── */}
+        {replyingTo && (
+          <View
+            style={{
+              backgroundColor: BRAND.surface,
+              borderTopWidth: 1, borderTopColor: BRAND.border,
+              paddingHorizontal: 14, paddingVertical: 10,
+            }}
+          >
+            <View
+              style={{
+                flexDirection: 'row', alignItems: 'center',
+                backgroundColor: BRAND.primarySoft,
+                borderRadius: 14, paddingHorizontal: 12, paddingVertical: 9,
+                borderLeftWidth: 3, borderLeftColor: BRAND.primary,
+              }}
+            >
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 11, fontWeight: '700', color: BRAND.primary, marginBottom: 2 }}>
+                  Replying to {replyingTo.sender._id === currentUserId ? 'yourself' : replyingTo.sender.firstName}
+                </Text>
+                <Text style={{ fontSize: 12, color: BRAND.textSecondary }} numberOfLines={1}>
+                  {replyingTo.text || '📎 Attachment'}
+                </Text>
               </View>
-
-              {inputText.trim() || selectedMedia ? (
-                <TouchableOpacity
-                  onPress={() => {
-                    if (selectedMedia) {
-                      handleSendMessage(selectedMedia.uri, selectedMedia.type || 'image');
-                    } else {
-                      handleSendMessage();
-                    }
-                  }}
-                  disabled={sending}
-                  className="ml-2"
-                  activeOpacity={0.7}
-                >
-                  <LinearGradient
-                    colors={['#eb278d', '#f472b6']}
-                    className="w-11 h-11 rounded-full items-center justify-center"
-                    style={{
-                      shadowColor: '#eb278d',
-                      shadowOffset: { width: 0, height: 3 },
-                      shadowOpacity: 0.4,
-                      shadowRadius: 6,
-                      elevation: 6,
-                    }}
-                  >
-                    {sending ? (
-                      <ActivityIndicator size="small" color="#fff" />
-                    ) : (
-                      <Ionicons name="send" size={18} color="#fff" />
-                    )}
-                  </LinearGradient>
-                </TouchableOpacity>
-              ) : (
-                <TouchableOpacity
-                  onPress={startRecording}
-                  className="ml-2"
-                  activeOpacity={0.7}
-                >
-                  <LinearGradient
-                    colors={['#eb278d', '#f472b6']}
-                    className="w-11 h-11 rounded-full items-center justify-center"
-                    style={{
-                      shadowColor: '#eb278d',
-                      shadowOffset: { width: 0, height: 3 },
-                      shadowOpacity: 0.4,
-                      shadowRadius: 6,
-                      elevation: 6,
-                    }}
-                  >
-                    <Ionicons name="mic" size={22} color="#fff" />
-                  </LinearGradient>
-                </TouchableOpacity>
-              )}
+              <TouchableOpacity onPress={() => setReplyingTo(null)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <Ionicons name="close" size={16} color={BRAND.textMuted} />
+              </TouchableOpacity>
             </View>
           </View>
-        </View>
+        )}
 
-        {/* Attachment Menu Modal */}
-        <AttachmentMenuModal
-          visible={showAttachmentMenu}
-          onClose={() => setShowAttachmentMenu(false)}
-          onPickImage={handlePickImage}
-          onTakePhoto={handleTakePhoto}
-          onPickVideo={handlePickVideo}
-          onPickDocument={handlePickDocument}
-        />
+        {/* ── MEDIA PREVIEW ──────────────────────────────────────────────── */}
+        {selectedMedia && (
+          <View style={{ backgroundColor: BRAND.surface, borderTopWidth: 1, borderTopColor: BRAND.border, paddingHorizontal: 14, paddingVertical: 10 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: BRAND.surfaceAlt, borderRadius: 13, padding: 10, borderWidth: 1, borderColor: BRAND.border }}>
+              {selectedMedia.uri && (
+                <Image source={{ uri: selectedMedia.uri }} style={{ width: 48, height: 48, borderRadius: 10, marginRight: 10 }} resizeMode="cover" />
+              )}
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 13, fontWeight: '600', color: BRAND.textPrimary }} numberOfLines={1}>
+                  {selectedMedia.name || 'Selected media'}
+                </Text>
+                <Text style={{ fontSize: 11, color: BRAND.green, marginTop: 2, fontWeight: '500' }}>Ready to send</Text>
+              </View>
+              <TouchableOpacity onPress={() => setSelectedMedia(null)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <View style={{ width: 26, height: 26, borderRadius: 13, backgroundColor: BRAND.borderStrong, alignItems: 'center', justifyContent: 'center' }}>
+                  <Ionicons name="close" size={14} color={BRAND.textSecondary} />
+                </View>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
+        {/* ── RECORDING UI ───────────────────────────────────────────────── */}
+        {isRecording && (
+          <View style={{ backgroundColor: BRAND.surface, borderTopWidth: 1, borderTopColor: '#FEE2E2', paddingHorizontal: 16, paddingVertical: 12 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <View style={{ width: 42, height: 42, borderRadius: 21, backgroundColor: '#EF4444', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
+                <Ionicons name="mic" size={20} color="#fff" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 14, fontWeight: '700', color: '#DC2626' }}>Recording…</Text>
+                <Text style={{ fontSize: 11, color: '#EF4444', marginTop: 1 }}>Tap Send to finish</Text>
+              </View>
+              <TouchableOpacity
+                onPress={cancelRecording}
+                activeOpacity={0.8}
+                style={{ paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: BRAND.borderStrong, backgroundColor: BRAND.surfaceAlt, marginRight: 8 }}
+              >
+                <Text style={{ fontSize: 13, fontWeight: '700', color: BRAND.textSecondary }}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={stopRecording} activeOpacity={0.85} style={{ borderRadius: 20, overflow: 'hidden' }}>
+                <LinearGradient
+                  colors={[BRAND.primary, BRAND.primaryDark]}
+                  start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                  style={{ paddingHorizontal: 18, paddingVertical: 8 }}
+                >
+                  <Text style={{ fontSize: 13, fontWeight: '700', color: '#fff' }}>Send</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
+        {/* ── INPUT BAR ──────────────────────────────────────────────────── */}
+        <View
+          style={{
+            backgroundColor: BRAND.surface,
+            borderTopWidth: 1,
+            borderTopColor: BRAND.border,
+            paddingHorizontal: 12,
+            paddingTop: 10,
+            paddingBottom: Platform.OS === 'ios' ? insets.bottom + 6 : 10,
+            ...Platform.select({
+              ios: { shadowColor: '#000', shadowOffset: { width: 0, height: -3 }, shadowOpacity: 0.05, shadowRadius: 8 },
+              android: { elevation: 8 },
+            }),
+          }}
+        >
+          <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 8 }}>
+            {/* Attachment button */}
+            <TouchableOpacity
+              onPress={() => setShowAttachmentMenu(true)}
+              activeOpacity={0.75}
+              style={{
+                width: 40, height: 40, borderRadius: 20,
+                backgroundColor: BRAND.surfaceAlt,
+                borderWidth: 1, borderColor: BRAND.border,
+                alignItems: 'center', justifyContent: 'center',
+                marginBottom: 2,
+              }}
+            >
+              <Ionicons name="add" size={22} color={BRAND.textSecondary} />
+            </TouchableOpacity>
+
+            {/* Text input */}
+            <View
+              style={{
+                flex: 1,
+                backgroundColor: BRAND.surfaceAlt,
+                borderRadius: 22,
+                borderWidth: 1.5,
+                borderColor: BRAND.border,
+                paddingHorizontal: 16,
+                paddingTop: Platform.OS === 'ios' ? 10 : 8,
+                paddingBottom: Platform.OS === 'ios' ? 10 : 8,
+                minHeight: 44,
+                justifyContent: 'center',
+              }}
+            >
+              <TextInput
+                value={inputText}
+                onChangeText={handleTextChange}
+                placeholder="Message…"
+                placeholderTextColor={BRAND.textMuted}
+                style={{
+                  fontSize: 15,
+                  color: BRAND.textPrimary,
+                  maxHeight: 110,
+                  paddingVertical: 0,
+                  textAlignVertical: 'center',
+                }}
+                multiline
+                maxLength={1000}
+                returnKeyType="default"
+                blurOnSubmit={false}
+                onFocus={() => setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), Platform.OS === 'ios' ? 300 : 400)}
+              />
+            </View>
+
+            {/* Send / mic */}
+            {inputText.trim() || selectedMedia ? (
+              <TouchableOpacity
+                onPress={() => {
+                  if (selectedMedia) handleSendMessage(selectedMedia.uri, selectedMedia.type || 'image');
+                  else handleSendMessage();
+                }}
+                disabled={sending}
+                activeOpacity={0.85}
+                style={{ marginBottom: 2, borderRadius: 20, overflow: 'hidden' }}
+              >
+                <LinearGradient
+                  colors={[BRAND.primary, BRAND.primaryDark]}
+                  start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                  style={{
+                    width: 40, height: 40, borderRadius: 20,
+                    alignItems: 'center', justifyContent: 'center',
+                    ...Platform.select({
+                      ios: { shadowColor: BRAND.primary, shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.4, shadowRadius: 6 },
+                      android: { elevation: 4 },
+                    }),
+                  }}
+                >
+                  {sending
+                    ? <ActivityIndicator size="small" color="#fff" />
+                    : <Ionicons name="send" size={16} color="#fff" style={{ marginLeft: 2 }} />
+                  }
+                </LinearGradient>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                onPress={startRecording}
+                activeOpacity={0.85}
+                style={{ marginBottom: 2 }}
+              >
+                <LinearGradient
+                  colors={[BRAND.primary, BRAND.primaryDark]}
+                  start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                  style={{
+                    width: 40, height: 40, borderRadius: 20,
+                    alignItems: 'center', justifyContent: 'center',
+                    ...Platform.select({
+                      ios: { shadowColor: BRAND.primary, shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.4, shadowRadius: 6 },
+                      android: { elevation: 4 },
+                    }),
+                  }}
+                >
+                  <Ionicons name="mic" size={18} color="#fff" />
+                </LinearGradient>
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
       </KeyboardAvoidingView>
+
+      {/* ── ATTACHMENT MODAL ─────────────────────────────────────────────── */}
+      <AttachmentMenuModal
+        visible={showAttachmentMenu}
+        onClose={() => setShowAttachmentMenu(false)}
+        onPickImage={handlePickImage}
+        onTakePhoto={handleTakePhoto}
+        onPickVideo={handlePickVideo}
+        onPickDocument={handlePickDocument}
+      />
     </SafeAreaView>
   );
 };
 
-
+// ─── Swipeable Message ────────────────────────────────────────────────────────
 const SwipeableMessage: React.FC<{
   message: Message;
   isMyMessage: boolean;
   isHighlighted: boolean;
   onReply: () => void;
-  onScrollToReply: (messageId: string) => void;
+  onScrollToReply: (id: string) => void;
   otherUser: any;
-  formatMessageTime: (date: string) => string;
+  formatMessageTime: (d: string) => string;
   playingAudioId: string | null;
-  audioProgress: { [key: string]: number };
-  audioDurations: { [key: string]: number };
-  onPlayAudio: (url: string, messageId: string) => void;
-}> = ({ 
-  message, 
-  isMyMessage, 
-  isHighlighted, 
-  onReply, 
-  onScrollToReply, 
-  otherUser, 
-  formatMessageTime,
-  playingAudioId,
-  audioProgress,
-  audioDurations,
-  onPlayAudio
-}) => {
+  audioProgress: Record<string, number>;
+  audioDurations: Record<string, number>;
+  onPlayAudio: (url: string, id: string) => void;
+}> = ({ message, isMyMessage, isHighlighted, onReply, onScrollToReply, otherUser, formatMessageTime, playingAudioId, audioProgress, audioDurations, onPlayAudio }) => {
   const translateX = useRef(new Animated.Value(0)).current;
 
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => false,
-      onMoveShouldSetPanResponder: (_, gestureState) => {
-        return Math.abs(gestureState.dx) > 15 && Math.abs(gestureState.dx) > Math.abs(gestureState.dy) * 2;
+      onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) > 15 && Math.abs(g.dx) > Math.abs(g.dy) * 2,
+      onPanResponderMove: (_, g) => {
+        if (isMyMessage && g.dx < 0 && g.dx > -90) translateX.setValue(g.dx * 0.55);
+        if (!isMyMessage && g.dx > 0 && g.dx < 90) translateX.setValue(g.dx * 0.55);
       },
-      onPanResponderMove: (_, gestureState) => {
-        if (isMyMessage) {
-          if (gestureState.dx < 0 && gestureState.dx > -100) {
-            translateX.setValue(gestureState.dx * 0.6);
-          }
-        } else {
-          if (gestureState.dx > 0 && gestureState.dx < 100) {
-            translateX.setValue(gestureState.dx * 0.6);
-          }
-        }
-      },
-      onPanResponderRelease: (_, gestureState) => {
-        const threshold = 60;
-        const velocity = Math.abs(gestureState.vx);
-        
-        if (Math.abs(gestureState.dx) > threshold || velocity > 0.5) {
-          onReply();
-        }
-        
-        Animated.spring(translateX, {
-          toValue: 0,
-          useNativeDriver: true,
-          tension: 100,
-          friction: 8,
-        }).start();
+      onPanResponderRelease: (_, g) => {
+        if (Math.abs(g.dx) > 55 || Math.abs(g.vx) > 0.5) onReply();
+        Animated.spring(translateX, { toValue: 0, useNativeDriver: true, tension: 120, friction: 8 }).start();
       },
     })
   ).current;
 
-  const formatDuration = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = Math.floor(seconds % 60);
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
-
   const isPlaying = playingAudioId === message._id;
-  const progress = audioProgress[message._id] || 0;
-  const duration = audioDurations[message._id] || 0;
+  const progress  = audioProgress[message._id] || 0;
+  const duration  = audioDurations[message._id] || 0;
+
+  const formatDuration = (secs: number) => {
+    const m = Math.floor(secs / 60), s = Math.floor(secs % 60);
+    return `${m}:${s.toString().padStart(2, '0')}`;
+  };
 
   return (
     <Animated.View
       {...panResponder.panHandlers}
-      style={{ 
-        transform: [{ translateX }],
-        width: '100%',
-      }}
-      className="mb-3 px-3"
+      style={{ transform: [{ translateX }], width: '100%', marginBottom: 6, paddingHorizontal: 6 }}
     >
-      <View className={`flex-row ${isMyMessage ? 'justify-end' : 'justify-start'}`}>
-        <View className={`flex-row items-end ${isMyMessage ? 'flex-row-reverse' : 'flex-row'}`} style={{ maxWidth: '85%' }}>
-          {!isMyMessage && (
-            <View 
-              className="w-8 h-8 rounded-full bg-pink-400 items-center justify-center overflow-hidden"
-              style={{
-                marginRight: 8,
-                shadowColor: '#000',
-                shadowOffset: { width: 0, height: 1 },
-                shadowOpacity: 0.1,
-                shadowRadius: 2,
-                elevation: 2,
-              }}
-            >
-              {otherUser?.avatar ? (
-                <Image
-                  source={{ uri: otherUser.avatar }}
-                  className="w-8 h-8"
-                  resizeMode="cover"
-                />
-              ) : (
-                <Ionicons name="person" size={16} color="#fff" />
-              )}
-            </View>
-          )}
+      <View style={{ flexDirection: 'row', justifyContent: isMyMessage ? 'flex-end' : 'flex-start', alignItems: 'flex-end' }}>
 
+        {/* Their avatar */}
+        {!isMyMessage && (
           <View
-            className={`rounded-3xl overflow-hidden ${
-              isMyMessage ? 'rounded-br-md' : 'rounded-bl-md'
-            } ${isHighlighted ? 'bg-yellow-100' : ''}`}
-            style={
-              isMyMessage
-                ? {
-                    shadowColor: '#eb278d',
-                    shadowOffset: { width: 0, height: 2 },
-                    shadowOpacity: 0.15,
-                    shadowRadius: 4,
-                    elevation: 3,
-                    ...(isHighlighted && {
-                      shadowColor: '#fbbf24',
-                      shadowOpacity: 0.4,
-                      shadowRadius: 8,
-                      elevation: 8,
-                    })
-                  }
-                : {
-                    shadowColor: '#000',
-                    shadowOffset: { width: 0, height: 1 },
-                    shadowOpacity: 0.08,
-                    shadowRadius: 3,
-                    elevation: 2,
-                    ...(isHighlighted && {
-                      shadowColor: '#fbbf24',
-                      shadowOpacity: 0.4,
-                      shadowRadius: 8,
-                      elevation: 8,
-                    })
-                  }
-            }
+            style={{
+              width: 30, height: 30, borderRadius: 15,
+              backgroundColor: BRAND.primarySoft,
+              alignItems: 'center', justifyContent: 'center',
+              overflow: 'hidden', marginRight: 6, marginBottom: 2,
+              borderWidth: 1, borderColor: BRAND.primaryMuted,
+            }}
           >
-            {isMyMessage ? (
-              <LinearGradient
-                colors={['#eb278d', '#f472b6']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                className="px-4 py-2.5"
-              >
-                {message.replyTo && (
-                  <TouchableOpacity 
-                    onPress={() => onScrollToReply(message.replyTo!._id)}
-                    activeOpacity={0.7}
-                    className="mb-2 pb-2 border-b border-white/20"
-                  >
-                    <Text className="text-white/80 text-xs font-medium mb-0.5">
-                      ↩ {message.replyTo.sender.firstName}
-                    </Text>
-                    <Text className="text-white/70 text-xs italic" numberOfLines={1}>
-                      {message.replyTo.text}
-                    </Text>
-                  </TouchableOpacity>
-                )}
+            {otherUser?.avatar
+              ? <Image source={{ uri: otherUser.avatar }} style={{ width: 30, height: 30 }} resizeMode="cover" />
+              : <Text style={{ fontSize: 12, fontWeight: '700', color: BRAND.primary }}>{(otherUser?.firstName || '?').charAt(0)}</Text>
+            }
+          </View>
+        )}
 
-                {message.attachments && message.attachments.length > 0 && (
-                  <View className="mb-2">
-                    {message.attachments[0].type === 'image' && (
-                      <Image
-                        source={{ uri: message.attachments[0].url }}
-                        style={{ width: 200, height: 200, borderRadius: 16 }}
-                        resizeMode="cover"
-                      />
-                    )}
-                    {message.attachments[0].type === 'audio' && (
-                      <TouchableOpacity
-                        onPress={() => onPlayAudio(message.attachments![0].url, message._id)}
-                        activeOpacity={0.7}
-                        className="bg-white/10 rounded-2xl p-3"
-                        style={{ minWidth: 200 }}
-                      >
-                        <View className="flex-row items-center">
-                          <View className="w-10 h-10 rounded-full bg-white/20 items-center justify-center mr-3">
-                            <Ionicons 
-                              name={isPlaying ? "pause" : "play"} 
-                              size={20} 
-                              color="#fff" 
-                            />
-                          </View>
-                          <View className="flex-1">
-                            <View className="flex-row items-center justify-between mb-1.5">
-                              <Text className="text-white font-semibold text-sm">Voice Message</Text>
-                              <Text className="text-white/80 text-xs">
-                                {duration > 0 ? formatDuration(duration * (1 - progress)) : '0:00'}
-                              </Text>
-                            </View>
-                            <View className="h-1 bg-white/20 rounded-full overflow-hidden">
-                              <View 
-                                className="h-full bg-white/60 rounded-full" 
-                                style={{ width: `${progress * 100}%` }}
-                              />
-                            </View>
-                          </View>
-                        </View>
-                      </TouchableOpacity>
-                    )}
-                  </View>
-                )}
-
-                {message.text && (
-                  <Text className="text-white text-base leading-5" style={{ flexShrink: 1 }}>
-                    {message.text}
+        {/* Bubble */}
+        <View
+          style={{
+            maxWidth: '78%',
+            borderRadius: 20,
+            borderBottomRightRadius: isMyMessage ? 5 : 20,
+            borderBottomLeftRadius: isMyMessage ? 20 : 5,
+            overflow: 'hidden',
+            backgroundColor: isHighlighted ? '#FEF3C7' : undefined,
+            ...Platform.select({
+              ios: {
+                shadowColor: isMyMessage ? BRAND.primary : '#000',
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: isMyMessage ? 0.2 : 0.07,
+                shadowRadius: 6,
+              },
+              android: { elevation: isMyMessage ? 3 : 2 },
+            }),
+          }}
+        >
+          {isMyMessage ? (
+            <LinearGradient
+              colors={[BRAND.primary, BRAND.primaryDark]}
+              start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+              style={{ paddingHorizontal: 14, paddingVertical: 10 }}
+            >
+              {/* Reply reference */}
+              {message.replyTo && (
+                <TouchableOpacity onPress={() => onScrollToReply(message.replyTo!._id)} activeOpacity={0.7}
+                  style={{ marginBottom: 8, paddingBottom: 8, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.2)' }}
+                >
+                  <Text style={{ color: 'rgba(255,255,255,0.75)', fontSize: 11, fontWeight: '600', marginBottom: 2 }}>
+                    ↩ {message.replyTo.sender.firstName}
                   </Text>
-                )}
-
-                <View className="flex-row items-center justify-end mt-1.5">
-                  <Text className="text-white/80 text-xs">
-                    {formatMessageTime(message.createdAt)}
+                  <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 11, fontStyle: 'italic' }} numberOfLines={1}>
+                    {message.replyTo.text}
                   </Text>
+                </TouchableOpacity>
+              )}
 
-                  <View className="ml-1">
-                    {(message.status === 'sent' || !message.status) && (
-                      <Ionicons name="checkmark" size={14} color="rgba(255, 255, 255, 0.8)" />
-                    )}
-                    {message.status === 'delivered' && (
-                      <Ionicons name="checkmark-done" size={14} color="rgba(255, 255, 255, 0.8)" />
-                    )}
-                    {message.status === 'read' && (
-                      <Ionicons name="checkmark-done" size={14} color="#60a5fa" />
-                    )}
+              {/* Image attachment */}
+              {message.attachments?.[0]?.type === 'image' && (
+                <Image source={{ uri: message.attachments[0].url }} style={{ width: 210, height: 210, borderRadius: 14, marginBottom: 4 }} resizeMode="cover" />
+              )}
+
+              {/* Audio attachment */}
+              {message.attachments?.[0]?.type === 'audio' && (
+                <TouchableOpacity onPress={() => onPlayAudio(message.attachments![0].url, message._id)} activeOpacity={0.8}
+                  style={{ backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 14, padding: 11, minWidth: 200, marginBottom: 4 }}
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center', marginRight: 10 }}>
+                      <Ionicons name={isPlaying ? 'pause' : 'play'} size={17} color="#fff" />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
+                        <Text style={{ color: '#fff', fontSize: 12, fontWeight: '600' }}>Voice message</Text>
+                        <Text style={{ color: 'rgba(255,255,255,0.75)', fontSize: 11 }}>
+                          {duration > 0 ? formatDuration(duration * (1 - progress)) : '0:00'}
+                        </Text>
+                      </View>
+                      <View style={{ height: 3, backgroundColor: 'rgba(255,255,255,0.25)', borderRadius: 2 }}>
+                        <View style={{ height: 3, width: `${progress * 100}%`, backgroundColor: '#fff', borderRadius: 2 }} />
+                      </View>
+                    </View>
                   </View>
-                </View>
-              </LinearGradient>
-            ) : (
-              <View className="bg-white px-4 py-2.5">
-                {message.replyTo && (
-                  <TouchableOpacity 
-                    onPress={() => onScrollToReply(message.replyTo!._id)}
-                    activeOpacity={0.7}
-                    className="mb-2 pb-2 border-b border-gray-200"
-                  >
-                    <Text className="text-pink-600 text-xs font-medium mb-0.5">
-                      ↩ {message.replyTo.sender.firstName}
-                    </Text>
-                    <Text className="text-gray-500 text-xs italic" numberOfLines={1}>
-                      {message.replyTo.text}
-                    </Text>
-                  </TouchableOpacity>
-                )}
+                </TouchableOpacity>
+              )}
 
-                {message.attachments && message.attachments.length > 0 && (
-                  <View className="mb-2">
-                    {message.attachments[0].type === 'image' && (
-                      <Image
-                        source={{ uri: message.attachments[0].url }}
-                        style={{ width: 200, height: 200, borderRadius: 16 }}
-                        resizeMode="cover"
-                      />
-                    )}
-                    {message.attachments[0].type === 'audio' && (
-                      <TouchableOpacity
-                        onPress={() => onPlayAudio(message.attachments![0].url, message._id)}
-                        activeOpacity={0.7}
-                        className="bg-pink-50 rounded-2xl p-3"
-                        style={{ minWidth: 200 }}
-                      >
-                        <View className="flex-row items-center">
-                          <View className="w-10 h-10 rounded-full bg-pink-100 items-center justify-center mr-3">
-                            <Ionicons 
-                              name={isPlaying ? "pause" : "play"} 
-                              size={20} 
-                              color="#eb278d" 
-                            />
-                          </View>
-                          <View className="flex-1">
-                            <View className="flex-row items-center justify-between mb-1.5">
-                              <Text className="text-gray-900 font-semibold text-sm">Voice Message</Text>
-                              <Text className="text-gray-500 text-xs">
-                                {duration > 0 ? formatDuration(duration * (1 - progress)) : '0:00'}
-                              </Text>
-                            </View>
-                            <View className="h-1 bg-pink-200 rounded-full overflow-hidden">
-                              <View 
-                                className="h-full bg-pink-500 rounded-full" 
-                                style={{ width: `${progress * 100}%` }}
-                              />
-                            </View>
-                          </View>
-                        </View>
-                      </TouchableOpacity>
-                    )}
-                  </View>
-                )}
+              {message.text && (
+                <Text style={{ color: '#fff', fontSize: 15, lineHeight: 21 }}>{message.text}</Text>
+              )}
 
-                {message.text && (
-                  <Text className="text-gray-900 text-base leading-5" style={{ flexShrink: 1 }}>
-                    {message.text}
-                  </Text>
-                )}
-
-                <Text className="text-gray-500 text-xs mt-1.5">
+              {/* Time + status */}
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', marginTop: 5, gap: 4 }}>
+                <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 10, fontWeight: '500' }}>
                   {formatMessageTime(message.createdAt)}
                 </Text>
+                <Ionicons
+                  name={message.status === 'read' ? 'checkmark-done' : message.status === 'delivered' ? 'checkmark-done' : 'checkmark'}
+                  size={13}
+                  color={message.status === 'read' ? '#93C5FD' : 'rgba(255,255,255,0.75)'}
+                />
               </View>
-            )}
-          </View>
+            </LinearGradient>
+          ) : (
+            <View style={{ backgroundColor: BRAND.surface, paddingHorizontal: 14, paddingVertical: 10, borderWidth: 1, borderColor: BRAND.border }}>
+              {message.replyTo && (
+                <TouchableOpacity onPress={() => onScrollToReply(message.replyTo!._id)} activeOpacity={0.7}
+                  style={{ marginBottom: 8, paddingBottom: 8, borderBottomWidth: 1, borderBottomColor: BRAND.border, borderLeftWidth: 3, borderLeftColor: BRAND.primary, paddingLeft: 8 }}
+                >
+                  <Text style={{ color: BRAND.primary, fontSize: 11, fontWeight: '600', marginBottom: 2 }}>
+                    ↩ {message.replyTo.sender.firstName}
+                  </Text>
+                  <Text style={{ color: BRAND.textMuted, fontSize: 11, fontStyle: 'italic' }} numberOfLines={1}>
+                    {message.replyTo.text}
+                  </Text>
+                </TouchableOpacity>
+              )}
+
+              {message.attachments?.[0]?.type === 'image' && (
+                <Image source={{ uri: message.attachments[0].url }} style={{ width: 210, height: 210, borderRadius: 14, marginBottom: 4 }} resizeMode="cover" />
+              )}
+
+              {message.attachments?.[0]?.type === 'audio' && (
+                <TouchableOpacity onPress={() => onPlayAudio(message.attachments![0].url, message._id)} activeOpacity={0.8}
+                  style={{ backgroundColor: BRAND.primarySoft, borderRadius: 14, padding: 11, minWidth: 200, marginBottom: 4 }}
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: BRAND.primaryMuted, alignItems: 'center', justifyContent: 'center', marginRight: 10 }}>
+                      <Ionicons name={isPlaying ? 'pause' : 'play'} size={17} color={BRAND.primary} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
+                        <Text style={{ color: BRAND.textPrimary, fontSize: 12, fontWeight: '600' }}>Voice message</Text>
+                        <Text style={{ color: BRAND.textMuted, fontSize: 11 }}>
+                          {duration > 0 ? formatDuration(duration * (1 - progress)) : '0:00'}
+                        </Text>
+                      </View>
+                      <View style={{ height: 3, backgroundColor: BRAND.primaryMuted, borderRadius: 2 }}>
+                        <View style={{ height: 3, width: `${progress * 100}%`, backgroundColor: BRAND.primary, borderRadius: 2 }} />
+                      </View>
+                    </View>
+                  </View>
+                </TouchableOpacity>
+              )}
+
+              {message.text && (
+                <Text style={{ color: BRAND.textPrimary, fontSize: 15, lineHeight: 21 }}>{message.text}</Text>
+              )}
+
+              <Text style={{ color: BRAND.textMuted, fontSize: 10, marginTop: 5, fontWeight: '500', textAlign: 'right' }}>
+                {formatMessageTime(message.createdAt)}
+              </Text>
+            </View>
+          )}
         </View>
       </View>
     </Animated.View>
   );
 };
 
+// ─── Attachment Modal ─────────────────────────────────────────────────────────
+const ATTACH_OPTIONS = [
+  { label: 'Photos',   icon: 'images'        as const, colors: ['#E04079', '#B5315F'] as [string, string] },
+  { label: 'Camera',   icon: 'camera'        as const, colors: ['#3B82F6', '#2563EB'] as [string, string] },
+  { label: 'Video',    icon: 'videocam'      as const, colors: ['#F97316', '#EA580C'] as [string, string] },
+  { label: 'Files',    icon: 'document-text' as const, colors: ['#10B981', '#059669'] as [string, string] },
+];
 
 const AttachmentMenuModal: React.FC<{
-  visible: boolean;
-  onClose: () => void;
-  onPickImage: () => void;
-  onTakePhoto: () => void;
-  onPickVideo: () => void;
-  onPickDocument: () => void;
+  visible: boolean; onClose: () => void;
+  onPickImage: () => void; onTakePhoto: () => void;
+  onPickVideo: () => void; onPickDocument: () => void;
 }> = ({ visible, onClose, onPickImage, onTakePhoto, onPickVideo, onPickDocument }) => {
+  const handlers = [onPickImage, onTakePhoto, onPickVideo, onPickDocument];
+
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="slide"
-      onRequestClose={onClose}
-    >
-      <TouchableOpacity
-        activeOpacity={1}
-        onPress={onClose}
-        className="flex-1 bg-black/60 justify-end"
-      >
-        <TouchableOpacity 
-          activeOpacity={1} 
-          className="bg-white rounded-t-3xl"
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <TouchableOpacity style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }} activeOpacity={1} onPress={onClose}>
+        <TouchableOpacity
+          activeOpacity={1}
           style={{
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: -4 },
-            shadowOpacity: 0.1,
-            shadowRadius: 12,
-            elevation: 12,
+            backgroundColor: BRAND.surface,
+            borderTopLeftRadius: 28, borderTopRightRadius: 28,
+            paddingHorizontal: 20, paddingTop: 16, paddingBottom: 36,
+            ...Platform.select({
+              ios: { shadowColor: '#000', shadowOffset: { width: 0, height: -6 }, shadowOpacity: 0.12, shadowRadius: 16 },
+              android: { elevation: 16 },
+            }),
           }}
         >
-          <View className="p-6">
-            <View className="w-12 h-1.5 bg-gray-300 rounded-full self-center mb-6" />
+          {/* Drag handle */}
+          <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: BRAND.borderStrong, alignSelf: 'center', marginBottom: 20 }} />
 
-            <Text className="text-2xl font-bold text-gray-900 mb-6">
-              Share content
-            </Text>
+          <Text style={{ fontSize: 18, fontWeight: '800', color: BRAND.textPrimary, marginBottom: 20, letterSpacing: -0.3 }}>
+            Share content
+          </Text>
 
-            <View className="flex-row flex-wrap gap-4 mb-4">
+          <View style={{ flexDirection: 'row', gap: 12, marginBottom: 16 }}>
+            {ATTACH_OPTIONS.map((opt, i) => (
               <TouchableOpacity
-                onPress={() => {
-                  onPickImage();
-                  onClose();
-                }}
-                className="items-center flex-1 min-w-[70px]"
-                activeOpacity={0.7}
+                key={opt.label}
+                onPress={() => { handlers[i](); onClose(); }}
+                activeOpacity={0.8}
+                style={{ flex: 1, alignItems: 'center' }}
               >
                 <LinearGradient
-                  colors={['#ec4899', '#f472b6']}
-                  className="w-16 h-16 rounded-2xl items-center justify-center mb-2"
+                  colors={opt.colors}
+                  start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
                   style={{
-                    shadowColor: '#ec4899',
-                    shadowOffset: { width: 0, height: 2 },
-                    shadowOpacity: 0.3,
-                    shadowRadius: 4,
-                    elevation: 4,
+                    width: 60, height: 60, borderRadius: 18,
+                    alignItems: 'center', justifyContent: 'center',
+                    marginBottom: 7,
+                    ...Platform.select({
+                      ios: { shadowColor: opt.colors[0], shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 6 },
+                      android: { elevation: 4 },
+                    }),
                   }}
                 >
-                  <Ionicons name="images" size={28} color="#fff" />
+                  <Ionicons name={opt.icon} size={26} color="#fff" />
                 </LinearGradient>
-                <Text className="text-gray-700 text-sm font-semibold">Photos</Text>
+                <Text style={{ fontSize: 12, fontWeight: '600', color: BRAND.textSecondary }}>{opt.label}</Text>
               </TouchableOpacity>
-
-              <TouchableOpacity
-                onPress={() => {
-                  onTakePhoto();
-                  onClose();
-                }}
-                className="items-center flex-1 min-w-[70px]"
-                activeOpacity={0.7}
-              >
-                <LinearGradient
-                  colors={['#3b82f6', '#60a5fa']}
-                  className="w-16 h-16 rounded-2xl items-center justify-center mb-2"
-                  style={{
-                    shadowColor: '#3b82f6',
-                    shadowOffset: { width: 0, height: 2 },
-                    shadowOpacity: 0.3,
-                    shadowRadius: 4,
-                    elevation: 4,
-                  }}
-                >
-                  <Ionicons name="camera" size={28} color="#fff" />
-                </LinearGradient>
-                <Text className="text-gray-700 text-sm font-semibold">Camera</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                onPress={() => {
-                  onPickVideo();
-                  onClose();
-                }}
-                className="items-center flex-1 min-w-[70px]"
-                activeOpacity={0.7}
-              >
-                <LinearGradient
-                  colors={['#f97316', '#fb923c']}
-                  className="w-16 h-16 rounded-2xl items-center justify-center mb-2"
-                  style={{
-                    shadowColor: '#f97316',
-                    shadowOffset: { width: 0, height: 2 },
-                    shadowOpacity: 0.3,
-                    shadowRadius: 4,
-                    elevation: 4,
-                  }}
-                >
-                  <Ionicons name="videocam" size={28} color="#fff" />
-                </LinearGradient>
-                <Text className="text-gray-700 text-sm font-semibold">Video</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                onPress={() => {
-                  onPickDocument();
-                  onClose();
-                }}
-                className="items-center flex-1 min-w-[70px]"
-                activeOpacity={0.7}
-              >
-                <LinearGradient
-                  colors={['#10b981', '#34d399']}
-                  className="w-16 h-16 rounded-2xl items-center justify-center mb-2"
-                  style={{
-                    shadowColor: '#10b981',
-                    shadowOffset: { width: 0, height: 2 },
-                    shadowOpacity: 0.3,
-                    shadowRadius: 4,
-                    elevation: 4,
-                  }}
-                >
-                  <Ionicons name="document-text" size={28} color="#fff" />
-                </LinearGradient>
-                <Text className="text-gray-700 text-sm font-semibold">Files</Text>
-              </TouchableOpacity>
-            </View>
-
-            <TouchableOpacity
-              onPress={onClose}
-              className="mt-4 bg-gray-100 py-4 rounded-2xl"
-              activeOpacity={0.7}
-            >
-              <Text className="text-center text-gray-700 font-bold text-base">
-                Cancel
-              </Text>
-            </TouchableOpacity>
+            ))}
           </View>
+
+          <TouchableOpacity onPress={onClose} activeOpacity={0.8}
+            style={{ backgroundColor: BRAND.surfaceAlt, borderRadius: 16, paddingVertical: 15, alignItems: 'center', borderWidth: 1, borderColor: BRAND.border }}
+          >
+            <Text style={{ fontSize: 15, fontWeight: '700', color: BRAND.textSecondary }}>Cancel</Text>
+          </TouchableOpacity>
         </TouchableOpacity>
       </TouchableOpacity>
     </Modal>

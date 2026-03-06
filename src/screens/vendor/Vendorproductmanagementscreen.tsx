@@ -1,146 +1,104 @@
 import React, { useState, useCallback } from 'react';
 import {
-  View,
-  Text,
-  TouchableOpacity,
-  ScrollView,
-  Image,
-  Alert,
-  ActivityIndicator,
-  RefreshControl,
-  Platform,
-  TextInput,
-  Dimensions,
+  View, Text, TouchableOpacity, ScrollView, Image, Alert,
+  ActivityIndicator, RefreshControl, Platform, TextInput,
+  Dimensions, StatusBar, ActionSheetIOS,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '@/types/navigation.types';
 import { productAPI, handleAPIError } from '@/api/api';
 
+// ─── Brand Tokens ─────────────────────────────────────────────────────────────
+const BRAND = {
+  primary: '#E04079', primaryDark: '#B5315F', primaryLight: '#F08BAC',
+  primarySoft: '#FEF0F5', primaryMuted: '#FCDCE9',
+  green: '#10B981', greenSoft: '#D1FAE5',
+  gold: '#F59E0B', goldSoft: '#FEF3C7',
+  orange: '#F97316', orangeSoft: '#FFEDD5',
+  red: '#EF4444', redSoft: '#FEE2E2',
+  surface: '#FFFFFF', surfaceAlt: '#F9FAFB',
+  border: '#F3F4F6', borderStrong: '#E5E7EB',
+  textPrimary: '#111827', textSecondary: '#6B7280', textMuted: '#9CA3AF',
+};
+
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const CARD_WIDTH = (SCREEN_WIDTH - 60) / 2; 
+const CARD_WIDTH = (SCREEN_WIDTH - 52) / 2;
 
-type VendorProductManagementNavigationProp = NativeStackNavigationProp<
-  RootStackParamList,
-  'VendorProductManagement'
->;
+const shadow = (color = '#000', opacity = 0.07, radius = 8, y = 2) =>
+  Platform.select({
+    ios: { shadowColor: color, shadowOffset: { width: 0, height: y }, shadowOpacity: opacity, shadowRadius: radius },
+    android: { elevation: Math.round(radius / 2) },
+  });
 
-interface Product {
-  _id: string;
-  name: string;
-  description: string;
-  images: string[];
-  price: number;
-  finalPrice: number;
-  stock: number;
-  approvalStatus: 'pending' | 'approved' | 'rejected';
-  isActive: boolean;
-  category: {
-    _id?: string;
-    name: string;
-  };
-  totalOrders?: number;
-  totalSales?: number;
-  rating?: number;
-  totalRatings?: number;
-  rejectionReason?: string;
-  createdAt: string;
-}
-
+// ─── Types ────────────────────────────────────────────────────────────────────
+type Nav = NativeStackNavigationProp<RootStackParamList, 'VendorProductManagement'>;
 type FilterStatus = 'all' | 'pending' | 'approved' | 'rejected';
 
+interface Product {
+  _id: string; name: string; description: string; images: string[];
+  price: number; finalPrice: number; stock: number;
+  approvalStatus: 'pending' | 'approved' | 'rejected';
+  isActive: boolean;
+  category: { _id?: string; name: string };
+  totalOrders?: number; totalSales?: number;
+  rating?: number; totalRatings?: number;
+  rejectionReason?: string; createdAt: string;
+}
+
+// ─── Status config ────────────────────────────────────────────────────────────
+const STATUS_CFG = {
+  approved: { bg: BRAND.greenSoft, text: '#065F46', border: '#A7F3D0', icon: 'checkmark-circle' as const, iconColor: BRAND.green },
+  pending:  { bg: BRAND.goldSoft,  text: '#92400E', border: '#FDE68A', icon: 'time'             as const, iconColor: BRAND.gold  },
+  rejected: { bg: BRAND.redSoft,   text: '#991B1B', border: '#FECACA', icon: 'close-circle'     as const, iconColor: BRAND.red   },
+} as const;
+
+const getStatusCfg = (s: string) => STATUS_CFG[s as keyof typeof STATUS_CFG] ?? { bg: BRAND.surfaceAlt, text: BRAND.textSecondary, border: BRAND.border, icon: 'help-circle' as const, iconColor: BRAND.textMuted };
+
+const formatPrice = (n: number) => `₦${n.toLocaleString()}`;
+
+// ─── Main Screen ──────────────────────────────────────────────────────────────
 const VendorProductManagementScreen: React.FC = () => {
-  const navigation = useNavigation<VendorProductManagementNavigationProp>();
+  const navigation = useNavigation<Nav>();
+  const insets = useSafeAreaInsets();
 
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [products, setProducts] = useState<Product[]>([]);
+  const [loading, setLoading]                 = useState(true);
+  const [refreshing, setRefreshing]           = useState(false);
+  const [products, setProducts]               = useState<Product[]>([]);
   const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [activeFilter, setActiveFilter] = useState<FilterStatus>('all');
+  const [searchQuery, setSearchQuery]         = useState('');
+  const [activeFilter, setActiveFilter]       = useState<FilterStatus>('all');
 
+  // ── Fetch ─────────────────────────────────────────────────────────────────
   const fetchProducts = async () => {
     try {
       setLoading(true);
-      console.log('🔍 Fetching products...');
-      
       const response = await productAPI.getMyProducts();
-      
-      console.log('📦 Full response:', JSON.stringify(response, null, 2));
-      console.log('✅ Response success:', response.success);
-      console.log('📊 Response data:', response.data);
-
       if (response.success) {
-        
-        let productList: Product[] = [];
-        
-        if (response.data.products) {
-          
-          productList = response.data.products;
-          console.log('📦 Found products in response.data.products');
-        } else if (Array.isArray(response.data)) {
-          
-          productList = response.data;
-          console.log('📦 Found products in response.data (array)');
-        } else if (response.data.data && response.data.data.products) {
-          
-          productList = response.data.data.products;
-          console.log('📦 Found products in response.data.data.products');
-        } else if (response.data.data && Array.isArray(response.data.data)) {
-          
-          productList = response.data.data;
-          console.log('📦 Found products in response.data.data (array)');
-        } else {
-          console.error('❌ Unknown response structure:', response);
-        }
-
-        console.log('📦 Product count:', productList.length);
-        console.log('📦 First product:', productList[0]);
-
-        setProducts(productList);
-        
-        if (productList.length === 0) {
-          console.log('⚠️ No products found');
-        }
+        const list: Product[] =
+          response.data.products ??
+          (Array.isArray(response.data) ? response.data : null) ??
+          response.data?.data?.products ??
+          (Array.isArray(response.data?.data) ? response.data.data : []);
+        setProducts(list);
       } else {
-        console.error('❌ Response not successful');
         Alert.alert('Error', 'Failed to fetch products');
       }
     } catch (error) {
-      const apiError = handleAPIError(error);
-      console.error('❌ Fetch products error:', apiError);
-      Alert.alert('Error', apiError.message);
-    } finally {
-      setLoading(false);
-    }
+      Alert.alert('Error', handleAPIError(error).message);
+    } finally { setLoading(false); }
   };
 
-  useFocusEffect(
-    useCallback(() => {
-      fetchProducts();
-    }, [])
-  );
+  useFocusEffect(useCallback(() => { fetchProducts(); }, []));
 
   React.useEffect(() => {
-    let filtered = products;
-
-    
-    if (activeFilter !== 'all') {
-      filtered = filtered.filter((product) => product.approvalStatus === activeFilter);
-    }
-
-    
-    if (searchQuery) {
-      filtered = filtered.filter((product) =>
-        product.name.toLowerCase().includes(searchQuery.toLowerCase())
-      );
-    }
-
-    console.log('🔍 Filtered products count:', filtered.length);
-    setFilteredProducts(filtered);
+    let f = products;
+    if (activeFilter !== 'all') f = f.filter((p) => p.approvalStatus === activeFilter);
+    if (searchQuery) f = f.filter((p) => p.name.toLowerCase().includes(searchQuery.toLowerCase()));
+    setFilteredProducts(f);
   }, [products, activeFilter, searchQuery]);
 
   const onRefresh = useCallback(() => {
@@ -148,462 +106,288 @@ const VendorProductManagementScreen: React.FC = () => {
     fetchProducts().finally(() => setRefreshing(false));
   }, []);
 
-  const handleAddProduct = () => {
-    navigation.navigate('AddProduct');
-  };
+  // ── Actions ───────────────────────────────────────────────────────────────
+  const handleEditProduct   = (id: string) => navigation.navigate('EditProduct', { productId: id });
 
-  const handleEditProduct = (productId: string) => {
-    navigation.navigate('EditProduct', { productId });
-  };
-
-  const handleDeleteProduct = (productId: string) => {
-    Alert.alert(
-      'Delete Product',
-      'Are you sure you want to delete this product? This action cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await productAPI.deleteProduct(productId);
-              Alert.alert('Success', 'Product deleted successfully');
-              fetchProducts();
-            } catch (error) {
-              const apiError = handleAPIError(error);
-              Alert.alert('Error', apiError.message || 'Failed to delete product');
-            }
-          },
-        },
-      ]
-    );
+  const handleDeleteProduct = (id: string) => {
+    Alert.alert('Delete Product', 'This action cannot be undone.', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: async () => {
+        try { await productAPI.deleteProduct(id); Alert.alert('Deleted', 'Product removed'); fetchProducts(); }
+        catch (e) { Alert.alert('Error', handleAPIError(e).message); }
+      }},
+    ]);
   };
 
   const handleUpdateStock = (product: Product) => {
-    Alert.prompt(
-      'Update Stock',
-      `Current stock: ${product.stock}`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Update',
-          onPress: async (value) => {
-            const quantity = parseInt(value || '0');
-            if (isNaN(quantity) || quantity < 0) {
-              Alert.alert('Invalid', 'Please enter a valid number');
-              return;
-            }
-
-            try {
-              await productAPI.updateStock(product._id, quantity);
-              Alert.alert('Success', 'Stock updated successfully');
-              fetchProducts();
-            } catch (error) {
-              const apiError = handleAPIError(error);
-              Alert.alert('Error', apiError.message || 'Failed to update stock');
-            }
-          },
-        },
-      ],
-      'plain-text',
-      product.stock.toString(),
-      'number-pad'
+    Alert.prompt('Update Stock', `Current: ${product.stock}`,
+      [{ text: 'Cancel', style: 'cancel' },
+       { text: 'Update', onPress: async (val) => {
+          const qty = parseInt(val || '0');
+          if (isNaN(qty) || qty < 0) { Alert.alert('Invalid', 'Enter a valid number'); return; }
+          try { await productAPI.updateStock(product._id, qty); Alert.alert('Updated', 'Stock updated'); fetchProducts(); }
+          catch (e) { Alert.alert('Error', handleAPIError(e).message); }
+       }}],
+      'plain-text', product.stock.toString(), 'number-pad'
     );
   };
 
-  const formatPrice = (price: number) => {
-    return `₦${price.toLocaleString()}`;
-  };
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'pending':
-        return 'bg-yellow-100 text-yellow-800 border-yellow-200';
-      case 'approved':
-        return 'bg-green-100 text-green-800 border-green-200';
-      case 'rejected':
-        return 'bg-red-100 text-red-800 border-red-200';
-      default:
-        return 'bg-gray-100 text-gray-800 border-gray-200';
-    }
-  };
-
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'pending':
-        return 'time';
-      case 'approved':
-        return 'checkmark-circle';
-      case 'rejected':
-        return 'close-circle';
-      default:
-        return 'help-circle';
-    }
-  };
-
-  const renderProductCard = (product: Product) => (
-    <TouchableOpacity
-      key={product._id}
-      
-      activeOpacity={0.9}
-      className="bg-white rounded-2xl overflow-hidden"
-      style={{
-        width: CARD_WIDTH,
-        ...Platform.select({
-          ios: {
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: 2 },
-            shadowOpacity: 0.08,
-            shadowRadius: 8,
-          },
-          android: { elevation: 3 },
-        }),
-      }}
-    >
-      {}
-      <View className="relative">
-        {product.images && product.images.length > 0 ? (
-          <Image
-            source={{ uri: product.images[0] }}
-            style={{ width: '100%', height: 140 }}
-            resizeMode="cover"
-          />
-        ) : (
-          <View 
-            style={{ width: '100%', height: 140 }}
-            className="bg-gray-200 items-center justify-center"
-          >
-            <Ionicons name="image-outline" size={32} color="#9ca3af" />
-          </View>
-        )}
-
-        {}
-        <View className="absolute top-2 left-2">
-          <View
-            className={`px-2 py-1 rounded-full border ${getStatusColor(product.approvalStatus)}`}
-          >
-            <View className="flex-row items-center" style={{ gap: 4 }}>
-              <Ionicons
-                name={getStatusIcon(product.approvalStatus) as any}
-                size={10}
-                color={
-                  product.approvalStatus === 'approved'
-                    ? '#15803d'
-                    : product.approvalStatus === 'rejected'
-                    ? '#dc2626'
-                    : '#ca8a04'
-                }
-              />
-              <Text className="text-xs font-bold capitalize">{product.approvalStatus}</Text>
-            </View>
-          </View>
-        </View>
-
-        {}
-        {/* Options Menu Button */}
-<TouchableOpacity
-  onPress={() => {
+  const openProductMenu = (product: Product) => {
     if (Platform.OS === 'ios') {
-      // iOS ActionSheet - dismisses when tapped outside
-      const ActionSheetIOS = require('react-native').ActionSheetIOS;
       ActionSheetIOS.showActionSheetWithOptions(
-        {
-          options: ['Edit Product', 'Delete Product', 'Cancel'],
-          destructiveButtonIndex: 1,
-          cancelButtonIndex: 2,
-        },
-        (buttonIndex) => {
-          if (buttonIndex === 0) {
-            handleEditProduct(product._id);
-          } else if (buttonIndex === 1) {
-            handleDeleteProduct(product._id);
-          }
-        }
+        { options: ['Edit Product', 'Update Stock', 'Delete Product', 'Cancel'], destructiveButtonIndex: 2, cancelButtonIndex: 3 },
+        (i) => { if (i === 0) handleEditProduct(product._id); else if (i === 1) handleUpdateStock(product); else if (i === 2) handleDeleteProduct(product._id); }
       );
     } else {
-      // Android Alert - already dismisses when tapped outside
-      Alert.alert(
-        'Product Options',
-        '',
-        [
-          {
-            text: 'Edit',
-            onPress: () => handleEditProduct(product._id),
-          },
-          {
-            text: 'Delete',
-            style: 'destructive',
-            onPress: () => handleDeleteProduct(product._id),
-          },
-          { text: 'Cancel', style: 'cancel' },
-        ],
-        { cancelable: true } // Allows dismissing by tapping outside on Android
-      );
+      Alert.alert('Product Options', '', [
+        { text: 'Edit', onPress: () => handleEditProduct(product._id) },
+        { text: 'Update Stock', onPress: () => handleUpdateStock(product) },
+        { text: 'Delete', style: 'destructive', onPress: () => handleDeleteProduct(product._id) },
+        { text: 'Cancel', style: 'cancel' },
+      ], { cancelable: true });
     }
-  }}
-  className="absolute top-2 right-2 w-7 h-7 rounded-full bg-white/90 items-center justify-center"
->
-  <Ionicons name="ellipsis-vertical" size={14} color="#6b7280" />
-</TouchableOpacity>
-      </View>
+  };
 
-      {}
-      <View className="p-3">
-        {}
-        <Text className="text-gray-500 text-xs mb-1" numberOfLines={1}>
-          {product.category?.name || 'No Category'}
-        </Text>
+  // ── Counts ────────────────────────────────────────────────────────────────
+  const counts = {
+    all:      products.length,
+    approved: products.filter((p) => p.approvalStatus === 'approved').length,
+    pending:  products.filter((p) => p.approvalStatus === 'pending').length,
+    rejected: products.filter((p) => p.approvalStatus === 'rejected').length,
+  };
 
-        {}
-        <Text className="text-gray-900 text-sm font-bold mb-2" numberOfLines={2}>
-          {product.name}
-        </Text>
+  const FILTERS: { key: FilterStatus; label: string }[] = [
+    { key: 'all',      label: 'All'      },
+    { key: 'approved', label: 'Approved' },
+    { key: 'pending',  label: 'Pending'  },
+    { key: 'rejected', label: 'Rejected' },
+  ];
 
-        {}
-        <View className="flex-row items-center justify-between mb-2">
-          <Text className="text-pink-600 text-base font-bold">
-            {formatPrice(product.finalPrice || product.price)}
-          </Text>
-          
-          <View
-            className={`px-2 py-1 rounded ${
-              product.stock === 0
-                ? 'bg-red-100'
-                : product.stock < 10
-                ? 'bg-orange-100'
-                : 'bg-green-100'
-            }`}
-          >
-            <Text
-              className={`text-xs font-bold ${
-                product.stock === 0
-                  ? 'text-red-700'
-                  : product.stock < 10
-                  ? 'text-orange-700'
-                  : 'text-green-700'
-              }`}
-            >
-              {product.stock}
-            </Text>
+  // ── Product card ──────────────────────────────────────────────────────────
+  const renderProductCard = (product: Product) => {
+    const cfg = getStatusCfg(product.approvalStatus);
+    const stockColor = product.stock === 0 ? BRAND.red : product.stock < 10 ? BRAND.orange : BRAND.green;
+    const stockBg    = product.stock === 0 ? BRAND.redSoft : product.stock < 10 ? BRAND.orangeSoft : BRAND.greenSoft;
+
+    return (
+      <View key={product._id}
+        style={[{ width: CARD_WIDTH, backgroundColor: BRAND.surface, borderRadius: 18, overflow: 'hidden', borderWidth: 1, borderColor: BRAND.border }, shadow()]}
+      >
+        {/* Image */}
+        <View style={{ position: 'relative' }}>
+          {product.images?.length > 0 ? (
+            <Image source={{ uri: product.images[0] }} style={{ width: '100%', height: 140 }} resizeMode="cover" />
+          ) : (
+            <View style={{ width: '100%', height: 140, backgroundColor: BRAND.surfaceAlt, alignItems: 'center', justifyContent: 'center' }}>
+              <Ionicons name="image-outline" size={32} color={BRAND.textMuted} />
+            </View>
+          )}
+
+          {/* Status badge */}
+          <View style={{ position: 'absolute', top: 8, left: 8, backgroundColor: cfg.bg, borderRadius: 12, paddingHorizontal: 7, paddingVertical: 4, flexDirection: 'row', alignItems: 'center', gap: 3, borderWidth: 1, borderColor: cfg.border }}>
+            <Ionicons name={cfg.icon} size={10} color={cfg.iconColor} />
+            <Text style={{ fontSize: 10, fontWeight: '700', color: cfg.text, textTransform: 'capitalize' }}>{product.approvalStatus}</Text>
           </View>
+
+          {/* Menu button */}
+          <TouchableOpacity
+            onPress={() => openProductMenu(product)}
+            activeOpacity={0.8}
+            style={{ position: 'absolute', top: 8, right: 8, width: 28, height: 28, borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.92)', alignItems: 'center', justifyContent: 'center', ...shadow('#000', 0.12, 4, 2) }}
+          >
+            <Ionicons name="ellipsis-vertical" size={14} color={BRAND.textSecondary} />
+          </TouchableOpacity>
         </View>
 
-        {}
-        {(product.totalOrders || product.totalSales || product.totalRatings) && (
-          <View className="flex-row items-center justify-between pt-2 border-t border-gray-100">
-            {product.totalOrders !== undefined && (
-              <View className="flex-row items-center">
-                <Ionicons name="cart" size={12} color="#9ca3af" />
-                <Text className="text-gray-600 text-xs ml-1">
-                  {product.totalOrders || 0}
-                </Text>
-              </View>
-            )}
+        {/* Info */}
+        <View style={{ padding: 11 }}>
+          <Text style={{ fontSize: 10, color: BRAND.textMuted, fontWeight: '500', marginBottom: 3 }} numberOfLines={1}>
+            {product.category?.name || 'No Category'}
+          </Text>
+          <Text style={{ fontSize: 13, fontWeight: '700', color: BRAND.textPrimary, marginBottom: 8, lineHeight: 18 }} numberOfLines={2}>
+            {product.name}
+          </Text>
 
-            {product.totalRatings && product.totalRatings > 0 && (
-              <View className="flex-row items-center">
-                <Ionicons name="star" size={12} color="#fbbf24" />
-                <Text className="text-gray-600 text-xs ml-1">
-                  {product.rating?.toFixed(1) || 0}
-                </Text>
+          {/* Price + stock */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+            <Text style={{ fontSize: 14, fontWeight: '800', color: BRAND.primary, letterSpacing: -0.3 }}>
+              {formatPrice(product.finalPrice || product.price)}
+            </Text>
+            <TouchableOpacity onPress={() => handleUpdateStock(product)} activeOpacity={0.8}
+              style={{ backgroundColor: stockBg, borderRadius: 8, paddingHorizontal: 7, paddingVertical: 3 }}>
+              <Text style={{ fontSize: 11, fontWeight: '800', color: stockColor }}>{product.stock}</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Stats row */}
+          {(product.totalOrders !== undefined || (product.totalRatings && product.totalRatings > 0)) && (
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 8, borderTopWidth: 1, borderTopColor: BRAND.border }}>
+              {product.totalOrders !== undefined && (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                  <Ionicons name="cart-outline" size={12} color={BRAND.textMuted} />
+                  <Text style={{ fontSize: 11, color: BRAND.textSecondary, fontWeight: '600' }}>{product.totalOrders}</Text>
+                </View>
+              )}
+              {product.totalRatings && product.totalRatings > 0 ? (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+                  <Ionicons name="star" size={11} color={BRAND.gold} />
+                  <Text style={{ fontSize: 11, color: BRAND.textSecondary, fontWeight: '600' }}>{product.rating?.toFixed(1)}</Text>
+                </View>
+              ) : null}
+            </View>
+          )}
+        </View>
+
+        {/* Rejection reason */}
+        {product.approvalStatus === 'rejected' && product.rejectionReason && (
+          <View style={{ backgroundColor: BRAND.redSoft, paddingHorizontal: 11, paddingVertical: 9, borderTopWidth: 1, borderTopColor: '#FECACA' }}>
+            <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 6 }}>
+              <Ionicons name="alert-circle" size={13} color={BRAND.red} style={{ marginTop: 1 }} />
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 10, fontWeight: '700', color: '#991B1B', marginBottom: 2 }}>Rejection reason</Text>
+                <Text style={{ fontSize: 11, color: '#B91C1C', lineHeight: 15 }} numberOfLines={2}>{product.rejectionReason}</Text>
               </View>
-            )}
+            </View>
           </View>
         )}
       </View>
-
-      {}
-      {product.approvalStatus === 'rejected' && product.rejectionReason && (
-        <View className="bg-red-50 px-3 py-2 border-t border-red-100">
-          <View className="flex-row items-start">
-            <Ionicons name="alert-circle" size={14} color="#dc2626" />
-            <View className="flex-1 ml-2">
-              <Text className="text-red-900 text-xs font-semibold mb-0.5">Rejection:</Text>
-              <Text className="text-red-700 text-xs" numberOfLines={2}>
-                {product.rejectionReason}
-              </Text>
-            </View>
-          </View>
-        </View>
-      )}
-    </TouchableOpacity>
-  );
-
-  const renderEmptyState = () => (
-    <View className="flex-1 items-center justify-center py-20 px-8">
-      <LinearGradient
-        colors={['#fce7f3', '#fdf2f8']}
-        className="w-32 h-32 rounded-full items-center justify-center mb-6"
-      >
-        <Ionicons name="cube-outline" size={64} color="#eb278d" />
-      </LinearGradient>
-      <Text className="text-xl font-bold text-gray-900 mb-2 text-center">No Products Yet</Text>
-      <Text className="text-gray-600 text-center text-sm mb-6">
-        {activeFilter !== 'all' 
-          ? `No ${activeFilter} products found`
-          : "Start by adding your first product to sell on the marketplace"}
-      </Text>
-      <TouchableOpacity
-        onPress={handleAddProduct}
-        className="bg-pink-500 px-8 py-4 rounded-2xl"
-        style={{
-          shadowColor: '#eb278d',
-          shadowOffset: { width: 0, height: 4 },
-          shadowOpacity: 0.3,
-          shadowRadius: 8,
-          elevation: 4,
-        }}
-      >
-        <Text className="text-white text-base font-bold">Add Your First Product</Text>
-      </TouchableOpacity>
-    </View>
-  );
-
-  const getProductCounts = () => {
-    return {
-      all: products.length,
-      pending: products.filter((p) => p.approvalStatus === 'pending').length,
-      approved: products.filter((p) => p.approvalStatus === 'approved').length,
-      rejected: products.filter((p) => p.approvalStatus === 'rejected').length,
-    };
+    );
   };
 
-  const counts = getProductCounts();
-
-  const filters: { key: FilterStatus; label: string; count: number }[] = [
-    { key: 'all', label: 'All', count: counts.all },
-    { key: 'approved', label: 'Approved', count: counts.approved },
-    { key: 'pending', label: 'Pending', count: counts.pending },
-    { key: 'rejected', label: 'Rejected', count: counts.rejected },
-  ];
-
+  // ── Loading ───────────────────────────────────────────────────────────────
   if (loading) {
     return (
-      <SafeAreaView className="flex-1 bg-gray-50">
-        <View className="flex-1 items-center justify-center">
-          <ActivityIndicator size="large" color="#eb278d" />
-          <Text className="text-gray-500 text-sm mt-4">Loading products...</Text>
+      <SafeAreaView style={{ flex: 1, backgroundColor: BRAND.surfaceAlt }}>
+        <StatusBar barStyle="dark-content" />
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+          <ActivityIndicator size="large" color={BRAND.primary} />
+          <Text style={{ color: BRAND.textMuted, fontSize: 14, marginTop: 12, fontWeight: '500' }}>Loading products…</Text>
         </View>
       </SafeAreaView>
     );
   }
 
+  // ─────────────────────────────────────────────────────────────────────────
   return (
-    <SafeAreaView className="flex-1 bg-gray-50" edges={['top']}>
-      {}
-      <LinearGradient
-        colors={['#eb278d', '#f472b6']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        className="pb-4"
-      >
-        <View className="px-5 pt-4">
-          <View className="flex-row items-center justify-between mb-4">
-            <TouchableOpacity
-              onPress={() => navigation.goBack()}
-              className="w-10 h-10 rounded-full bg-white/20 items-center justify-center mr-3"
-            >
-              <Ionicons name="arrow-back" size={24} color="#fff" />
-            </TouchableOpacity>
-            <View>
-              <Text className="text-white text-2xl font-bold mb-1">My Products</Text>
-              <Text className="text-white/80 text-sm">
-                {filteredProducts.length} {filteredProducts.length === 1 ? 'product' : 'products'}
-              </Text>
-            </View>
+    <SafeAreaView style={{ flex: 1, backgroundColor: BRAND.surfaceAlt }} edges={['top']}>
+      <StatusBar barStyle="dark-content" backgroundColor={BRAND.surface} />
 
-            <TouchableOpacity
-              
-              
-            >
-              {}
-            </TouchableOpacity>
-          </View>
+      {/* ── HEADER ───────────────────────────────────────────────────────── */}
+      <View style={[{
+        backgroundColor: BRAND.surface,
+        paddingHorizontal: 20, paddingTop: 10, paddingBottom: 14,
+        flexDirection: 'row', alignItems: 'center',
+        borderBottomWidth: 1, borderBottomColor: BRAND.border,
+      }, shadow('#000', 0.05, 8, 2)]}>
+        <TouchableOpacity onPress={() => navigation.goBack()} activeOpacity={0.8}
+          style={{ width: 40, height: 40, borderRadius: 13, backgroundColor: BRAND.surfaceAlt, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: BRAND.border, marginRight: 12 }}>
+          <Ionicons name="arrow-back" size={20} color={BRAND.textPrimary} />
+        </TouchableOpacity>
 
-          {}
-          <View className="flex-row items-center bg-white/20 rounded-2xl px-4 py-3 mb-4">
-            <Ionicons name="search" size={20} color="#fff" />
-            <TextInput
-              className="flex-1 ml-2 text-base text-white"
-              placeholder="Search products..."
-              placeholderTextColor="rgba(255, 255, 255, 0.7)"
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-            />
-            {searchQuery.length > 0 && (
-              <TouchableOpacity onPress={() => setSearchQuery('')}>
-                <Ionicons name="close-circle" size={20} color="#fff" />
-              </TouchableOpacity>
-            )}
-          </View>
-
-          {}
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ gap: 8 }}
-          >
-            {filters.map((filter) => (
-              <TouchableOpacity
-                key={filter.key}
-                onPress={() => setActiveFilter(filter.key)}
-                className={`px-5 py-2.5 rounded-full ${
-                  activeFilter === filter.key ? 'bg-white' : 'bg-white/20'
-                }`}
-              >
-                <Text
-                  className={`font-bold text-sm ${
-                    activeFilter === filter.key ? 'text-pink-600' : 'text-white'
-                  }`}
-                >
-                  {filter.label} ({filter.count})
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
+        <View style={{ flex: 1 }}>
+          <Text style={{ fontSize: 20, fontWeight: '800', color: BRAND.textPrimary, letterSpacing: -0.4 }}>My Products</Text>
+          <Text style={{ fontSize: 12, color: BRAND.textMuted, fontWeight: '500', marginTop: 1 }}>
+            {filteredProducts.length} {filteredProducts.length === 1 ? 'product' : 'products'}
+          </Text>
         </View>
-      </LinearGradient>
 
-      {}
-      <ScrollView
-        className="flex-1"
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#eb278d" />
-        }
-      >
-        <View style={{ paddingHorizontal: 20, paddingVertical: 16 }}>
-          {filteredProducts.length > 0 ? (
-            <View 
-              style={{ 
-                flexDirection: 'row', 
-                flexWrap: 'wrap',
-                gap: 20,
-              }}
-            >
-              {filteredProducts.map(renderProductCard)}
-            </View>
-          ) : (
-            renderEmptyState()
+        {/* Add product shortcut */}
+        <TouchableOpacity onPress={() => navigation.navigate('AddProduct')} activeOpacity={0.85}
+          style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: BRAND.primary, paddingHorizontal: 14, paddingVertical: 9, borderRadius: 20, ...shadow(BRAND.primary, 0.3, 8, 3) }}>
+          <Ionicons name="add" size={16} color="#fff" />
+          <Text style={{ color: '#fff', fontSize: 13, fontWeight: '700' }}>Add</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* ── SEARCH + FILTER BAR (sticky) ─────────────────────────────────── */}
+      <View style={{ backgroundColor: BRAND.surface, paddingHorizontal: 16, paddingTop: 12, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: BRAND.border }}>
+        {/* Search */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: BRAND.surfaceAlt, borderRadius: 14, paddingHorizontal: 12, paddingVertical: 10, borderWidth: 1.5, borderColor: BRAND.border, marginBottom: 10 }}>
+          <Ionicons name="search" size={16} color={BRAND.textMuted} style={{ marginRight: 8 }} />
+          <TextInput
+            style={{ flex: 1, fontSize: 14, color: BRAND.textPrimary, paddingVertical: 0 }}
+            placeholder="Search products…"
+            placeholderTextColor={BRAND.textMuted}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchQuery('')} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+              <Ionicons name="close-circle" size={17} color={BRAND.textMuted} />
+            </TouchableOpacity>
           )}
         </View>
+
+        {/* Filter pills */}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+          {FILTERS.map((f) => {
+            const active = activeFilter === f.key;
+            const cnt = counts[f.key];
+            return (
+              <TouchableOpacity key={f.key} onPress={() => setActiveFilter(f.key)} activeOpacity={0.8}
+                style={{
+                  flexDirection: 'row', alignItems: 'center', gap: 5,
+                  paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20,
+                  backgroundColor: active ? BRAND.primary : BRAND.surfaceAlt,
+                  borderWidth: 1.5, borderColor: active ? BRAND.primary : BRAND.border,
+                  ...(active ? shadow(BRAND.primary, 0.25, 8, 3) : {}),
+                }}
+              >
+                <Text style={{ fontSize: 12, fontWeight: '700', color: active ? '#fff' : BRAND.textSecondary }}>{f.label}</Text>
+                <View style={{ backgroundColor: active ? 'rgba(255,255,255,0.25)' : BRAND.border, borderRadius: 10, paddingHorizontal: 6, paddingVertical: 1 }}>
+                  <Text style={{ fontSize: 10, fontWeight: '800', color: active ? '#fff' : BRAND.textMuted }}>{cnt}</Text>
+                </View>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      </View>
+
+      {/* ── CONTENT ───────────────────────────────────────────────────────── */}
+      <ScrollView
+        style={{ flex: 1 }}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ padding: 16, paddingBottom: 100 }}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={BRAND.primary} colors={[BRAND.primary]} />}
+      >
+        {filteredProducts.length > 0 ? (
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
+            {filteredProducts.map(renderProductCard)}
+          </View>
+        ) : (
+          /* Empty state */
+          <View style={{ alignItems: 'center', justifyContent: 'center', paddingTop: 60, paddingHorizontal: 32 }}>
+            <View style={{ width: 88, height: 88, borderRadius: 26, backgroundColor: BRAND.primarySoft, alignItems: 'center', justifyContent: 'center', marginBottom: 18 }}>
+              <Ionicons name="cube-outline" size={42} color={BRAND.primary} />
+            </View>
+            <Text style={{ fontSize: 20, fontWeight: '800', color: BRAND.textPrimary, marginBottom: 8, letterSpacing: -0.3 }}>No Products Yet</Text>
+            <Text style={{ fontSize: 13, color: BRAND.textMuted, textAlign: 'center', lineHeight: 20, marginBottom: 24 }}>
+              {activeFilter !== 'all'
+                ? `No ${activeFilter} products found`
+                : 'Add your first product to start selling on the marketplace'}
+            </Text>
+            <TouchableOpacity onPress={() => navigation.navigate('AddProduct')} activeOpacity={0.85}
+              style={{ flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: BRAND.primary, paddingHorizontal: 24, paddingVertical: 14, borderRadius: 22, ...shadow(BRAND.primary, 0.35, 10, 4) }}>
+              <Ionicons name="add-circle-outline" size={18} color="#fff" />
+              <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>Add First Product</Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </ScrollView>
 
-      {}
+      {/* ── FAB ──────────────────────────────────────────────────────────── */}
       <TouchableOpacity
-        onPress={handleAddProduct}
-        className="absolute bottom-6 right-6 w-16 h-16 rounded-full bg-pink-500 items-center justify-center"
+        onPress={() => navigation.navigate('AddProduct')}
+        activeOpacity={0.85}
         style={{
-          shadowColor: '#eb278d',
-          shadowOffset: { width: 0, height: 4 },
-          shadowOpacity: 0.3,
-          shadowRadius: 8,
-          elevation: 6,
+          position: 'absolute', bottom: insets.bottom + 20, right: 20,
+          width: 58, height: 58, borderRadius: 29,
+          backgroundColor: BRAND.primary,
+          alignItems: 'center', justifyContent: 'center',
+          ...shadow(BRAND.primary, 0.4, 14, 6),
         }}
-        activeOpacity={0.8}
       >
-        <Ionicons name="add" size={32} color="#fff" />
+        <Ionicons name="add" size={28} color="#fff" />
       </TouchableOpacity>
     </SafeAreaView>
   );

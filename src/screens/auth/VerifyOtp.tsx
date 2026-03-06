@@ -199,7 +199,7 @@ const VerifyOtpScreen = ({ route, navigation }: Props) => {
           {/* Logo */}
           <View className="items-center mb-10">
             <Image
-              source={require('@/assets/logo.png')}
+              source={require('@/assets/app-icon.png')}
               className="w-32 h-20"
               resizeMode="contain"
             />

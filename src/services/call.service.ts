@@ -18,8 +18,28 @@ class CallService {
   private callData: CallData | null = null;
   private callStatus: CallStatus = 'idle';
   private listeners: { [key: string]: Function[] } = {};
+  private initialized: boolean = false;
+  private currentUserId: string | null = null;
 
-  public initialize() {
+  public async initialize() {
+    if (this.initialized) {
+      console.log('📞 Call service already initialized, skipping');
+      return;
+    }
+    this.initialized = true;
+
+    // Cache the current user ID for synchronous self-call filtering
+    try {
+      const userDataString = await AsyncStorage.getItem('userData');
+      if (userDataString) {
+        const userData = JSON.parse(userDataString);
+        this.currentUserId = userData._id || userData.id;
+        console.log('📞 Cached current user ID:', this.currentUserId);
+      }
+    } catch (error) {
+      console.error('❌ Error caching user ID:', error);
+    }
+
     this.setupSocketListeners();
     console.log('📞 Call service initialized');
   }
@@ -56,45 +76,40 @@ class CallService {
       this.emit('call:initiated', data);
     });
 
-    socketService.on('call:incoming', async (data: any) => {
-   console.log('📞 Incoming call received - FULL DATA:', JSON.stringify(data, null, 2));
-  console.log('   - Caller ID:', data.caller._id);
-  console.log('   - Call type from data:', data.type);  
-  console.log('   - Call.type from call object:', data.call.type);  
-  
-  
-  try {
-    const userDataString = await AsyncStorage.getItem('userData');
-    console.log('   - UserData from storage:', userDataString ? 'Found' : 'Not found');
-    
-    if (userDataString) {
-      const userData = JSON.parse(userDataString);
-      const currentUserId = userData._id || userData.id;
-      console.log('   - Current user ID:', currentUserId);
-      console.log('   - Comparing:', currentUserId, 'vs', data.caller._id);
-      
-      
-      if (data.caller._id === currentUserId || data.caller.id === currentUserId) {
-        console.log('⏭️ Ignoring our own outgoing call - IDs match!');
+    socketService.on('call:incoming', (data: any) => {
+      const callerId = data.caller?._id || data.caller?.id;
+      console.log('📞 Incoming call received:', callerId, 'type:', data.type, 'myStatus:', this.callStatus, 'myId:', this.currentUserId);
+
+      // Guard 1: If we're already calling or connected, ignore
+      if (this.callStatus !== 'idle') {
+        console.log('⏭️ Ignoring incoming call - not idle (status:', this.callStatus, ')');
         return;
       }
-    }
-  } catch (error) {
-    console.error('❌ Error getting user data:', error);
-  }
 
-  
-  console.log('✅ Processing incoming call from another user');
-  this.callData = {
-    callId: data.call._id,
-    type: data.type,  
-    caller: data.caller,
-    receiver: data.call.receiver,
-    conversationId: data.conversationId,
-  };
-  this.callStatus = 'incoming';
-  this.emit('call:incoming', data);
-});
+      // Guard 2: Check if the caller is us (backend broadcasts to conversation room)
+      if (this.currentUserId && callerId === this.currentUserId) {
+        console.log('⏭️ Ignoring our own outgoing call - IDs match');
+        return;
+      }
+
+      // Guard 3: Check if call.caller matches us (alternative field)
+      const callCallerIdFromCall = data.call?.caller?._id || data.call?.caller?.id;
+      if (this.currentUserId && callCallerIdFromCall === this.currentUserId) {
+        console.log('⏭️ Ignoring our own outgoing call - call.caller._id matches');
+        return;
+      }
+
+      console.log('✅ Processing incoming call from another user');
+      this.callData = {
+        callId: data.call._id,
+        type: data.type,
+        caller: data.caller,
+        receiver: data.call.receiver,
+        conversationId: data.conversationId,
+      };
+      this.callStatus = 'incoming';
+      this.emit('call:incoming', data);
+    });
     socketService.on('call:accepted', (data: any) => {
       console.log('📞 Call accepted:', data);
       this.callStatus = 'connected';
@@ -156,17 +171,18 @@ class CallService {
     conversationId?: string
   ) {
     try {
-      console.log('📞 Initiating call:', { receiverId, type, hasOffer: !!offer });
+      console.log('📞 Initiating call:', { receiverId, type, conversationId, currentUserId: this.currentUserId });
+      console.log('   - receiverId === currentUserId?', receiverId === this.currentUserId);
 
-      
+      // Set status BEFORE emit so the call:incoming guard works
+      this.callStatus = 'calling';
       this.callData = {
-        callId: 'pending', 
+        callId: 'pending',
         type: type,
-        caller: null, 
+        caller: { _id: this.currentUserId },
         receiver: { _id: receiverId },
         conversationId: conversationId,
       };
-      console.log('   - Stored temporary callData');
 
       socketService.emit('call:initiate', {
         receiverId,
@@ -174,8 +190,6 @@ class CallService {
         offer,
         conversationId,
       });
-
-      this.callStatus = 'calling';
     } catch (error) {
       console.error('❌ Error initiating call:', error);
       throw error;

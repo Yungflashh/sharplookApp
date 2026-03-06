@@ -428,7 +428,7 @@ const validateReferralCode = async (code: string) => {
           {/* Logo */}
           <View className="items-center mb-8">
             <Image
-              source={require('@/assets/logo.png')}
+              source={require('@/assets/app-icon.png')}
               className="w-28 h-16"
               resizeMode="contain"
             />

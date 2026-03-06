@@ -9,186 +9,359 @@ import {
   ActivityIndicator,
   Platform,
   TextInput,
+  StatusBar,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '@/types/navigation.types';
 import { orderAPI, handleAPIError } from '@/api/api';
 
-type OrderDetailRouteProp = RouteProp<RootStackParamList, 'OrderDetail'>;
-type OrderDetailNavigationProp = NativeStackNavigationProp<RootStackParamList, 'OrderDetail'>;
+// ─── Brand Tokens ─────────────────────────────────────────────────────────────
+const BRAND = {
+  primary: '#E04079',
+  primaryDark: '#B5315F',
+  primaryLight: '#F08BAC',
+  primarySoft: '#FEF0F5',
+  primaryMuted: '#FCDCE9',
+  blue: '#3B82F6',
+  blueSoft: '#DBEAFE',
+  green: '#10B981',
+  greenSoft: '#D1FAE5',
+  gold: '#F59E0B',
+  goldSoft: '#FEF3C7',
+  orange: '#F97316',
+  orangeSoft: '#FFEDD5',
+  red: '#EF4444',
+  redSoft: '#FEE2E2',
+  purple: '#8B5CF6',
+  purpleSoft: '#EDE9FE',
+  surface: '#FFFFFF',
+  surfaceAlt: '#F9FAFB',
+  border: '#F3F4F6',
+  borderStrong: '#E5E7EB',
+  textPrimary: '#111827',
+  textSecondary: '#6B7280',
+  textMuted: '#9CA3AF',
+};
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+type Nav  = NativeStackNavigationProp<RootStackParamList, 'OrderDetail'>;
+type RouteP = RouteProp<RootStackParamList, 'OrderDetail'>;
+type DisputeReason =
+  | 'product_not_received' | 'product_damaged' | 'wrong_product'
+  | 'product_not_as_described' | 'quality_issue' | 'delivery_issue'
+  | 'payment_issue' | 'other';
 
 interface Order {
   _id: string;
   orderNumber: string;
   items: Array<{
-    product: {
-      _id: string;
-      name: string;
-      images: string[];
-    };
+    product: { _id: string; name: string; images: string[] };
     quantity: number;
     price: number;
-    selectedVariant?: {
-      name: string;
-      option: string;
-    };
+    selectedVariant?: { name: string; option: string };
   }>;
-  customer: {
-    _id: string;
-    firstName: string;
-    lastName: string;
-    email: string;
-    phone?: string;
-  };
-  seller: {
-    _id: string;
-    firstName: string;
-    lastName: string;
-    email: string;
-    phone?: string;
-    vendorProfile?: {
-      businessName: string;
-    };
-  };
+  customer: { _id: string; firstName: string; lastName: string; email: string; phone?: string };
+  seller: { _id: string; firstName: string; lastName: string; email: string; phone?: string; vendorProfile?: { businessName: string } };
+  subtotal: number;
+  deliveryFee: number;
+  discount: number;
   totalAmount: number;
   status: string;
-  paymentStatus: string;
+  paymentMethod?: string;
+  paymentReference?: string;
+  isPaid: boolean;
+  escrowStatus?: string;      // 'held' | 'released' | 'refunded'
+  escrowedAmount?: number;
   deliveryType: 'home_delivery' | 'pickup';
-  deliveryAddress?: {
-    fullName: string;
-    phone: string;
-    address: string;
-    city: string;
-    state: string;
-    additionalInfo?: string;
-  };
+  deliveryAddress?: { fullName: string; phone: string; address: string; city: string; state: string; additionalInfo?: string };
   trackingNumber?: string;
   courierService?: string;
   customerNotes?: string;
   sellerNotes?: string;
   customerConfirmedDelivery: boolean;
   sellerConfirmedDelivery: boolean;
-  canCancel: boolean;
-  dispute?: {
-    _id: string;
-    status: string;
-    reason: string;
-  };
-  timeline: Array<{
-    status: string;
-    timestamp: string;
-    note?: string;
-  }>;
+  canCancel?: boolean;
+  hasDispute: boolean;
+  dispute?: { _id: string; status: string; reason: string };
+  statusHistory: Array<{ status: string; updatedAt: string; note?: string }>;
+  timeline: Array<{ status: string; timestamp: string; note?: string }>; // normalised from statusHistory
+  isRated: boolean;
   createdAt: string;
+  updatedAt: string;
 }
 
+// ─── Status dot color ─────────────────────────────────────────────────────────
+const statusDot = (s: string) => {
+  switch (s.toLowerCase()) {
+    case 'pending':                   return BRAND.gold;
+    case 'confirmed': case 'processing': return BRAND.blue;
+    case 'shipped':                   return BRAND.purple;
+    case 'delivered': case 'completed': return BRAND.green;
+    case 'cancelled':                 return BRAND.red;
+    default:                          return BRAND.textMuted;
+  }
+};
 
-type DisputeReason = 
-  | 'product_not_received'
-  | 'product_damaged'
-  | 'wrong_product'
-  | 'product_not_as_described'
-  | 'quality_issue'
-  | 'delivery_issue'
-  | 'payment_issue'
-  | 'other';
+// ─── Sub-components ───────────────────────────────────────────────────────────
 
+/** Section card wrapper */
+const Card: React.FC<{ children: React.ReactNode; style?: any }> = ({ children, style }) => (
+  <View
+    style={[
+      {
+        backgroundColor: BRAND.surface,
+        borderRadius: 20,
+        padding: 16,
+        marginBottom: 14,
+        borderWidth: 1,
+        borderColor: BRAND.border,
+        ...Platform.select({
+          ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8 },
+          android: { elevation: 2 },
+        }),
+      },
+      style,
+    ]}
+  >
+    {children}
+  </View>
+);
+
+/** Section header row */
+const CardHeader: React.FC<{
+  icon: keyof typeof Ionicons.glyphMap;
+  iconColor: string;
+  iconBg: string;
+  title: string;
+  badge?: React.ReactNode;
+}> = ({ icon, iconColor, iconBg, title, badge }) => (
+  <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 14 }}>
+    <View
+      style={{
+        width: 34, height: 34, borderRadius: 10,
+        backgroundColor: iconBg,
+        alignItems: 'center', justifyContent: 'center',
+        marginRight: 10,
+      }}
+    >
+      <Ionicons name={icon} size={16} color={iconColor} />
+    </View>
+    <Text style={{ fontSize: 15, fontWeight: '800', color: BRAND.textPrimary, flex: 1, letterSpacing: -0.2 }}>
+      {title}
+    </Text>
+    {badge}
+  </View>
+);
+
+/** Key-value info row */
+const InfoRow: React.FC<{
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  value: string;
+  iconColor?: string;
+}> = ({ icon, label, value, iconColor = BRAND.textMuted }) => (
+  <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+    <Ionicons name={icon} size={13} color={iconColor} style={{ marginRight: 8, width: 16 }} />
+    <Text style={{ fontSize: 12, color: BRAND.textMuted, width: 70 }}>{label}</Text>
+    <Text style={{ fontSize: 13, fontWeight: '600', color: BRAND.textPrimary, flex: 1 }}>{value}</Text>
+  </View>
+);
+
+// ─── Main Screen ──────────────────────────────────────────────────────────────
 const OrderDetailScreen: React.FC = () => {
-  const navigation = useNavigation<OrderDetailNavigationProp>();
-  const route = useRoute<OrderDetailRouteProp>();
+  const navigation = useNavigation<Nav>();
+  const route = useRoute<RouteP>();
   const { orderId, userType } = route.params;
+  const insets = useSafeAreaInsets();
 
-  const [loading, setLoading] = useState(true);
-  const [order, setOrder] = useState<Order | null>(null);
+  const [loading, setLoading]                 = useState(true);
+  const [order, setOrder]                     = useState<Order | null>(null);
   const [showDisputeForm, setShowDisputeForm] = useState(false);
-  const [disputeReason, setDisputeReason] = useState<DisputeReason>('product_not_as_described');
+  const [disputeReason, setDisputeReason]     = useState<DisputeReason>('product_not_as_described');
   const [disputeDescription, setDisputeDescription] = useState('');
   const [creatingDispute, setCreatingDispute] = useState(false);
 
-  useEffect(() => {
-    fetchOrder();
-  }, [orderId]);
+  useEffect(() => { fetchOrder(); }, [orderId]);
 
   const fetchOrder = async () => {
     try {
       setLoading(true);
       const response = await orderAPI.getOrderById(orderId);
 
-      
-      console.log('=== Order Detail Response Debug ===');
-      console.log('response.success:', response.success);
-      console.log('response.data type:', typeof response.data);
-      console.log('response.data keys:', Object.keys(response.data || {}));
-      
-      if (response.data?.data) {
-        console.log('response.data.data exists');
-        console.log('response.data.data keys:', Object.keys(response.data.data || {}));
-        
-        if (response.data.data.order) {
-          console.log('response.data.data.order exists!');
-          console.log('Order keys:', Object.keys(response.data.data.order || {}));
+      // ── STRUCTURED DEBUG LOGGING ────────────────────────────────────────
+      console.log('\n╔══════════════════════════════════════════════╗');
+      console.log('║         ORDER DETAIL RESPONSE DEBUG          ║');
+      console.log('╚══════════════════════════════════════════════╝');
+
+      console.log('\n▶ response.success       :', response.success);
+      console.log('▶ typeof response.data   :', typeof response.data);
+      console.log('▶ response.data keys     :', Object.keys(response.data || {}));
+
+      // Layer 1 — response.data
+      const d = response.data;
+      console.log('\n── Layer 1: response.data ──────────────────────');
+      console.log('  response.data                 :', d ? '[object]' : d);
+      console.log('  response.data.order           :', d?.order ? '[object]' : d?.order);
+      console.log('  response.data.data            :', d?.data ? (typeof d.data === 'object' ? '[object]' : d.data) : d?.data);
+
+      // Layer 2 — response.data.data
+      const dd = d?.data;
+      if (dd) {
+        console.log('\n── Layer 2: response.data.data ─────────────────');
+        console.log('  typeof                        :', typeof dd);
+        console.log('  keys                          :', Array.isArray(dd) ? '[array]' : Object.keys(dd));
+        console.log('  .order                        :', dd?.order ? '[object]' : dd?.order);
+        console.log('  .orderNumber                  :', dd?.orderNumber);
+        console.log('  .status                       :', dd?.status);
+      }
+
+      // Layer 3 — response.data.data.order (if present)
+      const ddo = d?.data?.order;
+      if (ddo) {
+        console.log('\n── Layer 3: response.data.data.order ───────────');
+        console.log('  .orderNumber                  :', ddo?.orderNumber);
+        console.log('  .status                       :', ddo?.status);
+        console.log('  .paymentStatus                :', ddo?.paymentStatus);
+        console.log('  .deliveryType                 :', ddo?.deliveryType);
+        console.log('  .totalAmount                  :', ddo?.totalAmount);
+        console.log('  .items (count)                :', Array.isArray(ddo?.items) ? ddo.items.length : 'NOT an array');
+        console.log('  .timeline (count)             :', Array.isArray(ddo?.timeline) ? ddo.timeline.length : 'NOT an array');
+        console.log('  .statusHistory (count)        :', Array.isArray(ddo?.statusHistory) ? ddo.statusHistory.length : 'NOT an array');
+        console.log('  .customer                     :', ddo?.customer ? '[object]' : ddo?.customer);
+        console.log('  .seller                       :', ddo?.seller ? '[object]' : ddo?.seller);
+        console.log('  .deliveryAddress              :', ddo?.deliveryAddress ? '[object]' : ddo?.deliveryAddress);
+        console.log('  .trackingNumber               :', ddo?.trackingNumber);
+        console.log('  .dispute                      :', ddo?.dispute ? '[object]' : ddo?.dispute);
+        console.log('  .canCancel                    :', ddo?.canCancel);
+        console.log('  .customerConfirmedDelivery    :', ddo?.customerConfirmedDelivery);
+        console.log('  .sellerConfirmedDelivery      :', ddo?.sellerConfirmedDelivery);
+
+        if (Array.isArray(ddo?.items) && ddo.items.length > 0) {
+          console.log('\n  ── First item sample ───────────────────────');
+          const fi = ddo.items[0];
+          console.log('    .product                    :', fi?.product ? '[object]' : fi?.product);
+          console.log('    .product._id                :', fi?.product?._id);
+          console.log('    .product.name               :', fi?.product?.name);
+          console.log('    .product.images (count)     :', Array.isArray(fi?.product?.images) ? fi.product.images.length : 'NOT an array');
+          console.log('    .quantity                   :', fi?.quantity);
+          console.log('    .price                      :', fi?.price);
+          console.log('    .selectedVariant            :', fi?.selectedVariant);
+        }
+
+        if (Array.isArray(ddo?.timeline) && ddo.timeline.length > 0) {
+          console.log('\n  ── Timeline events ─────────────────────────');
+          ddo.timeline.forEach((ev: any, i: number) => {
+            console.log(`    [${i}] status: ${ev?.status}, timestamp: ${ev?.timestamp}, note: ${ev?.note ?? '—'}`);
+          });
+        }
+
+        if (ddo?.customer) {
+          console.log('\n  ── customer ────────────────────────────────');
+          const c = ddo.customer;
+          console.log('    ._id                        :', c?._id);
+          console.log('    .firstName                  :', c?.firstName);
+          console.log('    .lastName                   :', c?.lastName);
+          console.log('    .email                      :', c?.email);
+          console.log('    .phone                      :', c?.phone);
+        }
+
+        if (ddo?.seller) {
+          console.log('\n  ── seller ──────────────────────────────────');
+          const s = ddo.seller;
+          console.log('    ._id                        :', s?._id);
+          console.log('    .firstName                  :', s?.firstName);
+          console.log('    .lastName                   :', s?.lastName);
+          console.log('    .email                      :', s?.email);
+          console.log('    .phone                      :', s?.phone);
+          console.log('    .vendorProfile?.businessName:', s?.vendorProfile?.businessName);
+        }
+
+        if (ddo?.dispute) {
+          console.log('\n  ── dispute ─────────────────────────────────');
+          console.log('    ._id                        :', ddo.dispute?._id);
+          console.log('    .status                     :', ddo.dispute?.status);
+          console.log('    .reason                     :', ddo.dispute?.reason);
         }
       }
 
+      // Fallback path — response.data.order
+      if (d?.order && !ddo) {
+        console.log('\n── Fallback path: response.data.order ──────────');
+        const o = d.order;
+        console.log('  .orderNumber                  :', o?.orderNumber);
+        console.log('  .status                       :', o?.status);
+        console.log('  .items (count)                :', Array.isArray(o?.items) ? o.items.length : 'NOT an array');
+        console.log('  .timeline (count)             :', Array.isArray(o?.timeline) ? o.timeline.length : 'NOT an array');
+      }
+
+      console.log('\n════════════════════════════════════════════════\n');
+      // ── END DEBUG LOGGING ───────────────────────────────────────────────
+
       if (response.success) {
-        
-        let orderData = null;
-        
-        
-        if (response.data?.data?.order) {
-          orderData = response.data.data.order;
-          console.log('✅ Found order at: response.data.data.order');
-        } else if (response.data?.order) {
-          orderData = response.data.order;
-          console.log('✅ Found order at: response.data.order');
-        } else if (response.data?.data && !response.data.data.order) {
-          orderData = response.data.data;
-          console.log('✅ Found order at: response.data.data (direct)');
-        }
-        
+        let orderData: any = null;
+
+        // ✅ Confirmed shape: response.data.order (from logs)
+        if (response.data?.order)                                  orderData = response.data.order;
+        else if (response.data?.data?.order)                       orderData = response.data.data.order;
+        else if (response.data?.data && !response.data.data.order) orderData = response.data.data;
+
         if (orderData) {
-          
-          const safeOrder = {
-            ...orderData,
-            items: Array.isArray(orderData.items) ? orderData.items : [],
-            timeline: Array.isArray(orderData.timeline) 
-              ? orderData.timeline 
-              : Array.isArray(orderData.statusHistory)
-              ? orderData.statusHistory.map((h: any) => ({
-                  status: h.status,
-                  timestamp: h.updatedAt || h.timestamp,
-                  note: h.note
-                }))
-              : [],
-            customer: orderData.customer || {
-              _id: '',
-              firstName: 'Unknown',
-              lastName: 'Customer',
-              email: '',
-            },
-            seller: orderData.seller || {
-              _id: '',
-              firstName: 'Unknown',
-              lastName: 'Seller',
-              email: '',
-            },
+          // Discover which key holds timeline events
+          console.log('\n── Timeline field discovery ────────────────');
+          console.log('  all orderData keys            :', Object.keys(orderData));
+          console.log('  .timeline                     :', Array.isArray(orderData.timeline) ? `array[${orderData.timeline.length}]` : orderData.timeline);
+          console.log('  .statusHistory                :', Array.isArray(orderData.statusHistory) ? `array[${orderData.statusHistory.length}]` : orderData.statusHistory);
+          console.log('  .orderHistory                 :', Array.isArray(orderData.orderHistory) ? `array[${orderData.orderHistory.length}]` : orderData.orderHistory);
+          console.log('  .history                      :', Array.isArray(orderData.history) ? `array[${orderData.history.length}]` : orderData.history);
+          console.log('  .events                       :', Array.isArray(orderData.events) ? `array[${orderData.events.length}]` : orderData.events);
+
+          // Log the actual statusHistory entries so we can see their shape
+          if (Array.isArray(orderData.statusHistory)) {
+            console.log('\n── statusHistory entries ────────────────────');
+            orderData.statusHistory.forEach((h: any, i: number) => {
+              console.log(`  [${i}] keys:`, Object.keys(h));
+              console.log(`  [${i}] full:`, JSON.stringify(h));
+            });
+          }
+          console.log('────────────────────────────────────────────────\n');
+
+          // Resolve timeline — confirmed shape: statusHistory[].{ status, updatedAt, updatedBy, _id }
+          const resolveTimeline = () => {
+            if (Array.isArray(orderData.statusHistory) && orderData.statusHistory.length > 0) {
+              return orderData.statusHistory.map((h: any) => ({
+                status:    h.status,
+                timestamp: h.updatedAt,   // confirmed key from logs
+                note:      h.note || undefined,
+              }));
+            }
+            if (Array.isArray(orderData.timeline) && orderData.timeline.length > 0)
+              return orderData.timeline;
+            return [];
           };
-          
-          console.log(`✅ Loaded order ${safeOrder.orderNumber} with ${safeOrder.items.length} items and ${safeOrder.timeline.length} timeline events`);
-          setOrder(safeOrder);
+
+          setOrder({
+            ...orderData,
+            items:    Array.isArray(orderData.items) ? orderData.items : [],
+            timeline: resolveTimeline(),
+            // Normalise statusHistory so existing timeline UI works
+            statusHistory: Array.isArray(orderData.statusHistory) ? orderData.statusHistory : [],
+            // Alias escrowStatus → paymentStatus for display
+            paymentStatus: orderData.escrowStatus || (orderData.isPaid ? 'paid' : 'pending'),
+            // canCancel may not come from API — derive from status
+            canCancel: orderData.canCancel ?? ['pending', 'processing'].includes(orderData.status),
+            customer: orderData.customer || { _id: '', firstName: 'Unknown', lastName: 'Customer', email: '' },
+            seller:   orderData.seller   || { _id: '', firstName: 'Unknown', lastName: 'Seller',   email: '' },
+          });
         } else {
-          console.error('❌ Order data not found in any expected location');
           throw new Error('Order data not found in response');
         }
       }
     } catch (error) {
-      const apiError = handleAPIError(error);
-      console.error('Fetch order error:', apiError);
-      Alert.alert('Error', apiError.message);
+      Alert.alert('Error', handleAPIError(error).message);
       navigation.goBack();
     } finally {
       setLoading(false);
@@ -197,722 +370,609 @@ const OrderDetailScreen: React.FC = () => {
 
   const handleCreateDispute = async () => {
     if (!order) return;
-
-    
-    const trimmedDescription = disputeDescription.trim();
-    
-    if (!trimmedDescription) {
-      Alert.alert('Required', 'Please provide a description for the dispute');
-      return;
-    }
-
-    if (trimmedDescription.length < 20) {
-      Alert.alert('Too Short', 'Please provide a more detailed description (at least 20 characters)');
-      return;
-    }
-
-    if (trimmedDescription.length > 2000) {
-      Alert.alert('Too Long', 'Description cannot exceed 2000 characters');
-      return;
-    }
-
+    const trimmed = disputeDescription.trim();
+    if (!trimmed)              { Alert.alert('Required', 'Please provide a description');                          return; }
+    if (trimmed.length < 20)   { Alert.alert('Too Short', 'Please provide at least 20 characters');               return; }
+    if (trimmed.length > 2000) { Alert.alert('Too Long', 'Description cannot exceed 2000 characters');             return; }
     try {
       setCreatingDispute(true);
-
-      const disputeData = {
-        order: order._id,         
-        reason: disputeReason,    
-        description: trimmedDescription,
-      };
-
-      console.log('Creating dispute with data:', disputeData);
-
-      const response = await orderAPI.createDispute(disputeData);
-
+      const response = await orderAPI.createDispute({ order: order._id, reason: disputeReason, description: trimmed });
       if (response.success) {
-        Alert.alert(
-          'Dispute Created',
-          'Your dispute has been submitted. Our team will review it shortly.',
-          [
-            {
-              text: 'OK',
-              onPress: () => {
-                setShowDisputeForm(false);
-                setDisputeDescription('');
-                fetchOrder();
-              },
-            },
-          ]
-        );
+        Alert.alert('Dispute Created', 'Your dispute has been submitted. Our team will review it shortly.', [
+          { text: 'OK', onPress: () => { setShowDisputeForm(false); setDisputeDescription(''); fetchOrder(); } },
+        ]);
       }
     } catch (error) {
-      const apiError = handleAPIError(error);
-      Alert.alert('Error', apiError.message || 'Failed to create dispute');
+      Alert.alert('Error', handleAPIError(error).message || 'Failed to create dispute');
     } finally {
       setCreatingDispute(false);
     }
   };
 
- const handleFetchDisputeStatus = async ()=>{
-  if (order?.dispute){
-    const response = await orderAPI.getDisputeById(order.dispute)
-    const disputeorderId = response.data.dispute._id
-    console.log(response.data.dispute._id);
-    
-    
-    navigation.navigate("DisputeOrderDetail", { 
-      disputeorderId,
-      userType: 'customer' 
-    })
-  }
-}
-  const formatPrice = (price: number) => {
-    return `₦${price.toLocaleString()}`;
-  };
-
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  };
-
-  const getStatusColor = (status: string) => {
-    switch (status.toLowerCase()) {
-      case 'pending':
-        return '#fbbf24';
-      case 'confirmed':
-      case 'processing':
-        return '#3b82f6';
-      case 'shipped':
-        return '#a855f7';
-      case 'delivered':
-      case 'completed':
-        return '#10b981';
-      case 'cancelled':
-        return '#ef4444';
-      default:
-        return '#6b7280';
+  const handleFetchDisputeStatus = async () => {
+    if (order?.dispute) {
+      const response = await orderAPI.getDisputeById(order.dispute);
+      navigation.navigate('DisputeOrderDetail', { disputeorderId: response.data.dispute._id, userType: 'customer' });
     }
   };
 
+  const formatPrice = (p: number) => `₦${p.toLocaleString()}`;
+  const formatDate  = (d: string) =>
+    new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+  const DISPUTE_CATEGORIES: { key: DisputeReason; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
+    { key: 'product_not_as_described', label: 'Not As Described', icon: 'document-text-outline' },
+    { key: 'product_not_received',     label: 'Not Received',     icon: 'close-circle-outline'  },
+    { key: 'product_damaged',          label: 'Damaged',          icon: 'alert-circle-outline'  },
+    { key: 'wrong_product',            label: 'Wrong Product',    icon: 'swap-horizontal-outline'},
+    { key: 'quality_issue',            label: 'Quality Issue',    icon: 'thumbs-down-outline'   },
+    { key: 'delivery_issue',           label: 'Delivery Issue',   icon: 'car-outline'           },
+    { key: 'payment_issue',            label: 'Payment Issue',    icon: 'card-outline'          },
+    { key: 'other',                    label: 'Other',            icon: 'ellipsis-horizontal'   },
+  ];
+
+  // ── Loading ────────────────────────────────────────────────────────────────
   if (loading) {
     return (
-      <SafeAreaView className="flex-1 bg-white">
-        <View className="flex-1 items-center justify-center">
-          <ActivityIndicator size="large" color="#eb278d" />
-          <Text className="text-gray-500 text-sm mt-4 font-medium">Loading order details...</Text>
+      <SafeAreaView style={{ flex: 1, backgroundColor: BRAND.surfaceAlt }}>
+        <StatusBar barStyle="dark-content" />
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+          <ActivityIndicator size="large" color={BRAND.primary} />
+          <Text style={{ color: BRAND.textMuted, fontSize: 14, marginTop: 12, fontWeight: '500' }}>
+            Loading order details…
+          </Text>
         </View>
       </SafeAreaView>
     );
   }
 
-  if (!order) {
-    return null;
-  }
+  if (!order) return null;
 
-  
-  const orderItems = Array.isArray(order.items) ? order.items : [];
+  const orderItems    = Array.isArray(order.items)    ? order.items    : [];
   const orderTimeline = Array.isArray(order.timeline) ? order.timeline : [];
+  const subtotal      = orderItems.reduce((s, i) => s + (i?.price || 0) * (i?.quantity || 0), 0);
+  const dot           = statusDot(order.status);
 
-  
-  const disputeCategories = [
-    { key: 'product_not_as_described' as DisputeReason, label: 'Not As Described', icon: 'document-text' },
-    { key: 'product_not_received' as DisputeReason, label: 'Not Received', icon: 'close-circle' },
-    { key: 'product_damaged' as DisputeReason, label: 'Damaged', icon: 'alert-circle' },
-    { key: 'wrong_product' as DisputeReason, label: 'Wrong Product', icon: 'swap-horizontal' },
-    { key: 'quality_issue' as DisputeReason, label: 'Quality Issue', icon: 'thumbs-down' },
-    { key: 'delivery_issue' as DisputeReason, label: 'Delivery Issue', icon: 'car' },
-    { key: 'payment_issue' as DisputeReason, label: 'Payment Issue', icon: 'card' },
-    { key: 'other' as DisputeReason, label: 'Other', icon: 'ellipsis-horizontal' },
-  ];
+  const personName = userType === 'vendor'
+    ? `${order.customer?.firstName || 'Unknown'} ${order.customer?.lastName || 'Customer'}`
+    : order.seller?.vendorProfile?.businessName || `${order.seller?.firstName || 'Unknown'} ${order.seller?.lastName || 'Seller'}`;
+  const personEmail = userType === 'vendor' ? order.customer?.email  : order.seller?.email;
+  const personPhone = userType === 'vendor' ? order.customer?.phone  : order.seller?.phone;
 
+  // ─────────────────────────────────────────────────────────────────────────
   return (
-    <SafeAreaView className="flex-1 bg-gray-50" edges={['top']}>
-      {}
-      <LinearGradient
-        colors={['#eb278d', '#f472b6']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
+    <SafeAreaView style={{ flex: 1, backgroundColor: BRAND.surfaceAlt }} edges={['top']}>
+      <StatusBar barStyle="dark-content" backgroundColor={BRAND.surface} />
+
+      {/* ── HEADER ───────────────────────────────────────────────────────── */}
+      <View
         style={{
-          shadowColor: '#eb278d',
-          shadowOffset: { width: 0, height: 4 },
-          shadowOpacity: 0.3,
-          shadowRadius: 8,
-          elevation: 8,
+          backgroundColor: BRAND.surface,
+          paddingHorizontal: 20, paddingTop: 10, paddingBottom: 14,
+          borderBottomWidth: 1, borderBottomColor: BRAND.border,
+          flexDirection: 'row', alignItems: 'center',
+          ...Platform.select({
+            ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8 },
+            android: { elevation: 3 },
+          }),
         }}
       >
-        <View className="px-5 py-4">
-          <View className="flex-row items-center">
-            <TouchableOpacity
-              onPress={() => navigation.goBack()}
-              className="w-10 h-10 rounded-full bg-white/20 items-center justify-center mr-3"
-              activeOpacity={0.7}
-            >
-              <Ionicons name="arrow-back" size={24} color="#fff" />
-            </TouchableOpacity>
-            <View className="flex-1">
-              <Text className="text-lg font-bold text-white">Order Details</Text>
-              <Text className="text-sm text-white/90">#{order.orderNumber || 'N/A'}</Text>
-            </View>
-          </View>
+        <TouchableOpacity
+          onPress={() => navigation.goBack()}
+          activeOpacity={0.8}
+          style={{
+            width: 40, height: 40, borderRadius: 13,
+            backgroundColor: BRAND.surfaceAlt,
+            alignItems: 'center', justifyContent: 'center',
+            borderWidth: 1, borderColor: BRAND.border,
+            marginRight: 12,
+          }}
+        >
+          <Ionicons name="arrow-back" size={20} color={BRAND.textPrimary} />
+        </TouchableOpacity>
+
+        <View style={{ flex: 1 }}>
+          <Text style={{ fontSize: 20, fontWeight: '800', color: BRAND.textPrimary, letterSpacing: -0.4 }}>
+            Order Details
+          </Text>
+          <Text style={{ fontSize: 12, color: BRAND.textMuted, fontWeight: '500', marginTop: 1 }}>
+            #{order.orderNumber || 'N/A'}
+          </Text>
         </View>
-      </LinearGradient>
 
-      <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
-        <View className="p-4">
-          {}
-          <View className="bg-white rounded-3xl p-5 mb-4"
-            style={{
-              shadowColor: '#000',
-              shadowOffset: { width: 0, height: 2 },
-              shadowOpacity: 0.08,
-              shadowRadius: 8,
-              elevation: 4,
-            }}
-          >
-            <View className="flex-row items-center justify-between mb-5">
-              <Text className="text-gray-900 text-lg font-bold">Order Status</Text>
-              <View
-                className="px-4 py-2 rounded-full"
-                style={{ backgroundColor: `${getStatusColor(order.status)}15` }}
-              >
-                <Text
-                  className="text-sm font-bold capitalize"
-                  style={{ color: getStatusColor(order.status) }}
-                >
-                  {order.status}
-                </Text>
-              </View>
-            </View>
+        {/* Live status pill */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: `${dot}18`, paddingHorizontal: 11, paddingVertical: 6, borderRadius: 20 }}>
+          <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: dot, marginRight: 5 }} />
+          <Text style={{ fontSize: 11, fontWeight: '700', color: dot, textTransform: 'capitalize' }}>
+            {order.status.replace('_', ' ')}
+          </Text>
+        </View>
+      </View>
 
-            {}
-            {orderTimeline.length > 0 && (
-              <View style={{ gap: 16 }}>
-                {orderTimeline.map((event, index) => (
-                  <View key={index} className="flex-row">
-                    <View className="items-center mr-4">
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
+
+        {/* ── ORDER STATUS + TIMELINE ──────────────────────────────────── */}
+        <Card>
+          <CardHeader icon="pulse-outline" iconColor={dot} iconBg={`${dot}18`} title="Order Timeline" />
+
+          {orderTimeline.length > 0 ? (
+            <View>
+              {orderTimeline.map((event, index) => {
+                const d = statusDot(event.status);
+                const isLast = index === orderTimeline.length - 1;
+                return (
+                  <View key={index} style={{ flexDirection: 'row' }}>
+                    {/* Dot + line */}
+                    <View style={{ alignItems: 'center', marginRight: 14, width: 16 }}>
                       <View
-                        className="w-4 h-4 rounded-full"
-                        style={{ 
-                          backgroundColor: getStatusColor(event.status),
-                          shadowColor: getStatusColor(event.status),
-                          shadowOffset: { width: 0, height: 2 },
-                          shadowOpacity: 0.4,
-                          shadowRadius: 4,
-                          elevation: 3,
+                        style={{
+                          width: 14, height: 14, borderRadius: 7,
+                          backgroundColor: d,
+                          ...Platform.select({
+                            ios: { shadowColor: d, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.4, shadowRadius: 4 },
+                            android: { elevation: 2 },
+                          }),
                         }}
                       />
-                      {index < orderTimeline.length - 1 && (
-                        <View 
-                          className="w-0.5 flex-1 mt-2"
-                          style={{ backgroundColor: `${getStatusColor(event.status)}30` }}
-                        />
+                      {!isLast && (
+                        <View style={{ width: 2, flex: 1, marginTop: 4, backgroundColor: `${d}30`, minHeight: 20 }} />
                       )}
                     </View>
-                    <View className="flex-1 pb-2">
-                      <Text className="text-gray-900 text-sm font-bold capitalize mb-1">
-                        {event.status.replace('_', ' ')}
+
+                    {/* Content */}
+                    <View style={{ flex: 1, paddingBottom: isLast ? 0 : 16 }}>
+                      <Text style={{ fontSize: 13, fontWeight: '700', color: BRAND.textPrimary, marginBottom: 2, textTransform: 'capitalize' }}>
+                        {event.status.replace(/_/g, ' ')}
                       </Text>
-                      <Text className="text-gray-500 text-xs">
+                      <Text style={{ fontSize: 11, color: BRAND.textMuted, fontWeight: '500' }}>
                         {formatDate(event.timestamp)}
                       </Text>
                       {event.note && (
-                        <Text className="text-gray-600 text-xs mt-2 bg-gray-50 p-2 rounded-lg">
-                          {event.note}
-                        </Text>
-                      )}
-                    </View>
-                  </View>
-                ))}
-              </View>
-            )}
-          </View>
-
-          {}
-          {orderItems.length > 0 && (
-            <View className="bg-white rounded-3xl p-5 mb-4"
-              style={{
-                shadowColor: '#000',
-                shadowOffset: { width: 0, height: 2 },
-                shadowOpacity: 0.08,
-                shadowRadius: 8,
-                elevation: 4,
-              }}
-            >
-              <Text className="text-gray-900 text-lg font-bold mb-4">Order Items</Text>
-              {orderItems.map((item, index) => (
-                <View
-                  key={index}
-                  className={`${
-                    index < orderItems.length - 1 ? 'mb-4 pb-4 border-b border-gray-100' : ''
-                  }`}
-                >
-                  <View className="flex-row items-center">
-                    <View className="relative">
-                      <Image
-                        source={{ 
-                          uri: item?.product?.images?.[0] || 'https://via.placeholder.com/150' 
-                        }}
-                        className="w-24 h-24 rounded-2xl"
-                        resizeMode="cover"
-                      />
-                      <View className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-pink-500 items-center justify-center"
-                        style={{
-                          shadowColor: '#eb278d',
-                          shadowOffset: { width: 0, height: 2 },
-                          shadowOpacity: 0.4,
-                          shadowRadius: 4,
-                          elevation: 4,
-                        }}
-                      >
-                        <Text className="text-white text-xs font-bold">{item?.quantity || 0}</Text>
-                      </View>
-                    </View>
-                    <View className="flex-1 ml-4">
-                      <Text className="text-gray-900 text-base font-bold mb-2">
-                        {item?.product?.name || 'Product'}
-                      </Text>
-                      {item?.selectedVariant && (
-                        <View className="bg-gray-100 px-3 py-1.5 rounded-full self-start mb-2">
-                          <Text className="text-gray-600 text-xs font-medium">
-                            {item.selectedVariant.name}: {item.selectedVariant.option}
-                          </Text>
+                        <View style={{ backgroundColor: BRAND.surfaceAlt, borderRadius: 9, padding: 9, marginTop: 6, borderWidth: 1, borderColor: BRAND.border }}>
+                          <Text style={{ fontSize: 12, color: BRAND.textSecondary, lineHeight: 17 }}>{event.note}</Text>
                         </View>
                       )}
-                      <Text className="text-pink-600 text-lg font-bold">
-                        {formatPrice((item?.price || 0) * (item?.quantity || 0))}
-                      </Text>
                     </View>
                   </View>
-                </View>
-              ))}
+                );
+              })}
             </View>
+          ) : (
+            <Text style={{ fontSize: 13, color: BRAND.textMuted, fontStyle: 'italic' }}>No timeline events yet.</Text>
           )}
+        </Card>
 
-          {}
-          <View className="bg-white rounded-3xl p-5 mb-4"
-            style={{
-              shadowColor: '#000',
-              shadowOffset: { width: 0, height: 2 },
-              shadowOpacity: 0.08,
-              shadowRadius: 8,
-              elevation: 4,
-            }}
-          >
-            <View className="flex-row items-center mb-4">
-              <View className="w-10 h-10 rounded-full bg-pink-100 items-center justify-center mr-3">
-                <Ionicons name="person" size={20} color="#eb278d" />
-              </View>
-              <Text className="text-gray-900 text-lg font-bold">
-                {userType === 'vendor' ? 'Customer' : 'Seller'} Information
-              </Text>
-            </View>
+        {/* ── ORDER ITEMS ──────────────────────────────────────────────── */}
+        {orderItems.length > 0 && (
+          <Card>
+            <CardHeader icon="bag-outline" iconColor={BRAND.primary} iconBg={BRAND.primarySoft} title="Order Items" />
 
-            {userType === 'vendor' ? (
-              <View className="bg-gray-50 rounded-2xl p-4">
-                <Text className="text-gray-900 text-base font-bold mb-2">
-                  {order.customer?.firstName || 'Unknown'} {order.customer?.lastName || 'Customer'}
-                </Text>
-                <View className="flex-row items-center mb-1.5">
-                  <Ionicons name="mail" size={14} color="#6b7280" />
-                  <Text className="text-gray-600 text-sm ml-2">{order.customer?.email || 'N/A'}</Text>
-                </View>
-                {order.customer?.phone && (
-                  <View className="flex-row items-center">
-                    <Ionicons name="call" size={14} color="#6b7280" />
-                    <Text className="text-gray-600 text-sm ml-2">{order.customer.phone}</Text>
-                  </View>
-                )}
-              </View>
-            ) : (
-              <View className="bg-gray-50 rounded-2xl p-4">
-                <Text className="text-gray-900 text-base font-bold mb-2">
-                  {order.seller?.vendorProfile?.businessName ||
-                    `${order.seller?.firstName || 'Unknown'} ${order.seller?.lastName || 'Seller'}`}
-                </Text>
-                <View className="flex-row items-center mb-1.5">
-                  <Ionicons name="mail" size={14} color="#6b7280" />
-                  <Text className="text-gray-600 text-sm ml-2">{order.seller?.email || 'N/A'}</Text>
-                </View>
-                {order.seller?.phone && (
-                  <View className="flex-row items-center">
-                    <Ionicons name="call" size={14} color="#6b7280" />
-                    <Text className="text-gray-600 text-sm ml-2">{order.seller.phone}</Text>
-                  </View>
-                )}
-              </View>
-            )}
-          </View>
-
-          {}
-          <View className="bg-white rounded-3xl p-5 mb-4"
-            style={{
-              shadowColor: '#000',
-              shadowOffset: { width: 0, height: 2 },
-              shadowOpacity: 0.08,
-              shadowRadius: 8,
-              elevation: 4,
-            }}
-          >
-            <View className="flex-row items-center mb-4">
-              <View className="w-10 h-10 rounded-full bg-blue-100 items-center justify-center mr-3">
-                <Ionicons name="location" size={20} color="#3b82f6" />
-              </View>
-              <Text className="text-gray-900 text-lg font-bold">Delivery Information</Text>
-            </View>
-
-            <View className="bg-gray-50 rounded-2xl p-4 mb-3">
-              <Text className="text-gray-500 text-xs font-semibold mb-1">Delivery Type</Text>
-              <Text className="text-gray-900 text-base font-bold capitalize">
-                {order.deliveryType?.replace('_', ' ') || 'N/A'}
-              </Text>
-            </View>
-
-            {order.deliveryAddress && (
-              <View className="bg-gray-50 rounded-2xl p-4 mb-3">
-                <Text className="text-gray-500 text-xs font-semibold mb-2">Delivery Address</Text>
-                <Text className="text-gray-900 text-base font-bold mb-2">
-                  {order.deliveryAddress.fullName}
-                </Text>
-                <Text className="text-gray-700 text-sm mb-1">{order.deliveryAddress.address}</Text>
-                <Text className="text-gray-700 text-sm mb-1">
-                  {order.deliveryAddress.city}, {order.deliveryAddress.state}
-                </Text>
-                <View className="flex-row items-center mt-2">
-                  <Ionicons name="call" size={14} color="#6b7280" />
-                  <Text className="text-gray-600 text-sm ml-2">{order.deliveryAddress.phone}</Text>
-                </View>
-                {order.deliveryAddress.additionalInfo && (
-                  <Text className="text-gray-500 text-xs mt-2 italic">
-                    {order.deliveryAddress.additionalInfo}
-                  </Text>
-                )}
-              </View>
-            )}
-
-            {order.trackingNumber && (
-              <LinearGradient
-                colors={['#a855f7', '#c084fc']}
-                className="p-4 rounded-2xl"
+            {orderItems.map((item, index) => (
+              <View
+                key={index}
+                style={[
+                  { flexDirection: 'row', alignItems: 'center' },
+                  index < orderItems.length - 1 && {
+                    marginBottom: 12, paddingBottom: 12,
+                    borderBottomWidth: 1, borderBottomColor: BRAND.border,
+                  },
+                ]}
               >
-                <View className="flex-row items-center mb-2">
-                  <Ionicons name="cube" size={18} color="#fff" />
-                  <Text className="text-white text-xs font-bold ml-2">TRACKING NUMBER</Text>
+                <View style={{ position: 'relative' }}>
+                  <Image
+                    source={{ uri: item?.product?.images?.[0] || 'https://via.placeholder.com/150' }}
+                    style={{ width: 80, height: 80, borderRadius: 13 }}
+                    resizeMode="cover"
+                  />
+                  {/* Qty badge */}
+                  <View
+                    style={{
+                      position: 'absolute', top: -5, right: -5,
+                      width: 22, height: 22, borderRadius: 7,
+                      backgroundColor: BRAND.primary,
+                      alignItems: 'center', justifyContent: 'center',
+                      borderWidth: 2, borderColor: BRAND.surface,
+                    }}
+                  >
+                    <Text style={{ color: '#fff', fontSize: 10, fontWeight: '800' }}>{item?.quantity || 0}</Text>
+                  </View>
                 </View>
-                <Text className="text-white text-xl font-bold mb-1">
-                  {order.trackingNumber}
-                </Text>
-                {order.courierService && (
-                  <Text className="text-white/90 text-sm">{order.courierService}</Text>
-                )}
-              </LinearGradient>
-            )}
-          </View>
 
-          {}
-          <View className="bg-white rounded-3xl p-5 mb-4"
-            style={{
-              shadowColor: '#000',
-              shadowOffset: { width: 0, height: 2 },
-              shadowOpacity: 0.08,
-              shadowRadius: 8,
-              elevation: 4,
-            }}
-          >
-            <View className="flex-row items-center mb-4">
-              <View className="w-10 h-10 rounded-full bg-green-100 items-center justify-center mr-3">
-                <Ionicons name="wallet" size={20} color="#10b981" />
-              </View>
-              <Text className="text-gray-900 text-lg font-bold">Payment Summary</Text>
-            </View>
-
-            <View style={{ gap: 14 }}>
-              <View className="flex-row justify-between items-center">
-                <Text className="text-gray-600 text-sm">Subtotal</Text>
-                <Text className="text-gray-900 text-base font-bold">
-                  {formatPrice(
-                    orderItems.reduce((sum, item) => sum + (item?.price || 0) * (item?.quantity || 0), 0)
+                <View style={{ flex: 1, marginLeft: 12 }}>
+                  <Text style={{ fontSize: 14, fontWeight: '700', color: BRAND.textPrimary, marginBottom: 4 }} numberOfLines={2}>
+                    {item?.product?.name || 'Product'}
+                  </Text>
+                  {item?.selectedVariant && (
+                    <View style={{ backgroundColor: BRAND.surfaceAlt, borderRadius: 8, paddingHorizontal: 9, paddingVertical: 4, alignSelf: 'flex-start', marginBottom: 5, borderWidth: 1, borderColor: BRAND.border }}>
+                      <Text style={{ fontSize: 11, color: BRAND.textSecondary, fontWeight: '500' }}>
+                        {item.selectedVariant.name}: {item.selectedVariant.option}
+                      </Text>
+                    </View>
                   )}
-                </Text>
-              </View>
-
-              <View className="flex-row justify-between items-center pb-4 border-b border-gray-200">
-                <Text className="text-gray-600 text-sm">Delivery Fee</Text>
-                <Text className="text-gray-900 text-base font-bold">
-                  {order.deliveryType === 'pickup' ? 'Free' : 'Included'}
-                </Text>
-              </View>
-
-              <View className="flex-row justify-between items-center bg-pink-50 -mx-5 -mb-5 px-5 py-4 rounded-b-3xl">
-                <Text className="text-gray-900 text-lg font-bold">Total Amount</Text>
-                <Text className="text-pink-600 text-2xl font-bold">
-                  {formatPrice(order.totalAmount || 0)}
-                </Text>
-              </View>
-
-              <View className="bg-gray-100 p-3 rounded-2xl -mb-5 -mx-5 mx-5 mt-4">
-                <View className="flex-row justify-between items-center">
-                  <Text className="text-gray-600 text-sm font-medium">Payment Status</Text>
-                  <View className="bg-white px-3 py-1.5 rounded-full">
-                    <Text className="text-gray-900 text-sm font-bold capitalize">
-                      {order.paymentStatus || 'pending'}
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <Text style={{ fontSize: 11, color: BRAND.textMuted }}>×{item?.quantity || 0} @ {formatPrice(item?.price || 0)}</Text>
+                    <Text style={{ fontSize: 15, fontWeight: '800', color: BRAND.primary }}>
+                      {formatPrice((item?.price || 0) * (item?.quantity || 0))}
                     </Text>
                   </View>
                 </View>
               </View>
+            ))}
+          </Card>
+        )}
+
+        {/* ── PERSON INFO — vendor only (seller details hidden from customers) ── */}
+        {userType === 'vendor' && (
+          <Card>
+            <CardHeader
+              icon="person-outline"
+              iconColor={BRAND.primary}
+              iconBg={BRAND.primarySoft}
+              title="Customer Information"
+            />
+            <View style={{ backgroundColor: BRAND.surfaceAlt, borderRadius: 13, padding: 14, borderWidth: 1, borderColor: BRAND.border }}>
+              <Text style={{ fontSize: 15, fontWeight: '700', color: BRAND.textPrimary, marginBottom: 10 }}>
+                {personName}
+              </Text>
+              <InfoRow icon="mail-outline" label="Email" value={personEmail || 'N/A'} />
+              {personPhone && <InfoRow icon="call-outline" label="Phone" value={personPhone} />}
             </View>
+          </Card>
+        )}
+
+        {/* ── DELIVERY INFO ────────────────────────────────────────────── */}
+        <Card>
+          <CardHeader icon="location-outline" iconColor={BRAND.blue} iconBg={BRAND.blueSoft} title="Delivery Information" />
+
+          {/* Delivery type chip */}
+          <View
+            style={{
+              flexDirection: 'row', alignItems: 'center',
+              backgroundColor: BRAND.surfaceAlt,
+              borderRadius: 11, paddingHorizontal: 12, paddingVertical: 10,
+              marginBottom: 10, borderWidth: 1, borderColor: BRAND.border,
+            }}
+          >
+            <Ionicons
+              name={order.deliveryType === 'home_delivery' ? 'home-outline' : 'storefront-outline'}
+              size={14} color={BRAND.blue} style={{ marginRight: 8 }}
+            />
+            <Text style={{ fontSize: 11, fontWeight: '700', color: BRAND.textMuted, letterSpacing: 0.5, textTransform: 'uppercase', marginRight: 8 }}>
+              Type
+            </Text>
+            <Text style={{ fontSize: 13, fontWeight: '700', color: BRAND.textPrimary, textTransform: 'capitalize' }}>
+              {order.deliveryType?.replace('_', ' ') || 'N/A'}
+            </Text>
           </View>
 
-          {}
-          {(order.customerNotes || order.sellerNotes) && (
-            <View className="bg-white rounded-3xl p-5 mb-4"
-              style={{
-                shadowColor: '#000',
-                shadowOffset: { width: 0, height: 2 },
-                shadowOpacity: 0.08,
-                shadowRadius: 8,
-                elevation: 4,
-              }}
-            >
-              <View className="flex-row items-center mb-4">
-                <View className="w-10 h-10 rounded-full bg-yellow-100 items-center justify-center mr-3">
-                  <Ionicons name="document-text" size={20} color="#f59e0b" />
-                </View>
-                <Text className="text-gray-900 text-lg font-bold">Notes</Text>
-              </View>
-
-              {order.customerNotes && (
-                <View className="bg-blue-50 p-4 rounded-2xl mb-3">
-                  <Text className="text-blue-900 text-xs font-bold mb-2">Customer Notes</Text>
-                  <Text className="text-blue-800 text-sm leading-5">{order.customerNotes}</Text>
-                </View>
-              )}
-
-              {order.sellerNotes && (
-                <View className="bg-purple-50 p-4 rounded-2xl">
-                  <Text className="text-purple-900 text-xs font-bold mb-2">Seller Notes</Text>
-                  <Text className="text-purple-800 text-sm leading-5">{order.sellerNotes}</Text>
+          {/* Address block — only for home delivery */}
+          {order.deliveryAddress && order.deliveryType === 'home_delivery' && (
+            <View style={{ backgroundColor: BRAND.surfaceAlt, borderRadius: 13, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: BRAND.border }}>
+              <Text style={{ fontSize: 10, fontWeight: '700', color: BRAND.textMuted, letterSpacing: 0.6, textTransform: 'uppercase', marginBottom: 8 }}>
+                Delivery Address
+              </Text>
+              <Text style={{ fontSize: 14, fontWeight: '700', color: BRAND.textPrimary, marginBottom: 6 }}>
+                {order.deliveryAddress.fullName}
+              </Text>
+              <InfoRow icon="location-outline"  label="Address" value={order.deliveryAddress.address} />
+              <InfoRow icon="business-outline"  label="City"    value={`${order.deliveryAddress.city}, ${order.deliveryAddress.state}`} />
+              <InfoRow icon="call-outline"      label="Phone"   value={order.deliveryAddress.phone} />
+              {order.deliveryAddress.additionalInfo && (
+                <View style={{ backgroundColor: BRAND.goldSoft, borderRadius: 8, padding: 8, marginTop: 6 }}>
+                  <Text style={{ fontSize: 11, color: '#92400E', fontStyle: 'italic' }}>
+                    {order.deliveryAddress.additionalInfo}
+                  </Text>
                 </View>
               )}
             </View>
           )}
 
-          {}
-          {order.dispute && (
-            <View className="bg-gradient-to-br from-orange-50 to-red-50 border-2 border-orange-300 rounded-3xl p-5 mb-4"
+          {/* Tracking */}
+          {order.trackingNumber && (
+            <View
               style={{
-                shadowColor: '#f97316',
-                shadowOffset: { width: 0, height: 4 },
-                shadowOpacity: 0.2,
-                shadowRadius: 8,
-                elevation: 6,
+                backgroundColor: BRAND.purpleSoft,
+                borderRadius: 13, padding: 14,
+                borderWidth: 1, borderColor: `${BRAND.purple}33`,
               }}
             >
-              <View className="flex-row items-center mb-4">
-                <View className="w-12 h-12 rounded-full bg-orange-500 items-center justify-center mr-3">
-                  <Ionicons name="alert-circle" size={26} color="#fff" />
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
+                <View style={{ width: 28, height: 28, borderRadius: 8, backgroundColor: `${BRAND.purple}22`, alignItems: 'center', justifyContent: 'center', marginRight: 8 }}>
+                  <Ionicons name="cube-outline" size={14} color={BRAND.purple} />
                 </View>
-                <View className="flex-1">
-                  <Text className="text-orange-900 text-lg font-bold">Dispute Active</Text>
-                  <Text className="text-orange-700 text-xs">Action required</Text>
-                </View>
-              </View>
-              
-              <View className="bg-white/60 rounded-2xl p-3 mb-3">
-                <Text className="text-orange-900 text-sm mb-2">
-                  <Text className="font-bold">Status: </Text>
-                  <Text className="capitalize">{order.dispute.status}</Text>
-                </Text>
-                <Text className="text-orange-900 text-sm">
-                  <Text className="font-bold">Reason: </Text>
-                  {order.dispute.reason}
+                <Text style={{ fontSize: 10, fontWeight: '700', color: BRAND.purple, letterSpacing: 0.6, textTransform: 'uppercase' }}>
+                  Tracking Number
                 </Text>
               </View>
-
-              <TouchableOpacity
-                onPress={() => handleFetchDisputeStatus()
-                }
-                activeOpacity={0.8}
-              >
-                <LinearGradient
-                  colors={['#f97316', '#ea580c']}
-                  className="py-4 rounded-2xl"
-                  style={{
-                    shadowColor: '#f97316',
-                    shadowOffset: { width: 0, height: 2 },
-                    shadowOpacity: 0.3,
-                    shadowRadius: 4,
-                    elevation: 4,
-                  }}
-                >
-                  <Text className="text-white text-center font-bold text-base">View Dispute Details</Text>
-                </LinearGradient>
-              </TouchableOpacity>
+              <Text style={{ fontSize: 18, fontWeight: '800', color: '#5B21B6', letterSpacing: -0.3, marginBottom: 3 }}>
+                {order.trackingNumber}
+              </Text>
+              {order.courierService && (
+                <Text style={{ fontSize: 12, color: BRAND.purple, fontWeight: '500' }}>{order.courierService}</Text>
+              )}
             </View>
           )}
+        </Card>
 
-          {}
-          {!order.dispute &&
-            (order.status === 'delivered' || order.status === 'completed') &&
-            !showDisputeForm && (
-              <TouchableOpacity
-                onPress={() => setShowDisputeForm(true)}
-                activeOpacity={0.8}
-                className="mb-4"
-              >
-                <LinearGradient
-                  colors={['#ef4444', '#dc2626']}
-                  className="py-5 rounded-2xl"
-                  style={{
-                    shadowColor: '#ef4444',
-                    shadowOffset: { width: 0, height: 4 },
-                    shadowOpacity: 0.3,
-                    shadowRadius: 8,
-                    elevation: 6,
-                  }}
-                >
-                  <View className="flex-row items-center justify-center">
-                    <Ionicons name="alert-circle" size={22} color="#fff" />
-                    <Text className="text-white text-base font-bold ml-2">Report Issue / Create Dispute</Text>
-                  </View>
-                </LinearGradient>
-              </TouchableOpacity>
+        {/* ── PAYMENT SUMMARY ──────────────────────────────────────────── */}
+        <Card>
+          <CardHeader icon="wallet-outline" iconColor={BRAND.green} iconBg={BRAND.greenSoft} title="Payment Summary" />
+
+          <View style={{ gap: 10 }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Text style={{ fontSize: 13, color: BRAND.textSecondary, fontWeight: '500' }}>
+                Subtotal ({orderItems.length} items)
+              </Text>
+              <Text style={{ fontSize: 13, fontWeight: '700', color: BRAND.textPrimary }}>{formatPrice(subtotal)}</Text>
+            </View>
+
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: BRAND.border }}>
+              <Text style={{ fontSize: 13, color: BRAND.textSecondary, fontWeight: '500' }}>Delivery fee</Text>
+              <Text style={{ fontSize: 13, fontWeight: '700', color: BRAND.textPrimary }}>
+                {order.deliveryType === 'pickup' || (order.deliveryFee === 0)
+                  ? 'Free'
+                  : order.deliveryFee
+                  ? formatPrice(order.deliveryFee)
+                  : 'Included'}
+              </Text>
+            </View>
+            {order.discount > 0 && (
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: BRAND.border }}>
+                <Text style={{ fontSize: 13, color: BRAND.green, fontWeight: '500' }}>Discount</Text>
+                <Text style={{ fontSize: 13, fontWeight: '700', color: BRAND.green }}>-{formatPrice(order.discount)}</Text>
+              </View>
             )}
 
-          {}
-          {showDisputeForm && (
-            <View className="bg-white rounded-3xl p-5 mb-4"
+            {/* Total row */}
+            <View
               style={{
-                shadowColor: '#000',
-                shadowOffset: { width: 0, height: 2 },
-                shadowOpacity: 0.08,
-                shadowRadius: 8,
-                elevation: 4,
+                flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+                backgroundColor: BRAND.primarySoft,
+                borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12,
+                borderWidth: 1, borderColor: BRAND.primaryMuted,
               }}
             >
-              <View className="flex-row items-center mb-5">
-                <View className="w-10 h-10 rounded-full bg-red-100 items-center justify-center mr-3">
-                  <Ionicons name="warning" size={20} color="#ef4444" />
-                </View>
-                <Text className="text-gray-900 text-lg font-bold">Create Dispute</Text>
-              </View>
+              <Text style={{ fontSize: 15, fontWeight: '800', color: BRAND.textPrimary }}>Total Amount</Text>
+              <Text style={{ fontSize: 22, fontWeight: '800', color: BRAND.primary, letterSpacing: -0.5 }}>
+                {formatPrice(order.totalAmount || 0)}
+              </Text>
+            </View>
 
-              <View className="mb-4">
-                <Text className="text-gray-700 text-sm font-bold mb-3">Select Issue Type *</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} className="-mx-5 px-5">
-                  {disputeCategories.map((category) => (
-                    <TouchableOpacity
-                      key={category.key}
-                      onPress={() => setDisputeReason(category.key)}
-                      activeOpacity={0.7}
-                      className="mr-2"
-                    >
-                      <LinearGradient
-                        colors={
-                          disputeReason === category.key
-                            ? ['#ef4444', '#dc2626']
-                            : ['#f3f4f6', '#e5e7eb']
-                        }
-                        className="px-4 py-3 rounded-2xl flex-row items-center"
-                      >
-                        <Ionicons 
-                          name={category.icon as any} 
-                          size={16} 
-                          color={disputeReason === category.key ? '#fff' : '#6b7280'} 
-                        />
-                        <Text
-                          className={`text-sm font-bold ml-2 ${
-                            disputeReason === category.key ? 'text-white' : 'text-gray-700'
-                          }`}
-                        >
-                          {category.label}
-                        </Text>
-                      </LinearGradient>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
-              </View>
-
-              <View className="mb-5">
-                <View className="flex-row items-center justify-between mb-2">
-                  <Text className="text-gray-700 text-sm font-bold">Description *</Text>
-                  <Text className={`text-xs ${
-                    disputeDescription.length > 2000 
-                      ? 'text-red-500 font-bold' 
-                      : disputeDescription.length > 1800 
-                      ? 'text-orange-500' 
-                      : 'text-gray-400'
-                  }`}>
-                    {disputeDescription.length}/2000
-                  </Text>
-                </View>
-                <TextInput
-                  className="bg-gray-50 px-4 py-4 rounded-2xl text-gray-900 border border-gray-200"
-                  placeholder="Provide detailed explanation (minimum 20 characters)..."
-                  placeholderTextColor="#9ca3af"
-                  value={disputeDescription}
-                  onChangeText={setDisputeDescription}
-                  multiline
-                  numberOfLines={6}
-                  textAlignVertical="top"
-                  maxLength={2000}
-                  style={{ minHeight: 140 }}
-                />
-                {disputeDescription.length > 0 && disputeDescription.length < 20 && (
-                  <Text className="text-orange-500 text-xs mt-2">
-                    Please provide at least {20 - disputeDescription.length} more characters
-                  </Text>
-                )}
-              </View>
-
-              <View className="flex-row" style={{ gap: 12 }}>
-                <TouchableOpacity
-                  onPress={() => {
-                    setShowDisputeForm(false);
-                    setDisputeDescription('');
-                  }}
-                  className="flex-1 border-2 border-gray-300 py-4 rounded-2xl"
-                  activeOpacity={0.7}
-                >
-                  <Text className="text-gray-700 text-center font-bold text-base">Cancel</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  onPress={handleCreateDispute}
-                  disabled={creatingDispute || disputeDescription.trim().length < 20}
-                  className="flex-1"
-                  activeOpacity={0.8}
-                  style={{ 
-                    opacity: (creatingDispute || disputeDescription.trim().length < 20) ? 0.5 : 1 
-                  }}
-                >
-                  <LinearGradient
-                    colors={['#ef4444', '#dc2626']}
-                    className="py-4 rounded-2xl"
-                    style={{
-                      shadowColor: '#ef4444',
-                      shadowOffset: { width: 0, height: 2 },
-                      shadowOpacity: 0.3,
-                      shadowRadius: 4,
-                      elevation: 4,
-                    }}
-                  >
-                    {creatingDispute ? (
-                      <ActivityIndicator size="small" color="#fff" />
-                    ) : (
-                      <Text className="text-white text-center font-bold text-base">Submit Dispute</Text>
-                    )}
-                  </LinearGradient>
-                </TouchableOpacity>
+            {/* Payment status */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: BRAND.surfaceAlt, borderRadius: 11, paddingHorizontal: 12, paddingVertical: 10, borderWidth: 1, borderColor: BRAND.border }}>
+              <Text style={{ fontSize: 12, color: BRAND.textMuted, fontWeight: '600' }}>Payment status</Text>
+              <View style={{ backgroundColor: BRAND.surface, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20, borderWidth: 1, borderColor: BRAND.border }}>
+                <Text style={{ fontSize: 12, fontWeight: '700', color: BRAND.textPrimary, textTransform: 'capitalize' }}>
+                  {order.paymentStatus || 'pending'}
+                </Text>
               </View>
             </View>
-          )}
-        </View>
+          </View>
+        </Card>
+
+        {/* ── NOTES ────────────────────────────────────────────────────── */}
+        {(order.customerNotes || order.sellerNotes) && (
+          <Card>
+            <CardHeader icon="document-text-outline" iconColor={BRAND.gold} iconBg={BRAND.goldSoft} title="Notes" />
+
+            {order.customerNotes && (
+              <View style={{ backgroundColor: BRAND.blueSoft, borderRadius: 12, padding: 12, marginBottom: 8, borderWidth: 1, borderColor: '#BFDBFE' }}>
+                <Text style={{ fontSize: 10, fontWeight: '700', color: BRAND.blue, letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 5 }}>
+                  Customer Notes
+                </Text>
+                <Text style={{ fontSize: 13, color: '#1E40AF', lineHeight: 19 }}>{order.customerNotes}</Text>
+              </View>
+            )}
+            {order.sellerNotes && (
+              <View style={{ backgroundColor: BRAND.purpleSoft, borderRadius: 12, padding: 12, borderWidth: 1, borderColor: `${BRAND.purple}33` }}>
+                <Text style={{ fontSize: 10, fontWeight: '700', color: BRAND.purple, letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 5 }}>
+                  Seller Notes
+                </Text>
+                <Text style={{ fontSize: 13, color: '#5B21B6', lineHeight: 19 }}>{order.sellerNotes}</Text>
+              </View>
+            )}
+          </Card>
+        )}
+
+        {/* ── ACTIVE DISPUTE ───────────────────────────────────────────── */}
+        {(order.hasDispute || order.dispute) && (
+          <View
+            style={{
+              backgroundColor: BRAND.orangeSoft,
+              borderRadius: 20, padding: 16, marginBottom: 14,
+              borderWidth: 1.5, borderColor: '#FED7AA',
+              ...Platform.select({
+                ios: { shadowColor: BRAND.orange, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 10 },
+                android: { elevation: 4 },
+              }),
+            }}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
+              <View style={{ width: 44, height: 44, borderRadius: 13, backgroundColor: BRAND.orange, alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
+                <Ionicons name="alert-circle" size={22} color="#fff" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 15, fontWeight: '800', color: '#9A3412' }}>Dispute Active</Text>
+                <Text style={{ fontSize: 11, color: '#C2410C', fontWeight: '500', marginTop: 1 }}>Action may be required</Text>
+              </View>
+            </View>
+
+            <View style={{ backgroundColor: 'rgba(255,255,255,0.6)', borderRadius: 11, padding: 12, marginBottom: 12 }}>
+              <View style={{ flexDirection: 'row', marginBottom: 5 }}>
+                <Text style={{ fontSize: 12, fontWeight: '700', color: '#9A3412', width: 60 }}>Status</Text>
+                <Text style={{ fontSize: 12, color: '#9A3412', textTransform: 'capitalize', flex: 1 }}>{order.dispute.status}</Text>
+              </View>
+              <View style={{ flexDirection: 'row' }}>
+                <Text style={{ fontSize: 12, fontWeight: '700', color: '#9A3412', width: 60 }}>Reason</Text>
+                <Text style={{ fontSize: 12, color: '#9A3412', flex: 1, textTransform: 'capitalize' }}>
+                  {order.dispute.reason.replace(/_/g, ' ')}
+                </Text>
+              </View>
+            </View>
+
+            <TouchableOpacity onPress={handleFetchDisputeStatus} activeOpacity={0.85} style={{ borderRadius: 13, overflow: 'hidden' }}>
+              <LinearGradient
+                colors={[BRAND.orange, '#EA580C']}
+                start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                style={{ paddingVertical: 13, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7 }}
+              >
+                <Ionicons name="eye-outline" size={16} color="#fff" />
+                <Text style={{ color: '#fff', fontSize: 14, fontWeight: '700' }}>View Dispute Details</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* ── RAISE DISPUTE CTA ────────────────────────────────────────── */}
+        {!order.hasDispute && !order.dispute && (order.status === 'delivered' || order.status === 'completed') && !showDisputeForm && (
+          <TouchableOpacity
+            onPress={() => setShowDisputeForm(true)}
+            activeOpacity={0.85}
+            style={{
+              marginBottom: 14,
+              borderRadius: 16, overflow: 'hidden',
+            }}
+          >
+            <View
+              style={{
+                flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+                paddingVertical: 15,
+                backgroundColor: BRAND.redSoft,
+                borderRadius: 16,
+                borderWidth: 1.5,
+                borderColor: '#FECACA',
+                gap: 8,
+              }}
+            >
+              <Ionicons name="alert-circle-outline" size={18} color={BRAND.red} />
+              <Text style={{ color: BRAND.red, fontSize: 14, fontWeight: '700' }}>Report Issue / Create Dispute</Text>
+            </View>
+          </TouchableOpacity>
+        )}
+
+        {/* ── DISPUTE FORM ─────────────────────────────────────────────── */}
+        {showDisputeForm && (
+          <Card>
+            <CardHeader icon="warning-outline" iconColor={BRAND.red} iconBg={BRAND.redSoft} title="Create Dispute" />
+
+            {/* Category picker */}
+            <Text style={{ fontSize: 11, fontWeight: '700', color: BRAND.textSecondary, letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 8 }}>
+              Issue Type *
+            </Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{ gap: 8, paddingBottom: 4, marginBottom: 14 }}
+            >
+              {DISPUTE_CATEGORIES.map((cat) => {
+                const isActive = disputeReason === cat.key;
+                return (
+                  <TouchableOpacity
+                    key={cat.key}
+                    onPress={() => setDisputeReason(cat.key)}
+                    activeOpacity={0.8}
+                    style={{
+                      flexDirection: 'row', alignItems: 'center',
+                      paddingHorizontal: 13, paddingVertical: 9,
+                      borderRadius: 13,
+                      backgroundColor: isActive ? BRAND.red : BRAND.surfaceAlt,
+                      borderWidth: 1.5,
+                      borderColor: isActive ? BRAND.red : BRAND.border,
+                    }}
+                  >
+                    <Ionicons name={cat.icon} size={13} color={isActive ? '#fff' : BRAND.textMuted} style={{ marginRight: 6 }} />
+                    <Text style={{ fontSize: 12, fontWeight: '700', color: isActive ? '#fff' : BRAND.textSecondary }}>
+                      {cat.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+
+            {/* Description */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+              <Text style={{ fontSize: 11, fontWeight: '700', color: BRAND.textSecondary, letterSpacing: 0.5, textTransform: 'uppercase' }}>
+                Description *
+              </Text>
+              <Text style={{
+                fontSize: 11, fontWeight: '600',
+                color: disputeDescription.length > 2000 ? BRAND.red : disputeDescription.length > 1800 ? BRAND.orange : BRAND.textMuted,
+              }}>
+                {disputeDescription.length}/2000
+              </Text>
+            </View>
+
+            <TextInput
+              style={{
+                backgroundColor: BRAND.surfaceAlt,
+                borderWidth: 1.5,
+                borderColor: BRAND.border,
+                borderRadius: 13,
+                paddingHorizontal: 14,
+                paddingTop: 12,
+                paddingBottom: 12,
+                fontSize: 14,
+                color: BRAND.textPrimary,
+                textAlignVertical: 'top',
+                minHeight: 130,
+                marginBottom: 6,
+              }}
+              placeholder="Provide a detailed explanation (minimum 20 characters)…"
+              placeholderTextColor={BRAND.textMuted}
+              value={disputeDescription}
+              onChangeText={setDisputeDescription}
+              multiline
+              numberOfLines={6}
+              maxLength={2000}
+            />
+
+            {disputeDescription.length > 0 && disputeDescription.length < 20 && (
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
+                <Ionicons name="alert-circle" size={12} color={BRAND.orange} />
+                <Text style={{ fontSize: 11, color: BRAND.orange, marginLeft: 5, fontWeight: '500' }}>
+                  {20 - disputeDescription.length} more characters needed
+                </Text>
+              </View>
+            )}
+
+            {/* Buttons */}
+            <View style={{ flexDirection: 'row', gap: 10, marginTop: 4 }}>
+              <TouchableOpacity
+                onPress={() => { setShowDisputeForm(false); setDisputeDescription(''); }}
+                activeOpacity={0.8}
+                style={{
+                  flex: 1, paddingVertical: 13, borderRadius: 13,
+                  borderWidth: 1.5, borderColor: BRAND.borderStrong,
+                  backgroundColor: BRAND.surfaceAlt,
+                  alignItems: 'center',
+                }}
+              >
+                <Text style={{ fontSize: 14, fontWeight: '700', color: BRAND.textSecondary }}>Cancel</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={handleCreateDispute}
+                disabled={creatingDispute || disputeDescription.trim().length < 20}
+                activeOpacity={0.85}
+                style={{
+                  flex: 1, borderRadius: 13, overflow: 'hidden',
+                  opacity: (creatingDispute || disputeDescription.trim().length < 20) ? 0.5 : 1,
+                }}
+              >
+                <LinearGradient
+                  colors={[BRAND.red, '#DC2626']}
+                  start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                  style={{ paddingVertical: 13, alignItems: 'center', justifyContent: 'center' }}
+                >
+                  {creatingDispute
+                    ? <ActivityIndicator size="small" color="#fff" />
+                    : <Text style={{ color: '#fff', fontSize: 14, fontWeight: '700' }}>Submit Dispute</Text>
+                  }
+                </LinearGradient>
+              </TouchableOpacity>
+            </View>
+          </Card>
+        )}
       </ScrollView>
     </SafeAreaView>
   );

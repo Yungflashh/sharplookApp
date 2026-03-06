@@ -1,33 +1,183 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, ActivityIndicator, RefreshControl, Alert } from 'react-native';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  ScrollView,
+  ActivityIndicator,
+  RefreshControl,
+  Alert,
+  Platform,
+  StatusBar,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { offerAPI, handleAPIError } from '@/api/api';
 
+// ─── Brand Tokens ─────────────────────────────────────────────────────────────
+const BRAND = {
+  primary: '#E04079',
+  primaryDark: '#B5315F',
+  primaryLight: '#F08BAC',
+  primarySoft: '#FEF0F5',
+  primaryMuted: '#FCDCE9',
+  blue: '#3B82F6',
+  blueSoft: '#DBEAFE',
+  green: '#10B981',
+  greenSoft: '#D1FAE5',
+  gold: '#F59E0B',
+  goldSoft: '#FEF3C7',
+  orange: '#F97316',
+  orangeSoft: '#FFEDD5',
+  purple: '#8B5CF6',
+  purpleSoft: '#EDE9FE',
+  surface: '#FFFFFF',
+  surfaceAlt: '#F9FAFB',
+  border: '#F3F4F6',
+  borderStrong: '#E5E7EB',
+  textPrimary: '#111827',
+  textSecondary: '#6B7280',
+  textMuted: '#9CA3AF',
+};
+
+// ─── Types ────────────────────────────────────────────────────────────────────
 interface Offer {
   _id: string;
   title: string;
   description: string;
   proposedPrice: number;
   status: string;
-  serviceType: 'home' | 'shop' | 'both'; // ✅ NEW FIELD
+  serviceType: 'home' | 'shop' | 'both';
   responses: any[];
   createdAt: string;
   expiresAt: string;
-  category: {
-    name: string;
-  };
-  location?: { // ✅ Now optional
-    address: string;
-    city: string;
-    state: string;
-  };
+  category: { name: string };
+  location?: { address: string; city: string; state: string };
 }
 
+// ─── Config maps ──────────────────────────────────────────────────────────────
+const STATUS_CONFIG: Record<
+  string,
+  { bg: string; text: string; dot: string; icon: keyof typeof Ionicons.glyphMap; iconColor: string }
+> = {
+  open: { bg: BRAND.greenSoft, text: '#065F46', dot: BRAND.green, icon: 'checkmark-circle-outline', iconColor: BRAND.green },
+  accepted: { bg: BRAND.blueSoft, text: '#1E40AF', dot: BRAND.blue, icon: 'thumbs-up-outline', iconColor: BRAND.blue },
+  closed: { bg: BRAND.border, text: BRAND.textSecondary, dot: BRAND.textMuted, icon: 'close-circle-outline', iconColor: BRAND.textMuted },
+};
+
+const SERVICE_TYPE_CONFIG: Record<
+  string,
+  { icon: keyof typeof Ionicons.glyphMap; label: string; color: string; bg: string }
+> = {
+  home: { icon: 'home-outline', label: 'Home Service', color: BRAND.green, bg: BRAND.greenSoft },
+  shop: { icon: 'storefront-outline', label: 'In-Shop', color: BRAND.blue, bg: BRAND.blueSoft },
+  both: { icon: 'repeat-outline', label: 'Flexible', color: BRAND.gold, bg: BRAND.goldSoft },
+};
+
+const getStatus = (s: string) =>
+  STATUS_CONFIG[s.toLowerCase()] || STATUS_CONFIG.closed;
+
+const getServiceType = (t: string) =>
+  SERVICE_TYPE_CONFIG[t] || { icon: 'help-circle-outline' as const, label: 'Unknown', color: BRAND.textMuted, bg: BRAND.border };
+
+// ─── Sub-components ───────────────────────────────────────────────────────────
+
+/** Compact info chip used inside cards */
+const InfoChip: React.FC<{
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  value: string;
+  iconColor: string;
+  bg: string;
+}> = ({ icon, label, value, iconColor, bg }) => (
+  <View
+    style={{
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: bg,
+      borderRadius: 12,
+      paddingHorizontal: 11,
+      paddingVertical: 9,
+      flex: 1,
+    }}
+  >
+    <View
+      style={{
+        width: 28,
+        height: 28,
+        borderRadius: 8,
+        backgroundColor: `${iconColor}22`,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginRight: 8,
+      }}
+    >
+      <Ionicons name={icon} size={13} color={iconColor} />
+    </View>
+    <View style={{ flex: 1 }}>
+      <Text
+        style={{
+          fontSize: 9,
+          fontWeight: '700',
+          color: iconColor,
+          letterSpacing: 0.6,
+          textTransform: 'uppercase',
+          marginBottom: 1,
+        }}
+      >
+        {label}
+      </Text>
+      <Text style={{ fontSize: 13, fontWeight: '800', color: BRAND.textPrimary }} numberOfLines={1}>
+        {value}
+      </Text>
+    </View>
+  </View>
+);
+
+/** Quick stat tile */
+const StatTile: React.FC<{
+  value: number;
+  label: string;
+  color: string;
+  bg: string;
+  icon: keyof typeof Ionicons.glyphMap;
+}> = ({ value, label, color, bg, icon }) => (
+  <View
+    style={{
+      flex: 1,
+      backgroundColor: bg,
+      borderRadius: 14,
+      padding: 14,
+      alignItems: 'center',
+      borderWidth: 1,
+      borderColor: `${color}33`,
+    }}
+  >
+    <View
+      style={{
+        width: 32,
+        height: 32,
+        borderRadius: 10,
+        backgroundColor: `${color}22`,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginBottom: 8,
+      }}
+    >
+      <Ionicons name={icon} size={15} color={color} />
+    </View>
+    <Text style={{ fontSize: 22, fontWeight: '800', color, letterSpacing: -0.5 }}>{value}</Text>
+    <Text style={{ fontSize: 11, color, fontWeight: '600', marginTop: 2 }}>{label}</Text>
+  </View>
+);
+
+// ─── Main Screen ──────────────────────────────────────────────────────────────
 const MyOffersScreen: React.FC = () => {
-  const navigation = useNavigation();
+  const navigation = useNavigation<any>();
+  const insets = useSafeAreaInsets();
+
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [offers, setOffers] = useState<Offer[]>([]);
@@ -35,459 +185,506 @@ const MyOffersScreen: React.FC = () => {
   const fetchOffers = async () => {
     try {
       setLoading(true);
-      const response = await offerAPI.getMyOffers({
-        page: 1,
-        limit: 50,
-      });
-
+      const response = await offerAPI.getMyOffers({ page: 1, limit: 50 });
       if (response.success) {
-        const offersData = response.data.offers || response.data || [];
-        
-        // ✅ Filter out expired offers
-        const activeOffers = offersData.filter((offer: Offer) => {
-          const isExpired = offer.status.toLowerCase() === 'expired';
-          const expiryDate = new Date(offer.expiresAt);
-          const now = new Date();
-          return !isExpired && expiryDate > now;
-        });
-        
-        setOffers(activeOffers);
+        const data = response.data.offers || response.data || [];
+        setOffers(
+          data.filter((o: Offer) => {
+            const isExpired = o.status.toLowerCase() === 'expired';
+            return !isExpired && new Date(o.expiresAt) > new Date();
+          })
+        );
       }
     } catch (error) {
-      const apiError = handleAPIError(error);
-      Alert.alert('Error', apiError.message);
+      Alert.alert('Error', handleAPIError(error).message);
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    fetchOffers();
-  }, []);
-
-  useFocusEffect(
-    useCallback(() => {
-      fetchOffers();
-    }, [])
-  );
+  useEffect(() => { fetchOffers(); }, []);
+  useFocusEffect(useCallback(() => { fetchOffers(); }, []));
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
     fetchOffers().finally(() => setRefreshing(false));
   }, []);
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-    });
-  };
+  const formatDate = (d: string) =>
+    new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 
-  const formatPrice = (price: number) => {
-    return `₦${price.toLocaleString()}`;
-  };
+  const formatPrice = (p: number) => `₦${p.toLocaleString()}`;
 
-  const getStatusConfig = (status: string) => {
-    switch (status.toLowerCase()) {
-      case 'open':
-        return {
-          bg: 'bg-green-100',
-          text: 'text-green-800',
-          icon: 'checkmark-circle' as const,
-          iconColor: '#059669',
-        };
-      case 'accepted':
-        return {
-          bg: 'bg-blue-100',
-          text: 'text-blue-800',
-          icon: 'thumbs-up' as const,
-          iconColor: '#3b82f6',
-        };
-      case 'closed':
-        return {
-          bg: 'bg-gray-100',
-          text: 'text-gray-800',
-          icon: 'close-circle' as const,
-          iconColor: '#6b7280',
-        };
-      default:
-        return {
-          bg: 'bg-gray-100',
-          text: 'text-gray-800',
-          icon: 'help-circle' as const,
-          iconColor: '#6b7280',
-        };
-    }
-  };
+  const openCount = offers.filter((o) => o.status.toLowerCase() === 'open').length;
+  const acceptedCount = offers.filter((o) => o.status.toLowerCase() === 'accepted').length;
+  const totalResponses = offers.reduce((s, o) => s + o.responses.length, 0);
 
-  // ✅ NEW: Service type configuration
-  const getServiceTypeConfig = (type: string) => {
-    switch (type) {
-      case 'home':
-        return {
-          icon: 'home' as const,
-          label: 'Home Service',
-          color: '#10b981',
-          bgColor: '#d1fae5',
-        };
-      case 'shop':
-        return {
-          icon: 'storefront' as const,
-          label: 'In-Shop',
-          color: '#3b82f6',
-          bgColor: '#dbeafe',
-        };
-      case 'both':
-        return {
-          icon: 'repeat' as const,
-          label: 'Flexible',
-          color: '#f59e0b',
-          bgColor: '#fef3c7',
-        };
-      default:
-        return {
-          icon: 'help-circle' as const,
-          label: 'Unknown',
-          color: '#6b7280',
-          bgColor: '#f3f4f6',
-        };
-    }
-  };
-
-  const renderOfferCard = (offer: Offer) => {
-    const statusConfig = getStatusConfig(offer.status);
-    const serviceTypeConfig = getServiceTypeConfig(offer.serviceType); // ✅ NEW
-
-    return (
-      <TouchableOpacity
-        key={offer._id}
-        className="bg-white rounded-3xl p-5 mb-4"
-        style={{
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: 2 },
-          shadowOpacity: 0.08,
-          shadowRadius: 8,
-          elevation: 4,
-        }}
-        onPress={() =>
-          navigation.navigate('OfferDetail', {
-            offerId: offer._id,
-          })
-        }
-        activeOpacity={0.7}
-      >
-        {/* Header */}
-        <View className="flex-row items-start justify-between mb-4">
-          <View className="flex-1 mr-3">
-            <Text className="text-lg font-bold text-gray-900 mb-1.5" numberOfLines={2}>
-              {offer.title}
-            </Text>
-            <View className="flex-row items-center flex-wrap gap-2">
-              <View className="flex-row items-center">
-                <View className="w-1.5 h-1.5 rounded-full bg-pink-500 mr-2" />
-                <Text className="text-sm text-gray-600 font-medium">
-                  {offer.category.name}
-                </Text>
-              </View>
-              
-              {/* ✅ NEW: Service Type Badge */}
-              <View 
-                className="px-2 py-1 rounded-full flex-row items-center"
-                style={{ backgroundColor: serviceTypeConfig.bgColor }}
-              >
-                <Ionicons 
-                  name={serviceTypeConfig.icon} 
-                  size={12} 
-                  color={serviceTypeConfig.color} 
-                />
-                <Text 
-                  className="text-xs font-bold ml-1"
-                  style={{ color: serviceTypeConfig.color }}
-                >
-                  {serviceTypeConfig.label}
-                </Text>
-              </View>
-            </View>
-          </View>
-
-          <View
-            className={`px-3 py-1.5 rounded-full ${statusConfig.bg} flex-row items-center`}
-          >
-            <Ionicons name={statusConfig.icon} size={14} color={statusConfig.iconColor} />
-            <Text className={`text-xs font-bold ml-1 capitalize ${statusConfig.text}`}>
-              {offer.status}
-            </Text>
-          </View>
-        </View>
-
-        {/* Info Cards */}
-        <View className="flex-row gap-2 mb-4">
-          {/* Budget */}
-          <View className="flex-1 bg-pink-50 rounded-2xl p-3">
-            <View className="flex-row items-center mb-1">
-              <Ionicons name="cash" size={16} color="#eb278d" />
-              <Text className="text-xs text-pink-700 font-semibold ml-1">BUDGET</Text>
-            </View>
-            <Text className="text-base font-bold text-pink-900">
-              {formatPrice(offer.proposedPrice)}
-            </Text>
-          </View>
-
-          {/* Responses */}
-          <View className="flex-1 bg-blue-50 rounded-2xl p-3">
-            <View className="flex-row items-center mb-1">
-              <Ionicons name="chatbubbles" size={16} color="#3b82f6" />
-              <Text className="text-xs text-blue-700 font-semibold ml-1">RESPONSES</Text>
-            </View>
-            <Text className="text-base font-bold text-blue-900">
-              {offer.responses.length}
-            </Text>
-          </View>
-        </View>
-
-        {/* ✅ UPDATED: Location/Service Type Info */}
-        <View className="bg-gray-50 rounded-2xl p-3 mb-4">
-          <View className="flex-row items-center justify-between">
-            {offer.serviceType === 'shop' ? (
-              // Show service type for shop-only offers
-              <View className="flex-row items-center flex-1">
-                <View 
-                  className="w-8 h-8 rounded-full items-center justify-center mr-2"
-                  style={{ backgroundColor: serviceTypeConfig.bgColor }}
-                >
-                  <Ionicons 
-                    name={serviceTypeConfig.icon} 
-                    size={16} 
-                    color={serviceTypeConfig.color} 
-                  />
-                </View>
-                <View className="flex-1">
-                  <Text className="text-xs text-gray-500 font-semibold">SERVICE TYPE</Text>
-                  <Text 
-                    className="text-sm font-bold"
-                    style={{ color: serviceTypeConfig.color }}
-                  >
-                    {serviceTypeConfig.label}
-                  </Text>
-                </View>
-              </View>
-            ) : (
-              // Show location for home/both offers
-              offer.location && (
-                <View className="flex-row items-center flex-1">
-                  <View className="w-8 h-8 rounded-full bg-blue-100 items-center justify-center mr-2">
-                    <Ionicons name="location" size={16} color="#3b82f6" />
-                  </View>
-                  <View className="flex-1">
-                    <Text className="text-xs text-gray-500 font-semibold">LOCATION</Text>
-                    <Text className="text-sm text-gray-900 font-bold" numberOfLines={1}>
-                      {offer.location.city}, {offer.location.state}
-                    </Text>
-                  </View>
-                </View>
-              )
-            )}
-            
-            {/* Expiry - moved to right side */}
-            <View className="flex-row items-center ml-3">
-              <View className="w-8 h-8 rounded-full bg-orange-100 items-center justify-center mr-2">
-                <Ionicons name="time" size={16} color="#f97316" />
-              </View>
-              <View>
-                <Text className="text-xs text-gray-500 font-semibold">EXPIRES</Text>
-                <Text className="text-sm text-gray-900 font-bold">
-                  {formatDate(offer.expiresAt)}
-                </Text>
-              </View>
-            </View>
-          </View>
-        </View>
-
-        {/* Footer */}
-        <View className="flex-row items-center justify-between pt-4 border-t border-gray-100">
-          <View className="flex-row items-center">
-            <Ionicons name="calendar-outline" size={14} color="#9ca3af" />
-            <Text className="text-xs text-gray-500 ml-1">
-              Posted {formatDate(offer.createdAt)}
-            </Text>
-          </View>
-
-          <View className="flex-row items-center">
-            <Text className="text-sm text-pink-600 font-bold mr-1">View Details</Text>
-            <Ionicons name="arrow-forward" size={16} color="#eb278d" />
-          </View>
-        </View>
-      </TouchableOpacity>
-    );
-  };
-
+  // ── Loading ────────────────────────────────────────────────────────────────
   if (loading) {
     return (
-      <SafeAreaView className="flex-1 bg-gray-50">
-        <View className="flex-1 items-center justify-center">
-          <ActivityIndicator size="large" color="#eb278d" />
-          <Text className="text-gray-500 text-sm mt-4 font-medium">
-            Loading your offers...
+      <SafeAreaView style={{ flex: 1, backgroundColor: BRAND.surfaceAlt }}>
+        <StatusBar barStyle="dark-content" />
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+          <ActivityIndicator size="large" color={BRAND.primary} />
+          <Text style={{ color: BRAND.textMuted, fontSize: 14, marginTop: 12, fontWeight: '500' }}>
+            Loading your offers…
           </Text>
         </View>
       </SafeAreaView>
     );
   }
 
+  // ─────────────────────────────────────────────────────────────────────────
   return (
-    <SafeAreaView className="flex-1 bg-gray-50" edges={['top']}>
-      {/* Header */}
-      <LinearGradient
-        colors={['#eb278d', '#f472b6']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
+    <SafeAreaView style={{ flex: 1, backgroundColor: BRAND.surfaceAlt }} edges={['top']}>
+      <StatusBar barStyle="dark-content" backgroundColor={BRAND.surface} />
+
+      {/* ── HEADER ───────────────────────────────────────────────────────── */}
+      <View
         style={{
-          shadowColor: '#eb278d',
-          shadowOffset: { width: 0, height: 4 },
-          shadowOpacity: 0.3,
-          shadowRadius: 8,
-          elevation: 8,
+          backgroundColor: BRAND.surface,
+          paddingHorizontal: 20,
+          paddingTop: 10,
+          paddingBottom: 14,
+          borderBottomWidth: 1,
+          borderBottomColor: BRAND.border,
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          ...Platform.select({
+            ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8 },
+            android: { elevation: 3 },
+          }),
         }}
       >
-        <View className="px-5 py-4">
-          <View className="flex-row items-center justify-between">
-            <TouchableOpacity
-              onPress={() => navigation.goBack()}
-              className="w-10 h-10 rounded-full bg-white/20 items-center justify-center"
-              activeOpacity={0.7}
-            >
-              <Ionicons name="arrow-back" size={24} color="#fff" />
-            </TouchableOpacity>
+        <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+          <TouchableOpacity
+            onPress={() => navigation.goBack()}
+            activeOpacity={0.8}
+            style={{
+              width: 40,
+              height: 40,
+              borderRadius: 13,
+              backgroundColor: BRAND.surfaceAlt,
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderWidth: 1,
+              borderColor: BRAND.border,
+              marginRight: 12,
+            }}
+          >
+            <Ionicons name="arrow-back" size={20} color={BRAND.textPrimary} />
+          </TouchableOpacity>
 
-            <View className="flex-1 mx-4">
-              <Text className="text-xl font-bold text-white text-center">My Offers</Text>
-              <Text className="text-sm text-white/80 text-center">
-                {offers.length} Active {offers.length === 1 ? 'Offer' : 'Offers'}
-              </Text>
-            </View>
-
-            <TouchableOpacity
-              onPress={() => navigation.navigate('CreateOffer')}
-              className="w-10 h-10 rounded-full bg-white/20 items-center justify-center"
-              activeOpacity={0.7}
-            >
-              <Ionicons name="add" size={28} color="#fff" />
-            </TouchableOpacity>
+          <View>
+            <Text style={{ fontSize: 22, fontWeight: '800', color: BRAND.textPrimary, letterSpacing: -0.5 }}>
+              My Offers
+            </Text>
+            <Text style={{ fontSize: 12, color: BRAND.textMuted, fontWeight: '500', marginTop: 1 }}>
+              {offers.length} active {offers.length === 1 ? 'offer' : 'offers'}
+            </Text>
           </View>
         </View>
-      </LinearGradient>
 
+        {/* Create offer */}
+        <TouchableOpacity
+          onPress={() => navigation.navigate('CreateOffer')}
+          activeOpacity={0.85}
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            borderRadius: 13,
+            overflow: 'hidden',
+          }}
+        >
+          <LinearGradient
+            colors={[BRAND.primary, BRAND.primaryDark]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              paddingHorizontal: 14,
+              paddingVertical: 9,
+              gap: 5,
+            }}
+          >
+            <Ionicons name="add" size={17} color="#fff" />
+            <Text style={{ color: '#fff', fontSize: 13, fontWeight: '700' }}>New Offer</Text>
+          </LinearGradient>
+        </TouchableOpacity>
+      </View>
+
+      {/* ── CONTENT ──────────────────────────────────────────────────────── */}
       <ScrollView
-        className="flex-1"
+        style={{ flex: 1 }}
+        contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            tintColor="#eb278d"
-            colors={['#eb278d']}
+            tintColor={BRAND.primary}
+            colors={[BRAND.primary]}
           />
         }
       >
-        <View className="px-5 py-6">
-          {offers.length > 0 ? (
-            <>
-              {/* Stats Card */}
-              <View
-                className="bg-white rounded-3xl p-5 mb-6"
-                style={{
-                  shadowColor: '#000',
-                  shadowOffset: { width: 0, height: 2 },
-                  shadowOpacity: 0.08,
-                  shadowRadius: 8,
-                  elevation: 4,
-                }}
-              >
-                <Text className="text-base font-bold text-gray-900 mb-4">
-                  Quick Stats
-                </Text>
-                <View className="flex-row gap-3">
-                  <View className="flex-1 bg-green-50 rounded-2xl p-3">
-                    <Text className="text-2xl font-bold text-green-700 mb-1">
-                      {offers.filter((o) => o.status.toLowerCase() === 'open').length}
-                    </Text>
-                    <Text className="text-xs text-green-600 font-semibold">Open</Text>
-                  </View>
+        {offers.length > 0 ? (
+          <>
+            {/* ── STATS ──────────────────────────────────────────────────── */}
+            <View style={{ flexDirection: 'row', gap: 10, marginBottom: 20 }}>
+              <StatTile
+                value={openCount}
+                label="Open"
+                color={BRAND.green}
+                bg={BRAND.greenSoft}
+                icon="radio-button-on-outline"
+              />
+              <StatTile
+                value={acceptedCount}
+                label="Accepted"
+                color={BRAND.blue}
+                bg={BRAND.blueSoft}
+                icon="thumbs-up-outline"
+              />
+              <StatTile
+                value={totalResponses}
+                label="Responses"
+                color={BRAND.primary}
+                bg={BRAND.primarySoft}
+                icon="chatbubbles-outline"
+              />
+            </View>
 
-                  <View className="flex-1 bg-blue-50 rounded-2xl p-3">
-                    <Text className="text-2xl font-bold text-blue-700 mb-1">
-                      {offers.filter((o) => o.status.toLowerCase() === 'accepted').length}
-                    </Text>
-                    <Text className="text-xs text-blue-600 font-semibold">Accepted</Text>
-                  </View>
+            {/* ── OFFER CARDS ────────────────────────────────────────────── */}
+            <Text
+              style={{
+                fontSize: 13,
+                fontWeight: '600',
+                color: BRAND.textMuted,
+                letterSpacing: 0.6,
+                textTransform: 'uppercase',
+                marginBottom: 12,
+              }}
+            >
+              Active Offers
+            </Text>
 
-                  <View className="flex-1 bg-pink-50 rounded-2xl p-3">
-                    <Text className="text-2xl font-bold text-pink-700 mb-1">
-                      {offers.reduce((sum, o) => sum + o.responses.length, 0)}
-                    </Text>
-                    <Text className="text-xs text-pink-600 font-semibold">Responses</Text>
-                  </View>
-                </View>
-              </View>
+            {offers.map((offer) => {
+              const sc = getStatus(offer.status);
+              const stc = getServiceType(offer.serviceType);
 
-              {/* Offers List */}
-              <View className="mb-4">
-                <Text className="text-lg font-bold text-gray-900 mb-4">Your Offers</Text>
-                {offers.map((offer) => renderOfferCard(offer))}
-              </View>
-            </>
-          ) : (
-            <View className="flex-1 items-center justify-center py-20">
-              <View
-                className="w-32 h-32 rounded-full bg-gradient-to-br from-pink-100 to-pink-50 items-center justify-center mb-6"
-                style={{
-                  shadowColor: '#eb278d',
-                  shadowOffset: { width: 0, height: 4 },
-                  shadowOpacity: 0.1,
-                  shadowRadius: 12,
-                  elevation: 4,
-                }}
-              >
-                <LinearGradient
-                  colors={['#eb278d', '#f472b6']}
-                  className="w-32 h-32 rounded-full items-center justify-center"
-                >
-                  <Ionicons name="pricetag" size={56} color="#fff" />
-                </LinearGradient>
-              </View>
-
-              <Text className="text-xl font-bold text-gray-900 mb-2">No Active Offers</Text>
-              <Text className="text-gray-600 text-center mb-8 px-8 leading-6">
-                Create your first offer and let vendors compete for your business with their best
-                proposals!
-              </Text>
-
-              <TouchableOpacity
-                onPress={() => navigation.navigate('CreateOffer')}
-                activeOpacity={0.8}
-              >
-                <LinearGradient
-                  colors={['#eb278d', '#f472b6']}
-                  className="px-8 py-4 rounded-2xl"
+              return (
+                <TouchableOpacity
+                  key={offer._id}
+                  onPress={() => navigation.navigate('OfferDetail', { offerId: offer._id })}
+                  activeOpacity={0.8}
                   style={{
-                    shadowColor: '#eb278d',
-                    shadowOffset: { width: 0, height: 4 },
-                    shadowOpacity: 0.3,
-                    shadowRadius: 8,
-                    elevation: 6,
+                    backgroundColor: BRAND.surface,
+                    borderRadius: 20,
+                    marginBottom: 14,
+                    overflow: 'hidden',
+                    borderWidth: 1,
+                    borderColor: BRAND.border,
+                    ...Platform.select({
+                      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.07, shadowRadius: 10 },
+                      android: { elevation: 3 },
+                    }),
                   }}
                 >
-                  <View className="flex-row items-center">
-                    <Ionicons name="add-circle" size={22} color="#fff" />
-                    <Text className="text-white text-base font-bold ml-2">Create Offer</Text>
+                  {/* Status accent bar */}
+                  <View style={{ height: 3, backgroundColor: sc.dot }} />
+
+                  <View style={{ padding: 16 }}>
+                    {/* Card header */}
+                    <View style={{ flexDirection: 'row', alignItems: 'flex-start', marginBottom: 12 }}>
+                      {/* Icon badge */}
+                      <View
+                        style={{
+                          width: 44,
+                          height: 44,
+                          borderRadius: 13,
+                          backgroundColor: BRAND.primarySoft,
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          marginRight: 12,
+                          borderWidth: 1,
+                          borderColor: BRAND.primaryMuted,
+                        }}
+                      >
+                        <Ionicons name="pricetag-outline" size={20} color={BRAND.primary} />
+                      </View>
+
+                      <View style={{ flex: 1 }}>
+                        <Text
+                          style={{
+                            fontSize: 15,
+                            fontWeight: '700',
+                            color: BRAND.textPrimary,
+                            letterSpacing: -0.2,
+                            marginBottom: 5,
+                          }}
+                          numberOfLines={2}
+                        >
+                          {offer.title}
+                        </Text>
+
+                        {/* Category + service type row */}
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                            <View
+                              style={{
+                                width: 5,
+                                height: 5,
+                                borderRadius: 3,
+                                backgroundColor: BRAND.primary,
+                                marginRight: 5,
+                              }}
+                            />
+                            <Text style={{ fontSize: 12, color: BRAND.textSecondary, fontWeight: '500' }}>
+                              {offer.category.name}
+                            </Text>
+                          </View>
+
+                          {/* Service type chip */}
+                          <View
+                            style={{
+                              flexDirection: 'row',
+                              alignItems: 'center',
+                              backgroundColor: stc.bg,
+                              paddingHorizontal: 7,
+                              paddingVertical: 3,
+                              borderRadius: 8,
+                            }}
+                          >
+                            <Ionicons name={stc.icon} size={10} color={stc.color} />
+                            <Text style={{ fontSize: 10, fontWeight: '700', color: stc.color, marginLeft: 3 }}>
+                              {stc.label}
+                            </Text>
+                          </View>
+                        </View>
+                      </View>
+
+                      {/* Status badge */}
+                      <View
+                        style={{
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          backgroundColor: sc.bg,
+                          paddingHorizontal: 9,
+                          paddingVertical: 5,
+                          borderRadius: 10,
+                          marginLeft: 8,
+                        }}
+                      >
+                        <Ionicons name={sc.icon} size={12} color={sc.iconColor} />
+                        <Text
+                          style={{
+                            fontSize: 11,
+                            fontWeight: '700',
+                            color: sc.text,
+                            marginLeft: 4,
+                            textTransform: 'capitalize',
+                          }}
+                        >
+                          {offer.status}
+                        </Text>
+                      </View>
+                    </View>
+
+                    {/* Info chips row */}
+                    <View style={{ flexDirection: 'row', gap: 8, marginBottom: 10 }}>
+                      <InfoChip
+                        icon="cash-outline"
+                        label="Budget"
+                        value={formatPrice(offer.proposedPrice)}
+                        iconColor={BRAND.primary}
+                        bg={BRAND.primarySoft}
+                      />
+                      <InfoChip
+                        icon="chatbubbles-outline"
+                        label="Responses"
+                        value={`${offer.responses.length}`}
+                        iconColor={BRAND.blue}
+                        bg={BRAND.blueSoft}
+                      />
+                    </View>
+
+                    {/* Location / service + expiry row */}
+                    <View
+                      style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        gap: 8,
+                      }}
+                    >
+                      {/* Location or service type */}
+                      {offer.serviceType === 'shop' ? (
+                        <View
+                          style={{
+                            flex: 1,
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            backgroundColor: stc.bg,
+                            borderRadius: 10,
+                            paddingHorizontal: 10,
+                            paddingVertical: 7,
+                          }}
+                        >
+                          <Ionicons name={stc.icon} size={13} color={stc.color} style={{ marginRight: 6 }} />
+                          <Text style={{ fontSize: 12, fontWeight: '600', color: stc.color }}>
+                            {stc.label}
+                          </Text>
+                        </View>
+                      ) : offer.location ? (
+                        <View
+                          style={{
+                            flex: 1,
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            backgroundColor: BRAND.blueSoft,
+                            borderRadius: 10,
+                            paddingHorizontal: 10,
+                            paddingVertical: 7,
+                          }}
+                        >
+                          <Ionicons name="location-outline" size={13} color={BRAND.blue} style={{ marginRight: 6 }} />
+                          <Text style={{ fontSize: 12, fontWeight: '600', color: BRAND.blue }} numberOfLines={1}>
+                            {offer.location.city}, {offer.location.state}
+                          </Text>
+                        </View>
+                      ) : null}
+
+                      {/* Expiry */}
+                      <View
+                        style={{
+                          flex: 1,
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          backgroundColor: BRAND.orangeSoft,
+                          borderRadius: 10,
+                          paddingHorizontal: 10,
+                          paddingVertical: 7,
+                        }}
+                      >
+                        <Ionicons name="time-outline" size={13} color={BRAND.orange} style={{ marginRight: 6 }} />
+                        <Text style={{ fontSize: 12, fontWeight: '600', color: '#9A3412' }} numberOfLines={1}>
+                          {formatDate(offer.expiresAt)}
+                        </Text>
+                      </View>
+                    </View>
+
+                    {/* Footer */}
+                    <View
+                      style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        marginTop: 12,
+                        paddingTop: 12,
+                        borderTopWidth: 1,
+                        borderTopColor: BRAND.border,
+                      }}
+                    >
+                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                        <Ionicons name="calendar-outline" size={12} color={BRAND.textMuted} />
+                        <Text style={{ fontSize: 11, color: BRAND.textMuted, marginLeft: 4, fontWeight: '500' }}>
+                          Posted {formatDate(offer.createdAt)}
+                        </Text>
+                      </View>
+
+                      <View
+                        style={{
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          backgroundColor: BRAND.primarySoft,
+                          paddingHorizontal: 10,
+                          paddingVertical: 5,
+                          borderRadius: 20,
+                        }}
+                      >
+                        <Text style={{ fontSize: 12, color: BRAND.primary, fontWeight: '700', marginRight: 3 }}>
+                          Details
+                        </Text>
+                        <Ionicons name="arrow-forward" size={12} color={BRAND.primary} />
+                      </View>
+                    </View>
                   </View>
-                </LinearGradient>
-              </TouchableOpacity>
+                </TouchableOpacity>
+              );
+            })}
+          </>
+        ) : (
+          /* ── EMPTY STATE ───────────────────────────────────────────────── */
+          <View style={{ alignItems: 'center', justifyContent: 'center', paddingTop: 70 }}>
+            <View
+              style={{
+                width: 100,
+                height: 100,
+                borderRadius: 30,
+                overflow: 'hidden',
+                marginBottom: 20,
+                ...Platform.select({
+                  ios: { shadowColor: BRAND.primary, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.2, shadowRadius: 14 },
+                  android: { elevation: 6 },
+                }),
+              }}
+            >
+              <LinearGradient
+                colors={[BRAND.primary, BRAND.primaryDark]}
+                style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}
+              >
+                <Ionicons name="pricetag-outline" size={46} color="#fff" />
+              </LinearGradient>
             </View>
-          )}
-        </View>
+
+            <Text
+              style={{
+                fontSize: 20,
+                fontWeight: '800',
+                color: BRAND.textPrimary,
+                marginBottom: 8,
+                letterSpacing: -0.4,
+              }}
+            >
+              No Active Offers
+            </Text>
+            <Text
+              style={{
+                fontSize: 14,
+                color: BRAND.textSecondary,
+                textAlign: 'center',
+                lineHeight: 21,
+                paddingHorizontal: 32,
+                marginBottom: 28,
+              }}
+            >
+              Create an offer and let vendors compete for your business with their best proposals!
+            </Text>
+
+            <TouchableOpacity
+              onPress={() => navigation.navigate('CreateOffer')}
+              activeOpacity={0.85}
+              style={{ borderRadius: 16, overflow: 'hidden' }}
+            >
+              <LinearGradient
+                colors={[BRAND.primary, BRAND.primaryDark]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  paddingHorizontal: 26,
+                  paddingVertical: 14,
+                  gap: 8,
+                }}
+              >
+                <Ionicons name="add-circle-outline" size={18} color="#fff" />
+                <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>Create Offer</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          </View>
+        )}
       </ScrollView>
     </SafeAreaView>
   );

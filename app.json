@@ -54,7 +54,7 @@
         "NSCameraUsageDescription": "LookReal needs camera access so you can take photos of beauty products to list them in your vendor store. For example, snap a picture of a skincare product you're selling to show it to potential buyers.",
         "NSPhotoLibraryUsageDescription": "LookReal needs access to your photo library so you can select existing images of your beauty products for your vendor listings. For example, choose a product photo from your gallery to include in your store.",
         "NSPhotoLibraryAddUsageDescription": "LookReal needs permission to save photos to your library so you can keep copies of product images and receipts. For example, save a photo of your purchase confirmation for your records.",
-        "NSMicrophoneUsageDescription": "LookReal needs microphone access so you can record video demonstrations of your beauty products for potential buyers. For example, record a video review showing how a makeup product applies.",
+        "NSMicrophoneUsageDescription": "LookReal needs microphone access for voice and video calls with vendors and clients, and to record video demonstrations of beauty products.",
         "NSLocationWhenInUseUsageDescription": "LookReal needs your location to show you nearby beauty vendors and salons, and to calculate accurate shipping costs. For example, we'll display beauty stores within 10 miles of you and estimate delivery times for products."
       }
     },
@@ -87,6 +87,7 @@
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",
         "RECORD_AUDIO",
+        "MODIFY_AUDIO_SETTINGS",
         "com.google.android.gms.permission.AD_ID"
       ]
     },

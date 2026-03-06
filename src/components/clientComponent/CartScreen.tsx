@@ -8,16 +8,42 @@ import {
   Alert,
   ActivityIndicator,
   Platform,
+  StatusBar,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '@/types/navigation.types';
 import { cartAPI } from '@/api/api';
 
-type CartNavigationProp = NativeStackNavigationProp<RootStackParamList, 'Cart'>;
+// ─── Brand Tokens ─────────────────────────────────────────────────────────────
+const BRAND = {
+  primary: '#E04079',
+  primaryDark: '#B5315F',
+  primaryLight: '#F08BAC',
+  primarySoft: '#FEF0F5',
+  primaryMuted: '#FCDCE9',
+  gold: '#F59E0B',
+  goldSoft: '#FEF3C7',
+  green: '#10B981',
+  greenSoft: '#D1FAE5',
+  orange: '#F97316',
+  orangeSoft: '#FFEDD5',
+  red: '#EF4444',
+  redSoft: '#FEE2E2',
+  surface: '#FFFFFF',
+  surfaceAlt: '#F9FAFB',
+  border: '#F3F4F6',
+  borderStrong: '#E5E7EB',
+  textPrimary: '#111827',
+  textSecondary: '#6B7280',
+  textMuted: '#9CA3AF',
+};
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+type Nav = NativeStackNavigationProp<RootStackParamList, 'Cart'>;
 
 interface CartItem {
   product: {
@@ -28,74 +54,57 @@ interface CartItem {
     finalPrice: number;
     compareAtPrice?: number;
     stock: number;
-    seller: {
-      _id: string;
-      firstName: string;
-      lastName: string;
-    };
+    seller: { _id: string; firstName: string; lastName: string };
   };
   quantity: number;
-  selectedVariant?: {
-    name: string;
-    option: string;
-  };
+  selectedVariant?: { name: string; option: string };
 }
 
+// ─── Main Screen ──────────────────────────────────────────────────────────────
 const CartScreen: React.FC = () => {
-  const navigation = useNavigation<CartNavigationProp>();
+  const navigation = useNavigation<Nav>();
+  const insets = useSafeAreaInsets();
 
   const [loading, setLoading] = useState(true);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [updating, setUpdating] = useState<string | null>(null);
 
+  // ── Data ───────────────────────────────────────────────────────────────────
   const loadCart = async () => {
     try {
       setLoading(true);
       const cartData = await cartAPI.getCart();
       setCart(cartData);
-    } catch (error) {
-      console.error('Load cart error:', error);
+    } catch {
       Alert.alert('Error', 'Failed to load cart');
     } finally {
       setLoading(false);
     }
   };
 
-  useFocusEffect(
-    useCallback(() => {
-      loadCart();
-    }, [])
-  );
+  useFocusEffect(useCallback(() => { loadCart(); }, []));
 
-  const handleUpdateQuantity = async (
-    productId: string,
-    newQuantity: number,
-    variant?: any
-  ) => {
+  const handleUpdateQuantity = async (productId: string, newQty: number, variant?: any) => {
     try {
       setUpdating(productId);
-      const updatedCart = await cartAPI.updateCartItem(productId, newQuantity, variant);
-      setCart(updatedCart);
-    } catch (error) {
-      console.error('Update quantity error:', error);
+      setCart(await cartAPI.updateCartItem(productId, newQty, variant));
+    } catch {
       Alert.alert('Error', 'Failed to update quantity');
     } finally {
       setUpdating(null);
     }
   };
 
-  const handleRemoveItem = async (productId: string, variant?: any) => {
-    Alert.alert('Remove Item', 'Are you sure you want to remove this item from cart?', [
+  const handleRemoveItem = (productId: string, variant?: any) => {
+    Alert.alert('Remove Item', 'Remove this item from your cart?', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Remove',
         style: 'destructive',
         onPress: async () => {
           try {
-            const updatedCart = await cartAPI.removeFromCart(productId, variant);
-            setCart(updatedCart);
-          } catch (error) {
-            console.error('Remove item error:', error);
+            setCart(await cartAPI.removeFromCart(productId, variant));
+          } catch {
             Alert.alert('Error', 'Failed to remove item');
           }
         },
@@ -104,17 +113,16 @@ const CartScreen: React.FC = () => {
   };
 
   const handleClearCart = () => {
-    Alert.alert('Clear Cart', 'Are you sure you want to clear your cart?', [
+    Alert.alert('Clear Cart', 'Remove all items from your cart?', [
       { text: 'Cancel', style: 'cancel' },
       {
-        text: 'Clear',
+        text: 'Clear All',
         style: 'destructive',
         onPress: async () => {
           try {
             await cartAPI.clearCart();
             setCart([]);
-          } catch (error) {
-            console.error('Clear cart error:', error);
+          } catch {
             Alert.alert('Error', 'Failed to clear cart');
           }
         },
@@ -122,324 +130,514 @@ const CartScreen: React.FC = () => {
     ]);
   };
 
-  const calculateSubtotal = () => {
-    return cart.reduce((total, item) => {
-      return total + item.product.finalPrice * item.quantity;
-    }, 0);
-  };
-
-  const calculateTotal = () => {
-    const subtotal = calculateSubtotal();
-    
-    return subtotal;
-  };
-
-  const formatPrice = (price: number) => {
-    return `₦${price.toLocaleString()}`;
-  };
-
   const handleCheckout = () => {
-    if (cart.length === 0) {
-      Alert.alert('Empty Cart', 'Your cart is empty');
-      return;
-    }
-
-    
+    if (cart.length === 0) { Alert.alert('Empty Cart', 'Your cart is empty'); return; }
     const itemsBySeller = cart.reduce((acc, item) => {
-      const sellerId = item.product.seller._id;
-      if (!acc[sellerId]) {
-        acc[sellerId] = [];
-      }
-      acc[sellerId].push(item);
+      const id = item.product.seller._id;
+      if (!acc[id]) acc[id] = [];
+      acc[id].push(item);
       return acc;
     }, {} as Record<string, CartItem[]>);
-
-    
-    navigation.navigate('Checkout', { 
-      cartItems: cart,
-      itemsBySeller: Object.keys(itemsBySeller).length
-    });
+    navigation.navigate('Checkout', { cartItems: cart, itemsBySeller: Object.keys(itemsBySeller).length });
   };
 
-  const renderCartItem = (item: CartItem) => {
-    const { product, quantity, selectedVariant } = item;
-    const itemTotal = product.finalPrice * quantity;
-    const isUpdating = updating === product._id;
+  const subtotal = cart.reduce((t, i) => t + i.product.finalPrice * i.quantity, 0);
+  const formatPrice = (p: number) => `₦${p.toLocaleString()}`;
 
-    return (
-      <View
-        key={`${product._id}-${JSON.stringify(selectedVariant)}`}
-        className="bg-white rounded-2xl p-4 mb-3"
-        style={{
-          ...Platform.select({
-            ios: {
-              shadowColor: '#000',
-              shadowOffset: { width: 0, height: 2 },
-              shadowOpacity: 0.08,
-              shadowRadius: 8,
-            },
-            android: { elevation: 3 },
-          }),
-        }}
-      >
-        <View className="flex-row">
-          {}
-          <TouchableOpacity
-            onPress={() => navigation.navigate('ProductDetail', { productId: product._id })}
-          >
-            <Image
-              source={{ uri: product.images[0] }}
-              className="w-24 h-24 rounded-xl"
-              resizeMode="cover"
-            />
-          </TouchableOpacity>
-
-          {}
-          <View className="flex-1 ml-3">
-            <TouchableOpacity
-              onPress={() => navigation.navigate('ProductDetail', { productId: product._id })}
-            >
-              <Text className="text-gray-900 text-sm font-bold mb-1" numberOfLines={2}>
-                {product.name}
-              </Text>
-            </TouchableOpacity>
-
-            {selectedVariant && (
-              <View className="bg-gray-100 px-2 py-1 rounded-lg self-start mb-2">
-                <Text className="text-gray-600 text-xs">
-                  {selectedVariant.name}: {selectedVariant.option}
-                </Text>
-              </View>
-            )}
-
-            <View className="flex-row items-center mb-2">
-              <Text className="text-pink-600 text-lg font-bold">
-                {formatPrice(product.finalPrice)}
-              </Text>
-              {product.compareAtPrice && product.compareAtPrice > product.finalPrice && (
-                <Text className="text-gray-400 text-xs line-through ml-2">
-                  {formatPrice(product.compareAtPrice)}
-                </Text>
-              )}
-            </View>
-
-            {}
-            <View className="flex-row items-center justify-between">
-              <View className="flex-row items-center bg-gray-100 rounded-xl">
-                <TouchableOpacity
-                  onPress={() =>
-                    handleUpdateQuantity(product._id, quantity - 1, selectedVariant)
-                  }
-                  disabled={isUpdating || quantity <= 1}
-                  className="w-8 h-8 items-center justify-center"
-                >
-                  <Ionicons
-                    name="remove"
-                    size={18}
-                    color={quantity <= 1 ? '#d1d5db' : '#374151'}
-                  />
-                </TouchableOpacity>
-
-                <View className="w-10 items-center">
-                  {isUpdating ? (
-                    <ActivityIndicator size="small" color="#eb278d" />
-                  ) : (
-                    <Text className="text-gray-900 text-sm font-bold">{quantity}</Text>
-                  )}
-                </View>
-
-                <TouchableOpacity
-                  onPress={() =>
-                    handleUpdateQuantity(product._id, quantity + 1, selectedVariant)
-                  }
-                  disabled={isUpdating || quantity >= product.stock}
-                  className="w-8 h-8 items-center justify-center"
-                >
-                  <Ionicons
-                    name="add"
-                    size={18}
-                    color={quantity >= product.stock ? '#d1d5db' : '#374151'}
-                  />
-                </TouchableOpacity>
-              </View>
-
-              {}
-              <TouchableOpacity
-                onPress={() => handleRemoveItem(product._id, selectedVariant)}
-                className="w-8 h-8 rounded-full bg-red-100 items-center justify-center"
-              >
-                <Ionicons name="trash-outline" size={16} color="#ef4444" />
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-
-        {}
-        {product.stock < 10 && quantity < product.stock && (
-          <View className="mt-3 bg-orange-50 p-2 rounded-lg flex-row items-center">
-            <Ionicons name="alert-circle" size={16} color="#f97316" />
-            <Text className="text-orange-600 text-xs ml-2">
-              Only {product.stock - quantity} more available
-            </Text>
-          </View>
-        )}
-
-        {}
-        <View className="mt-3 pt-3 border-t border-gray-100 flex-row justify-between items-center">
-          <Text className="text-gray-500 text-sm">Item Total:</Text>
-          <Text className="text-gray-900 text-base font-bold">{formatPrice(itemTotal)}</Text>
-        </View>
-      </View>
-    );
-  };
-
-  const renderEmptyCart = () => (
-    <View className="flex-1 items-center justify-center px-8 py-20">
-      <LinearGradient
-        colors={['#fce7f3', '#fdf2f8']}
-        className="w-32 h-32 rounded-full items-center justify-center mb-6"
-      >
-        <Ionicons name="cart-outline" size={64} color="#eb278d" />
-      </LinearGradient>
-      <Text className="text-xl font-bold text-gray-900 mb-2">Your cart is empty</Text>
-      <Text className="text-gray-500 text-center mb-6">
-        Start adding products to your cart and they'll appear here
-      </Text>
-      <TouchableOpacity
-        onPress={() => navigation.navigate('Marketplace')}
-        className="bg-pink-500 px-8 py-4 rounded-2xl"
-        style={{
-          shadowColor: '#eb278d',
-          shadowOffset: { width: 0, height: 4 },
-          shadowOpacity: 0.3,
-          shadowRadius: 8,
-          elevation: 4,
-        }}
-      >
-        <Text className="text-white text-base font-bold">Browse Products</Text>
-      </TouchableOpacity>
-    </View>
-  );
-
+  // ── Loading ────────────────────────────────────────────────────────────────
   if (loading) {
     return (
-      <SafeAreaView className="flex-1 bg-gray-50">
-        <View className="flex-1 items-center justify-center">
-          <ActivityIndicator size="large" color="#eb278d" />
-          <Text className="text-gray-500 text-sm mt-4">Loading cart...</Text>
+      <SafeAreaView style={{ flex: 1, backgroundColor: BRAND.surfaceAlt }}>
+        <StatusBar barStyle="dark-content" />
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+          <ActivityIndicator size="large" color={BRAND.primary} />
+          <Text style={{ color: BRAND.textMuted, fontSize: 14, marginTop: 12, fontWeight: '500' }}>
+            Loading cart…
+          </Text>
         </View>
       </SafeAreaView>
     );
   }
 
+  // ─────────────────────────────────────────────────────────────────────────
   return (
-    <SafeAreaView className="flex-1 bg-gray-50" edges={['top']}>
-      {/* Header */}
-      <LinearGradient
-        colors={['#eb278d', '#f472b6']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        className="pb-4"
-      >
-        <View className="px-5 pt-4">
-          <View className="flex-row items-center justify-between">
-            <View className="flex-row items-center">
-              <TouchableOpacity
-                onPress={() => navigation.goBack()}
-                className="w-10 h-10 rounded-full bg-white/20 items-center justify-center mr-3"
-              >
-                <Ionicons name="arrow-back" size={22} color="#fff" />
-              </TouchableOpacity>
-              <View>
-                <Text className="text-white text-2xl font-bold">My Cart</Text>
-                <Text className="text-white/80 text-sm">
-                  {cart.length} {cart.length === 1 ? 'item' : 'items'}
-                </Text>
-              </View>
-            </View>
+    <SafeAreaView style={{ flex: 1, backgroundColor: BRAND.surfaceAlt }} edges={['top']}>
+      <StatusBar barStyle="dark-content" backgroundColor={BRAND.surface} />
 
-            {cart.length > 0 && (
-              <TouchableOpacity
-                onPress={handleClearCart}
-                className="w-10 h-10 rounded-full bg-white/20 items-center justify-center"
-              >
-                <Ionicons name="trash-outline" size={20} color="#fff" />
-              </TouchableOpacity>
-            )}
+      {/* ── HEADER ───────────────────────────────────────────────────────── */}
+      <View
+        style={{
+          backgroundColor: BRAND.surface,
+          paddingHorizontal: 20,
+          paddingTop: 10,
+          paddingBottom: 14,
+          borderBottomWidth: 1,
+          borderBottomColor: BRAND.border,
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          ...Platform.select({
+            ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8 },
+            android: { elevation: 3 },
+          }),
+        }}
+      >
+        <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+          <TouchableOpacity
+            onPress={() => navigation.goBack()}
+            activeOpacity={0.8}
+            style={{
+              width: 40,
+              height: 40,
+              borderRadius: 13,
+              backgroundColor: BRAND.surfaceAlt,
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderWidth: 1,
+              borderColor: BRAND.border,
+              marginRight: 12,
+            }}
+          >
+            <Ionicons name="arrow-back" size={20} color={BRAND.textPrimary} />
+          </TouchableOpacity>
+
+          <View>
+            <Text style={{ fontSize: 22, fontWeight: '800', color: BRAND.textPrimary, letterSpacing: -0.5 }}>
+              My Cart
+            </Text>
+            <Text style={{ fontSize: 12, color: BRAND.textMuted, fontWeight: '500', marginTop: 1 }}>
+              {cart.length} {cart.length === 1 ? 'item' : 'items'}
+            </Text>
           </View>
         </View>
-      </LinearGradient>
 
-      {cart.length === 0 ? (
-        renderEmptyCart()
-      ) : (
-        <>
-          {/* Cart Items */}
-          <ScrollView className="flex-1 px-5 pt-5" showsVerticalScrollIndicator={false}>
-            {cart.map(renderCartItem)}
-
-            
-
-            <View className="h-32" />
-          </ScrollView>
-
-          {}
-          <View
-            className="bg-white px-5 py-4"
+        {cart.length > 0 && (
+          <TouchableOpacity
+            onPress={handleClearCart}
+            activeOpacity={0.8}
             style={{
+              width: 40,
+              height: 40,
+              borderRadius: 13,
+              backgroundColor: BRAND.redSoft,
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderWidth: 1,
+              borderColor: '#FECACA',
+            }}
+          >
+            <Ionicons name="trash-outline" size={18} color={BRAND.red} />
+          </TouchableOpacity>
+        )}
+      </View>
+
+      {/* ── EMPTY STATE ───────────────────────────────────────────────────── */}
+      {cart.length === 0 ? (
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 }}>
+          <View
+            style={{
+              width: 110,
+              height: 110,
+              borderRadius: 32,
+              backgroundColor: BRAND.primarySoft,
+              alignItems: 'center',
+              justifyContent: 'center',
+              marginBottom: 20,
+              borderWidth: 1,
+              borderColor: BRAND.primaryMuted,
               ...Platform.select({
-                ios: {
-                  shadowColor: '#000',
-                  shadowOffset: { width: 0, height: -4 },
-                  shadowOpacity: 0.1,
-                  shadowRadius: 8,
-                },
-                android: { elevation: 8 },
+                ios: { shadowColor: BRAND.primary, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.15, shadowRadius: 14 },
+                android: { elevation: 5 },
               }),
             }}
           >
-            {}
-            <View className="mb-4">
-              <View className="flex-row justify-between mb-2">
-                <Text className="text-gray-600 text-sm">Subtotal</Text>
-                <Text className="text-gray-900 text-sm font-semibold">
-                  {formatPrice(calculateSubtotal())}
+            <Ionicons name="cart-outline" size={52} color={BRAND.primary} />
+          </View>
+
+          <Text style={{ fontSize: 20, fontWeight: '800', color: BRAND.textPrimary, marginBottom: 8, letterSpacing: -0.4 }}>
+            Your cart is empty
+          </Text>
+          <Text style={{ fontSize: 14, color: BRAND.textSecondary, textAlign: 'center', lineHeight: 21, marginBottom: 28 }}>
+            Add products from the marketplace and they'll appear here
+          </Text>
+
+          <TouchableOpacity
+            onPress={() => navigation.navigate('Marketplace')}
+            activeOpacity={0.85}
+            style={{ borderRadius: 16, overflow: 'hidden' }}
+          >
+            <LinearGradient
+              colors={[BRAND.primary, BRAND.primaryDark]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={{
+                paddingHorizontal: 28,
+                paddingVertical: 14,
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 8,
+              }}
+            >
+              <Ionicons name="storefront-outline" size={18} color="#fff" />
+              <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>Browse Products</Text>
+            </LinearGradient>
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <>
+          {/* ── CART ITEMS ─────────────────────────────────────────────── */}
+          <ScrollView
+            style={{ flex: 1 }}
+            contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 24 }}
+            showsVerticalScrollIndicator={false}
+          >
+            {cart.map((item) => {
+              const { product, quantity, selectedVariant } = item;
+              const isUpdating = updating === product._id;
+              const itemTotal = product.finalPrice * quantity;
+              const discount =
+                product.compareAtPrice && product.compareAtPrice > product.finalPrice
+                  ? Math.round(
+                      ((product.compareAtPrice - product.finalPrice) / product.compareAtPrice) * 100
+                    )
+                  : 0;
+
+              return (
+                <View
+                  key={`${product._id}-${JSON.stringify(selectedVariant)}`}
+                  style={{
+                    backgroundColor: BRAND.surface,
+                    borderRadius: 20,
+                    marginBottom: 12,
+                    overflow: 'hidden',
+                    borderWidth: 1,
+                    borderColor: BRAND.border,
+                    ...Platform.select({
+                      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.07, shadowRadius: 10 },
+                      android: { elevation: 3 },
+                    }),
+                  }}
+                >
+                  {/* Top accent bar matching product price tier */}
+                  <View style={{ height: 2.5, backgroundColor: BRAND.primaryMuted }} />
+
+                  <View style={{ padding: 14 }}>
+                    <View style={{ flexDirection: 'row' }}>
+                      {/* Image */}
+                      <TouchableOpacity
+                        onPress={() => navigation.navigate('ProductDetail', { productId: product._id })}
+                        activeOpacity={0.88}
+                        style={{
+                          width: 90,
+                          height: 90,
+                          borderRadius: 14,
+                          overflow: 'hidden',
+                          borderWidth: 1,
+                          borderColor: BRAND.border,
+                        }}
+                      >
+                        <Image
+                          source={{ uri: product.images[0] }}
+                          style={{ width: '100%', height: '100%' }}
+                          resizeMode="cover"
+                        />
+                        {discount > 0 && (
+                          <View
+                            style={{
+                              position: 'absolute',
+                              top: 6,
+                              left: 6,
+                              backgroundColor: BRAND.red,
+                              paddingHorizontal: 5,
+                              paddingVertical: 2,
+                              borderRadius: 6,
+                            }}
+                          >
+                            <Text style={{ color: '#fff', fontSize: 9, fontWeight: '800' }}>-{discount}%</Text>
+                          </View>
+                        )}
+                      </TouchableOpacity>
+
+                      {/* Details */}
+                      <View style={{ flex: 1, marginLeft: 12 }}>
+                        <TouchableOpacity
+                          onPress={() => navigation.navigate('ProductDetail', { productId: product._id })}
+                          activeOpacity={0.8}
+                        >
+                          <Text
+                            style={{
+                              fontSize: 14,
+                              fontWeight: '700',
+                              color: BRAND.textPrimary,
+                              lineHeight: 19,
+                              marginBottom: 4,
+                            }}
+                            numberOfLines={2}
+                          >
+                            {product.name}
+                          </Text>
+                        </TouchableOpacity>
+
+                        {selectedVariant && (
+                          <View
+                            style={{
+                              backgroundColor: BRAND.surfaceAlt,
+                              paddingHorizontal: 8,
+                              paddingVertical: 3,
+                              borderRadius: 7,
+                              alignSelf: 'flex-start',
+                              marginBottom: 6,
+                              borderWidth: 1,
+                              borderColor: BRAND.border,
+                            }}
+                          >
+                            <Text style={{ fontSize: 11, color: BRAND.textSecondary, fontWeight: '500' }}>
+                              {selectedVariant.name}: {selectedVariant.option}
+                            </Text>
+                          </View>
+                        )}
+
+                        {/* Price */}
+                        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10 }}>
+                          <Text style={{ fontSize: 17, fontWeight: '800', color: BRAND.primary, letterSpacing: -0.3 }}>
+                            {formatPrice(product.finalPrice)}
+                          </Text>
+                          {product.compareAtPrice && product.compareAtPrice > product.finalPrice && (
+                            <Text
+                              style={{
+                                fontSize: 12,
+                                color: BRAND.textMuted,
+                                textDecorationLine: 'line-through',
+                                marginLeft: 6,
+                              }}
+                            >
+                              {formatPrice(product.compareAtPrice)}
+                            </Text>
+                          )}
+                        </View>
+
+                        {/* Quantity stepper + delete */}
+                        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                          {/* Stepper */}
+                          <View
+                            style={{
+                              flexDirection: 'row',
+                              alignItems: 'center',
+                              backgroundColor: BRAND.surfaceAlt,
+                              borderRadius: 11,
+                              borderWidth: 1,
+                              borderColor: BRAND.borderStrong,
+                              overflow: 'hidden',
+                            }}
+                          >
+                            <TouchableOpacity
+                              onPress={() => handleUpdateQuantity(product._id, quantity - 1, selectedVariant)}
+                              disabled={isUpdating || quantity <= 1}
+                              style={{
+                                width: 34,
+                                height: 34,
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                backgroundColor: quantity <= 1 ? 'transparent' : BRAND.surface,
+                              }}
+                            >
+                              <Ionicons
+                                name="remove"
+                                size={17}
+                                color={quantity <= 1 ? BRAND.textMuted : BRAND.textPrimary}
+                              />
+                            </TouchableOpacity>
+
+                            <View
+                              style={{
+                                width: 38,
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                borderLeftWidth: 1,
+                                borderRightWidth: 1,
+                                borderColor: BRAND.border,
+                                height: 34,
+                              }}
+                            >
+                              {isUpdating ? (
+                                <ActivityIndicator size="small" color={BRAND.primary} />
+                              ) : (
+                                <Text style={{ fontSize: 14, fontWeight: '700', color: BRAND.textPrimary }}>
+                                  {quantity}
+                                </Text>
+                              )}
+                            </View>
+
+                            <TouchableOpacity
+                              onPress={() => handleUpdateQuantity(product._id, quantity + 1, selectedVariant)}
+                              disabled={isUpdating || quantity >= product.stock}
+                              style={{
+                                width: 34,
+                                height: 34,
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                backgroundColor: quantity >= product.stock ? 'transparent' : BRAND.surface,
+                              }}
+                            >
+                              <Ionicons
+                                name="add"
+                                size={17}
+                                color={quantity >= product.stock ? BRAND.textMuted : BRAND.textPrimary}
+                              />
+                            </TouchableOpacity>
+                          </View>
+
+                          {/* Delete */}
+                          <TouchableOpacity
+                            onPress={() => handleRemoveItem(product._id, selectedVariant)}
+                            activeOpacity={0.8}
+                            style={{
+                              width: 34,
+                              height: 34,
+                              borderRadius: 10,
+                              backgroundColor: BRAND.redSoft,
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              borderWidth: 1,
+                              borderColor: '#FECACA',
+                            }}
+                          >
+                            <Ionicons name="trash-outline" size={15} color={BRAND.red} />
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    </View>
+
+                    {/* Low stock warning */}
+                    {product.stock < 10 && quantity < product.stock && (
+                      <View
+                        style={{
+                          marginTop: 10,
+                          backgroundColor: BRAND.orangeSoft,
+                          borderRadius: 10,
+                          paddingHorizontal: 10,
+                          paddingVertical: 7,
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          borderWidth: 1,
+                          borderColor: '#FED7AA',
+                        }}
+                      >
+                        <Ionicons name="alert-circle-outline" size={14} color={BRAND.orange} />
+                        <Text style={{ fontSize: 12, color: '#9A3412', marginLeft: 6, fontWeight: '500' }}>
+                          Only {product.stock - quantity} more available
+                        </Text>
+                      </View>
+                    )}
+
+                    {/* Item total row */}
+                    <View
+                      style={{
+                        marginTop: 12,
+                        paddingTop: 12,
+                        borderTopWidth: 1,
+                        borderTopColor: BRAND.border,
+                        flexDirection: 'row',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                      }}
+                    >
+                      <Text style={{ fontSize: 13, color: BRAND.textMuted, fontWeight: '500' }}>
+                        {quantity} × {formatPrice(product.finalPrice)}
+                      </Text>
+                      <Text style={{ fontSize: 15, fontWeight: '800', color: BRAND.textPrimary, letterSpacing: -0.2 }}>
+                        {formatPrice(itemTotal)}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+              );
+            })}
+          </ScrollView>
+
+          {/* ── ORDER SUMMARY + CHECKOUT ────────────────────────────────── */}
+          <View
+            style={{
+              backgroundColor: BRAND.surface,
+              paddingHorizontal: 20,
+              paddingTop: 16,
+              paddingBottom: insets.bottom + 16,
+              borderTopWidth: 1,
+              borderTopColor: BRAND.border,
+              ...Platform.select({
+                ios: { shadowColor: '#000', shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.07, shadowRadius: 12 },
+                android: { elevation: 10 },
+              }),
+            }}
+          >
+            {/* Summary rows */}
+            <View
+              style={{
+                backgroundColor: BRAND.surfaceAlt,
+                borderRadius: 16,
+                padding: 14,
+                marginBottom: 14,
+                borderWidth: 1,
+                borderColor: BRAND.border,
+              }}
+            >
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 }}>
+                <Text style={{ fontSize: 13, color: BRAND.textSecondary, fontWeight: '500' }}>
+                  Subtotal ({cart.length} {cart.length === 1 ? 'item' : 'items'})
+                </Text>
+                <Text style={{ fontSize: 13, fontWeight: '700', color: BRAND.textPrimary }}>
+                  {formatPrice(subtotal)}
                 </Text>
               </View>
-              <View className="flex-row justify-between mb-3 pb-3 border-b border-gray-200">
-                <Text className="text-gray-600 text-sm">Delivery Fee</Text>
-                <Text className="text-gray-900 text-sm font-semibold">Calculated at checkout</Text>
+
+              <View
+                style={{
+                  flexDirection: 'row',
+                  justifyContent: 'space-between',
+                  paddingBottom: 12,
+                  marginBottom: 12,
+                  borderBottomWidth: 1,
+                  borderBottomColor: BRAND.border,
+                }}
+              >
+                <Text style={{ fontSize: 13, color: BRAND.textSecondary, fontWeight: '500' }}>
+                  Delivery fee
+                </Text>
+                <Text style={{ fontSize: 13, color: BRAND.textMuted, fontWeight: '500' }}>
+                  Calculated at checkout
+                </Text>
               </View>
-              <View className="flex-row justify-between items-center">
-                <Text className="text-gray-900 text-lg font-bold">Total</Text>
-                <Text className="text-pink-600 text-2xl font-bold">
-                  {formatPrice(calculateTotal())}
+
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Text style={{ fontSize: 16, fontWeight: '800', color: BRAND.textPrimary }}>Total</Text>
+                <Text style={{ fontSize: 22, fontWeight: '800', color: BRAND.primary, letterSpacing: -0.5 }}>
+                  {formatPrice(subtotal)}
                 </Text>
               </View>
             </View>
 
-            {}
-            <TouchableOpacity
-              onPress={handleCheckout}
-              activeOpacity={0.8}
-            >
+            {/* Checkout CTA */}
+            <TouchableOpacity onPress={handleCheckout} activeOpacity={0.85} style={{ borderRadius: 16, overflow: 'hidden' }}>
               <LinearGradient
-                colors={['#eb278d', '#f472b6']}
+                colors={[BRAND.primary, BRAND.primaryDark]}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 0 }}
-                className="py-4 rounded-2xl items-center"
                 style={{
-                  shadowColor: '#eb278d',
-                  shadowOffset: { width: 0, height: 4 },
-                  shadowOpacity: 0.3,
-                  shadowRadius: 8,
-                  elevation: 4,
+                  paddingVertical: 16,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexDirection: 'row',
+                  gap: 8,
+                  ...Platform.select({
+                    ios: { shadowColor: BRAND.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.35, shadowRadius: 10 },
+                    android: { elevation: 5 },
+                  }),
                 }}
               >
-                <View className="flex-row items-center">
-                  <Text className="text-white text-lg font-bold mr-2">Proceed to Checkout</Text>
-                  <Ionicons name="arrow-forward" size={20} color="#fff" />
-                </View>
+                <Text style={{ color: '#fff', fontSize: 16, fontWeight: '800', letterSpacing: 0.1 }}>
+                  Proceed to Checkout
+                </Text>
+                <Ionicons name="arrow-forward" size={18} color="#fff" />
               </LinearGradient>
             </TouchableOpacity>
           </View>

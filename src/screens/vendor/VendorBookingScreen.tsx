@@ -1,1104 +1,607 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  View,
-  Text,
-  TouchableOpacity,
-  ScrollView,
-  ActivityIndicator,
-  RefreshControl,
-  Alert,
-  TextInput,
-  Platform,
-  Modal,
-  KeyboardAvoidingView,
-  Keyboard,
+  View, Text, TouchableOpacity, ScrollView, ActivityIndicator,
+  RefreshControl, Alert, TextInput, Platform, Modal,
+  KeyboardAvoidingView, Keyboard, StatusBar,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '@/types/navigation.types';
 import { bookingAPI, handleAPIError } from '@/api/api';
 
-type VendorBookingsNavigationProp = NativeStackNavigationProp<RootStackParamList, 'Main'>;
+// ─── Brand Tokens ─────────────────────────────────────────────────────────────
+const BRAND = {
+  primary: '#E04079', primaryDark: '#B5315F', primaryLight: '#F08BAC',
+  primarySoft: '#FEF0F5', primaryMuted: '#FCDCE9',
+  blue: '#3B82F6', blueSoft: '#DBEAFE',
+  green: '#10B981', greenSoft: '#D1FAE5',
+  gold: '#F59E0B', goldSoft: '#FEF3C7',
+  purple: '#8B5CF6', purpleSoft: '#EDE9FE',
+  red: '#EF4444', redSoft: '#FEE2E2',
+  surface: '#FFFFFF', surfaceAlt: '#F9FAFB',
+  border: '#F3F4F6', borderStrong: '#E5E7EB',
+  textPrimary: '#111827', textSecondary: '#6B7280', textMuted: '#9CA3AF',
+};
+
+const shadow = (color = '#000', opacity = 0.07, radius = 8, y = 2) =>
+  Platform.select({
+    ios: { shadowColor: color, shadowOffset: { width: 0, height: y }, shadowOpacity: opacity, shadowRadius: radius },
+    android: { elevation: Math.round(radius / 2) },
+  });
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+type Nav = NativeStackNavigationProp<RootStackParamList, 'Main'>;
+type FilterTab = 'all' | 'pending' | 'accepted' | 'in_progress' | 'completed' | 'cancelled';
 
 interface VendorBooking {
-  _id: string;
-  bookingNumber?: string;
+  _id: string; bookingNumber?: string;
   bookingType: 'standard' | 'offer_based';
-  service?: {
-    _id: string;
-    name: string;
-    images?: string[];
-  };
+  service?: { _id: string; name: string; images?: string[] };
   offer?: string;
-  client: {
-    _id: string;
-    firstName: string;
-    lastName: string;
-    phone?: string;
-  };
-  scheduledDate: string;
-  scheduledTime?: string;
-  totalAmount: number;
-  servicePrice: number;
-  status: string;
-  paymentStatus: string;
-  createdAt: string;
-  location?: {
-    address: string;
-    city: string;
-    state: string;
-  };
-  vendorNotes?: string;
-  clientNotes?: string;
+  client: { _id: string; firstName: string; lastName: string; phone?: string };
+  scheduledDate: string; scheduledTime?: string;
+  totalAmount: number; servicePrice: number;
+  status: string; paymentStatus: string; createdAt: string;
+  location?: { address: string; city: string; state: string };
+  vendorNotes?: string; clientNotes?: string;
 }
 
 interface VendorStats {
-  totalBookings: number;
-  pendingBookings: number;
-  activeBookings: number;
-  completedBookings: number;
-  totalEarnings: number;
-  pendingPayments: number;
+  totalBookings: number; pendingBookings: number; activeBookings: number;
+  completedBookings: number; totalEarnings: number; pendingPayments: number;
 }
 
-type FilterTab = 'all' | 'pending' | 'accepted' | 'in_progress' | 'completed' | 'cancelled';
+// ─── Status helpers ───────────────────────────────────────────────────────────
+const STATUS_CONFIG: Record<string, { bg: string; text: string; border: string; icon: keyof typeof Ionicons.glyphMap; iconColor: string }> = {
+  pending:     { bg: BRAND.goldSoft,   text: '#92400E', border: '#FDE68A', icon: 'time-outline',               iconColor: BRAND.gold   },
+  accepted:    { bg: BRAND.blueSoft,   text: '#1E40AF', border: '#BFDBFE', icon: 'checkmark-circle-outline',   iconColor: BRAND.blue   },
+  in_progress: { bg: BRAND.purpleSoft, text: '#5B21B6', border: '#DDD6FE', icon: 'hourglass-outline',          iconColor: BRAND.purple },
+  completed:   { bg: BRAND.greenSoft,  text: '#065F46', border: '#A7F3D0', icon: 'checkmark-done-circle-outline', iconColor: BRAND.green },
+  cancelled:   { bg: BRAND.redSoft,    text: '#991B1B', border: '#FECACA', icon: 'close-circle-outline',        iconColor: BRAND.red    },
+};
+const getStatusCfg = (s: string) => STATUS_CONFIG[s.toLowerCase()] ?? { bg: BRAND.surfaceAlt, text: BRAND.textSecondary, border: BRAND.border, icon: 'help-circle-outline' as any, iconColor: BRAND.textMuted };
 
-const RejectionModalContent = React.memo<{
-  visible: boolean;
-  rejectionReason: string;
-  onChangeReason: (text: string) => void;
-  onCancel: () => void;
-  onSubmit: () => void;
+const formatStatus = (s: string) => s.split('_').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+const formatDate   = (d: string) => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+const formatPrice  = (n: number) => `₦${n.toLocaleString()}`;
+
+const PAYMENT_CFG: Record<string, { bg: string; text: string; border: string }> = {
+  escrowed: { bg: BRAND.blueSoft,   text: '#1E40AF', border: BRAND.blue   },
+  released: { bg: BRAND.greenSoft,  text: '#065F46', border: BRAND.green  },
+  pending:  { bg: BRAND.goldSoft,   text: '#92400E', border: BRAND.gold   },
+};
+const getPaymentCfg = (s: string) => PAYMENT_CFG[s.toLowerCase()] ?? { bg: BRAND.surfaceAlt, text: BRAND.textSecondary, border: BRAND.border };
+
+// ─── Rejection Modal ──────────────────────────────────────────────────────────
+const RejectionModal = React.memo<{
+  visible: boolean; rejectionReason: string;
+  onChangeReason: (t: string) => void; onCancel: () => void; onSubmit: () => void;
 }>(({ visible, rejectionReason, onChangeReason, onCancel, onSubmit }) => {
-  const charCount = rejectionReason.length;
-  const isValid = charCount >= 10 && charCount <= 500;
-  
+  const n = rejectionReason.length;
+  const valid = n >= 10 && n <= 500;
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="fade"
-      onRequestClose={onCancel}
-    >
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        className="flex-1"
-      >
-        <TouchableOpacity
-          activeOpacity={1}
-          onPress={onCancel}
-          className="flex-1 bg-black/50 justify-center items-center px-5"
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+        <TouchableOpacity activeOpacity={1} onPress={onCancel}
+          style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 20 }}
         >
-          <View 
-            onStartShouldSetResponder={() => true}
-            className="w-full bg-white rounded-3xl p-6"
+          <TouchableOpacity activeOpacity={1} onPress={() => {}}
+            style={[{ width: '100%', backgroundColor: BRAND.surface, borderRadius: 24, padding: 24 }, shadow('#000', 0.2, 24, 10)]}
           >
-            <View className="flex-row items-center mb-4">
-              <View className="w-12 h-12 rounded-full bg-red-100 items-center justify-center mr-3">
-                <Ionicons name="close-circle" size={24} color="#ef4444" />
+            {/* Title */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16 }}>
+              <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: BRAND.redSoft, alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
+                <Ionicons name="close-circle" size={22} color={BRAND.red} />
               </View>
-              <Text className="text-xl font-bold text-gray-900 flex-1">Reject Booking</Text>
+              <Text style={{ fontSize: 18, fontWeight: '800', color: BRAND.textPrimary, letterSpacing: -0.3 }}>Reject Booking</Text>
             </View>
 
-            <Text className="text-sm text-gray-600 mb-3">
-              Please provide a reason for rejection (10-500 characters):
+            <Text style={{ fontSize: 13, color: BRAND.textSecondary, marginBottom: 12, lineHeight: 19 }}>
+              Please provide a reason for rejection (10–500 characters):
             </Text>
 
             <TextInput
-              className="bg-gray-50 rounded-xl p-4 text-base text-gray-900 mb-2 border border-gray-200"
-              placeholder="Enter rejection reason..."
-              placeholderTextColor="#9ca3af"
+              style={{
+                backgroundColor: BRAND.surfaceAlt, borderRadius: 14,
+                padding: 14, fontSize: 14, color: BRAND.textPrimary,
+                minHeight: 110, textAlignVertical: 'top',
+                borderWidth: 1.5, borderColor: BRAND.border, marginBottom: 8,
+              }}
+              placeholder="Enter rejection reason…"
+              placeholderTextColor={BRAND.textMuted}
               value={rejectionReason}
               onChangeText={onChangeReason}
-              multiline
-              numberOfLines={4}
-              textAlignVertical="top"
-              autoFocus
-              style={{ minHeight: 100 }}
+              multiline numberOfLines={4}
+              autoFocus maxLength={520}
             />
 
-            {/* Character count and validation */}
-            <View className="flex-row items-center justify-between mb-4">
-              <Text 
-                className={`text-xs font-medium ${
-                  charCount < 10 
-                    ? 'text-red-600' 
-                    : charCount > 500 
-                    ? 'text-red-600' 
-                    : 'text-green-600'
-                }`}
-              >
-                {charCount < 10 
-                  ? `Minimum 10 characters (${10 - charCount} more needed)` 
-                  : charCount > 500
-                  ? `Maximum 500 characters (${charCount - 500} over limit)`
-                  : '✓ Valid length'}
+            {/* Char counter */}
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
+              <Text style={{ fontSize: 11, fontWeight: '600', color: n < 10 ? BRAND.red : n > 500 ? BRAND.red : BRAND.green }}>
+                {n < 10 ? `${10 - n} more characters needed` : n > 500 ? `${n - 500} over limit` : '✓ Valid length'}
               </Text>
-              <Text 
-                className={`text-xs font-bold ${
-                  charCount > 500 ? 'text-red-600' : 'text-gray-500'
-                }`}
-              >
-                {charCount}/500
-              </Text>
+              <Text style={{ fontSize: 11, fontWeight: '700', color: n > 500 ? BRAND.red : BRAND.textMuted }}>{n}/500</Text>
             </View>
 
-            <View className="flex-row gap-3">
-              <TouchableOpacity
-                onPress={onCancel}
-                className="flex-1 bg-gray-100 py-3.5 rounded-xl"
-                activeOpacity={0.8}
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              <TouchableOpacity onPress={onCancel} activeOpacity={0.8}
+                style={{ flex: 1, backgroundColor: BRAND.surfaceAlt, borderRadius: 14, paddingVertical: 14, alignItems: 'center', borderWidth: 1, borderColor: BRAND.borderStrong }}
               >
-                <Text className="text-gray-700 text-center font-bold text-base">Cancel</Text>
+                <Text style={{ fontSize: 14, fontWeight: '700', color: BRAND.textSecondary }}>Cancel</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity
-                onPress={onSubmit}
-                disabled={!isValid}
-                className="flex-1 rounded-xl overflow-hidden"
-                activeOpacity={0.8}
-                style={{ opacity: isValid ? 1 : 0.5 }}
+              <TouchableOpacity onPress={onSubmit} disabled={!valid} activeOpacity={0.85}
+                style={{ flex: 1, borderRadius: 14, overflow: 'hidden', opacity: valid ? 1 : 0.45 }}
               >
-                <LinearGradient
-                  colors={['#ef4444', '#dc2626']}
-                  className="py-3.5"
-                >
-                  <Text className="text-white text-center font-bold text-base">Reject</Text>
+                <LinearGradient colors={[BRAND.red, '#DC2626']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                  style={{ paddingVertical: 14, alignItems: 'center' }}>
+                  <Text style={{ color: '#fff', fontSize: 14, fontWeight: '700' }}>Reject</Text>
                 </LinearGradient>
               </TouchableOpacity>
             </View>
-          </View>
+          </TouchableOpacity>
         </TouchableOpacity>
       </KeyboardAvoidingView>
     </Modal>
   );
 });
 
-
+// ─── Main Screen ──────────────────────────────────────────────────────────────
 const VendorBookingsScreen: React.FC = () => {
-  const navigation = useNavigation<VendorBookingsNavigationProp>();
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [bookings, setBookings] = useState<VendorBooking[]>([]);
-  const [filteredBookings, setFilteredBookings] = useState<VendorBooking[]>([]);
-  const [stats, setStats] = useState<VendorStats | null>(null);
-  const [activeFilter, setActiveFilter] = useState<FilterTab>('all');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [page, setPage] = useState(1);
-  const [hasMore, setHasMore] = useState(true);
-  const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const navigation = useNavigation<Nav>();
+  const insets = useSafeAreaInsets();
 
-  // Rejection modal states
+  const [loading, setLoading]           = useState(true);
+  const [refreshing, setRefreshing]     = useState(false);
+  const [bookings, setBookings]         = useState<VendorBooking[]>([]);
+  const [filteredBookings, setFilteredBookings] = useState<VendorBooking[]>([]);
+  const [stats, setStats]               = useState<VendorStats | null>(null);
+  const [activeFilter, setActiveFilter] = useState<FilterTab>('all');
+  const [searchQuery, setSearchQuery]   = useState('');
+  const [page, setPage]                 = useState(1);
+  const [hasMore, setHasMore]           = useState(true);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [rejectModalVisible, setRejectModalVisible] = useState(false);
   const [rejectingBookingId, setRejectingBookingId] = useState<string | null>(null);
-  const [rejectionReason, setRejectionReason] = useState('');
+  const [rejectionReason, setRejectionReason]       = useState('');
 
-  const calculateStatsFromBookings = useCallback((bookingsData: VendorBooking[]) => {
-    const completedBookings = bookingsData.filter((b) => b.status.toLowerCase() === 'completed');
-    const inProgressBookings = bookingsData.filter((b) => b.status.toLowerCase() === 'in_progress');
-    const totalEarnings = completedBookings.reduce((sum, booking) => sum + (booking.totalAmount || 0), 0);
-
-    const calculatedStats: VendorStats = {
-      totalBookings: bookingsData.length,
-      pendingBookings: bookingsData.filter((b) => b.status.toLowerCase() === 'pending').length,
-      activeBookings: inProgressBookings.length,
-      completedBookings: completedBookings.length,
-      totalEarnings: totalEarnings,
-      pendingPayments: bookingsData.filter((b) => b.paymentStatus === 'pending').length,
-    };
-
-    setStats(calculatedStats);
+  // ── Stats ─────────────────────────────────────────────────────────────────
+  const calcStats = useCallback((data: VendorBooking[]) => {
+    const completed = data.filter((b) => b.status.toLowerCase() === 'completed');
+    setStats({
+      totalBookings: data.length,
+      pendingBookings: data.filter((b) => b.status.toLowerCase() === 'pending').length,
+      activeBookings: data.filter((b) => b.status.toLowerCase() === 'in_progress').length,
+      completedBookings: completed.length,
+      totalEarnings: completed.reduce((s, b) => s + (b.totalAmount || 0), 0),
+      pendingPayments: data.filter((b) => b.paymentStatus === 'pending').length,
+    });
   }, []);
 
-  const fetchBookings = async (pageNum: number = 1, append: boolean = false) => {
+  // ── Fetch ─────────────────────────────────────────────────────────────────
+  const fetchBookings = async (pageNum = 1, append = false) => {
     try {
       if (pageNum === 1) setLoading(true);
-
-      const response = await bookingAPI.getMyBookings({
-        role: 'vendor',
-        page: pageNum,
-        limit: 20,
-      });
-
-      console.log('Vendor bookings response:', response);
-
-      if (response.success) {
-        const newBookings = Array.isArray(response.data)
-          ? response.data
-          : response.data.bookings || [];
-
-        let updatedBookings: VendorBooking[];
-        if (append) {
-          updatedBookings = [...bookings, ...newBookings];
-          setBookings(updatedBookings);
-        } else {
-          updatedBookings = newBookings;
-          setBookings(newBookings);
-        }
-
-        calculateStatsFromBookings(updatedBookings);
-
-        const hasNext = response.meta?.pagination?.hasNextPage ?? newBookings.length === 20;
-        setHasMore(hasNext);
+      const res = await bookingAPI.getMyBookings({ role: 'vendor', page: pageNum, limit: 20 });
+      if (res.success) {
+        const newB = Array.isArray(res.data) ? res.data : res.data.bookings || [];
+        const updated = append ? [...bookings, ...newB] : newB;
+        setBookings(updated);
+        calcStats(updated);
+        setHasMore(res.meta?.pagination?.hasNextPage ?? newB.length === 20);
         setPage(pageNum);
       }
     } catch (error) {
-      const apiError = handleAPIError(error);
-      console.error('Vendor bookings fetch error:', apiError);
-      Alert.alert('Error', apiError.message || 'Failed to load bookings');
-    } finally {
-      setLoading(false);
-    }
+      Alert.alert('Error', handleAPIError(error).message || 'Failed to load bookings');
+    } finally { setLoading(false); }
   };
 
-  const fetchStats = async () => {
-    try {
-      const response = await bookingAPI.getBookingStats('vendor');
-      console.log('Vendor stats:', response);
-      if (response.success) {
-        const apiStats = response.data.stats || response.data;
-        console.log('API Stats (reference):', apiStats);
-      }
-    } catch (error) {
-      console.error('Stats fetch error:', error);
-    }
-  };
+  useEffect(() => { fetchBookings(); }, []);
+  useFocusEffect(useCallback(() => { fetchBookings(1, false); }, []));
 
+  // ── Filter ────────────────────────────────────────────────────────────────
   useEffect(() => {
-    fetchBookings();
-    fetchStats();
-  }, []);
-
-  useFocusEffect(
-    useCallback(() => {
-      fetchBookings(1, false);
-      fetchStats();
-    }, [])
-  );
-
-  useEffect(() => {
-    let filtered = bookings;
-
-    if (activeFilter !== 'all') {
-      filtered = filtered.filter((booking) => booking.status.toLowerCase() === activeFilter);
-    }
-
+    let f = bookings;
+    if (activeFilter !== 'all') f = f.filter((b) => b.status.toLowerCase() === activeFilter);
     if (searchQuery) {
-      filtered = filtered.filter(
-        (booking) =>
-          booking.service?.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          `${booking.client?.firstName || ''} ${booking.client?.lastName || ''}`
-            .toLowerCase()
-            .includes(searchQuery.toLowerCase()) ||
-          booking.bookingNumber?.toLowerCase().includes(searchQuery.toLowerCase())
+      const q = searchQuery.toLowerCase();
+      f = f.filter((b) =>
+        b.service?.name?.toLowerCase().includes(q) ||
+        `${b.client?.firstName || ''} ${b.client?.lastName || ''}`.toLowerCase().includes(q) ||
+        b.bookingNumber?.toLowerCase().includes(q)
       );
     }
-
-    setFilteredBookings(filtered);
+    setFilteredBookings(f);
   }, [bookings, activeFilter, searchQuery]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
-    Promise.all([fetchBookings(1, false), fetchStats()]).finally(() => setRefreshing(false));
+    fetchBookings(1, false).finally(() => setRefreshing(false));
   }, []);
 
-  const loadMore = () => {
-    if (!loading && hasMore) {
-      fetchBookings(page + 1, true);
-    }
+  // ── Actions ───────────────────────────────────────────────────────────────
+  const confirmAction = (title: string, msg: string, onConfirm: () => void, confirmLabel = 'Confirm') => {
+    Alert.alert(title, msg, [{ text: 'Cancel', style: 'cancel' }, { text: confirmLabel, onPress: onConfirm }]);
   };
 
-  const handleAcceptBooking = (bookingId: string) => {
-    Alert.alert('Accept Booking', 'Do you want to accept this booking request?', [
-      {
-        text: 'Cancel',
-        style: 'cancel',
-      },
-      {
-        text: 'Accept',
-        onPress: async () => {
-          try {
-            setActionLoading(bookingId);
-            const response = await bookingAPI.acceptBooking(bookingId);
-            if (response.success) {
-              Alert.alert('Success', 'Booking accepted successfully');
-              fetchBookings(1, false);
-            }
-          } catch (error) {
-            const apiError = handleAPIError(error);
-            Alert.alert('Error', apiError.message || 'Failed to accept booking');
-          } finally {
-            setActionLoading(null);
-          }
-        },
-      },
-    ]);
+  const handleAccept = (id: string) => confirmAction('Accept Booking', 'Accept this booking request?', async () => {
+    try { setActionLoading(id); const r = await bookingAPI.acceptBooking(id); if (r.success) { Alert.alert('Success', 'Booking accepted'); fetchBookings(1); } }
+    catch (e) { Alert.alert('Error', handleAPIError(e).message); }
+    finally { setActionLoading(null); }
+  }, 'Accept');
+
+  const handleStartService = (id: string) => confirmAction('Start Service', 'Mark this booking as in progress?', async () => {
+    try { setActionLoading(id); const r = await bookingAPI.startBooking(id); if (r.success) { Alert.alert('Success', 'Service started'); fetchBookings(1); } }
+    catch (e) { Alert.alert('Error', handleAPIError(e).message); }
+    finally { setActionLoading(null); }
+  }, 'Start');
+
+  const handleComplete = (id: string) => confirmAction('Complete Service', 'Mark this service as completed?', async () => {
+    try { setActionLoading(id); const r = await bookingAPI.markComplete(id); if (r.success) { Alert.alert('Success', 'Service completed'); fetchBookings(1); } }
+    catch (e) { Alert.alert('Error', handleAPIError(e).message); }
+    finally { setActionLoading(null); }
+  }, 'Complete');
+
+  const handleReject = (id: string) => { setRejectingBookingId(id); setRejectionReason(''); setRejectModalVisible(true); };
+
+  const submitRejection = async () => {
+    const t = rejectionReason.trim();
+    if (t.length < 10) { Alert.alert('Too Short', `Need at least 10 characters (${10 - t.length} more).`); return; }
+    if (t.length > 500) { Alert.alert('Too Long', `Must not exceed 500 characters.`); return; }
+    try {
+      setActionLoading(rejectingBookingId!); setRejectModalVisible(false);
+      const r = await bookingAPI.rejectBooking(rejectingBookingId!, t);
+      if (r.success) { Alert.alert('Success', 'Booking rejected'); fetchBookings(1); }
+    } catch (error) {
+      const e = handleAPIError(error);
+      Alert.alert('Error', e.message || 'Failed to reject booking');
+      setRejectModalVisible(true);
+    } finally { setActionLoading(null); }
   };
 
-  const handleRejectBooking = (bookingId: string) => {
-    setRejectingBookingId(bookingId);
-    setRejectionReason('');
-    setRejectModalVisible(true);
-  };
+  const handleCloseModal = useCallback(() => { Keyboard.dismiss(); setRejectModalVisible(false); setRejectionReason(''); }, []);
+  const handleChangeReason = useCallback((t: string) => setRejectionReason(t), []);
 
-const submitRejection = async () => {
-  const trimmedReason = rejectionReason.trim();
-  
-  // Client-side validation
-  if (trimmedReason.length < 10) {
-    Alert.alert(
-      'Invalid Reason', 
-      `Reason must be at least 10 characters long. You entered ${trimmedReason.length} characters.`
-    );
-    return;
-  }
-  
-  if (trimmedReason.length > 500) {
-    Alert.alert(
-      'Invalid Reason', 
-      `Reason must not exceed 500 characters. You entered ${trimmedReason.length} characters.`
-    );
-    return;
-  }
-
-  try {
-    setActionLoading(rejectingBookingId!);
-    setRejectModalVisible(false);
-    const response = await bookingAPI.rejectBooking(rejectingBookingId!, trimmedReason);
-    if (response.success) {
-      Alert.alert('Success', 'Booking rejected successfully');
-      fetchBookings(1, false);
-    }
-  } catch (error) {
-    const apiError = handleAPIError(error);
-    
-    // Show specific validation errors if available
-    if (apiError.errors && Array.isArray(apiError.errors)) {
-      const errorMessages = apiError.errors
-        .map((err: any) => `${err.field}: ${err.message}`)
-        .join('\n');
-      Alert.alert('Validation Error', errorMessages);
-    } else {
-      Alert.alert('Error', apiError.message || 'Failed to reject booking');
-    }
-    
-    // Reopen modal if there was an error
-    setRejectModalVisible(true);
-  } finally {
-    setActionLoading(null);
-  }
-};
-  const handleStartService = (bookingId: string) => {
-    Alert.alert('Start Service', 'Mark this booking as in progress?', [
-      {
-        text: 'Cancel',
-        style: 'cancel',
-      },
-      {
-        text: 'Start',
-        onPress: async () => {
-          try {
-            setActionLoading(bookingId);
-            const response = await bookingAPI.startBooking(bookingId);
-            if (response.success) {
-              Alert.alert('Success', 'Service started');
-              fetchBookings(1, false);
-            }
-          } catch (error) {
-            const apiError = handleAPIError(error);
-            Alert.alert('Error', apiError.message || 'Failed to start service');
-          } finally {
-            setActionLoading(null);
-          }
-        },
-      },
-    ]);
-  };
-
-  const handleCompleteService = (bookingId: string) => {
-    Alert.alert('Complete Service', 'Mark this service as completed?', [
-      {
-        text: 'Cancel',
-        style: 'cancel',
-      },
-      {
-        text: 'Complete',
-        onPress: async () => {
-          try {
-            setActionLoading(bookingId);
-            const response = await bookingAPI.markComplete(bookingId);
-            if (response.success) {
-              Alert.alert('Success', 'Service marked as complete');
-              fetchBookings(1, false);
-            }
-          } catch (error) {
-            const apiError = handleAPIError(error);
-            Alert.alert('Error', apiError.message || 'Failed to complete service');
-          } finally {
-            setActionLoading(null);
-          }
-        },
-      },
-    ]);
-  };
-
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-    });
-  };
-
-  const formatPrice = (price: number) => {
-    return `₦${price.toLocaleString()}`;
-  };
-
-  const getStatusColor = (status: string) => {
-    switch (status.toLowerCase()) {
-      case 'pending':
-        return 'bg-yellow-100 text-yellow-800 border-yellow-200';
-      case 'accepted':
-        return 'bg-blue-100 text-blue-800 border-blue-200';
-      case 'in_progress':
-        return 'bg-purple-100 text-purple-800 border-purple-200';
-      case 'completed':
-        return 'bg-green-100 text-green-800 border-green-200';
-      case 'cancelled':
-        return 'bg-red-100 text-red-800 border-red-200';
-      default:
-        return 'bg-gray-100 text-gray-800 border-gray-200';
-    }
-  };
-
-  const getStatusIcon = (status: string) => {
-    switch (status.toLowerCase()) {
-      case 'pending':
-        return 'time';
-      case 'accepted':
-        return 'checkmark-circle';
-      case 'in_progress':
-        return 'hourglass';
-      case 'completed':
-        return 'checkmark-done-circle';
-      case 'cancelled':
-        return 'close-circle';
-      default:
-        return 'help-circle';
-    }
-  };
-
-  const formatStatus = (status: string) => {
-    return status
-      .split('_')
-      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-      .join(' ');
-  };
-
-  const getBookingTitle = (booking: VendorBooking): string => {
-    if (booking.bookingType === 'offer_based') {
-      return 'Custom Offer Booking';
-    }
-    return booking.service?.name || 'Service Booking';
-  };
-
+  // ── Action buttons ────────────────────────────────────────────────────────
   const getActionButtons = (booking: VendorBooking) => {
     const isLoading = actionLoading === booking._id;
 
-    if (booking.status === 'pending') {
-      return (
-        <View className="flex-row" style={{ gap: 8 }}>
-          <TouchableOpacity
-            onPress={() => handleRejectBooking(booking._id)}
-            disabled={isLoading}
-            className="flex-1 rounded-xl overflow-hidden"
-            activeOpacity={0.8}
-          >
-            <LinearGradient
-              colors={['#ef4444', '#dc2626']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              className="py-3"
-              style={{
-                shadowColor: '#ef4444',
-                shadowOffset: { width: 0, height: 4 },
-                shadowOpacity: 0.3,
-                shadowRadius: 6,
-                elevation: 4,
-              }}
-            >
-              {isLoading ? (
-                <ActivityIndicator size="small" color="#fff" />
-              ) : (
-                <View className="flex-row items-center justify-center">
-                  <Ionicons name="close-circle" size={18} color="#fff" />
-                  <Text className="text-white text-center font-bold text-sm ml-1.5">Reject</Text>
-                </View>
-              )}
-            </LinearGradient>
-          </TouchableOpacity>
+    const GradBtn = ({ colors, onPress, icon, label, color }: { colors: [string,string]; onPress: () => void; icon: keyof typeof Ionicons.glyphMap; label: string; color: string }) => (
+      <TouchableOpacity onPress={onPress} disabled={isLoading} activeOpacity={0.85} style={{ flex: 1, borderRadius: 13, overflow: 'hidden' }}>
+        <LinearGradient colors={colors} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+          style={{ paddingVertical: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+            ...shadow(color, 0.3, 8, 4) }}>
+          {isLoading ? <ActivityIndicator size="small" color="#fff" />
+            : <><Ionicons name={icon} size={16} color="#fff" /><Text style={{ color: '#fff', fontSize: 13, fontWeight: '700' }}>{label}</Text></>}
+        </LinearGradient>
+      </TouchableOpacity>
+    );
 
-          <TouchableOpacity
-            onPress={() => handleAcceptBooking(booking._id)}
-            disabled={isLoading}
-            className="flex-1 rounded-xl overflow-hidden"
-            activeOpacity={0.8}
-          >
-            <LinearGradient
-              colors={['#10b981', '#059669']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              className="py-3"
-              style={{
-                shadowColor: '#10b981',
-                shadowOffset: { width: 0, height: 4 },
-                shadowOpacity: 0.3,
-                shadowRadius: 6,
-                elevation: 4,
-              }}
-            >
-              {isLoading ? (
-                <ActivityIndicator size="small" color="#fff" />
-              ) : (
-                <View className="flex-row items-center justify-center">
-                  <Ionicons name="checkmark-circle" size={18} color="#fff" />
-                  <Text className="text-white text-center font-bold text-sm ml-1.5">Accept</Text>
-                </View>
-              )}
-            </LinearGradient>
-          </TouchableOpacity>
-        </View>
-      );
-    }
-
-    if (booking.status === 'accepted') {
-      return (
-        <TouchableOpacity
-          onPress={() => handleStartService(booking._id)}
-          disabled={isLoading}
-          className="rounded-xl overflow-hidden"
-          activeOpacity={0.8}
-        >
-          <LinearGradient
-            colors={['#a855f7', '#9333ea']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            className="py-3"
-            style={{
-              shadowColor: '#a855f7',
-              shadowOffset: { width: 0, height: 4 },
-              shadowOpacity: 0.3,
-              shadowRadius: 6,
-              elevation: 4,
-            }}
-          >
-            {isLoading ? (
-              <ActivityIndicator size="small" color="#fff" />
-            ) : (
-              <View className="flex-row items-center justify-center">
-                <Ionicons name="play-circle" size={20} color="#fff" />
-                <Text className="text-white text-center font-bold text-sm ml-2">Start Service</Text>
-              </View>
-            )}
-          </LinearGradient>
-        </TouchableOpacity>
-      );
-    }
-
-    if (booking.status === 'in_progress') {
-      return (
-        <TouchableOpacity
-          onPress={() => handleCompleteService(booking._id)}
-          disabled={isLoading}
-          className="rounded-xl overflow-hidden"
-          activeOpacity={0.8}
-        >
-          <LinearGradient
-            colors={['#10b981', '#059669']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            className="py-3"
-            style={{
-              shadowColor: '#10b981',
-              shadowOffset: { width: 0, height: 4 },
-              shadowOpacity: 0.3,
-              shadowRadius: 6,
-              elevation: 4,
-            }}
-          >
-            {isLoading ? (
-              <ActivityIndicator size="small" color="#fff" />
-            ) : (
-              <View className="flex-row items-center justify-center">
-                <Ionicons name="checkmark-done-circle" size={20} color="#fff" />
-                <Text className="text-white text-center font-bold text-sm ml-2">Mark Complete</Text>
-              </View>
-            )}
-          </LinearGradient>
-        </TouchableOpacity>
-      );
-    }
-
+    if (booking.status === 'pending') return (
+      <View style={{ flexDirection: 'row', gap: 10 }}>
+        <GradBtn colors={[BRAND.red, '#DC2626']} onPress={() => handleReject(booking._id)} icon="close-circle-outline" label="Reject" color={BRAND.red} />
+        <GradBtn colors={[BRAND.green, '#059669']} onPress={() => handleAccept(booking._id)} icon="checkmark-circle-outline" label="Accept" color={BRAND.green} />
+      </View>
+    );
+    if (booking.status === 'accepted') return (
+      <GradBtn colors={[BRAND.purple, '#7C3AED']} onPress={() => handleStartService(booking._id)} icon="play-circle-outline" label="Start Service" color={BRAND.purple} />
+    );
+    if (booking.status === 'in_progress') return (
+      <GradBtn colors={[BRAND.green, '#059669']} onPress={() => handleComplete(booking._id)} icon="checkmark-done-circle-outline" label="Mark Complete" color={BRAND.green} />
+    );
     return null;
   };
 
-  const getBookingCounts = () => {
-    return {
-      total: bookings.length,
-      pending: bookings.filter((b) => b.status === 'pending').length,
-      accepted: bookings.filter((b) => b.status === 'accepted').length,
-      in_progress: bookings.filter((b) => b.status === 'in_progress').length,
-      completed: bookings.filter((b) => b.status === 'completed').length,
-      cancelled: bookings.filter((b) => b.status === 'cancelled').length,
-    };
+  // ── Filter counts ─────────────────────────────────────────────────────────
+  const counts = {
+    all: bookings.length,
+    pending: bookings.filter((b) => b.status === 'pending').length,
+    accepted: bookings.filter((b) => b.status === 'accepted').length,
+    in_progress: bookings.filter((b) => b.status === 'in_progress').length,
+    completed: bookings.filter((b) => b.status === 'completed').length,
+    cancelled: bookings.filter((b) => b.status === 'cancelled').length,
   };
-
-  const counts = getBookingCounts();
-
-  const filters: { key: FilterTab; label: string; count: number }[] = [
-    { key: 'all', label: 'All', count: counts.total },
-    { key: 'pending', label: 'Pending', count: counts.pending },
-    { key: 'accepted', label: 'Accepted', count: counts.accepted },
-    { key: 'in_progress', label: 'In Progress', count: counts.in_progress },
-    { key: 'completed', label: 'Completed', count: counts.completed },
+  const filters: { key: FilterTab; label: string }[] = [
+    { key: 'all', label: 'All' }, { key: 'pending', label: 'Pending' },
+    { key: 'accepted', label: 'Accepted' }, { key: 'in_progress', label: 'In Progress' },
+    { key: 'completed', label: 'Done' },
   ];
 
-  // Memoized callbacks for the modal
-  const handleCloseModal = useCallback(() => {
-    Keyboard.dismiss();
-    setRejectModalVisible(false);
-    setRejectionReason('');
-  }, []);
+  // ── Booking card ──────────────────────────────────────────────────────────
+  const renderBookingCard = (booking: VendorBooking) => {
+    const cfg = getStatusCfg(booking.status);
+    const payCfg = getPaymentCfg(booking.paymentStatus);
+    const title = booking.bookingType === 'offer_based' ? 'Custom Offer Booking' : (booking.service?.name || 'Service Booking');
+    const clientName = `${booking.client.firstName} ${booking.client.lastName}`;
+    const hasActions = ['pending','accepted','in_progress'].includes(booking.status);
 
-  const handleChangeReason = useCallback((text: string) => {
-    setRejectionReason(text);
-  }, []);
+    return (
+      <TouchableOpacity key={booking._id} onPress={() => navigation.navigate('BookingDetail', { bookingId: booking._id })} activeOpacity={0.93}>
+        <View style={[{
+          backgroundColor: BRAND.surface, borderRadius: 20, padding: 16,
+          marginBottom: 14, borderWidth: 1, borderColor: BRAND.border,
+          borderTopWidth: 3, borderTopColor: cfg.iconColor,
+        }, shadow()]}>
 
-  const renderBookingCard = (booking: VendorBooking) => (
-    <TouchableOpacity
-      key={booking._id}
-      onPress={() => navigation.navigate('BookingDetail', { bookingId: booking._id })}
-      activeOpacity={0.95}
-    >
-      <View
-        className="bg-white rounded-3xl p-5 mb-4 border border-gray-100"
-        style={{
-          ...Platform.select({
-            ios: {
-              shadowColor: '#000',
-              shadowOffset: { width: 0, height: 4 },
-              shadowOpacity: 0.1,
-              shadowRadius: 16,
-            },
-            android: {
-              elevation: 5,
-            },
-          }),
-        }}
-      >
-        {/* Header */}
-        <View className="flex-row items-start justify-between mb-4">
-          <View className="flex-1 mr-3">
-            <Text className="text-lg font-bold text-gray-900 mb-2">
-              {getBookingTitle(booking)}
-            </Text>
-            {booking.bookingType === 'offer_based' && (
-              <View className="mb-2">
-                <View className="px-2 py-1 bg-purple-100 rounded-lg self-start">
-                  <Text className="text-xs text-purple-700 font-bold">Offer Based</Text>
+          {/* Header row */}
+          <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 12 }}>
+            <View style={{ flex: 1, marginRight: 10 }}>
+              <Text style={{ fontSize: 15, fontWeight: '800', color: BRAND.textPrimary, letterSpacing: -0.2, marginBottom: 4 }} numberOfLines={1}>{title}</Text>
+              {booking.bookingType === 'offer_based' && (
+                <View style={{ backgroundColor: BRAND.purpleSoft, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3, alignSelf: 'flex-start', marginBottom: 6 }}>
+                  <Text style={{ fontSize: 10, color: BRAND.purple, fontWeight: '700' }}>Offer Based</Text>
+                </View>
+              )}
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <View style={{ width: 26, height: 26, borderRadius: 13, backgroundColor: BRAND.primarySoft, alignItems: 'center', justifyContent: 'center' }}>
+                  <Ionicons name="person" size={13} color={BRAND.primary} />
+                </View>
+                <Text style={{ fontSize: 13, fontWeight: '600', color: BRAND.textSecondary }}>{clientName}</Text>
+              </View>
+            </View>
+
+            {/* Status badge */}
+            <View style={{ backgroundColor: cfg.bg, borderRadius: 20, paddingHorizontal: 10, paddingVertical: 5, borderWidth: 1, borderColor: cfg.border, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+              <Ionicons name={cfg.icon} size={12} color={cfg.iconColor} />
+              <Text style={{ fontSize: 11, fontWeight: '700', color: cfg.text }}>{formatStatus(booking.status)}</Text>
+            </View>
+          </View>
+
+          {/* Details block */}
+          <View style={{ backgroundColor: BRAND.surfaceAlt, borderRadius: 14, padding: 12, marginBottom: hasActions ? 12 : 8, gap: 10, borderWidth: 1, borderColor: BRAND.border }}>
+            {/* Date */}
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <View style={{ width: 34, height: 34, borderRadius: 10, backgroundColor: BRAND.blueSoft, alignItems: 'center', justifyContent: 'center', marginRight: 10 }}>
+                <Ionicons name="calendar-outline" size={16} color={BRAND.blue} />
+              </View>
+              <View>
+                <Text style={{ fontSize: 10, color: BRAND.textMuted, fontWeight: '500', marginBottom: 1 }}>Date & Time</Text>
+                <Text style={{ fontSize: 13, fontWeight: '700', color: BRAND.textPrimary }}>
+                  {formatDate(booking.scheduledDate)}{booking.scheduledTime ? ` · ${booking.scheduledTime}` : ''}
+                </Text>
+              </View>
+            </View>
+
+            {/* Location */}
+            {booking.location && (
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <View style={{ width: 34, height: 34, borderRadius: 10, backgroundColor: BRAND.greenSoft, alignItems: 'center', justifyContent: 'center', marginRight: 10 }}>
+                  <Ionicons name="location-outline" size={16} color={BRAND.green} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 10, color: BRAND.textMuted, fontWeight: '500', marginBottom: 1 }}>Location</Text>
+                  <Text style={{ fontSize: 13, fontWeight: '700', color: BRAND.textPrimary }} numberOfLines={1}>{booking.location.address}</Text>
                 </View>
               </View>
             )}
-            <View className="flex-row items-center">
-              <View
-                className="w-8 h-8 rounded-full items-center justify-center mr-2 bg-[#eb278d]"
-              >
-                <Ionicons name="person" size={16} color="#fff" />
+
+            {/* Amount + payment status */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <View style={{ width: 34, height: 34, borderRadius: 10, backgroundColor: BRAND.purpleSoft, alignItems: 'center', justifyContent: 'center', marginRight: 10 }}>
+                  <Ionicons name="cash-outline" size={16} color={BRAND.purple} />
+                </View>
+                <View>
+                  <Text style={{ fontSize: 10, color: BRAND.textMuted, fontWeight: '500', marginBottom: 1 }}>Amount</Text>
+                  <Text style={{ fontSize: 16, fontWeight: '800', color: BRAND.primary, letterSpacing: -0.3 }}>{formatPrice(booking.totalAmount)}</Text>
+                </View>
               </View>
-              <Text className="text-sm text-gray-700 font-semibold">
-                {booking.client.firstName} {booking.client.lastName}
-              </Text>
+              <View style={{ backgroundColor: payCfg.bg, borderRadius: 12, paddingHorizontal: 10, paddingVertical: 5, borderWidth: 1, borderColor: payCfg.border }}>
+                <Text style={{ fontSize: 11, fontWeight: '700', color: payCfg.text }}>{formatStatus(booking.paymentStatus)}</Text>
+              </View>
             </View>
+
+            {/* Booking number */}
+            {booking.bookingNumber && (
+              <View style={{ flexDirection: 'row', alignItems: 'center', paddingTop: 8, borderTopWidth: 1, borderTopColor: BRAND.border }}>
+                <Ionicons name="receipt-outline" size={12} color={BRAND.textMuted} style={{ marginRight: 5 }} />
+                <Text style={{ fontSize: 11, color: BRAND.textMuted, fontWeight: '600' }}>{booking.bookingNumber}</Text>
+              </View>
+            )}
           </View>
 
-          <View
-            className={`px-3 py-2 rounded-full ${getStatusColor(booking.status)}`}
-            style={{
-              borderWidth: 1.5,
-            }}
+          {/* Action buttons */}
+          {getActionButtons(booking)}
+
+          {/* Details link */}
+          <TouchableOpacity
+            onPress={() => navigation.navigate('BookingDetail', { bookingId: booking._id })}
+            activeOpacity={0.8}
+            style={{ marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: BRAND.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5 }}
           >
-            <View className="flex-row items-center" style={{ gap: 4 }}>
-              <Ionicons
-                name={getStatusIcon(booking.status) as any}
-                size={14}
-                color={
-                  booking.status === 'completed'
-                    ? '#15803d'
-                    : booking.status === 'cancelled'
-                    ? '#dc2626'
-                    : booking.status === 'pending'
-                    ? '#ca8a04'
-                    : booking.status === 'accepted'
-                    ? '#2563eb'
-                    : '#7c3aed'
-                }
-              />
-              <Text className="text-xs font-bold">{formatStatus(booking.status)}</Text>
-            </View>
-          </View>
+            <Text style={{ fontSize: 13, fontWeight: '700', color: BRAND.primary }}>View Full Details</Text>
+            <Ionicons name="arrow-forward-circle-outline" size={16} color={BRAND.primary} />
+          </TouchableOpacity>
         </View>
+      </TouchableOpacity>
+    );
+  };
 
-        {/* Details */}
-        <View className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-2xl p-4 mb-4" style={{ gap: 14 }}>
-          <View className="flex-row items-center">
-            <View className="w-10 h-10 rounded-full items-center justify-center mr-3 bg-[#2563eb]"
-            >
-              <Ionicons name="calendar" size={20} color="#fff" />
-            </View>
-            <View className="flex-1">
-              <Text className="text-xs text-gray-500 mb-0.5 font-medium">Date & Time</Text>
-              <Text className="text-sm font-bold text-gray-900">
-                {formatDate(booking.scheduledDate)}
-                {booking.scheduledTime && ` • ${booking.scheduledTime}`}
-              </Text>
-            </View>
-          </View>
-
-          {booking.location && (
-            <View className="flex-row items-center">
-              <View className="w-10 h-10 rounded-full items-center justify-center mr-3 bg-[#059669]"
-              >
-                <Ionicons name="location" size={20} color="#fff" />
-              </View>
-              <View className="flex-1">
-                <Text className="text-xs text-gray-500 mb-0.5 font-medium">Location</Text>
-                <Text className="text-sm font-bold text-gray-900" numberOfLines={1}>
-                  {booking.location.address}
-                </Text>
-              </View>
-            </View>
-          )}
-
-          <View className="flex-row items-center justify-between">
-            <View className="flex-row items-center flex-1">
-              <View
-                className="w-10 h-10 rounded-full items-center justify-center mr-3 bg-[#9333ea]"
-              >
-                <Ionicons name="cash" size={20} color="#fff" />
-              </View>
-              <View className="flex-1">
-                <Text className="text-xs text-gray-500 mb-0.5 font-medium">Amount</Text>
-                <Text className="text-lg font-bold text-pink-600">
-                  {formatPrice(booking.totalAmount)}
-                </Text>
-              </View>
-            </View>
-
-            <View
-              className={`px-3 py-2 rounded-xl ${
-                booking.paymentStatus === 'escrowed'
-                  ? 'bg-blue-100'
-                  : booking.paymentStatus === 'released'
-                  ? 'bg-green-100'
-                  : 'bg-yellow-100'
-              }`}
-              style={{
-                borderWidth: 1.5,
-                borderColor:
-                  booking.paymentStatus === 'escrowed'
-                    ? '#3b82f6'
-                    : booking.paymentStatus === 'released'
-                    ? '#10b981'
-                    : '#f59e0b',
-              }}
-            >
-              <Text
-                className={`text-xs font-bold ${
-                  booking.paymentStatus === 'escrowed'
-                    ? 'text-blue-700'
-                    : booking.paymentStatus === 'released'
-                    ? 'text-green-700'
-                    : 'text-yellow-700'
-                }`}
-              >
-                {formatStatus(booking.paymentStatus)}
-              </Text>
-            </View>
-          </View>
-
-          {booking.bookingNumber && (
-            <View className="flex-row items-center pt-3 border-t border-gray-200">
-              <Ionicons name="receipt" size={14} color="#9ca3af" />
-              <Text className="text-xs text-gray-500 ml-2 font-semibold">
-                {booking.bookingNumber}
-              </Text>
-            </View>
-          )}
-        </View>
-
-        {/* Action Buttons */}
-        {getActionButtons(booking)}
-
-        {/* View Details */}
-        <TouchableOpacity
-          onPress={() => navigation.navigate('BookingDetail', { bookingId: booking._id })}
-          className="mt-3 pt-4 border-t border-gray-100"
-        >
-          <View className="flex-row items-center justify-center">
-            <LinearGradient
-              colors={['#eb278d', '#f472b6']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={{
-                paddingHorizontal: 16,
-                paddingVertical: 8,
-                borderRadius: 20,
-              }}
-            >
-              <View className="flex-row items-center">
-                <Text className="text-white font-bold text-sm mr-1">View Full Details</Text>
-                <Ionicons name="arrow-forward-circle" size={18} color="#fff" />
-              </View>
-            </LinearGradient>
-          </View>
-        </TouchableOpacity>
-      </View>
-    </TouchableOpacity>
-  );
-
-  const renderEmptyState = () => (
-    <View className="flex-1 items-center justify-center py-20 px-8">
-      <LinearGradient
-        colors={['#fce7f3', '#fdf2f8']}
-        className="w-32 h-32 rounded-full items-center justify-center mb-6"
-      >
-        <Ionicons name="calendar-outline" size={64} color="#eb278d" />
-      </LinearGradient>
-      <Text className="text-xl font-bold text-gray-900 mb-2 text-center">No Bookings</Text>
-      <Text className="text-gray-600 text-center text-sm">
-        {activeFilter !== 'all'
-          ? `You don't have any ${formatStatus(activeFilter).toLowerCase()} bookings`
-          : "You don't have any bookings yet. They'll appear here once clients book your services."}
-      </Text>
-    </View>
-  );
-
+  // ── Loading ───────────────────────────────────────────────────────────────
   if (loading && page === 1) {
     return (
-      <SafeAreaView className="flex-1 bg-gray-50">
-        <View className="flex-1 items-center justify-center">
-          <ActivityIndicator size="large" color="#eb278d" />
-          <Text className="text-gray-500 text-sm mt-4 font-medium">Loading bookings...</Text>
+      <SafeAreaView style={{ flex: 1, backgroundColor: BRAND.surfaceAlt }}>
+        <StatusBar barStyle="dark-content" />
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+          <ActivityIndicator size="large" color={BRAND.primary} />
+          <Text style={{ color: BRAND.textMuted, fontSize: 14, marginTop: 12, fontWeight: '500' }}>Loading bookings…</Text>
         </View>
       </SafeAreaView>
     );
   }
 
+  // ─────────────────────────────────────────────────────────────────────────
   return (
-    <SafeAreaView className="flex-1 bg-gray-50" edges={['top']}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: BRAND.surfaceAlt }} edges={['top']}>
+      <StatusBar barStyle="dark-content" backgroundColor={BRAND.surface} />
+
+      {/* ── HEADER ───────────────────────────────────────────────────────── */}
+      <View style={[{
+        backgroundColor: BRAND.surface,
+        paddingHorizontal: 20, paddingTop: 10, paddingBottom: 14,
+        flexDirection: 'row', alignItems: 'center',
+        borderBottomWidth: 1, borderBottomColor: BRAND.border,
+      }, shadow('#000', 0.05, 8, 2)]}>
+        <TouchableOpacity onPress={() => navigation.goBack()} activeOpacity={0.8}
+          style={{ width: 40, height: 40, borderRadius: 13, backgroundColor: BRAND.surfaceAlt, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: BRAND.border, marginRight: 12 }}>
+          <Ionicons name="arrow-back" size={20} color={BRAND.textPrimary} />
+        </TouchableOpacity>
+
+        <View style={{ flex: 1 }}>
+          <Text style={{ fontSize: 20, fontWeight: '800', color: BRAND.textPrimary, letterSpacing: -0.4 }}>My Bookings</Text>
+          <Text style={{ fontSize: 12, color: BRAND.textMuted, fontWeight: '500', marginTop: 1 }}>
+            {filteredBookings.length} {filteredBookings.length === 1 ? 'booking' : 'bookings'}
+          </Text>
+        </View>
+
+        <View style={{ flexDirection: 'row', gap: 8 }}>
+          <TouchableOpacity onPress={() => navigation.navigate('VendorMyResponses')} activeOpacity={0.8}
+            style={{ width: 40, height: 40, borderRadius: 13, backgroundColor: BRAND.surfaceAlt, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: BRAND.border }}>
+            <Ionicons name="chatbox-ellipses-outline" size={18} color={BRAND.primary} />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => navigation.navigate('AvailableOffers')} activeOpacity={0.8}
+            style={{ width: 40, height: 40, borderRadius: 13, backgroundColor: BRAND.surfaceAlt, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: BRAND.border }}>
+            <Ionicons name="pricetag-outline" size={18} color={BRAND.primary} />
+          </TouchableOpacity>
+        </View>
+      </View>
+
       <ScrollView
-        className="flex-1"
+        style={{ flex: 1 }}
         showsVerticalScrollIndicator={false}
-        stickyHeaderIndices={[1]}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            tintColor="#eb278d"
-            colors={['#eb278d']}
-          />
-        }
-        onScroll={({ nativeEvent }) => {
-          const { layoutMeasurement, contentOffset, contentSize } = nativeEvent;
-          const isCloseToBottom =
-            layoutMeasurement.height + contentOffset.y >= contentSize.height - 20;
-          if (isCloseToBottom) {
-            loadMore();
+        stickyHeaderIndices={[0]}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={BRAND.primary} colors={[BRAND.primary]} />}
+        onScroll={({ nativeEvent: { layoutMeasurement, contentOffset, contentSize } }) => {
+          if (layoutMeasurement.height + contentOffset.y >= contentSize.height - 20) {
+            if (!loading && hasMore) fetchBookings(page + 1, true);
           }
         }}
         scrollEventThrottle={400}
       >
-        {/* Header */}
-        <LinearGradient
-          colors={['#eb278d', '#eb278d']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          className="pb-4"
-        >
-          <View className="px-5 pt-4">
-            <View className="flex-row items-center justify-between mb-4">
-              <View>
-                <Text className="text-white text-2xl font-bold mb-1">My Bookings</Text>
-                <Text className="text-white/80 text-sm">
-                  {filteredBookings.length}{' '}
-                  {filteredBookings.length === 1 ? 'booking' : 'bookings'}
-                </Text>
-              </View>
-
-              {/* Action Buttons */}
-              <View className="flex-row gap-2">
-                <TouchableOpacity
-                  onPress={() => navigation.navigate('VendorMyResponses')}
-                  className="w-10 h-10 rounded-full bg-white/20 items-center justify-center"
-                >
-                  <Ionicons name="chatbox-ellipses" size={20} color="#fff" />
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  onPress={() => navigation.navigate('AvailableOffers')}
-                  className="w-10 h-10 rounded-full bg-white/20 items-center justify-center"
-                >
-                  <Ionicons name="pricetag" size={20} color="#fff" />
-                </TouchableOpacity>
-
-            
-              </View>
-            </View>
-
-            {/* Quick Links */}
-            <View className="flex-row mb-4" style={{ gap: 8 }}>
-              <TouchableOpacity
-                onPress={() => navigation.navigate('AvailableOffers')}
-                className="flex-1 bg-white/10 rounded-xl p-3 flex-row items-center"
-                activeOpacity={0.7}
-              >
-                <View className="w-10 h-10 rounded-full bg-white/30 items-center justify-center mr-3">
-                  <Ionicons name="pricetag" size={18} color="#fff" />
-                </View>
-                <View className="flex-1">
-                  <Text className="text-white text-xs font-semibold mb-0.5">Browse Offers</Text>
-                  <Text className="text-white/80 text-[10px]">Find new opportunities</Text>
-                </View>
-                <Ionicons name="chevron-forward" size={18} color="#fff" />
+        {/* ── STICKY SEARCH + FILTERS ────────────────────────────────────── */}
+        <View style={{ backgroundColor: BRAND.surface, borderBottomWidth: 1, borderBottomColor: BRAND.border, paddingHorizontal: 16, paddingTop: 12, paddingBottom: 12 }}>
+          {/* Search */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: BRAND.surfaceAlt, borderRadius: 14, paddingHorizontal: 12, paddingVertical: 10, borderWidth: 1.5, borderColor: BRAND.border, marginBottom: 10 }}>
+            <Ionicons name="search" size={16} color={BRAND.textMuted} style={{ marginRight: 8 }} />
+            <TextInput
+              style={{ flex: 1, fontSize: 14, color: BRAND.textPrimary, paddingVertical: 0 }}
+              placeholder="Search bookings…"
+              placeholderTextColor={BRAND.textMuted}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+            />
+            {searchQuery.length > 0 && (
+              <TouchableOpacity onPress={() => setSearchQuery('')} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+                <Ionicons name="close-circle" size={17} color={BRAND.textMuted} />
               </TouchableOpacity>
-
-              <TouchableOpacity
-                onPress={() => navigation.navigate('VendorMyResponses')}
-                className="flex-1 bg-white/10 rounded-xl p-3 flex-row items-center"
-                activeOpacity={0.7}
-              >
-                <View className="w-10 h-10 rounded-full bg-white/30 items-center justify-center mr-3">
-                  <Ionicons name="chatbox-ellipses" size={18} color="#fff" />
-                </View>
-                <View className="flex-1">
-                  <Text className="text-white text-xs font-semibold mb-0.5">My Responses</Text>
-                  <Text className="text-white/80 text-[10px]">Track your proposals</Text>
-                </View>
-                <Ionicons name="chevron-forward" size={18} color="#fff" />
-              </TouchableOpacity>
-            </View>
-
-            {/* Stats Cards */}
-            {stats && (
-              <View className="flex-row mb-4" style={{ gap: 12 }}>
-                <View className="flex-1 bg-white/10 rounded-2xl p-4">
-                  <View className="flex-row items-center justify-between mb-2">
-                    <Text className="text-white/90 text-xs font-semibold">Total Earnings</Text>
-                    <Ionicons name="cash" size={16} color="#fff" />
-                  </View>
-                  <Text className="text-white text-xl font-bold">
-                    {formatPrice(stats.totalEarnings)}
-                  </Text>
-                  <Text className="text-white/70 text-[10px] mt-1">
-                    From {stats.completedBookings} completed{' '}
-                    {stats.completedBookings === 1 ? 'job' : 'jobs'}
-                  </Text>
-                </View>
-
-                <View className="flex-1 bg-white/10 rounded-2xl p-4">
-                  <View className="flex-row items-center justify-between mb-2">
-                    <Text className="text-white/90 text-xs font-semibold">Active Jobs</Text>
-                    <Ionicons name="hourglass" size={16} color="#fff" />
-                  </View>
-                  <Text className="text-white text-xl font-bold">{stats.activeBookings}</Text>
-                  <Text className="text-white/70 text-[10px] mt-1">In progress services</Text>
-                </View>
-              </View>
             )}
           </View>
-        </LinearGradient>
 
-        {/* Filters Section */}
-        <LinearGradient
-          colors={['#eb278d', '#eb278d']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-        >
-          <View className="px-5 pb-4">
-            {/* Search Bar */}
-            <View className="flex-row items-center bg-white/20 rounded-2xl px-4 py-3 mb-4">
-              <Ionicons name="search" size={20} color="#fff" />
-              <TextInput
-                className="flex-1 ml-2 text-base text-white"
-                placeholder="Search bookings..."
-                placeholderTextColor="rgba(255, 255, 255, 0.7)"
-                value={searchQuery}
-                onChangeText={setSearchQuery}
-              />
-              {searchQuery.length > 0 && (
-                <TouchableOpacity onPress={() => setSearchQuery('')}>
-                  <Ionicons name="close-circle" size={20} color="#fff" />
-                </TouchableOpacity>
-              )}
-            </View>
-
-            {/* Filter Tabs */}
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={{ gap: 8 }}
-            >
-              {filters.map((filter) => (
-                <TouchableOpacity
-                  key={filter.key}
-                  onPress={() => setActiveFilter(filter.key)}
-                  className={`px-5 py-2.5 rounded-full ${
-                    activeFilter === filter.key ? 'bg-white' : 'bg-white/20'
-                  }`}
-                  activeOpacity={0.7}
+          {/* Filter pills */}
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+            {filters.map((f) => {
+              const active = activeFilter === f.key;
+              const cnt = counts[f.key];
+              return (
+                <TouchableOpacity key={f.key} onPress={() => setActiveFilter(f.key)} activeOpacity={0.8}
+                  style={{
+                    flexDirection: 'row', alignItems: 'center', gap: 5,
+                    paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20,
+                    backgroundColor: active ? BRAND.primary : BRAND.surfaceAlt,
+                    borderWidth: 1.5, borderColor: active ? BRAND.primary : BRAND.border,
+                    ...( active ? shadow(BRAND.primary, 0.25, 8, 3) : {}),
+                  }}
                 >
-                  <Text
-                    className={`font-bold text-sm ${
-                      activeFilter === filter.key ? 'text-pink-600' : 'text-white'
-                    }`}
-                  >
-                    {filter.label}
-                    {filter.count > 0 && ` (${filter.count})`}
-                  </Text>
+                  <Text style={{ fontSize: 12, fontWeight: '700', color: active ? '#fff' : BRAND.textSecondary }}>{f.label}</Text>
+                  {cnt > 0 && (
+                    <View style={{ backgroundColor: active ? 'rgba(255,255,255,0.25)' : BRAND.border, borderRadius: 10, paddingHorizontal: 6, paddingVertical: 1 }}>
+                      <Text style={{ fontSize: 10, fontWeight: '800', color: active ? '#fff' : BRAND.textMuted }}>{cnt}</Text>
+                    </View>
+                  )}
                 </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </View>
-        </LinearGradient>
+              );
+            })}
+          </ScrollView>
+        </View>
 
-        {/* Bookings List */}
-        <View className="px-5 py-4">
+        {/* ── STATS STRIP ───────────────────────────────────────────────── */}
+        {stats && (
+          <View style={{ paddingHorizontal: 16, paddingTop: 14, paddingBottom: 4 }}>
+            <LinearGradient
+              colors={[BRAND.primary, BRAND.primaryDark]}
+              start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+              style={{ borderRadius: 20, padding: 16, flexDirection: 'row', gap: 0, ...shadow(BRAND.primary, 0.25, 12, 5) }}
+            >
+              {[
+                { label: 'Total Earnings', value: formatPrice(stats.totalEarnings), icon: 'cash-outline' as const },
+                { label: 'Active Jobs',    value: stats.activeBookings.toString(),  icon: 'hourglass-outline' as const },
+                { label: 'Pending',        value: stats.pendingBookings.toString(), icon: 'time-outline' as const },
+              ].map((s, i) => (
+                <View key={i} style={{ flex: 1, alignItems: 'center', borderRightWidth: i < 2 ? 1 : 0, borderRightColor: 'rgba(255,255,255,0.2)' }}>
+                  <Ionicons name={s.icon} size={16} color="rgba(255,255,255,0.7)" style={{ marginBottom: 4 }} />
+                  <Text style={{ color: '#fff', fontSize: 16, fontWeight: '800', letterSpacing: -0.3 }}>{s.value}</Text>
+                  <Text style={{ color: 'rgba(255,255,255,0.65)', fontSize: 10, fontWeight: '500', marginTop: 2 }}>{s.label}</Text>
+                </View>
+              ))}
+            </LinearGradient>
+          </View>
+        )}
+
+        {/* ── QUICK LINKS ───────────────────────────────────────────────── */}
+        <View style={{ paddingHorizontal: 16, paddingTop: 14, flexDirection: 'row', gap: 10 }}>
+          {[
+            { label: 'Browse Offers', sub: 'Find new opportunities', icon: 'pricetag-outline' as const, bg: BRAND.primarySoft, color: BRAND.primary, onPress: () => navigation.navigate('AvailableOffers') },
+            { label: 'My Responses', sub: 'Track your proposals',    icon: 'chatbox-ellipses-outline' as const, bg: BRAND.blueSoft,    color: BRAND.blue,    onPress: () => navigation.navigate('VendorMyResponses') },
+          ].map((q, i) => (
+            <TouchableOpacity key={i} onPress={q.onPress} activeOpacity={0.85} style={{ flex: 1 }}>
+              <View style={[{ backgroundColor: BRAND.surface, borderRadius: 16, padding: 14, flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: BRAND.border }, shadow()]}>
+                <View style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: q.bg, alignItems: 'center', justifyContent: 'center', marginRight: 10 }}>
+                  <Ionicons name={q.icon} size={17} color={q.color} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 12, fontWeight: '700', color: BRAND.textPrimary, marginBottom: 1 }}>{q.label}</Text>
+                  <Text style={{ fontSize: 10, color: BRAND.textMuted }}>{q.sub}</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={14} color={BRAND.textMuted} />
+              </View>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        {/* ── BOOKING LIST ──────────────────────────────────────────────── */}
+        <View style={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 24 }}>
           {filteredBookings.length > 0 ? (
             <>
-              {filteredBookings.map((booking) => renderBookingCard(booking))}
-
+              {filteredBookings.map(renderBookingCard)}
               {loading && page > 1 && (
-                <View className="py-4">
-                  <ActivityIndicator size="small" color="#eb278d" />
+                <View style={{ paddingVertical: 16, alignItems: 'center' }}>
+                  <ActivityIndicator size="small" color={BRAND.primary} />
                 </View>
               )}
-
               {!hasMore && filteredBookings.length > 10 && (
-                <Text className="text-center text-gray-400 text-sm py-4">No more bookings</Text>
+                <Text style={{ textAlign: 'center', color: BRAND.textMuted, fontSize: 12, paddingVertical: 16 }}>All bookings loaded</Text>
               )}
             </>
           ) : (
-            renderEmptyState()
+            <View style={{ alignItems: 'center', justifyContent: 'center', paddingTop: 60, paddingHorizontal: 32 }}>
+              <View style={{ width: 80, height: 80, borderRadius: 24, backgroundColor: BRAND.primarySoft, alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
+                <Ionicons name="calendar-outline" size={38} color={BRAND.primary} />
+              </View>
+              <Text style={{ fontSize: 18, fontWeight: '800', color: BRAND.textPrimary, marginBottom: 6, letterSpacing: -0.3 }}>No Bookings</Text>
+              <Text style={{ fontSize: 13, color: BRAND.textMuted, textAlign: 'center', lineHeight: 20 }}>
+                {activeFilter !== 'all'
+                  ? `No ${formatStatus(activeFilter).toLowerCase()} bookings yet`
+                  : "Bookings from clients will appear here"}
+              </Text>
+            </View>
           )}
         </View>
       </ScrollView>
 
-      {/* Rejection Modal */}
-      <RejectionModalContent
+      <RejectionModal
         visible={rejectModalVisible}
         rejectionReason={rejectionReason}
         onChangeReason={handleChangeReason}

@@ -50,7 +50,9 @@ export const webrtcHtml = `
         let peerConnection;
         let localStream;
         let remoteStream;
-        
+        let pendingIceCandidates = [];
+        let hasRemoteDescription = false;
+
         const localVideo = document.getElementById('localVideo');
         const remoteVideo = document.getElementById('remoteVideo');
         const remoteAudio = document.getElementById('remoteAudio');
@@ -61,7 +63,27 @@ export const webrtcHtml = `
                 { urls: 'stun:stun1.l.google.com:19302' },
                 { urls: 'stun:stun2.l.google.com:19302' },
                 { urls: 'stun:stun3.l.google.com:19302' },
-                { urls: 'stun:stun4.l.google.com:19302' }
+                { urls: 'stun:stun4.l.google.com:19302' },
+                {
+                    urls: 'turn:a.relay.metered.ca:80',
+                    username: 'e8dd65b92f6de1da0c2bf5b6',
+                    credential: 'VhacMpSx/TM+Fpn+'
+                },
+                {
+                    urls: 'turn:a.relay.metered.ca:80?transport=tcp',
+                    username: 'e8dd65b92f6de1da0c2bf5b6',
+                    credential: 'VhacMpSx/TM+Fpn+'
+                },
+                {
+                    urls: 'turn:a.relay.metered.ca:443',
+                    username: 'e8dd65b92f6de1da0c2bf5b6',
+                    credential: 'VhacMpSx/TM+Fpn+'
+                },
+                {
+                    urls: 'turns:a.relay.metered.ca:443?transport=tcp',
+                    username: 'e8dd65b92f6de1da0c2bf5b6',
+                    credential: 'VhacMpSx/TM+Fpn+'
+                }
             ],
             iceCandidatePoolSize: 10
         };
@@ -74,21 +96,27 @@ export const webrtcHtml = `
 
         async function getLocalStream(isVideo) {
             try {
-                console.log('🎥 Getting local stream - isVideo:', isVideo);
-                
+                console.log('Getting local stream - isVideo:', isVideo);
+                console.log('isSecureContext:', window.isSecureContext);
+                console.log('navigator.mediaDevices:', !!navigator.mediaDevices);
+
+                if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                    throw new Error('getUserMedia not available. isSecureContext=' + window.isSecureContext + '. WebView may need HTTPS baseUrl.');
+                }
+
                 const constraints = {
                     audio: {
                         echoCancellation: true,
                         noiseSuppression: true,
                         autoGainControl: true
                     },
-                    video: isVideo ? { 
+                    video: isVideo ? {
                         facingMode: 'user',
                         width: { ideal: 1280 },
                         height: { ideal: 720 }
                     } : false
                 };
-                
+
                 localStream = await navigator.mediaDevices.getUserMedia(constraints);
                 
                 // Display local video
@@ -127,35 +155,59 @@ export const webrtcHtml = `
 
                 // Handle ICE connection state changes
                 peerConnection.oniceconnectionstatechange = () => {
-                    console.log('🧊 ICE connection state:', peerConnection.iceConnectionState);
-                    if (peerConnection.iceConnectionState === 'connected') {
+                    console.log('ICE connection state:', peerConnection.iceConnectionState);
+                    sendMessage('connectionState', { state: peerConnection.iceConnectionState });
+                    if (peerConnection.iceConnectionState === 'failed') {
+                        console.log('ICE failed, attempting restart...');
+                        peerConnection.restartIce();
+                    } else if (peerConnection.iceConnectionState === 'disconnected') {
+                        // Give it a few seconds to recover before reporting failure
+                        setTimeout(() => {
+                            if (peerConnection && peerConnection.iceConnectionState === 'disconnected') {
+                                sendMessage('connectionState', { state: 'failed' });
+                            }
+                        }, 5000);
+                    }
+                };
+
+                // Handle connection state (more reliable than ICE state on some browsers)
+                peerConnection.onconnectionstatechange = () => {
+                    console.log('Connection state:', peerConnection.connectionState);
+                    if (peerConnection.connectionState === 'connected') {
                         sendMessage('connectionState', { state: 'connected' });
-                    } else if (peerConnection.iceConnectionState === 'failed') {
-                        sendMessage('connectionState', { state: 'failed' });
                     }
                 };
 
                 // Handle incoming tracks
                 peerConnection.ontrack = (event) => {
                     console.log('📥 Received remote track:', event.track.kind);
-                    
+
                     if (event.streams && event.streams[0]) {
                         const stream = event.streams[0];
-                        
+
                         console.log('✅ Remote stream received');
                         console.log('   - Audio tracks:', stream.getAudioTracks().length);
                         console.log('   - Video tracks:', stream.getVideoTracks().length);
-                        
-                        // Attach to both video and audio elements
-                        if (event.track.kind === 'video') {
-                            remoteVideo.srcObject = stream;
-                            remoteVideo.play().catch(e => console.log('Video autoplay failed:', e));
-                        } else if (event.track.kind === 'audio') {
-                            remoteAudio.srcObject = stream;
-                            remoteAudio.play().catch(e => console.log('Audio autoplay failed:', e));
+
+                        // Always attach the full stream to both elements for reliability
+                        remoteVideo.srcObject = stream;
+                        remoteAudio.srcObject = stream;
+
+                        // Ensure playback starts (with retry for autoplay restrictions)
+                        function tryPlay(element, name) {
+                            element.play().then(() => {
+                                console.log(name + ' playing successfully');
+                            }).catch(e => {
+                                console.log(name + ' autoplay failed, retrying in 500ms:', e);
+                                setTimeout(() => {
+                                    element.play().catch(e2 => console.log(name + ' retry also failed:', e2));
+                                }, 500);
+                            });
                         }
-                        
-                        sendMessage('remoteStream', { 
+                        tryPlay(remoteVideo, 'Video');
+                        tryPlay(remoteAudio, 'Audio');
+
+                        sendMessage('remoteStream', {
                             id: stream.id,
                             hasAudio: stream.getAudioTracks().length > 0,
                             hasVideo: stream.getVideoTracks().length > 0
@@ -187,13 +239,23 @@ export const webrtcHtml = `
             try {
                 switch (type) {
                     case 'init':
-                        console.log('🎬 Initializing with video:', data.isVideo);
-                        await getLocalStream(data.isVideo);
+                        console.log('Initializing with video:', data.isVideo);
+                        try {
+                            await getLocalStream(data.isVideo);
+                        } catch (streamError) {
+                            console.error('Failed to get local stream:', streamError);
+                            sendMessage('error', { message: 'Microphone/camera access failed: ' + streamError.message });
+                        }
                         await createPeerConnection();
+                        sendMessage('initComplete', {});
                         break;
                     
                     case 'createOffer':
-                        console.log('📤 Creating offer');
+                        console.log('Creating offer');
+                        if (!peerConnection) {
+                            sendMessage('error', { message: 'PeerConnection not initialized - media access may have failed' });
+                            break;
+                        }
                         const offer = await peerConnection.createOffer({
                             offerToReceiveAudio: true,
                             offerToReceiveVideo: true
@@ -204,10 +266,24 @@ export const webrtcHtml = `
                         break;
 
                     case 'createAnswer':
-                        console.log('📥 Creating answer for received offer');
+                        console.log('Creating answer for received offer');
+                        if (!peerConnection) {
+                            sendMessage('error', { message: 'PeerConnection not initialized - media access may have failed' });
+                            break;
+                        }
                         await peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
+                        hasRemoteDescription = true;
                         console.log('✅ Remote description set');
-                        
+
+                        // Flush any queued ICE candidates
+                        if (pendingIceCandidates.length > 0) {
+                            console.log('📥 Flushing ' + pendingIceCandidates.length + ' queued ICE candidates');
+                            for (const candidate of pendingIceCandidates) {
+                                await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+                            }
+                            pendingIceCandidates = [];
+                        }
+
                         const answer = await peerConnection.createAnswer();
                         await peerConnection.setLocalDescription(answer);
                         console.log('✅ Answer created and set as local description');
@@ -217,13 +293,28 @@ export const webrtcHtml = `
                     case 'handleAnswer':
                         console.log('📥 Handling received answer');
                         await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
+                        hasRemoteDescription = true;
                         console.log('✅ Remote description (answer) set');
+
+                        // Flush any queued ICE candidates
+                        if (pendingIceCandidates.length > 0) {
+                            console.log('📥 Flushing ' + pendingIceCandidates.length + ' queued ICE candidates');
+                            for (const candidate of pendingIceCandidates) {
+                                await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+                            }
+                            pendingIceCandidates = [];
+                        }
                         break;
 
                     case 'addIceCandidate':
-                        console.log('📥 Adding ICE candidate');
-                        await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
-                        console.log('✅ ICE candidate added');
+                        if (!peerConnection || !hasRemoteDescription) {
+                            console.log('📥 Queuing ICE candidate (remote description not set yet)');
+                            pendingIceCandidates.push(data.candidate);
+                        } else {
+                            console.log('📥 Adding ICE candidate');
+                            await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
+                            console.log('✅ ICE candidate added');
+                        }
                         break;
 
                     case 'toggleMute':
@@ -292,13 +383,17 @@ export const webrtcHtml = `
                                 console.log('   - Stopping track:', track.kind);
                                 track.stop();
                             });
+                            localStream = null;
                         }
                         if (peerConnection) {
                             peerConnection.close();
+                            peerConnection = null;
                         }
                         localVideo.srcObject = null;
                         remoteVideo.srcObject = null;
                         remoteAudio.srcObject = null;
+                        pendingIceCandidates = [];
+                        hasRemoteDescription = false;
                         console.log('✅ Call ended, all resources cleaned up');
                         break;
                 }

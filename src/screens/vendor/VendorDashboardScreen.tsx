@@ -1,1015 +1,639 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StatusBar, Animated, Dimensions, RefreshControl, Platform, Alert } from 'react-native';
+import {
+  View, Text, TouchableOpacity, ScrollView, StatusBar,
+  Animated, Dimensions, RefreshControl, Platform, Alert,
+} from 'react-native';
 import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '@/types/navigation.types';
 import VendorSidebar from '@/components/VendorSidebar';
-import { vendorAPI, walletAPI, bookingAPI, servicesAPI, handleAPIError, userAPI, notificationAPI, messageAPI, analyticsAPI } from '@/api/api';
+import {
+  vendorAPI, walletAPI, bookingAPI, servicesAPI, handleAPIError,
+  userAPI, notificationAPI, messageAPI, analyticsAPI,
+} from '@/api/api';
 import socketService from '@/services/socket.service';
 import WalletFundingModal from '@/components/WalletFundingModal';
-import WithdrawalModal from '@/components/WIthdrawalModal'; 
+import WithdrawalModal from '@/components/WIthdrawalModal';
 
-const {
-  width: SCREEN_WIDTH
-} = Dimensions.get('window');
+// ─── Brand Tokens ─────────────────────────────────────────────────────────────
+const BRAND = {
+  primary: '#E04079',
+  primaryDark: '#B5315F',
+  primaryLight: '#F08BAC',
+  primarySoft: '#FEF0F5',
+  primaryMuted: '#FCDCE9',
+  blue: '#3B82F6', blueSoft: '#DBEAFE',
+  green: '#10B981', greenSoft: '#D1FAE5',
+  gold: '#F59E0B', goldSoft: '#FEF3C7',
+  orange: '#F97316', orangeSoft: '#FFEDD5',
+  purple: '#8B5CF6', purpleSoft: '#EDE9FE',
+  red: '#EF4444', redSoft: '#FEE2E2',
+  surface: '#FFFFFF',
+  surfaceAlt: '#F9FAFB',
+  border: '#F3F4F6',
+  borderStrong: '#E5E7EB',
+  textPrimary: '#111827',
+  textSecondary: '#6B7280',
+  textMuted: '#9CA3AF',
+};
 
-interface QuickAction {
-  id: string;
-  title: string;
-  icon: string;
-  iconFamily: 'ionicons' | 'material' | 'feather';
-  color: string;
-  bgColor: string;
-  onPress: () => void;
-}
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const CARD_W = (SCREEN_WIDTH - 52) / 2;
 
-interface Stat {
-  label: string;
-  value: string;
-  change: string;
-  isPositive: boolean;
-}
-
-interface VendorProfile {
-  businessName: string;
-  businessDescription?: string;
-  rating?: number;
-  totalReviews?: number;
-  isActive?: boolean;
-  createdAt?: string;
-  firstName?: string;
-  lastName?: string;
-  email?: string;
-  walletBalance?: number;
-  avatar?: string;
-}
-
-interface WalletData {
-  balance: number;
-  pendingBalance: number;
-  totalEarnings: number;
-}
-
-interface RecentActivity {
-  icon: string;
-  title: string;
-  subtitle: string;
-  time: string;
-  color: string;
-}
-
-type VendorDashboardScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Main'>;
-
-const VendorDashboardScreen: React.FC = () => {
-  const navigation = useNavigation<VendorDashboardScreenNavigationProp>();
-  const [showBalance, setShowBalance] = useState<boolean>(false);
-  const [refreshing, setRefreshing] = useState<boolean>(false);
-  const [selectedPeriod, setSelectedPeriod] = useState<'day' | 'week' | 'month'>('week');
-  const [sidebarVisible, setSidebarVisible] = useState<boolean>(false);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [vendorProfile, setVendorProfile] = useState<VendorProfile | null>(null);
-  const [fundingModalVisible, setFundingModalVisible] = useState<boolean>(false);
-  const [withdrawalModalVisible, setWithdrawalModalVisible] = useState<boolean>(false);
-  const [walletData, setWalletData] = useState<WalletData>({
-    balance: 0,
-    pendingBalance: 0,
-    totalEarnings: 0
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+const shadow = (color = '#000', opacity = 0.07, radius = 8, y = 2) =>
+  Platform.select({
+    ios: { shadowColor: color, shadowOffset: { width: 0, height: y }, shadowOpacity: opacity, shadowRadius: radius },
+    android: { elevation: Math.round(radius / 2) },
   });
-  const [bookingsData, setBookingsData] = useState<any[]>([]);
-  const [servicesData, setServicesData] = useState<any[]>([]);
-  const [unreadNotificationCount, setUnreadNotificationCount] = useState<number>(0);
-  const [unreadMessagesCount, setUnreadMessagesCount] = useState<number>(0);
-  const [analyticsData, setAnalyticsData] = useState<any>(null);
-  const [stats, setStats] = useState<Stat[]>([{
-    label: 'Total Orders',
-    value: '0',
-    change: '+0%',
-    isPositive: true
-  }, {
-    label: 'Active Products',
-    value: '0',
-    change: '+0',
-    isPositive: true
-  }, {
-    label: 'Avg. Rating',
-    value: '0.0',
-    change: '+0.0',
-    isPositive: true
-  }, {
-    label: 'Response Rate',
-    value: '0%',
-    change: '0%',
-    isPositive: true
-  }]);
-  const [recentActivities, setRecentActivities] = useState<RecentActivity[]>([]);
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(50)).current;
-  const scaleAnim = useRef(new Animated.Value(0.95)).current;
 
+const getGreeting = () => {
+  const h = new Date().getHours();
+  if (h < 12) return 'Good morning 👋';
+  if (h < 18) return 'Good afternoon 👋';
+  return 'Good evening 👋';
+};
+
+const getTimeAgo = (date: Date | string) => {
+  const diff = Date.now() - new Date(date).getTime();
+  const m = Math.floor(diff / 60000), hr = Math.floor(diff / 3600000), d = Math.floor(diff / 86400000);
+  if (m < 60) return `${m}m ago`;
+  if (hr < 24) return `${hr}h ago`;
+  return `${d}d ago`;
+};
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+type Nav = StackNavigationProp<RootStackParamList, 'Main'>;
+
+interface Stat { label: string; value: string; change: string; isPositive: boolean }
+interface VendorProfile {
+  businessName: string; businessDescription?: string; rating?: number;
+  totalReviews?: number; isActive?: boolean; createdAt?: string;
+  firstName?: string; lastName?: string; email?: string;
+  walletBalance?: number; avatar?: string;
+}
+interface WalletData { balance: number; pendingBalance: number; totalEarnings: number }
+interface RecentActivity { icon: string; title: string; subtitle: string; time: string; color: string }
+
+// ─── Perf Card ────────────────────────────────────────────────────────────────
+const PerfCard: React.FC<{
+  icon: keyof typeof Ionicons.glyphMap;
+  iconBg: string; iconColor: string;
+  label: string; value: string;
+  badgeText: string; badgeGood: boolean;
+  barColor: string; barWidth: number;
+}> = ({ icon, iconBg, iconColor, label, value, badgeText, badgeGood, barColor, barWidth }) => (
+  <View style={[{ backgroundColor: BRAND.surface, borderRadius: 18, padding: 16, marginBottom: 10, borderWidth: 1, borderColor: BRAND.border }, shadow()]}>
+    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+        <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: iconBg, alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
+          <Ionicons name={icon} size={19} color={iconColor} />
+        </View>
+        <View>
+          <Text style={{ fontSize: 11, color: BRAND.textMuted, fontWeight: '500', marginBottom: 2 }}>{label}</Text>
+          <Text style={{ fontSize: 22, fontWeight: '800', color: BRAND.textPrimary, letterSpacing: -0.4 }}>{value}</Text>
+        </View>
+      </View>
+      <View style={{ backgroundColor: badgeGood ? BRAND.greenSoft : BRAND.goldSoft, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 }}>
+        <Text style={{ fontSize: 11, fontWeight: '700', color: badgeGood ? '#065F46' : '#92400E' }}>{badgeText}</Text>
+      </View>
+    </View>
+    <View style={{ height: 4, backgroundColor: BRAND.border, borderRadius: 2 }}>
+      <View style={{ height: 4, width: `${Math.min(barWidth, 100)}%`, backgroundColor: barColor, borderRadius: 2 }} />
+    </View>
+  </View>
+);
+
+// ─── Badge ────────────────────────────────────────────────────────────────────
+const Badge: React.FC<{ count: number }> = ({ count }) => {
+  if (count <= 0) return null;
+  return (
+    <View style={{
+      position: 'absolute', top: -2, right: -2,
+      minWidth: 17, height: 17, borderRadius: 9,
+      backgroundColor: BRAND.primary,
+      alignItems: 'center', justifyContent: 'center',
+      paddingHorizontal: 3,
+      ...shadow(BRAND.primary, 0.35, 4, 2),
+    }}>
+      <Text style={{ color: '#fff', fontSize: 10, fontWeight: '800' }}>
+        {count > 99 ? '99+' : count}
+      </Text>
+    </View>
+  );
+};
+
+// ─── Main Screen ──────────────────────────────────────────────────────────────
+const VendorDashboardScreen: React.FC = () => {
+  const navigation = useNavigation<Nav>();
+  const insets = useSafeAreaInsets();
+
+  const [showBalance, setShowBalance]               = useState(false);
+  const [refreshing, setRefreshing]                 = useState(false);
+  const [selectedPeriod, setSelectedPeriod]         = useState<'day' | 'week' | 'month'>('week');
+  const [sidebarVisible, setSidebarVisible]         = useState(false);
+  const [loading, setLoading]                       = useState(true);
+  const [vendorProfile, setVendorProfile]           = useState<VendorProfile | null>(null);
+  const [fundingModalVisible, setFundingModalVisible]   = useState(false);
+  const [withdrawalModalVisible, setWithdrawalModalVisible] = useState(false);
+  const [walletData, setWalletData]                 = useState<WalletData>({ balance: 0, pendingBalance: 0, totalEarnings: 0 });
+  const [servicesData, setServicesData]             = useState<any[]>([]);
+  const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
+  const [unreadMessagesCount, setUnreadMessagesCount]         = useState(0);
+  const [analyticsData, setAnalyticsData]           = useState<any>(null);
+  const [stats, setStats]                           = useState<Stat[]>([
+    { label: 'Total Orders',    value: '0',   change: '+0%', isPositive: true },
+    { label: 'Active Services', value: '0',   change: '+0',  isPositive: true },
+    { label: 'Avg. Rating',     value: '0.0', change: '+0.0',isPositive: true },
+    { label: 'Response Rate',   value: '0%',  change: '0%',  isPositive: true },
+  ]);
+
+  const fadeAnim  = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(30)).current;
+  const scaleAnim = useRef(new Animated.Value(0.97)).current;
+
+  // ── Socket ───────────────────────────────────────────────────────────────
   useEffect(() => {
-    console.log('🔌 Connecting to Socket.IO...');
     socketService.connect();
-
-    socketService.onNewMessage((data) => {
-      console.log('📩 New message received via socket:', data);
-      setUnreadMessagesCount((prev) => prev + 1);
-    });
-
-    return () => {
-      console.log('🧹 Cleaning up socket listeners');
-      socketService.removeListener('message:new');
-    };
+    socketService.onNewMessage(() => setUnreadMessagesCount((p) => p + 1));
+    return () => socketService.removeListener('message:new');
   }, []);
 
+  useFocusEffect(useCallback(() => {
+    fetchUnreadNotificationCount();
+    fetchUnreadMessagesCount();
+    if (!socketService.isSocketConnected()) socketService.connect();
+    const interval = setInterval(() => {
+      fetchUnreadNotificationCount();
+      fetchUnreadMessagesCount();
+    }, 30000);
+    return () => clearInterval(interval);
+  }, []));
+
+  // ── Animations ───────────────────────────────────────────────────────────
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim,  { toValue: 1, duration: 500, useNativeDriver: true }),
+      Animated.timing(slideAnim, { toValue: 0, duration: 450, useNativeDriver: true }),
+      Animated.spring(scaleAnim, { toValue: 1, friction: 8, tension: 40, useNativeDriver: true }),
+    ]).start();
+  }, []);
+
+  useEffect(() => { fetchDashboardData(); }, []);
+
+  // ── Data fetching ─────────────────────────────────────────────────────────
   const fetchUnreadNotificationCount = async () => {
     try {
-      const response = await notificationAPI.getUnreadCount();
-      
-      if (response.data?.count !== undefined) {
-        setUnreadNotificationCount(response.data.count);
-      } else if (response.data?.data?.count !== undefined) {
-        setUnreadNotificationCount(response.data.data.count);
-      } else if (response.count !== undefined) {
-        setUnreadNotificationCount(response.count);
-      }
-    } catch (error) {
-      console.error('Error fetching unread notification count:', error);
-    }
+      const r = await notificationAPI.getUnreadCount();
+      const c = r.data?.count ?? r.data?.data?.count ?? r.count ?? 0;
+      setUnreadNotificationCount(c);
+    } catch {}
   };
 
   const fetchUnreadMessagesCount = async () => {
     try {
-      const response = await messageAPI.getUnreadCount();
-
-      if (response.data?.unreadCount !== undefined) {
-        setUnreadMessagesCount(response.data.unreadCount);
-        console.log('✅ Set unread messages to:', response.data.unreadCount);
-      } else if (response.unreadCount !== undefined) {
-        setUnreadMessagesCount(response.unreadCount);
-        console.log('✅ Set unread messages to:', response.unreadCount);
-      }
-    } catch (error) {
-      console.error('Error fetching unread messages count:', error);
-    }
+      const r = await messageAPI.getUnreadCount();
+      const c = r.data?.unreadCount ?? r.unreadCount ?? 0;
+      setUnreadMessagesCount(c);
+    } catch {}
   };
 
   const fetchDashboardData = async () => {
     try {
       setLoading(true);
-      
-      const profileResponse = await userAPI.getProfile();
-      console.log(profileResponse.data);
-      if (profileResponse.success) {
-        const userData = profileResponse.data.user || profileResponse.data;
-        setVendorProfile(userData);
-        
-        if (userData.walletBalance !== undefined) {
-          setWalletData({
-            balance: userData.walletBalance || 0,
-            pendingBalance: 0, 
-            totalEarnings: userData.walletBalance || 0, 
+
+      const profileRes = await userAPI.getProfile();
+      if (profileRes.success) {
+        const u = profileRes.data.user || profileRes.data;
+        setVendorProfile(u);
+        if (u.walletBalance !== undefined)
+          setWalletData({ balance: u.walletBalance, pendingBalance: 0, totalEarnings: u.walletBalance });
+      }
+
+      const bookingsRes = await vendorAPI.getStats();
+      if (bookingsRes.success) {
+        const s = bookingsRes.data?.stats || bookingsRes.data || {};
+        if (s.total !== undefined) {
+          setStats((p) => {
+            const n = [...p];
+            n[0] = { label: 'Total Bookings', value: s.total?.toString() || '0', change: `${s.pending || 0} pending`, isPositive: true };
+            n[3] = { label: 'Completed', value: s.completed?.toString() || '0', change: `${Math.round((s.completed / (s.total || 1)) * 100)}%`, isPositive: true };
+            return n;
           });
         }
       }
 
-      const bookingsResponse = await vendorAPI.getStats();
-      if (bookingsResponse.success) {
-        const statsData = bookingsResponse.data?.stats || bookingsResponse.data || {};
-        console.log('Stats data:', statsData);
-        
-        if (statsData.total !== undefined) {
-          setStats(prevStats => {
-            const newStats = [...prevStats];
-            
-            newStats[0] = {
-              label: 'Total Bookings',
-              value: statsData.total?.toString() || '0',
-              change: `${statsData.pending || 0} pending`,
-              isPositive: true
-            };
-            
-            newStats[3] = {
-              label: 'Completed',
-              value: statsData.completed?.toString() || '0',
-              change: `${Math.round((statsData.completed / (statsData.total || 1)) * 100)}%`,
-              isPositive: true
-            };
-            
-            return newStats;
-          });
-        }
-        
-        setBookingsData([]);
-        setRecentActivities([]);
-      }
-
-      const servicesResponse = await servicesAPI.getMyServices();
-      if (servicesResponse.success) {
-        const servicesArray = servicesResponse.data?.services || servicesResponse.data || [];
-        console.log('Services array:', servicesArray);
-        setServicesData(Array.isArray(servicesArray) ? servicesArray : []);
-        updateServicesStats(Array.isArray(servicesArray) ? servicesArray : []);
+      const servicesRes = await servicesAPI.getMyServices();
+      if (servicesRes.success) {
+        const arr = servicesRes.data?.services || servicesRes.data || [];
+        const list = Array.isArray(arr) ? arr : [];
+        setServicesData(list);
+        const active = list.filter((s: any) => s.isActive !== false).length;
+        setStats((p) => { const n = [...p]; n[1] = { label: 'Active Services', value: active.toString(), change: `${list.length} total`, isPositive: active > 0 }; return n; });
       }
 
       try {
-        const analyticsResponse = await analyticsAPI.getVendorAnalytics({
+        const analyticsRes = await analyticsAPI.getVendorAnalytics({
           startDate: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
           endDate: new Date().toISOString(),
         });
-        
-        if (analyticsResponse.success) {
-          setAnalyticsData(analyticsResponse.data);
-          updateStatsFromAnalytics(analyticsResponse.data);
+        if (analyticsRes.success) {
+          setAnalyticsData(analyticsRes.data);
+          const a = analyticsRes.data;
+          setStats((p) => {
+            const n = [...p];
+            if (a.reviews?.averageRating)
+              n[2] = { label: 'Avg. Rating', value: a.reviews.averageRating.toFixed(1), change: `${a.reviews.total} reviews`, isPositive: a.reviews.averageRating >= 4 };
+            if (a.performance?.acceptanceRate !== undefined)
+              n[3] = { label: 'Acceptance Rate', value: `${a.performance.acceptanceRate.toFixed(0)}%`, change: a.performance.completionRate ? `${a.performance.completionRate.toFixed(0)}% done` : '0%', isPositive: a.performance.acceptanceRate >= 80 };
+            return n;
+          });
         }
-      } catch (analyticsError) {
-        console.log('Analytics fetch error (non-critical):', analyticsError);
-      }
+      } catch {}
 
       await fetchUnreadNotificationCount();
       await fetchUnreadMessagesCount();
     } catch (error) {
-      const apiError = handleAPIError(error);
-      console.error('Dashboard fetch error:', apiError);
-      Alert.alert('Error', apiError.message);
-    } finally {
-      setLoading(false);
-    }
+      Alert.alert('Error', handleAPIError(error).message);
+    } finally { setLoading(false); }
   };
-
-  const updateStatsFromBookings = (bookings: any[]) => {
-    const completedBookings = bookings.filter(b => b.status === 'completed');
-    const pendingBookings = bookings.filter(b => b.status === 'pending');
-    setStats(prevStats => [{
-      label: 'Total Orders',
-      value: bookings.length.toString(),
-      change: `+${pendingBookings.length}%`,
-      isPositive: pendingBookings.length > 0
-    }, prevStats[1], prevStats[2], {
-      label: 'Completed',
-      value: completedBookings.length.toString(),
-      change: `${Math.round(completedBookings.length / (bookings.length || 1) * 100)}%`,
-      isPositive: true
-    }]);
-  };
-
-  const updateServicesStats = (services: any[]) => {
-    const activeServices = services.filter(s => s.isActive !== false);
-    setStats(prevStats => [prevStats[0], {
-      label: 'Active Services',
-      value: activeServices.length.toString(),
-      change: `+${services.length - activeServices.length}`,
-      isPositive: activeServices.length > 0
-    }, prevStats[2], prevStats[3]]);
-  };
-
-  const updateStatsFromAnalytics = (analytics: any) => {
-    if (!analytics) return;
-
-    setStats(prevStats => {
-      const newStats = [...prevStats];
-      
-      if (analytics.reviews?.averageRating) {
-        newStats[2] = {
-          label: 'Avg. Rating',
-          value: analytics.reviews.averageRating.toFixed(1),
-          change: `${analytics.reviews.total} reviews`,
-          isPositive: analytics.reviews.averageRating >= 4.0,
-        };
-      }
-
-      if (analytics.performance?.acceptanceRate !== undefined) {
-        newStats[3] = {
-          label: 'Acceptance Rate',
-          value: `${analytics.performance.acceptanceRate.toFixed(0)}%`,
-          change: analytics.performance.completionRate ? `${analytics.performance.completionRate.toFixed(0)}% completion` : '0%',
-          isPositive: analytics.performance.acceptanceRate >= 80,
-        };
-      }
-
-      return newStats;
-    });
-  };
-
-  const generateRecentActivities = (bookings: any[]) => {
-    const activities: RecentActivity[] = bookings.slice(0, 3).map((booking, index) => {
-      const timeAgo = getTimeAgo(booking.createdAt || new Date());
-      return {
-        icon: booking.status === 'completed' ? 'checkmark-circle' : booking.status === 'pending' ? 'time' : 'cart',
-        title: `Booking #${booking._id?.slice(-4) || index}`,
-        subtitle: `${booking.serviceName || 'Service'} • ₦${booking.totalAmount?.toLocaleString() || '0'}`,
-        time: timeAgo,
-        color: booking.status === 'completed' ? '#10b981' : booking.status === 'pending' ? '#f59e0b' : '#3b82f6'
-      };
-    });
-    setRecentActivities(activities);
-  };
-
-  const getTimeAgo = (date: Date | string): string => {
-    const now = new Date();
-    const past = new Date(date);
-    const diffMs = now.getTime() - past.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMs / 3600000);
-    const diffDays = Math.floor(diffMs / 86400000);
-    if (diffMins < 60) return `${diffMins} min ago`;
-    if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
-    return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
-  };
-
-  useEffect(() => {
-    if (vendorProfile?.rating) {
-      setStats(prevStats => {
-        const newStats = [...prevStats];
-        newStats[2] = {
-          label: 'Avg. Rating',
-          value: vendorProfile.rating?.toFixed(1) || '0.0',
-          change: '+0.2',
-          isPositive: true
-        };
-        return newStats;
-      });
-    }
-  }, [vendorProfile]);
-
-  useEffect(() => {
-    fetchDashboardData();
-  }, []);
-
-  useFocusEffect(
-    useCallback(() => {
-      console.log('🔄 Dashboard focused - refreshing counts');
-      
-      fetchUnreadNotificationCount();
-      fetchUnreadMessagesCount();
-
-      if (!socketService.isSocketConnected()) {
-        console.log('🔌 Reconnecting socket...');
-        socketService.connect();
-      }
-
-      const interval = setInterval(() => {
-        fetchUnreadNotificationCount();
-        fetchUnreadMessagesCount();
-      }, 30000); 
-
-      return () => {
-        console.log('🛑 Dashboard unfocused - clearing interval');
-        clearInterval(interval);
-      };
-    }, [])
-  );
-
-  useEffect(() => {
-    Animated.parallel([Animated.timing(fadeAnim, {
-      toValue: 1,
-      duration: 600,
-      useNativeDriver: true
-    }), Animated.timing(slideAnim, {
-      toValue: 0,
-      duration: 500,
-      useNativeDriver: true
-    }), Animated.spring(scaleAnim, {
-      toValue: 1,
-      friction: 8,
-      tension: 40,
-      useNativeDriver: true
-    })]).start();
-  }, []);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
-    fetchDashboardData().finally(() => {
-      setRefreshing(false);
-    });
+    fetchDashboardData().finally(() => setRefreshing(false));
   }, []);
 
-  const formatBalance = (amount: number): string => {
-    return `₦${amount.toLocaleString()}`;
-  };
+  const formatBalance = (n: number) => `₦${n.toLocaleString()}`;
 
-  const quickActions: QuickAction[] = [{
-    id: '1',
-    title: 'Add Service',
-    icon: 'add-circle-outline',
-    iconFamily: 'ionicons',
-    color: '#eb278d',
-    bgColor: '#fce7f3',
-    onPress: () => {
-      navigation.navigate("Services")
-    }
-  }, {
-    id: '2',
-    title: 'Bookings',
-    icon: 'package',
-    iconFamily: 'feather',
-    color: '#3b82f6',
-    bgColor: '#dbeafe',
-    onPress: () => {
-      navigation.navigate("Bookings")
-    }
-  },];
+  const displayName = vendorProfile?.businessName || vendorProfile?.firstName || 'User';
+  const p = analyticsData?.performance;
 
-  const renderIcon = (iconFamily: string, iconName: string, size: number, color: string): JSX.Element => {
-    switch (iconFamily) {
-      case 'material':
-        return <MaterialCommunityIcons name={iconName as any} size={size} color={color} />;
-      case 'feather':
-        return <Feather name={iconName as any} size={size} color={color} />;
-      default:
-        return <Ionicons name={iconName as any} size={size} color={color} />;
-    }
-  };
-
-  const getGreeting = (): string => {
-    const hour = new Date().getHours();
-    if (hour < 12) return 'Good morning! 👋';
-    if (hour < 18) return 'Good afternoon! 👋';
-    return 'Good evening! 👋';
-  };
-
+  // ─────────────────────────────────────────────────────────────────────────
   return (
-    <SafeAreaView className="flex-1 bg-gray-50 p-0 m-0">
-      <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
-      
-      {}
-      <View className="bg-white shadow-sm">
-        <View className="flex-row items-center justify-between px-5 py-4">
-          <TouchableOpacity 
-            className="w-10 h-10 items-center justify-center" 
-            activeOpacity={0.7} 
-            onPress={() => setSidebarVisible(true)}
+    <SafeAreaView style={{ flex: 1, backgroundColor: BRAND.surfaceAlt }} edges={['top']}>
+      <StatusBar barStyle="dark-content" backgroundColor={BRAND.surface} />
+
+      {/* ── HEADER ─────────────────────────────────────────────────────────── */}
+      <View style={[{
+        backgroundColor: BRAND.surface,
+        paddingHorizontal: 20, paddingTop: 10, paddingBottom: 14,
+        flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+        borderBottomWidth: 1, borderBottomColor: BRAND.border,
+      }, shadow('#000', 0.05, 8, 2)]}>
+
+        {/* Menu */}
+        <TouchableOpacity
+          onPress={() => setSidebarVisible(true)}
+          activeOpacity={0.75}
+          style={{
+            width: 40, height: 40, borderRadius: 13,
+            backgroundColor: BRAND.primarySoft,
+            alignItems: 'center', justifyContent: 'center',
+          }}
+        >
+          <Ionicons name="menu" size={22} color={BRAND.primary} />
+        </TouchableOpacity>
+
+        <Text style={{ fontSize: 17, fontWeight: '800', color: BRAND.textPrimary, letterSpacing: -0.3 }}>
+          Dashboard
+        </Text>
+
+        {/* Icon row */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <TouchableOpacity
+            onPress={() => navigation.navigate('ChatList')}
+            activeOpacity={0.75}
+            style={{ width: 40, height: 40, borderRadius: 13, backgroundColor: BRAND.surfaceAlt, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: BRAND.border }}
           >
-            <Ionicons name="menu" size={28} color="#eb278d" />
+            <Ionicons name="chatbubble-ellipses-outline" size={20} color={BRAND.primary} />
+            <Badge count={unreadMessagesCount} />
           </TouchableOpacity>
-          
-          <Text className="text-lg font-bold text-gray-800">Dashboard</Text>
-          
-          <View className="flex-row items-center gap-3">
-        <TouchableOpacity 
-  className="relative w-10 h-10 items-center justify-center" 
-  activeOpacity={0.7} 
-  onPress={() => navigation.navigate('ChatList')}
->
-  <Ionicons name="chatbubble-ellipses-outline" size={24} color="#eb278d" />
-  {unreadMessagesCount > 0 && (
-    <View
-      className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] bg-pink-500 rounded-full items-center justify-center px-1"
-      style={{
-        shadowColor: '#eb278d',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.3,
-        shadowRadius: 3,
-        elevation: 4,
-      }}
-    >
-      <Text className="text-white text-[10px] font-bold">
-        {unreadMessagesCount > 99 ? '99+' : unreadMessagesCount}
-      </Text>
-    </View>
-  )}
-</TouchableOpacity>
-            
-            <TouchableOpacity 
-              className="relative w-10 h-10 items-center justify-center" 
-              activeOpacity={0.7} 
-              onPress={() => navigation.navigate('Notifications')}
-            >
-              <Ionicons name="notifications-outline" size={26} color="#eb278d" />
-              {unreadNotificationCount > 0 && (
-                <View
-                  className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] bg-pink-500 rounded-full items-center justify-center px-1"
-                  style={{
-                    shadowColor: '#eb278d',
-                    shadowOffset: { width: 0, height: 2 },
-                    shadowOpacity: 0.3,
-                    shadowRadius: 3,
-                    elevation: 4,
-                  }}
-                >
-                  <Text className="text-white text-[10px] font-bold">
-                    {unreadNotificationCount > 99 ? '99+' : unreadNotificationCount}
-                  </Text>
-                </View>
-              )}
-            </TouchableOpacity>
-          </View>
+
+          <TouchableOpacity
+            onPress={() => navigation.navigate('Notifications')}
+            activeOpacity={0.75}
+            style={{ width: 40, height: 40, borderRadius: 13, backgroundColor: BRAND.surfaceAlt, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: BRAND.border }}
+          >
+            <Ionicons name="notifications-outline" size={20} color={BRAND.primary} />
+            <Badge count={unreadNotificationCount} />
+          </TouchableOpacity>
         </View>
       </View>
 
-      <ScrollView 
-        className='flex-1 h-full' 
-        showsVerticalScrollIndicator={false} 
-        contentContainerStyle={{
-          paddingBottom: 150
-        }} 
-        refreshControl={
-          <RefreshControl 
-            refreshing={refreshing} 
-            onRefresh={onRefresh} 
-            tintColor="#eb278d" 
-            colors={['#eb278d']} 
-          />
-        }
+      <ScrollView
+        style={{ flex: 1 }}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: 120 }}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={BRAND.primary} colors={[BRAND.primary]} />}
       >
-        {}
-        <Animated.View 
-          className="bg-white px-5 py-6" 
-          style={{
-            opacity: fadeAnim,
-            transform: [{
-              translateY: slideAnim
-            }]
-          }}
-        >
-          <View className="flex-row items-center justify-between">
-            <View className="flex-1">
-              <Text className="text-gray-600 text-sm mb-1">{getGreeting()}</Text>
-              <Text className="text-2xl font-bold text-gray-900">
-                {vendorProfile?.businessName || vendorProfile?.firstName || "User"}
+        {/* ── GREETING ─────────────────────────────────────────────────────── */}
+        <Animated.View style={{
+          backgroundColor: BRAND.surface,
+          paddingHorizontal: 20, paddingTop: 20, paddingBottom: 18,
+          borderBottomWidth: 1, borderBottomColor: BRAND.border,
+          opacity: fadeAnim, transform: [{ translateY: slideAnim }],
+        }}>
+          <Text style={{ fontSize: 13, color: BRAND.textMuted, fontWeight: '500', marginBottom: 4 }}>{getGreeting()}</Text>
+          <Text style={{ fontSize: 24, fontWeight: '800', color: BRAND.textPrimary, letterSpacing: -0.5, marginBottom: 10 }}>
+            {displayName}
+          </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: BRAND.greenSoft, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20 }}>
+              <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: BRAND.green, marginRight: 5 }} />
+              <Text style={{ color: '#065F46', fontSize: 11, fontWeight: '700' }}>
+                {vendorProfile?.isActive !== false ? 'Active' : 'Inactive'}
               </Text>
-              <View className="flex-row items-center mt-2">
-                <View className="flex-row items-center bg-green-100 px-2 py-1 rounded-full">
-                  <View className="w-2 h-2 bg-green-500 rounded-full mr-1.5" />
-                  <Text className="text-green-700 text-xs font-semibold">
-                    {vendorProfile?.isActive !== false ? 'Active' : 'Inactive'}
-                  </Text>
-                </View>
-                {vendorProfile?.createdAt && (
-                  <Text className="text-gray-500 text-xs ml-3">
-                    Since {new Date(vendorProfile.createdAt).toLocaleDateString('en-US', {
-                      month: 'short',
-                      year: 'numeric'
-                    })}
-                  </Text>
-                )}
-              </View>
             </View>
+            {vendorProfile?.createdAt && (
+              <Text style={{ color: BRAND.textMuted, fontSize: 12, fontWeight: '500' }}>
+                Since {new Date(vendorProfile.createdAt).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
+              </Text>
+            )}
           </View>
         </Animated.View>
 
-        {}
-        <View className="px-5 py-4">
-          <LinearGradient 
-            colors={['#eb278d', '#f472b6']} 
-            start={{ x: 0, y: 0 }} 
-            end={{ x: 1, y: 1 }} 
+        {/* ── WALLET CARD ───────────────────────────────────────────────────── */}
+        <View style={{ paddingHorizontal: 16, paddingTop: 18, paddingBottom: 4 }}>
+          <LinearGradient
+            colors={[BRAND.primary, BRAND.primaryDark]}
+            start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
             style={{
-              padding: 20,
-              borderRadius: 24,
-              overflow: 'hidden',
-              shadowColor: '#eb278d',
-              shadowOffset: { width: 0, height: 8 },
-              shadowOpacity: 0.3,
-              shadowRadius: 16,
-              elevation: 12
+              borderRadius: 24, padding: 22, overflow: 'hidden',
+              ...shadow(BRAND.primary, 0.3, 18, 8),
             }}
           >
-            <View className="flex-row items-center justify-between mb-4">
-              <View className="flex-row items-center gap-2">
-                <Text className="text-white/90 text-sm font-medium">
-                  Total Balance
-                </Text>
-                <TouchableOpacity 
-                  onPress={() => setShowBalance(!showBalance)} 
-                  className="w-8 h-8 items-center justify-center rounded-full" 
-                  style={{ backgroundColor: 'rgba(255, 255, 255, 0.2)' }} 
-                  activeOpacity={0.7}
+            {/* Top row */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 13, fontWeight: '600' }}>Total Balance</Text>
+                <TouchableOpacity
+                  onPress={() => setShowBalance(!showBalance)}
+                  activeOpacity={0.8}
+                  style={{ width: 30, height: 30, borderRadius: 15, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' }}
                 >
-                  <Ionicons name={showBalance ? "eye-outline" : "eye-off-outline"} size={16} color="#fff" />
+                  <Ionicons name={showBalance ? 'eye-outline' : 'eye-off-outline'} size={15} color="#fff" />
                 </TouchableOpacity>
               </View>
-              
-              <TouchableOpacity 
-                className="flex-row items-center gap-1 bg-white/20 px-3 py-1.5 rounded-full" 
-                activeOpacity={0.7} 
-                onPress={() => navigation.navigate("Transactions")}
+              <TouchableOpacity
+                onPress={() => navigation.navigate('Transactions')}
+                activeOpacity={0.8}
+                style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.2)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, gap: 4 }}
               >
-                <Text className="text-white text-xs font-semibold">
-                  History
-                </Text>
-                <Ionicons name="chevron-forward" size={14} color="#fff" />
+                <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>History</Text>
+                <Ionicons name="chevron-forward" size={13} color="#fff" />
               </TouchableOpacity>
             </View>
 
-            <View className="mb-6">
+            {/* Balance display */}
+            <View style={{ marginBottom: 22 }}>
               {showBalance ? (
-                <View>
-                  <Text className="text-white text-4xl font-bold tracking-tight mb-2">
+                <>
+                  <Text style={{ color: '#fff', fontSize: 38, fontWeight: '800', letterSpacing: -1, marginBottom: 10 }}>
                     {formatBalance(walletData.balance)}
                   </Text>
-                  <View className="flex-row items-center gap-4">
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}>
                     <View>
-                      <Text className="text-white/70 text-xs">Pending</Text>
-                      <Text className="text-white font-semibold">
-                        {formatBalance(walletData.pendingBalance)}
-                      </Text>
+                      <Text style={{ color: 'rgba(255,255,255,0.65)', fontSize: 11, marginBottom: 2 }}>Pending</Text>
+                      <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>{formatBalance(walletData.pendingBalance)}</Text>
                     </View>
-                    <View className="w-px h-8 bg-white/30" />
+                    <View style={{ width: 1, height: 32, backgroundColor: 'rgba(255,255,255,0.25)' }} />
                     <View>
-                      <Text className="text-white/70 text-xs">Total Earned</Text>
-                      <Text className="text-white font-semibold">
-                        {formatBalance(walletData.totalEarnings)}
-                      </Text>
+                      <Text style={{ color: 'rgba(255,255,255,0.65)', fontSize: 11, marginBottom: 2 }}>Total Earned</Text>
+                      <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>{formatBalance(walletData.totalEarnings)}</Text>
                     </View>
                   </View>
-                </View>
+                </>
               ) : (
-                <View>
-                  <Text className="text-white text-4xl font-bold tracking-widest mb-2">
-                    ••••••
-                  </Text>
-                  <Text className="text-white/70 text-sm">Tap eye to view balance</Text>
-                </View>
+                <>
+                  <Text style={{ color: '#fff', fontSize: 38, fontWeight: '800', letterSpacing: 4, marginBottom: 6 }}>••••••</Text>
+                  <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 12 }}>Tap eye icon to reveal</Text>
+                </>
               )}
             </View>
 
-            {}
-            <View className="flex-row gap-4">
-              <TouchableOpacity 
-                className="flex-1 bg-white/20 rounded-2xl py-3 items-center flex-row justify-center gap-2" 
-                activeOpacity={0.7} 
+            {/* Action buttons */}
+            <View style={{ flexDirection: 'row', gap: 12 }}>
+              <TouchableOpacity
                 onPress={() => setFundingModalVisible(true)}
+                activeOpacity={0.8}
+                style={{
+                  flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+                  backgroundColor: 'rgba(255,255,255,0.18)', borderRadius: 18, paddingVertical: 14, gap: 8,
+                  borderWidth: 1, borderColor: 'rgba(255,255,255,0.25)',
+                }}
               >
-                <View className="w-10 h-10 rounded-full bg-white/30 items-center justify-center">
-                  <Ionicons name="add" size={20} color="#fff" />
+                <View style={{ width: 30, height: 30, borderRadius: 15, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' }}>
+                  <Ionicons name="add" size={18} color="#fff" />
                 </View>
-                <Text className="text-white text-sm font-semibold">Fund Wallet</Text>
+                <Text style={{ color: '#fff', fontSize: 13, fontWeight: '700' }}>Fund Wallet</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity 
-                className="flex-1 bg-white rounded-2xl py-3 items-center flex-row justify-center gap-2" 
-                activeOpacity={0.7} 
+              <TouchableOpacity
                 onPress={() => setWithdrawalModalVisible(true)}
+                activeOpacity={0.8}
+                style={{
+                  flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+                  backgroundColor: BRAND.surface, borderRadius: 18, paddingVertical: 14, gap: 8,
+                  ...shadow(BRAND.primaryDark, 0.2, 8, 4),
+                }}
               >
-                <View className="w-10 h-10 rounded-full bg-pink-100 items-center justify-center">
-                  <Ionicons name="arrow-up" size={20} color="#eb278d" />
+                <View style={{ width: 30, height: 30, borderRadius: 15, backgroundColor: BRAND.primarySoft, alignItems: 'center', justifyContent: 'center' }}>
+                  <Ionicons name="arrow-up" size={18} color={BRAND.primary} />
                 </View>
-                <Text className="text-gray-800 text-sm font-semibold">Withdraw</Text>
+                <Text style={{ color: BRAND.textPrimary, fontSize: 13, fontWeight: '700' }}>Withdraw</Text>
               </TouchableOpacity>
             </View>
           </LinearGradient>
         </View>
 
-        {}
-        <View className="px-5 py-4">
-          <Text className="text-lg font-bold text-gray-900 mb-4">Quick Actions</Text>
-          <View className="flex-row flex-wrap gap-4">
-            {quickActions.map((action, index) => (
-              <TouchableOpacity 
-                key={action.id} 
-                activeOpacity={0.7} 
-                onPress={action.onPress} 
-                className="flex-1" 
-                style={{
-                  minWidth: (SCREEN_WIDTH - 60) / 2
-                }}
+        {/* ── QUICK ACTIONS ─────────────────────────────────────────────────── */}
+        <View style={{ paddingHorizontal: 16, paddingTop: 20 }}>
+          <Text style={{ fontSize: 16, fontWeight: '800', color: BRAND.textPrimary, marginBottom: 14, letterSpacing: -0.3 }}>Quick Actions</Text>
+          <View style={{ flexDirection: 'row', gap: 12 }}>
+            {[
+              { title: 'Add Service', icon: 'add-circle-outline' as const, iconColor: BRAND.primary, bg: BRAND.primarySoft, onPress: () => navigation.navigate('Services') },
+              { title: 'Bookings',    icon: 'calendar-outline'   as const, iconColor: BRAND.blue,    bg: BRAND.blueSoft,    onPress: () => navigation.navigate('Bookings')  },
+            ].map((action, i) => (
+              <TouchableOpacity
+                key={i}
+                onPress={action.onPress}
+                activeOpacity={0.8}
+                style={{ flex: 1 }}
               >
-                <Animated.View 
-                  className="bg-white rounded-2xl p-4 items-center" 
-                  style={{
-                    opacity: fadeAnim,
-                    transform: [{
-                      translateY: slideAnim.interpolate({
-                        inputRange: [0, 50],
-                        outputRange: [0, index * 10]
-                      })
-                    }],
-                    shadowColor: '#000',
-                    shadowOffset: {
-                      width: 0,
-                      height: 2
-                    },
-                    shadowOpacity: 0.05,
-                    shadowRadius: 8,
-                    elevation: 3
-                  }}
-                >
-                  <View 
-                    className="w-12 h-12 rounded-xl items-center justify-center mb-3" 
-                    style={{
-                      backgroundColor: action.bgColor
-                    }}
-                  >
-                    {renderIcon(action.iconFamily, action.icon, 24, action.color)}
+                <Animated.View style={[{
+                  backgroundColor: BRAND.surface,
+                  borderRadius: 18, paddingVertical: 18,
+                  alignItems: 'center',
+                  borderWidth: 1, borderColor: BRAND.border,
+                  opacity: fadeAnim,
+                  transform: [{ translateY: slideAnim }],
+                }, shadow()]}>
+                  <View style={{ width: 48, height: 48, borderRadius: 14, backgroundColor: action.bg, alignItems: 'center', justifyContent: 'center', marginBottom: 10 }}>
+                    <Ionicons name={action.icon} size={22} color={action.iconColor} />
                   </View>
-                  <Text className="text-gray-800 text-sm font-semibold">{action.title}</Text>
+                  <Text style={{ fontSize: 13, fontWeight: '700', color: BRAND.textPrimary }}>{action.title}</Text>
                 </Animated.View>
               </TouchableOpacity>
             ))}
           </View>
         </View>
 
-        {}
-        <View className="px-5 py-4">
-          <View className="flex-row items-center justify-between mb-4">
-            <Text className="text-lg font-bold text-gray-900">Performance</Text>
-            <View className="flex-row bg-gray-100 rounded-lg p-1">
-              {(['day', 'week', 'month'] as const).map(period => (
-                <TouchableOpacity 
-                  key={period} 
-                  onPress={() => setSelectedPeriod(period)} 
-                  className={`px-4 py-1.5 rounded-md ${selectedPeriod === period ? 'bg-white' : ''}`} 
-                  activeOpacity={0.7}
-                >
-                  <Text className={`text-xs font-semibold capitalize ${selectedPeriod === period ? 'text-pink-600' : 'text-gray-500'}`}>
-                    {period === 'day' ? 'Today' : period === 'week' ? 'This Week' : 'This Month'}
-                  </Text>
-                </TouchableOpacity>
-              ))}
+        {/* ── STATS GRID ────────────────────────────────────────────────────── */}
+        <View style={{ paddingHorizontal: 16, paddingTop: 20 }}>
+          {/* Period selector */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+            <Text style={{ fontSize: 16, fontWeight: '800', color: BRAND.textPrimary, letterSpacing: -0.3 }}>Performance</Text>
+            <View style={{ flexDirection: 'row', backgroundColor: BRAND.border, borderRadius: 12, padding: 3 }}>
+              {(['day', 'week', 'month'] as const).map((period) => {
+                const active = selectedPeriod === period;
+                return (
+                  <TouchableOpacity
+                    key={period}
+                    onPress={() => setSelectedPeriod(period)}
+                    activeOpacity={0.75}
+                    style={{
+                      paddingHorizontal: 12, paddingVertical: 6, borderRadius: 9,
+                      backgroundColor: active ? BRAND.surface : 'transparent',
+                      ...( active ? shadow() : {}),
+                    }}
+                  >
+                    <Text style={{ fontSize: 11, fontWeight: '700', color: active ? BRAND.primary : BRAND.textMuted }}>
+                      {period === 'day' ? 'Today' : period === 'week' ? 'Week' : 'Month'}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
             </View>
           </View>
 
-          <View className="flex-row flex-wrap gap-3">
-            {stats.map((stat, index) => (
-              <View 
-                key={index} 
-                className="bg-white rounded-2xl p-4" 
-                style={{
-                  width: (SCREEN_WIDTH - 52) / 2,
-                  shadowColor: '#000',
-                  shadowOffset: {
-                    width: 0,
-                    height: 2
-                  },
-                  shadowOpacity: 0.05,
-                  shadowRadius: 8,
-                  elevation: 3
-                }}
-              >
-                <View className="flex-row items-center justify-between mb-2">
-                  <Text className="text-gray-500 text-xs">{stat.label}</Text>
-                  <View className={`flex-row items-center px-2 py-0.5 rounded-full ${stat.isPositive ? 'bg-green-100' : 'bg-red-100'}`}>
-                    <Ionicons 
-                      name={stat.isPositive ? 'trending-up' : 'trending-down'} 
-                      size={12} 
-                      color={stat.isPositive ? '#10b981' : '#ef4444'} 
-                    />
-                    <Text className={`text-xs ml-1 font-semibold ${stat.isPositive ? 'text-green-600' : 'text-red-600'}`}>
-                      {stat.change}
-                    </Text>
+          {/* 2-column stat cards */}
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
+            {stats.map((stat, i) => (
+              <View key={i} style={[{
+                width: CARD_W,
+                backgroundColor: BRAND.surface,
+                borderRadius: 18, padding: 16,
+                borderWidth: 1, borderColor: BRAND.border,
+              }, shadow()]}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                  <Text style={{ fontSize: 11, color: BRAND.textMuted, fontWeight: '500' }}>{stat.label}</Text>
+                  <View style={{ backgroundColor: stat.isPositive ? BRAND.greenSoft : BRAND.redSoft, paddingHorizontal: 7, paddingVertical: 2, borderRadius: 10, flexDirection: 'row', alignItems: 'center', gap: 2 }}>
+                    <Ionicons name={stat.isPositive ? 'trending-up' : 'trending-down'} size={10} color={stat.isPositive ? BRAND.green : BRAND.red} />
+                    <Text style={{ fontSize: 10, fontWeight: '700', color: stat.isPositive ? '#065F46' : '#991B1B' }}>{stat.change}</Text>
                   </View>
                 </View>
-                <Text className="text-2xl font-bold text-gray-900">{stat.value}</Text>
+                <Text style={{ fontSize: 26, fontWeight: '800', color: BRAND.textPrimary, letterSpacing: -0.5 }}>{stat.value}</Text>
               </View>
             ))}
           </View>
         </View>
 
-        {}
-        <View className="px-5 py-4 mb-4">
-          <View className="flex-row items-center justify-between mb-4">
-            <Text className="text-lg font-bold text-gray-900">Performance Dashboard</Text>
-            <TouchableOpacity
-              onPress={() => navigation.navigate('Analytics')}
-              className="flex-row items-center"
-              activeOpacity={0.7}
-            >
-              <Text className="text-pink-600 text-sm font-semibold mr-1">View All</Text>
-              <Ionicons name="chevron-forward" size={16} color="#eb278d" />
+        {/* ── PERFORMANCE DASHBOARD ─────────────────────────────────────────── */}
+        <View style={{ paddingHorizontal: 16, paddingTop: 24, paddingBottom: 8 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+            <Text style={{ fontSize: 16, fontWeight: '800', color: BRAND.textPrimary, letterSpacing: -0.3 }}>Analytics</Text>
+            <TouchableOpacity onPress={() => navigation.navigate('Analytics')} activeOpacity={0.75} style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+              <Text style={{ fontSize: 13, fontWeight: '700', color: BRAND.primary }}>View All</Text>
+              <Ionicons name="chevron-forward" size={14} color={BRAND.primary} />
             </TouchableOpacity>
           </View>
 
-          {analyticsData && analyticsData.performance ? (
-            <View style={{ gap: 12 }}>
-              {}
-              <View className="bg-white rounded-2xl p-4 border border-gray-100">
-                <View className="flex-row items-center justify-between mb-3">
-                  <View className="flex-row items-center">
-                    <View className="w-10 h-10 bg-green-100 rounded-full items-center justify-center mr-3">
-                      <Ionicons name="checkmark-circle" size={20} color="#10b981" />
-                    </View>
-                    <View>
-                      <Text className="text-xs text-gray-500">Acceptance Rate</Text>
-                      <Text className="text-2xl font-bold text-gray-900">
-                        {analyticsData.performance.acceptanceRate.toFixed(0)}%
-                      </Text>
-                    </View>
-                  </View>
-                  <View className={`px-3 py-1 rounded-full ${
-                    analyticsData.performance.acceptanceRate >= 80 ? 'bg-green-100' : 'bg-yellow-100'
-                  }`}>
-                    <Text className={`text-xs font-bold ${
-                      analyticsData.performance.acceptanceRate >= 80 ? 'text-green-700' : 'text-yellow-700'
-                    }`}>
-                      {analyticsData.performance.acceptanceRate >= 80 ? 'Excellent' : 'Good'}
-                    </Text>
-                  </View>
+          {p ? (
+            <>
+              <PerfCard
+                icon="checkmark-circle-outline" iconBg={BRAND.greenSoft} iconColor={BRAND.green}
+                label="Acceptance Rate" value={`${p.acceptanceRate.toFixed(0)}%`}
+                badgeText={p.acceptanceRate >= 80 ? 'Excellent' : 'Good'} badgeGood={p.acceptanceRate >= 80}
+                barColor={BRAND.green} barWidth={p.acceptanceRate}
+              />
+              <PerfCard
+                icon="flag-outline" iconBg={BRAND.purpleSoft} iconColor={BRAND.purple}
+                label="Completion Rate" value={`${p.completionRate.toFixed(0)}%`}
+                badgeText={p.completionRate >= 90 ? 'Excellent' : 'Good'} badgeGood={p.completionRate >= 90}
+                barColor={BRAND.purple} barWidth={p.completionRate}
+              />
+              <PerfCard
+                icon="time-outline" iconBg={BRAND.blueSoft} iconColor={BRAND.blue}
+                label="Avg Response Time" value={`${p.responseTime.toFixed(1)}h`}
+                badgeText={p.responseTime <= 2 ? 'Fast' : 'Moderate'} badgeGood={p.responseTime <= 2}
+                barColor={BRAND.blue} barWidth={Math.min((24 / (p.responseTime || 1)) * 100, 100)}
+              />
+              <PerfCard
+                icon="happy-outline" iconBg={BRAND.primarySoft} iconColor={BRAND.primary}
+                label="Customer Satisfaction" value={`${p.customerSatisfactionScore.toFixed(0)}%`}
+                badgeText={p.customerSatisfactionScore >= 85 ? 'Excellent' : 'Good'} badgeGood={p.customerSatisfactionScore >= 85}
+                barColor={BRAND.primary} barWidth={p.customerSatisfactionScore}
+              />
+              <PerfCard
+                icon="rocket-outline" iconBg={BRAND.goldSoft} iconColor={BRAND.gold}
+                label="On-Time Delivery" value={`${p.onTimeDeliveryRate.toFixed(0)}%`}
+                badgeText={p.onTimeDeliveryRate >= 90 ? 'Excellent' : 'Good'} badgeGood={p.onTimeDeliveryRate >= 90}
+                barColor={BRAND.gold} barWidth={p.onTimeDeliveryRate}
+              />
+            </>
+          ) : servicesData.length === 0 ? (
+            <TouchableOpacity onPress={() => navigation.navigate('Services')} activeOpacity={0.8}>
+              <LinearGradient
+                colors={[BRAND.primarySoft, '#FDF2F8']}
+                start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                style={{ borderRadius: 18, padding: 18, borderWidth: 1, borderColor: BRAND.primaryMuted }}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 6 }}>
+                  <Ionicons name="add-circle" size={22} color={BRAND.primary} />
+                  <Text style={{ color: BRAND.primary, fontWeight: '700', fontSize: 14 }}>Add Your First Service</Text>
                 </View>
-                <View className="bg-gray-200 rounded-full h-2">
-                  <View
-                    className="bg-green-500 rounded-full h-2"
-                    style={{ width: `${analyticsData.performance.acceptanceRate}%` }}
-                  />
-                </View>
-              </View>
-
-              {}
-              <View className="bg-white rounded-2xl p-4 border border-gray-100">
-                <View className="flex-row items-center justify-between mb-3">
-                  <View className="flex-row items-center">
-                    <View className="w-10 h-10 bg-purple-100 rounded-full items-center justify-center mr-3">
-                      <Ionicons name="flag" size={20} color="#8b5cf6" />
-                    </View>
-                    <View>
-                      <Text className="text-xs text-gray-500">Completion Rate</Text>
-                      <Text className="text-2xl font-bold text-gray-900">
-                        {analyticsData.performance.completionRate.toFixed(0)}%
-                      </Text>
-                    </View>
-                  </View>
-                  <View className={`px-3 py-1 rounded-full ${
-                    analyticsData.performance.completionRate >= 90 ? 'bg-green-100' : 'bg-yellow-100'
-                  }`}>
-                    <Text className={`text-xs font-bold ${
-                      analyticsData.performance.completionRate >= 90 ? 'text-green-700' : 'text-yellow-700'
-                    }`}>
-                      {analyticsData.performance.completionRate >= 90 ? 'Excellent' : 'Good'}
-                    </Text>
-                  </View>
-                </View>
-                <View className="bg-gray-200 rounded-full h-2">
-                  <View
-                    className="bg-purple-500 rounded-full h-2"
-                    style={{ width: `${analyticsData.performance.completionRate}%` }}
-                  />
-                </View>
-              </View>
-
-              {}
-              <View className="bg-white rounded-2xl p-4 border border-gray-100">
-                <View className="flex-row items-center justify-between mb-3">
-                  <View className="flex-row items-center">
-                    <View className="w-10 h-10 bg-blue-100 rounded-full items-center justify-center mr-3">
-                      <Ionicons name="time" size={20} color="#3b82f6" />
-                    </View>
-                    <View>
-                      <Text className="text-xs text-gray-500">Avg Response Time</Text>
-                      <Text className="text-2xl font-bold text-gray-900">
-                        {analyticsData.performance.responseTime.toFixed(1)}h
-                      </Text>
-                    </View>
-                  </View>
-                  <View className={`px-3 py-1 rounded-full ${
-                    analyticsData.performance.responseTime <= 2 ? 'bg-green-100' : 'bg-yellow-100'
-                  }`}>
-                    <Text className={`text-xs font-bold ${
-                      analyticsData.performance.responseTime <= 2 ? 'text-green-700' : 'text-yellow-700'
-                    }`}>
-                      {analyticsData.performance.responseTime <= 2 ? 'Fast' : 'Moderate'}
-                    </Text>
-                  </View>
-                </View>
-                <View className="bg-gray-200 rounded-full h-2">
-                  <View
-                    className="bg-blue-500 rounded-full h-2"
-                    style={{ 
-                      width: `${Math.min((24 / (analyticsData.performance.responseTime || 1)) * 100, 100)}%` 
-                    }}
-                  />
-                </View>
-              </View>
-
-              {}
-              <View className="bg-white rounded-2xl p-4 border border-gray-100">
-                <View className="flex-row items-center justify-between mb-3">
-                  <View className="flex-row items-center">
-                    <View className="w-10 h-10 bg-pink-100 rounded-full items-center justify-center mr-3">
-                      <Ionicons name="happy" size={20} color="#ec4899" />
-                    </View>
-                    <View>
-                      <Text className="text-xs text-gray-500">Customer Satisfaction</Text>
-                      <Text className="text-2xl font-bold text-gray-900">
-                        {analyticsData.performance.customerSatisfactionScore.toFixed(0)}%
-                      </Text>
-                    </View>
-                  </View>
-                  <View className={`px-3 py-1 rounded-full ${
-                    analyticsData.performance.customerSatisfactionScore >= 85 ? 'bg-green-100' : 'bg-yellow-100'
-                  }`}>
-                    <Text className={`text-xs font-bold ${
-                      analyticsData.performance.customerSatisfactionScore >= 85 ? 'text-green-700' : 'text-yellow-700'
-                    }`}>
-                      {analyticsData.performance.customerSatisfactionScore >= 85 ? 'Excellent' : 'Good'}
-                    </Text>
-                  </View>
-                </View>
-                <View className="bg-gray-200 rounded-full h-2">
-                  <View
-                    className="bg-pink-500 rounded-full h-2"
-                    style={{ width: `${analyticsData.performance.customerSatisfactionScore}%` }}
-                  />
-                </View>
-              </View>
-
-              {}
-              <View className="bg-white rounded-2xl p-4 border border-gray-100">
-                <View className="flex-row items-center justify-between mb-3">
-                  <View className="flex-row items-center">
-                    <View className="w-10 h-10 bg-orange-100 rounded-full items-center justify-center mr-3">
-                      <Ionicons name="rocket" size={20} color="#f59e0b" />
-                    </View>
-                    <View>
-                      <Text className="text-xs text-gray-500">On-Time Delivery</Text>
-                      <Text className="text-2xl font-bold text-gray-900">
-                        {analyticsData.performance.onTimeDeliveryRate.toFixed(0)}%
-                      </Text>
-                    </View>
-                  </View>
-                  <View className={`px-3 py-1 rounded-full ${
-                    analyticsData.performance.onTimeDeliveryRate >= 90 ? 'bg-green-100' : 'bg-yellow-100'
-                  }`}>
-                    <Text className={`text-xs font-bold ${
-                      analyticsData.performance.onTimeDeliveryRate >= 90 ? 'text-green-700' : 'text-yellow-700'
-                    }`}>
-                      {analyticsData.performance.onTimeDeliveryRate >= 90 ? 'Excellent' : 'Good'}
-                    </Text>
-                  </View>
-                </View>
-                <View className="bg-gray-200 rounded-full h-2">
-                  <View
-                    className="bg-orange-500 rounded-full h-2"
-                    style={{ width: `${analyticsData.performance.onTimeDeliveryRate}%` }}
-                  />
-                </View>
-              </View>
-            </View>
+                <Text style={{ color: BRAND.textMuted, fontSize: 12, textAlign: 'center', lineHeight: 18 }}>
+                  Start earning today by adding your services
+                </Text>
+              </LinearGradient>
+            </TouchableOpacity>
           ) : (
-            servicesData.length === 0 ? (
-              <TouchableOpacity className="mt-4" activeOpacity={0.7}>
-                <LinearGradient 
-                  colors={['#fce7f3', '#fdf2f8']} 
-                  start={{
-                    x: 0,
-                    y: 0
-                  }} 
-                  end={{
-                    x: 1,
-                    y: 0
-                  }} 
-                  className="rounded-2xl p-4 border border-pink-200"
-                >
-                  <View className="flex-row items-center justify-center">
-                    <Ionicons name="add-circle" size={24} color="#eb278d" />
-                    <Text className="text-pink-600 font-semibold ml-2">Add Your First Service</Text>
-                  </View>
-                  <Text className="text-gray-500 text-xs text-center mt-2">
-                    Start earning today by adding your services
-                  </Text>
-                </LinearGradient>
-              </TouchableOpacity>
-            ) : (
-              <View className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-2xl p-4 border border-green-200">
-                <View className="flex-row items-center">
-                  <View className="w-12 h-12 rounded-xl bg-green-100 items-center justify-center mr-3">
-                    <Ionicons name="checkmark-circle" size={24} color="#10b981" />
-                  </View>
-                  <View className="flex-1">
-                    <Text className="text-gray-900 font-semibold text-sm">Active Services</Text>
-                    <Text className="text-gray-600 text-xs mt-0.5">
-                      {servicesData.length} service{servicesData.length > 1 ? 's' : ''} available
-                    </Text>
-                  </View>
-                  <TouchableOpacity 
-                    className="bg-green-500 px-4 py-2 rounded-full" 
-                    activeOpacity={0.7}
-                  >
-                    <Text className="text-white text-xs font-semibold">Manage</Text>
-                  </TouchableOpacity>
-                </View>
+            <View style={[{
+              backgroundColor: BRAND.surface,
+              borderRadius: 18, padding: 16,
+              flexDirection: 'row', alignItems: 'center',
+              borderWidth: 1, borderColor: BRAND.border,
+            }, shadow()]}>
+              <View style={{ width: 44, height: 44, borderRadius: 13, backgroundColor: BRAND.greenSoft, alignItems: 'center', justifyContent: 'center', marginRight: 14 }}>
+                <Ionicons name="checkmark-circle" size={22} color={BRAND.green} />
               </View>
-            )
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 14, fontWeight: '700', color: BRAND.textPrimary, marginBottom: 2 }}>Active Services</Text>
+                <Text style={{ fontSize: 12, color: BRAND.textMuted }}>{servicesData.length} service{servicesData.length > 1 ? 's' : ''} available</Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => navigation.navigate('Services')}
+                activeOpacity={0.8}
+                style={{ backgroundColor: BRAND.greenSoft, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20 }}
+              >
+                <Text style={{ color: '#065F46', fontSize: 12, fontWeight: '700' }}>Manage</Text>
+              </TouchableOpacity>
+            </View>
           )}
         </View>
       </ScrollView>
 
-      {}
-      <VendorSidebar 
-        visible={sidebarVisible} 
-        onClose={() => setSidebarVisible(false)} 
-        userName={vendorProfile?.businessName || vendorProfile?.firstName || 'Vendor'} 
+      {/* ── MODALS & SIDEBAR ─────────────────────────────────────────────────── */}
+      <VendorSidebar
+        visible={sidebarVisible}
+        onClose={() => setSidebarVisible(false)}
+        userName={displayName}
         userEmail={vendorProfile?.email || 'vendor@example.com'}
         userAvatar={vendorProfile?.avatar}
       />
-
-      {}
       <WalletFundingModal
         visible={fundingModalVisible}
         onClose={() => setFundingModalVisible(false)}
-        onSuccess={() => {
-          fetchDashboardData(); 
-        }}
+        onSuccess={fetchDashboardData}
         currentBalance={walletData.balance}
       />
-
       <WithdrawalModal
         visible={withdrawalModalVisible}
         onClose={() => setWithdrawalModalVisible(false)}
-        onSuccess={() => {
-          fetchDashboardData(); 
-        }}
+        onSuccess={fetchDashboardData}
         currentBalance={walletData.balance}
       />
     </SafeAreaView>
