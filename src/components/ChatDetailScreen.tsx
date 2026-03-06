@@ -618,7 +618,7 @@ const ChatDetailScreen: React.FC = () => {
                 <Ionicons name="call-outline" size={18} color="#fff" />
               </TouchableOpacity>
 
-              <TouchableOpacity
+              {/* <TouchableOpacity
                 onPress={() => handleCall('video')}
                 activeOpacity={0.75}
                 style={{
@@ -628,7 +628,7 @@ const ChatDetailScreen: React.FC = () => {
                 }}
               >
                 <Ionicons name="videocam-outline" size={18} color="#fff" />
-              </TouchableOpacity>
+              </TouchableOpacity> */}
             </View>
           </View>
         </LinearGradient>

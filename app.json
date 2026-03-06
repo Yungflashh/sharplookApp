@@ -14,8 +14,8 @@
       [
         "expo-notifications",
         {
-          "icon": "./assets/app-icon.png",
-          "color": "#FF6B35",
+          "icon": "./assets/notification-icon.png",
+          "color": "#D73870",
           "sounds": []
         }
       ],
@@ -41,6 +41,9 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.techtrove.sharplook",
       "buildNumber": "21",
+      "associatedDomains": [
+        "applinks:lookreal.beauty"
+      ],
       "infoPlist": {
         "CFBundleURLTypes": [
           {
@@ -72,6 +75,36 @@
           "data": [
             {
               "scheme": "LookReal"
+            }
+          ],
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
+        },
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "lookreal.beauty",
+              "pathPrefix": "/share"
+            }
+          ],
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
+        },
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "lookreal.beauty",
+              "pathPrefix": "/vendors"
             }
           ],
           "category": [

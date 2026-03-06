@@ -161,21 +161,16 @@ export const webrtcHtml = `
                         console.log('ICE failed, attempting restart...');
                         peerConnection.restartIce();
                     } else if (peerConnection.iceConnectionState === 'disconnected') {
-                        // Give it a few seconds to recover before reporting failure
-                        setTimeout(() => {
-                            if (peerConnection && peerConnection.iceConnectionState === 'disconnected') {
-                                sendMessage('connectionState', { state: 'failed' });
-                            }
-                        }, 5000);
+                        sendMessage('connectionState', { state: 'disconnected' });
+                    } else if (peerConnection.iceConnectionState === 'closed') {
+                        sendMessage('connectionState', { state: 'closed' });
                     }
                 };
 
                 // Handle connection state (more reliable than ICE state on some browsers)
                 peerConnection.onconnectionstatechange = () => {
                     console.log('Connection state:', peerConnection.connectionState);
-                    if (peerConnection.connectionState === 'connected') {
-                        sendMessage('connectionState', { state: 'connected' });
-                    }
+                    sendMessage('connectionState', { state: peerConnection.connectionState });
                 };
 
                 // Handle incoming tracks

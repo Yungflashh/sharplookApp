@@ -156,10 +156,20 @@ class CallService {
       this.emit('call:signal:answer', data);
     });
 
+    socketService.on('call:signal:hangup', (data: any) => {
+      console.log('📞 Received hangup signal via socket:', data);
+      this.emit('call:ended', data);
+    });
+
     socketService.on('call:signal:ice', async (data: any) => {
+      // Check if this is a hangup signal disguised as ICE
+      if (data.candidate?.type === 'hangup') {
+        console.log('📞 Received hangup via ICE channel');
+        this.emit('call:ended', data);
+        return;
+      }
+
       console.log('📞 Received ICE candidate via socket:', data);
-      
-      
       this.emit('call:signal:ice', data);
     });
   }
@@ -282,24 +292,26 @@ class CallService {
   }
 
   public endCall() {
-    console.log('📞 [CallService] Ending call');
-    console.log('   - Has callData:', !!this.callData);
-    console.log('   - CallId:', this.callData?.callId);
+    console.log('📞 [CallService] Ending call, callId:', this.callData?.callId);
 
     if (this.callData?.callId) {
-      console.log('   - Emitting call:end event with callId:', this.callData.callId);
+      const otherUserId = this.currentUserId === (this.callData.caller?._id || this.callData.caller)
+        ? this.callData.receiver?._id || this.callData.receiver
+        : this.callData.caller?._id || this.callData.caller;
+
       socketService.emit('call:end', { callId: this.callData.callId });
-    } else {
-      console.warn('   ⚠️ No callId found, cannot emit call:end event');
+      socketService.emit('call:cancel', { callId: this.callData.callId });
+      // Send hangup via call:signal:ice channel (the backend relays this)
+      socketService.emit('call:signal:ice', {
+        callId: this.callData.callId,
+        receiverId: otherUserId,
+        candidate: { type: 'hangup' },
+      });
+      console.log('📞 Sent hangup to:', otherUserId);
     }
 
-    console.log('   - Closing WebRTC service');
-    webrtcService.close();
-
-    console.log('   - Clearing callData');
     this.callData = null;
     this.callStatus = 'idle';
-    console.log('✅ [CallService] Call ended');
   }
 
   public cancelCall(callId: string) {

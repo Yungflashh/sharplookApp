@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -17,7 +17,7 @@ import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '@/types/navigation.types';
 import callService from '@/services/call.service';
-import { Audio } from 'expo-av';
+import callSounds from '@/services/call-sounds.service';
 
 type IncomingCallNavigationProp = NativeStackNavigationProp<RootStackParamList, 'IncomingCall'>;
 type IncomingCallRouteProp = RouteProp<RootStackParamList, 'IncomingCall'>;
@@ -30,37 +30,12 @@ const IncomingCallScreen: React.FC = () => {
 
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const rippleAnim = useRef(new Animated.Value(0)).current;
-  const [ringtone, setRingtone] = useState<Audio.Sound | null>(null);
-  const [receivedOffer, setReceivedOffer] = useState<any>(offer); 
+  const [receivedOffer, setReceivedOffer] = useState<any>(offer);
 
   useEffect(() => {
-    console.log('📲 IncomingCallScreen MOUNTED');
-    console.log('   - Call ID:', call._id);
-    console.log('   - Call type:', callType);
-    console.log('   - Caller:', caller.firstName, caller.lastName);
-    console.log('   - Caller ID:', caller._id);
-    console.log('   - Has offer in params:', !!offer);
-    
     startPulseAnimation();
-
-    console.log('   - Starting vibration...');
     Vibration.vibrate([0, 1000, 500, 1000], true);
-
-    const playRingtone = async () => {
-      try {
-        console.log('   - Playing ringtone...');
-        const { sound } = await Audio.Sound.createAsync(
-          require('@/assets/sounds/ringtone.mp3'), 
-          { shouldPlay: true, isLooping: true }
-        );
-        setRingtone(sound);
-        console.log('   ✅ Ringtone started');
-      } catch (error) {
-        console.log('   ❌ Error playing ringtone:', error);
-      }
-    };
-    
-    playRingtone();
+    callSounds.playRingtone();
 
     
     const handleSignalOffer = (data: any) => {
@@ -76,14 +51,21 @@ const IncomingCallScreen: React.FC = () => {
       cleanupAndGoBack();
     };
 
+    const handleCallEnded = () => {
+      console.log('📞 Call was ended by caller');
+      cleanupAndGoBack();
+    };
+
     callService.on('call:signal:offer', handleSignalOffer);
     callService.on('call:cancelled', handleCallCancelled);
+    callService.on('call:ended', handleCallEnded);
 
     return () => {
       console.log('📲 IncomingCallScreen UNMOUNTING');
       cleanup();
       callService.removeListener('call:signal:offer', handleSignalOffer);
       callService.removeListener('call:cancelled', handleCallCancelled);
+      callService.removeListener('call:ended', handleCallEnded);
     };
   }, [call._id]);
 
@@ -120,14 +102,7 @@ const IncomingCallScreen: React.FC = () => {
 
   const cleanup = async () => {
     Vibration.cancel();
-    if (ringtone) {
-      try {
-        await ringtone.stopAsync();
-        await ringtone.unloadAsync();
-      } catch (error) {
-        console.log('Error stopping ringtone:', error);
-      }
-    }
+    await callSounds.stopAll();
   };
 
   const cleanupAndGoBack = async () => {

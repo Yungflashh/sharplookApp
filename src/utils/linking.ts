@@ -17,7 +17,7 @@ export function navigate(name: keyof RootStackParamList, params?: any) {
 }
 
 export const linking = {
-  prefixes: ['lookReal://', 'https://lookReal.com', 'https://*.lookReal.com'],
+  prefixes: ['LookReal://', 'https://lookreal.beauty', 'https://*.lookreal.beauty'],
   config: {
     screens: {
       Splash: 'splash',
@@ -122,6 +122,24 @@ export const useDeepLinking = () => {
     // Payment verification - let the app handle naturally
     if (path?.includes('payment/verify') || path?.includes('payment') || queryParams?.reference) {
       console.log('Payment verification callback detected');
+      return;
+    }
+
+    // Shared vendor profile: /share/vendor/:id
+    if (path?.includes('share/vendor/')) {
+      const vendorId = path.split('share/vendor/')[1]?.split('/')[0];
+      if (vendorId) {
+        navigate('VendorDetail', { vendorId });
+      }
+      return;
+    }
+
+    // Shared product: /share/product/:id
+    if (path?.includes('share/product/')) {
+      const productId = path.split('share/product/')[1]?.split('/')[0];
+      if (productId) {
+        navigate('ProductDetail', { productId });
+      }
       return;
     }
 

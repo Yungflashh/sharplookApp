@@ -65,8 +65,6 @@ import SharedContentScreen from '@/screens/shared/SharedContentScreen';
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 const RootNavigator = () => {
-  useDeepLinking(); // Now safe - uses navigationRef instead of useNavigation hook
-  
   const [isLoading, setIsLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isVendor, setIsVendor] = useState(false);

@@ -290,8 +290,8 @@ const VendorDetailScreen: React.FC = () => {
     if (!vendor) return;
     try {
       await Share.share({
-        message: `Check out ${vendor.vendorProfile.businessName} on LookReal!\nhttps://lookreal.com/vendors/${vendorId}`,
-        url: `https://lookreal.com/vendors/${vendorId}`,
+        message: `Check out ${vendor.vendorProfile.businessName} on LookReal!\nhttps://lookreal.beauty/share/vendor/${vendorId}`,
+        url: `https://lookreal.beauty/share/vendor/${vendorId}`,
         title: vendor.vendorProfile.businessName,
       });
     } catch { Alert.alert('Error', 'Failed to share vendor profile.'); }

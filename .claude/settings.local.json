@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node:*)",
+      "Read(//c/Users/YungFlash/**)",
+      "Bash(mkdir:*)",
+      "Bash(rm:*)",
+      "Bash(npx next:*)"
+    ]
+  }
+}

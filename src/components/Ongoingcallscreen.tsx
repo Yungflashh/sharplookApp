@@ -20,6 +20,7 @@ import { RootStackParamList } from '@/types/navigation.types';
 import { WebView } from 'react-native-webview';
 import { Audio } from 'expo-av';
 import callService from '@/services/call.service';
+import callSounds from '@/services/call-sounds.service';
 import webrtcService from '@/services/webrtc.service';
 import { webrtcHtml } from '@/services/webrtc-html';
 
@@ -115,6 +116,8 @@ const OngoingCallScreen: React.FC = () => {
   const hasProcessedOffer   = useRef(false);
   const hasProcessedAnswer  = useRef(false);
   const processedIce        = useRef(new Set<string>());
+  const hasEnded            = useRef(false);
+  const wasConnected        = useRef(false);
 
   // ── Effects ────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -126,6 +129,11 @@ const OngoingCallScreen: React.FC = () => {
       shouldDuckAndroid: false,
       playThroughEarpieceAndroid: false,
     }).catch((err) => console.warn('Audio mode error:', err));
+
+    // Play outgoing ring tone while waiting for answer
+    if (isOutgoing) {
+      callSounds.playOutgoingRing();
+    }
 
     initializeCall();
 
@@ -139,10 +147,10 @@ const OngoingCallScreen: React.FC = () => {
       }
     };
 
-    const handleCallAccepted  = () => setCallStatus('Connecting…');
-    const handleCallRejected  = () => { setCallStatus('Call declined'); setTimeout(() => { cleanup(); navigation.goBack(); }, 2000); };
-    const handleCallEnded     = () => { setCallStatus('Call ended'); cleanup(); setTimeout(() => navigation.goBack(), 1000); };
-    const handleCallCancelled = () => { setCallStatus('Call cancelled'); cleanup(); setTimeout(() => navigation.goBack(), 1000); };
+    const handleCallAccepted  = () => { callSounds.stopAll(); setCallStatus('Connecting…'); };
+    const handleCallRejected  = () => { if (hasEnded.current) return; hasEnded.current = true; callSounds.stopAll(); callSounds.playHangup(); cleanup(); navigation.goBack(); };
+    const handleCallEnded     = () => { if (hasEnded.current) return; hasEnded.current = true; callSounds.stopAll(); callSounds.playHangup(); cleanup(); navigation.goBack(); };
+    const handleCallCancelled = () => { if (hasEnded.current) return; hasEnded.current = true; callSounds.stopAll(); callSounds.playHangup(); cleanup(); navigation.goBack(); };
 
     const handleSignalOffer = (data: any) => {
       if (!isOutgoing && data.offer && webViewLoaded && !hasProcessedOffer.current) {
@@ -154,6 +162,7 @@ const OngoingCallScreen: React.FC = () => {
     const handleSignalAnswer = (data: any) => {
       if (isOutgoing && data.answer && !hasProcessedAnswer.current) {
         hasProcessedAnswer.current = true;
+        callSounds.stopAll();
         webrtcService.handleAnswer(data.answer);
       }
     };
@@ -189,12 +198,20 @@ const OngoingCallScreen: React.FC = () => {
         case 'connectionState':
           console.log('WebRTC connection state:', event.data?.state);
           if (event.data?.state === 'connected') {
+            if (!wasConnected.current) {
+              callSounds.stopAll(); callSounds.playConnected();
+            }
+            wasConnected.current = true;
             setCallStatus('Connected');
             setIsConnected(true);
             startCallDuration();
-          } else if (event.data?.state === 'failed') {
-            setCallStatus('Connection failed');
-            setTimeout(() => { cleanup(); navigation.goBack(); }, 2000);
+          } else if (event.data?.state === 'failed' || event.data?.state === 'closed' || event.data?.state === 'disconnected') {
+            if (event.data?.state === 'disconnected' && !wasConnected.current) break;
+            if (hasEnded.current) return;
+            hasEnded.current = true;
+            callSounds.stopAll(); callSounds.playHangup();
+            cleanup();
+            navigation.goBack();
           }
           break;
         case 'localStream':
@@ -287,7 +304,10 @@ const OngoingCallScreen: React.FC = () => {
   };
 
   const endCall = () => {
+    if (hasEnded.current) return;
+    hasEnded.current = true;
     if (durationInterval.current) clearInterval(durationInterval.current);
+    callSounds.stopAll(); callSounds.playHangup();
     callService.endCall();
     cleanup();
     navigation.goBack();
@@ -295,6 +315,7 @@ const OngoingCallScreen: React.FC = () => {
 
   const cleanup = () => {
     webrtcService.close();
+    callSounds.stopAll();
     if (durationInterval.current) { clearInterval(durationInterval.current); durationInterval.current = null; }
     // Reset audio mode
     Audio.setAudioModeAsync({
