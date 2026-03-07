@@ -1,7 +1,6 @@
 import socketService from './socket.service';
 import webrtcService from './webrtc.service';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Alert } from 'react-native';
 
 export type CallType = 'voice' | 'video';
 export type CallStatus = 'idle' | 'calling' | 'incoming' | 'connected' | 'ended';
@@ -47,7 +46,6 @@ class CallService {
     this.initialized = true;
     this.setupSocketListeners();
     console.log('📞 Call service initialized on socket:', currentSocketId);
-    Alert.alert('DEBUG: CallService', `initialized on socket: ${currentSocketId}\nuserId: ${this.currentUserId}`);
   }
 
   public on(event: string, callback: Function) {
@@ -86,20 +84,15 @@ class CallService {
       const callerId = data.caller?._id || data.caller?.id;
       console.log('📞 Incoming call received:', callerId, 'type:', data.type, 'myStatus:', this.callStatus, 'myId:', this.currentUserId);
 
-      // DEBUG: Show alert so we know the socket event arrived
-      Alert.alert('DEBUG: call:incoming', `caller=${callerId}\nstatus=${this.callStatus}\nmyId=${this.currentUserId}`);
-
       // Guard 1: If we're already calling or connected, ignore
       if (this.callStatus !== 'idle') {
         console.log('⏭️ Ignoring incoming call - not idle (status:', this.callStatus, ')');
-        Alert.alert('DEBUG: BLOCKED', `Guard 1: not idle, status=${this.callStatus}`);
         return;
       }
 
       // Guard 2: Check if the caller is us (backend broadcasts to conversation room)
       if (this.currentUserId && callerId === this.currentUserId) {
         console.log('⏭️ Ignoring our own outgoing call - IDs match');
-        Alert.alert('DEBUG: BLOCKED', 'Guard 2: caller is us');
         return;
       }
 
@@ -107,12 +100,10 @@ class CallService {
       const callCallerIdFromCall = data.call?.caller?._id || data.call?.caller?.id;
       if (this.currentUserId && callCallerIdFromCall === this.currentUserId) {
         console.log('⏭️ Ignoring our own outgoing call - call.caller._id matches');
-        Alert.alert('DEBUG: BLOCKED', 'Guard 3: call.caller is us');
         return;
       }
 
       console.log('✅ Processing incoming call from another user');
-      Alert.alert('DEBUG: PASSED', 'All guards passed, emitting call:incoming');
       this.callData = {
         callId: data.call._id,
         type: data.type,

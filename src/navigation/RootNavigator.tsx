@@ -48,7 +48,6 @@ import VendorStoreSettingsScreen from '@/components/vendorComponent/VendorStoreS
 import OrderPaymentScreen from '@/components/clientComponent/OrderPaymentScreen';
 import CustomerOrdersScreen from '@/components/clientComponent/Customerordersscreen';
 import TransactionHistoryScreen from '@/components/TransactionHistoryScreen';
-import { Alert } from 'react-native';
 import callService from '@/services/call.service';
 import socketService from '@/services/socket.service';
 import { navigate } from '../utils/linking';
@@ -75,7 +74,6 @@ const RootNavigator = () => {
   useEffect(() => {
     const handleIncomingCall = (data: any) => {
       console.log('📞 Incoming call received in RootNavigator:', data);
-      Alert.alert('DEBUG: RootNavigator', `handleIncomingCall fired!\ncall=${!!data.call}\ncaller=${!!data.caller}`);
       if (data.call && data.caller) {
         navigate('IncomingCall', {
           call: data.call,
@@ -83,8 +81,6 @@ const RootNavigator = () => {
           callType: data.type || data.call?.type || 'voice',
           offer: data.offer
         });
-      } else {
-        Alert.alert('DEBUG: FAILED', `Missing data: call=${!!data.call} caller=${!!data.caller}`);
       }
     };
 
@@ -144,15 +140,12 @@ const RootNavigator = () => {
       setIsAuthenticated(authStatus.isAuthenticated);
       setIsVendor(authStatus.isVendor);
 
-      Alert.alert('DEBUG: initializeApp', `authenticated=${authStatus.isAuthenticated}`);
-
       if (authStatus.isAuthenticated) {
         console.log('🔌 Connecting socket...');
         socketService.connect();
 
         socketService.onConnected(() => {
           console.log('📞 Initializing call service after socket connection');
-          Alert.alert('DEBUG: Socket connected', 'About to initialize callService');
           callService.initialize();
         });
 

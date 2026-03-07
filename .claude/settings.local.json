@@ -6,7 +6,8 @@
       "Bash(mkdir:*)",
       "Bash(rm:*)",
       "Bash(npx next:*)",
-      "Bash(xargs grep:*)"
+      "Bash(xargs grep:*)",
+      "Bash(npx eas:*)"
     ]
   }
 }

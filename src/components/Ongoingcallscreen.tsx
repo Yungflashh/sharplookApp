@@ -237,10 +237,6 @@ const OngoingCallScreen: React.FC = () => {
         case 'videoStatus':   setIsVideoOff(!event.data.enabled);      break;
         case 'error':
           console.error('WebRTC error:', event.data?.message);
-          // Show WebRTC errors as call status so they're visible in production
-          if (event.data?.message) {
-            setCallStatus('Error: ' + event.data.message.substring(0, 60));
-          }
           break;
       }
     });
@@ -382,11 +378,7 @@ const OngoingCallScreen: React.FC = () => {
           ref={(ref) => { if (ref) webrtcService.setWebViewRef(ref); }}
           source={{ uri: WEBRTC_URL }}
           onMessage={(e) => webrtcService.handleWebViewMessage(e)}
-          onLoadEnd={() => {
-            console.log('📞 WebView loaded from:', WEBRTC_URL);
-            onWebViewLoad();
-          }}
-          onLoad={() => console.log('📞 WebView onLoad fired')}
+          onLoadEnd={onWebViewLoad}
           style={callType === 'video' ? styles.webViewVideo : styles.webViewHidden}
           mediaPlaybackRequiresUserAction={false}
           allowsInlineMediaPlayback
@@ -398,7 +390,6 @@ const OngoingCallScreen: React.FC = () => {
           mediaCapturePermissionGrantType="grant"
           allowsProtectedMedia={true}
           onError={(e) => console.warn('WebView error:', e.nativeEvent)}
-          onHttpError={(e) => console.warn('WebView HTTP error:', e.nativeEvent.statusCode, e.nativeEvent.url)}
         />
       </View>
 
