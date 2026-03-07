@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "515208797389",
+    "project_id": "lookreal-6e7a4",
+    "storage_bucket": "lookreal-6e7a4.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:515208797389:android:adcc8557608dbd30f4dd84",
+        "android_client_info": {
+          "package_name": "com.inuud.sharplook"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDq8rWr_vjKYWPg-cJ9J3Y10w9nEugcGAU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

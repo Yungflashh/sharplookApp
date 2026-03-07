@@ -45,7 +45,7 @@ const NotificationsScreen: React.FC<NotificationsScreenProps> = ({
       const response = await notificationAPI.getNotifications({
         page: isRefresh ? 1 : page,
         limit: 20,
-        filter: filter === 'unread' ? 'unread' : undefined
+        isRead: filter === 'unread' ? false : undefined
       });
       console.log('Full notifications response:', JSON.stringify(response, null, 2));
       let newNotifications: Notification[] = [];

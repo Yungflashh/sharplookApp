@@ -22,7 +22,8 @@ import { Audio } from 'expo-av';
 import callService from '@/services/call.service';
 import callSounds from '@/services/call-sounds.service';
 import webrtcService from '@/services/webrtc.service';
-import { webrtcHtml } from '@/services/webrtc-html';
+
+const WEBRTC_URL = 'https://sharplook-backend-production.onrender.com/webrtc';
 
 // ─── Brand Tokens ─────────────────────────────────────────────────────────────
 const BRAND = {
@@ -108,8 +109,11 @@ const OngoingCallScreen: React.FC = () => {
   const [isConnected, setIsConnected]       = useState(false);
   const [hasRemoteStream, setHasRemoteStream] = useState(false);
   const [webViewLoaded, setWebViewLoaded]   = useState(false);
+  const webViewLoadedRef    = useRef(false);
+  const currentCallIdRef    = useRef<string | undefined>(callId);
 
   const durationInterval    = useRef<NodeJS.Timeout | null>(null);
+  const callTimeoutRef      = useRef<NodeJS.Timeout | null>(null);
   const pulseAnim           = useRef(new Animated.Value(1)).current;
   const rippleAnim          = useRef(new Animated.Value(0)).current;
   const hasInitiatedCall    = useRef(false);
@@ -133,14 +137,25 @@ const OngoingCallScreen: React.FC = () => {
     // Play outgoing ring tone while waiting for answer
     if (isOutgoing) {
       callSounds.playOutgoingRing();
+      // Auto-cancel if no answer within 60 seconds
+      callTimeoutRef.current = setTimeout(() => {
+        if (!wasConnected.current && !hasEnded.current) {
+          console.log('📞 Call timeout — no answer after 60s');
+          setCallStatus('No Answer');
+          endCall();
+        }
+      }, 60000);
     }
 
     initializeCall();
 
     const handleCallInitiated = (data: any) => {
       if (data.call?._id) {
+        console.log('📞 Got real callId:', data.call._id);
         setCurrentCallId(data.call._id);
-        if (isOutgoing && webViewLoaded && !hasInitiatedCall.current) {
+        currentCallIdRef.current = data.call._id;
+        // Now that we have a real callId, create the offer if WebView is ready
+        if (isOutgoing && webViewLoadedRef.current && !hasInitiatedCall.current) {
           hasInitiatedCall.current = true;
           setTimeout(() => webrtcService.createOffer(), 500);
         }
@@ -200,6 +215,7 @@ const OngoingCallScreen: React.FC = () => {
           if (event.data?.state === 'connected') {
             if (!wasConnected.current) {
               callSounds.stopAll(); callSounds.playConnected();
+              if (callTimeoutRef.current) { clearTimeout(callTimeoutRef.current); callTimeoutRef.current = null; }
             }
             wasConnected.current = true;
             setCallStatus('Connected');
@@ -221,6 +237,10 @@ const OngoingCallScreen: React.FC = () => {
         case 'videoStatus':   setIsVideoOff(!event.data.enabled);      break;
         case 'error':
           console.error('WebRTC error:', event.data?.message);
+          // Show WebRTC errors as call status so they're visible in production
+          if (event.data?.message) {
+            setCallStatus('Error: ' + event.data.message.substring(0, 60));
+          }
           break;
       }
     });
@@ -281,11 +301,16 @@ const OngoingCallScreen: React.FC = () => {
 
   const onWebViewLoad = () => {
     setWebViewLoaded(true);
+    webViewLoadedRef.current = true;
     webrtcService.initialize(callType === 'video');
-    if (isOutgoing && currentCallId && !hasInitiatedCall.current) {
-      hasInitiatedCall.current = true;
-      setTimeout(() => webrtcService.createOffer(), 500);
-    } else if (!isOutgoing && offer && !hasProcessedOffer.current) {
+    if (isOutgoing) {
+      // Only create offer if we already have a real callId from call:initiated
+      // (if call:initiated hasn't fired yet, handleCallInitiated will handle it)
+      if (currentCallIdRef.current && currentCallIdRef.current !== 'pending' && !hasInitiatedCall.current) {
+        hasInitiatedCall.current = true;
+        setTimeout(() => webrtcService.createOffer(), 500);
+      }
+    } else if (offer && !hasProcessedOffer.current) {
       hasProcessedOffer.current = true;
       setTimeout(() => webrtcService.createAnswer(offer), 1000);
     }
@@ -316,6 +341,7 @@ const OngoingCallScreen: React.FC = () => {
   const cleanup = () => {
     webrtcService.close();
     callSounds.stopAll();
+    if (callTimeoutRef.current) { clearTimeout(callTimeoutRef.current); callTimeoutRef.current = null; }
     if (durationInterval.current) { clearInterval(durationInterval.current); durationInterval.current = null; }
     // Reset audio mode
     Audio.setAudioModeAsync({
@@ -354,9 +380,13 @@ const OngoingCallScreen: React.FC = () => {
       <View style={{ flex: 1 }}>
         <WebView
           ref={(ref) => { if (ref) webrtcService.setWebViewRef(ref); }}
-          source={{ html: webrtcHtml, baseUrl: 'https://localhost' }}
+          source={{ uri: WEBRTC_URL }}
           onMessage={(e) => webrtcService.handleWebViewMessage(e)}
-          onLoadEnd={onWebViewLoad}
+          onLoadEnd={() => {
+            console.log('📞 WebView loaded from:', WEBRTC_URL);
+            onWebViewLoad();
+          }}
+          onLoad={() => console.log('📞 WebView onLoad fired')}
           style={callType === 'video' ? styles.webViewVideo : styles.webViewHidden}
           mediaPlaybackRequiresUserAction={false}
           allowsInlineMediaPlayback
@@ -367,12 +397,8 @@ const OngoingCallScreen: React.FC = () => {
           androidLayerType="hardware"
           mediaCapturePermissionGrantType="grant"
           allowsProtectedMedia={true}
-          onPermissionRequest={(event: any) => {
-            if (event?.grant) {
-              event.grant(event.resources || []);
-            }
-          }}
           onError={(e) => console.warn('WebView error:', e.nativeEvent)}
+          onHttpError={(e) => console.warn('WebView HTTP error:', e.nativeEvent.statusCode, e.nativeEvent.url)}
         />
       </View>
 

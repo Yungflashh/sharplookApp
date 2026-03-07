@@ -91,12 +91,16 @@ export const getFCMToken = async (): Promise<string | null> => {
       console.log('✅ Android notification channel configured');
     }
 
-    // Get project ID
-    const projectId = Constants.expoConfig?.extra?.eas?.projectId;
-    
+    // Get project ID — try multiple sources for compatibility with standalone builds
+    const projectId =
+      Constants.expoConfig?.extra?.eas?.projectId ??
+      (Constants as any).manifest?.extra?.eas?.projectId ??
+      (Constants as any).manifest2?.extra?.expoClient?.extra?.eas?.projectId;
+
+    console.log('📱 EAS Project ID:', projectId || 'NOT FOUND');
+
     if (!projectId) {
-      console.log('⚠️ No EAS project ID found');
-      console.log('💡 Get one from: https://expo.dev');
+      console.log('⚠️ No EAS project ID found — push tokens may not work in standalone builds');
     }
 
     // Get Expo push token
@@ -111,7 +115,8 @@ export const getFCMToken = async (): Promise<string | null> => {
     return token; // Format: ExponentPushToken[xxxxxx]
 
   } catch (error: any) {
-    console.error('❌ Error getting Expo push token:', error);
+    console.error('❌ Error getting Expo push token:', error?.message || error);
+    console.error('❌ Full error:', JSON.stringify(error, null, 2));
     return null;
   }
 };

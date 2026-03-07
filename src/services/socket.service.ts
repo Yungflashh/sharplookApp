@@ -7,22 +7,32 @@ class SocketService {
   private socket: Socket | null = null;
   private isConnected: boolean = false;
   private connectionCallbacks: Array<() => void> = [];
+  private pendingListeners: Array<{ event: string; callback: (data: any) => void }> = [];
 
   
   async connect(): Promise<void> {
     try {
       if (this.socket?.connected) {
-        console.log('🔌 Socket already connected');
-        
+        console.log('🔌 Socket already connected, socket ID:', this.socket.id);
+
         this.connectionCallbacks.forEach(cb => cb());
         return;
       }
 
       const token = await getStoredToken();
-      
+
       if (!token) {
         console.error('❌ No auth token found for socket connection');
         return;
+      }
+
+      // Disconnect old socket if it exists (prevents duplicate connections)
+      if (this.socket) {
+        console.log('🔌 Cleaning up old socket before reconnecting');
+        this.socket.removeAllListeners();
+        this.socket.disconnect();
+        this.socket = null;
+        this.pendingListeners = [];
       }
 
       console.log('🔵 Connecting to Socket.IO server...');
@@ -32,8 +42,9 @@ class SocketService {
         auth: { token },
         transports: ['websocket', 'polling'],
         reconnection: true,
-        reconnectionAttempts: 5,
+        reconnectionAttempts: Infinity,
         reconnectionDelay: 1000,
+        reconnectionDelayMax: 10000,
       });
 
       this.setupEventListeners();
@@ -46,13 +57,25 @@ class SocketService {
   private setupEventListeners(): void {
     if (!this.socket) return;
 
-    
+
     this.socket.on('connect', () => {
       this.isConnected = true;
       console.log('✅ Socket connected successfully');
       console.log('   Socket ID:', this.socket?.id);
-      
-      
+
+      // Replay any listeners that were queued before socket was ready
+      if (this.pendingListeners.length > 0) {
+        console.log('🔄 Replaying', this.pendingListeners.length, 'pending listeners');
+        for (const { event, callback } of this.pendingListeners) {
+          if (this.socket) {
+            this.socket.on(event, callback);
+            console.log('   ✅ Replayed listener for:', event);
+          }
+        }
+        this.pendingListeners = [];
+      }
+
+
       this.connectionCallbacks.forEach(cb => cb());
     });
 
@@ -601,16 +624,19 @@ class SocketService {
 
   
   on(event: string, callback: (data: any) => void): void {
+    const wrappedCallback = (data: any) => {
+      console.log('📥 RECEIVED custom event:', event);
+      callback(data);
+    };
+
     if (!this.socket) {
-      console.error('❌ Cannot listen - socket not initialized');
+      console.log('⏳ Socket not ready, queuing listener for:', event);
+      this.pendingListeners.push({ event, callback: wrappedCallback });
       return;
     }
 
-    console.log('👂 Setting up listener for custom event:', event);
-    this.socket.on(event, (data) => {
-      console.log('📥 RECEIVED custom event:', event, JSON.stringify(data, null, 2));
-      callback(data);
-    });
+    console.log('👂 Setting up listener for custom event:', event, '| Socket ID:', this.socket.id);
+    this.socket.on(event, wrappedCallback);
   }
 }
 

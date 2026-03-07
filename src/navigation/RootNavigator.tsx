@@ -48,9 +48,12 @@ import VendorStoreSettingsScreen from '@/components/vendorComponent/VendorStoreS
 import OrderPaymentScreen from '@/components/clientComponent/OrderPaymentScreen';
 import CustomerOrdersScreen from '@/components/clientComponent/Customerordersscreen';
 import TransactionHistoryScreen from '@/components/TransactionHistoryScreen';
+import { Alert } from 'react-native';
 import callService from '@/services/call.service';
 import socketService from '@/services/socket.service';
 import { navigate } from '../utils/linking';
+import { initializeFCM, onForegroundNotification, onNotificationTap, getDeviceInfo } from '@/utils/fcm';
+import { notificationAPI } from '@/api/api';
 import ReferralScreen from '@/components/ReferralScreen';
 import ReferralLeaderboard from '@/components/ReferralLeaderBoard';
 import ApplyReferralCode from '@/components/ApplyReferralCode';
@@ -71,15 +74,17 @@ const RootNavigator = () => {
 
   useEffect(() => {
     const handleIncomingCall = (data: any) => {
-      console.log('📞 Incoming call received:', data);
+      console.log('📞 Incoming call received in RootNavigator:', data);
+      Alert.alert('DEBUG: RootNavigator', `handleIncomingCall fired!\ncall=${!!data.call}\ncaller=${!!data.caller}`);
       if (data.call && data.caller) {
-        // Use the navigate helper instead of useNavigation hook
         navigate('IncomingCall', {
           call: data.call,
           caller: data.caller,
           callType: data.type || data.call?.type || 'voice',
           offer: data.offer
         });
+      } else {
+        Alert.alert('DEBUG: FAILED', `Missing data: call=${!!data.call} caller=${!!data.caller}`);
       }
     };
 
@@ -93,6 +98,32 @@ const RootNavigator = () => {
   useEffect(() => {
     initializeApp();
   }, []);
+
+  // Set up push notification listeners
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    const unsubForeground = onForegroundNotification();
+    const unsubTap = onNotificationTap((notification) => {
+      const data = notification.request.content.data;
+      if (data?.bookingId) {
+        navigate('BookingDetail', { bookingId: data.bookingId });
+      } else if (data?.paymentId || data?.type === 'payment') {
+        navigate('Transactions' as never);
+      } else if (data?.conversationId) {
+        navigate('ChatDetail', { conversationId: data.conversationId });
+      } else if (data?.orderId) {
+        navigate('OrderDetail', { orderId: data.orderId });
+      } else {
+        navigate('Notifications' as never);
+      }
+    });
+
+    return () => {
+      unsubForeground();
+      unsubTap();
+    };
+  }, [isAuthenticated]);
 
   useEffect(() => {
     const interval = setInterval(async () => {
@@ -113,14 +144,33 @@ const RootNavigator = () => {
       setIsAuthenticated(authStatus.isAuthenticated);
       setIsVendor(authStatus.isVendor);
 
+      Alert.alert('DEBUG: initializeApp', `authenticated=${authStatus.isAuthenticated}`);
+
       if (authStatus.isAuthenticated) {
         console.log('🔌 Connecting socket...');
         socketService.connect();
-        
+
         socketService.onConnected(() => {
           console.log('📞 Initializing call service after socket connection');
+          Alert.alert('DEBUG: Socket connected', 'About to initialize callService');
           callService.initialize();
         });
+
+        // Initialize push notifications and re-register device token
+        try {
+          const token = await initializeFCM();
+          if (token) {
+            const deviceInfo = getDeviceInfo();
+            await notificationAPI.registerDeviceToken({
+              token,
+              deviceType: deviceInfo.deviceType,
+              deviceName: deviceInfo.deviceName,
+            });
+            console.log('✅ Device token registered on app launch');
+          }
+        } catch (error) {
+          console.error('⚠️ Failed to register device token on launch:', error);
+        }
       }
 
       console.log('🔐 Auth status:', {

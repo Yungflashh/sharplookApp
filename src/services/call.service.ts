@@ -1,6 +1,7 @@
 import socketService from './socket.service';
 import webrtcService from './webrtc.service';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Alert } from 'react-native';
 
 export type CallType = 'voice' | 'video';
 export type CallStatus = 'idle' | 'calling' | 'incoming' | 'connected' | 'ended';
@@ -20,14 +21,9 @@ class CallService {
   private listeners: { [key: string]: Function[] } = {};
   private initialized: boolean = false;
   private currentUserId: string | null = null;
+  private registeredSocketId: string | null = null;
 
   public async initialize() {
-    if (this.initialized) {
-      console.log('📞 Call service already initialized, skipping');
-      return;
-    }
-    this.initialized = true;
-
     // Cache the current user ID for synchronous self-call filtering
     try {
       const userDataString = await AsyncStorage.getItem('userData');
@@ -40,8 +36,18 @@ class CallService {
       console.error('❌ Error caching user ID:', error);
     }
 
+    // Only re-register if socket changed (prevents duplicate listeners)
+    const currentSocketId = socketService.getSocket()?.id || null;
+    if (this.initialized && this.registeredSocketId === currentSocketId) {
+      console.log('📞 Call service already initialized on this socket, skipping');
+      return;
+    }
+
+    this.registeredSocketId = currentSocketId;
+    this.initialized = true;
     this.setupSocketListeners();
-    console.log('📞 Call service initialized');
+    console.log('📞 Call service initialized on socket:', currentSocketId);
+    Alert.alert('DEBUG: CallService', `initialized on socket: ${currentSocketId}\nuserId: ${this.currentUserId}`);
   }
 
   public on(event: string, callback: Function) {
@@ -80,15 +86,20 @@ class CallService {
       const callerId = data.caller?._id || data.caller?.id;
       console.log('📞 Incoming call received:', callerId, 'type:', data.type, 'myStatus:', this.callStatus, 'myId:', this.currentUserId);
 
+      // DEBUG: Show alert so we know the socket event arrived
+      Alert.alert('DEBUG: call:incoming', `caller=${callerId}\nstatus=${this.callStatus}\nmyId=${this.currentUserId}`);
+
       // Guard 1: If we're already calling or connected, ignore
       if (this.callStatus !== 'idle') {
         console.log('⏭️ Ignoring incoming call - not idle (status:', this.callStatus, ')');
+        Alert.alert('DEBUG: BLOCKED', `Guard 1: not idle, status=${this.callStatus}`);
         return;
       }
 
       // Guard 2: Check if the caller is us (backend broadcasts to conversation room)
       if (this.currentUserId && callerId === this.currentUserId) {
         console.log('⏭️ Ignoring our own outgoing call - IDs match');
+        Alert.alert('DEBUG: BLOCKED', 'Guard 2: caller is us');
         return;
       }
 
@@ -96,10 +107,12 @@ class CallService {
       const callCallerIdFromCall = data.call?.caller?._id || data.call?.caller?.id;
       if (this.currentUserId && callCallerIdFromCall === this.currentUserId) {
         console.log('⏭️ Ignoring our own outgoing call - call.caller._id matches');
+        Alert.alert('DEBUG: BLOCKED', 'Guard 3: call.caller is us');
         return;
       }
 
       console.log('✅ Processing incoming call from another user');
+      Alert.alert('DEBUG: PASSED', 'All guards passed, emitting call:incoming');
       this.callData = {
         callId: data.call._id,
         type: data.type,
@@ -118,21 +131,29 @@ class CallService {
 
     socketService.on('call:rejected', (data: any) => {
       console.log('📞 Call rejected:', data);
+      this.callData = null;
+      this.callStatus = 'idle';
       this.emit('call:rejected', data);
     });
 
     socketService.on('call:ended', (data: any) => {
       console.log('📞 Call ended:', data);
+      this.callData = null;
+      this.callStatus = 'idle';
       this.emit('call:ended', data);
     });
 
     socketService.on('call:cancelled', (data: any) => {
       console.log('📞 Call cancelled:', data);
+      this.callData = null;
+      this.callStatus = 'idle';
       this.emit('call:cancelled', data);
     });
 
     socketService.on('call:busy', (data: any) => {
       console.log('📞 User busy:', data);
+      this.callData = null;
+      this.callStatus = 'idle';
       this.emit('call:busy', data);
     });
 
@@ -158,6 +179,8 @@ class CallService {
 
     socketService.on('call:signal:hangup', (data: any) => {
       console.log('📞 Received hangup signal via socket:', data);
+      this.callData = null;
+      this.callStatus = 'idle';
       this.emit('call:ended', data);
     });
 
@@ -165,6 +188,8 @@ class CallService {
       // Check if this is a hangup signal disguised as ICE
       if (data.candidate?.type === 'hangup') {
         console.log('📞 Received hangup via ICE channel');
+        this.callData = null;
+        this.callStatus = 'idle';
         this.emit('call:ended', data);
         return;
       }
@@ -294,13 +319,20 @@ class CallService {
   public endCall() {
     console.log('📞 [CallService] Ending call, callId:', this.callData?.callId);
 
-    if (this.callData?.callId) {
+    if (this.callData?.callId && this.callData.callId !== 'pending') {
       const otherUserId = this.currentUserId === (this.callData.caller?._id || this.callData.caller)
         ? this.callData.receiver?._id || this.callData.receiver
         : this.callData.caller?._id || this.callData.caller;
 
-      socketService.emit('call:end', { callId: this.callData.callId });
-      socketService.emit('call:cancel', { callId: this.callData.callId });
+      // Send the appropriate event based on call status
+      if (this.callStatus === 'calling') {
+        // Call was never answered — cancel it
+        socketService.emit('call:cancel', { callId: this.callData.callId });
+      } else {
+        // Call was connected or is being ended normally
+        socketService.emit('call:end', { callId: this.callData.callId });
+      }
+
       // Send hangup via call:signal:ice channel (the backend relays this)
       socketService.emit('call:signal:ice', {
         callId: this.callData.callId,
@@ -317,7 +349,8 @@ class CallService {
   public cancelCall(callId: string) {
     console.log('📞 Cancelling call:', callId);
     socketService.emit('call:cancel', { callId });
-    this.endCall();
+    this.callData = null;
+    this.callStatus = 'idle';
   }
 
   public toggleMute() {
