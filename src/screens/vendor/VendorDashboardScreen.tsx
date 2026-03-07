@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   View, Text, TouchableOpacity, ScrollView, StatusBar,
-  Animated, Dimensions, RefreshControl, Platform, Alert,
+  Animated, Dimensions, RefreshControl, Platform,
 } from 'react-native';
 import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -17,6 +17,7 @@ import {
 import socketService from '@/services/socket.service';
 import WalletFundingModal from '@/components/WalletFundingModal';
 import WithdrawalModal from '@/components/WIthdrawalModal';
+import { toast } from '@/components/ui/Toast';
 
 // ─── Brand Tokens ─────────────────────────────────────────────────────────────
 const BRAND = {
@@ -257,7 +258,7 @@ const VendorDashboardScreen: React.FC = () => {
       await fetchUnreadNotificationCount();
       await fetchUnreadMessagesCount();
     } catch (error) {
-      Alert.alert('Error', handleAPIError(error).message);
+      toast.error('Error', handleAPIError(error).message);
     } finally { setLoading(false); }
   };
 

@@ -6,7 +6,6 @@ import {
   ScrollView,
   ActivityIndicator,
   RefreshControl,
-  Alert,
   TextInput,
   Platform,
   StatusBar,
@@ -19,6 +18,7 @@ import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '@/types/navigation.types';
 import { bookingAPI, handleAPIError } from '@/api/api';
+import { toast } from '@/components/ui/Toast';
 
 // ─── Brand Tokens ─────────────────────────────────────────────────────────────
 const BRAND = {
@@ -237,7 +237,7 @@ const BookingsScreen: React.FC = () => {
       }
     } catch (error) {
       const apiError = handleAPIError(error);
-      Alert.alert('Error', apiError.message || 'Failed to load bookings');
+      toast.error('Error', apiError.message || 'Failed to load bookings');
     } finally {
       setLoading(false);
     }

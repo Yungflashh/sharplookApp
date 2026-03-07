@@ -1,8 +1,10 @@
 import React, { useState, useCallback } from 'react';
 import {
-  View, Text, TouchableOpacity, ScrollView, Image, Alert,
-  ActivityIndicator, RefreshControl, Platform, TextInput, StatusBar,
+  View, Text, TouchableOpacity, ScrollView, Image,
+  ActivityIndicator, RefreshControl, Platform, TextInput, StatusBar, Modal,
 } from 'react-native';
+import { toast } from '@/components/ui/Toast';
+import ConfirmationModal from '@/components/ConfirmationModal';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -109,6 +111,8 @@ const VendorProductOrdersScreen: React.FC = () => {
   const [searchQuery, setSearchQuery]     = useState('');
   const [activeFilter, setActiveFilter]   = useState<FilterStatus>('all');
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [confirmModal, setConfirmModal] = useState({ visible: false, title: '', message: '', onConfirm: () => {} });
+  const [trackingModal, setTrackingModal] = useState({ visible: false, orderId: '', value: '' });
 
   // ── Fetch ─────────────────────────────────────────────────────────────────
   const fetchOrders = async () => {
@@ -128,7 +132,7 @@ const VendorProductOrdersScreen: React.FC = () => {
         setOrders(safe);
       }
     } catch (error) {
-      Alert.alert('Error', handleAPIError(error).message);
+      toast.error('Error', handleAPIError(error).message);
     } finally { setLoading(false); }
   };
 
@@ -157,43 +161,44 @@ const VendorProductOrdersScreen: React.FC = () => {
     try {
       setActionLoading(orderId);
       await orderAPI.updateOrderStatus(orderId, newStatus);
-      Alert.alert('Updated', 'Order status updated');
+      toast.success('Updated', 'Order status updated');
       fetchOrders();
-    } catch (e) { Alert.alert('Error', handleAPIError(e).message); }
+    } catch (e) { toast.error('Error', handleAPIError(e).message); }
     finally { setActionLoading(null); }
   };
 
   const handleAddTracking = (orderId: string) => {
-    Alert.prompt('Add Tracking', 'Enter tracking number, courier (comma-separated)',
-      [{ text: 'Cancel', style: 'cancel' },
-       { text: 'Add', onPress: async (val) => {
-          const [trackingNumber, courierService = 'Local Courier'] = (val || '').split(',').map((s) => s.trim());
-          if (!trackingNumber) { Alert.alert('Invalid', 'Please enter a tracking number'); return; }
-          try {
-            setActionLoading(orderId);
-            await orderAPI.addTrackingInfo(orderId, trackingNumber, courierService);
-            Alert.alert('Added', 'Tracking information added');
-            fetchOrders();
-          } catch (e) { Alert.alert('Error', handleAPIError(e).message); }
-          finally { setActionLoading(null); }
-       }}],
-      'plain-text', '', 'default'
-    );
+    setTrackingModal({ visible: true, orderId, value: '' });
+  };
+
+  const submitTracking = async () => {
+    const [trackingNumber, courierService = 'Local Courier'] = (trackingModal.value || '').split(',').map((s) => s.trim());
+    if (!trackingNumber) { toast.error('Invalid', 'Please enter a tracking number'); return; }
+    try {
+      setActionLoading(trackingModal.orderId);
+      setTrackingModal(prev => ({ ...prev, visible: false }));
+      await orderAPI.addTrackingInfo(trackingModal.orderId, trackingNumber, courierService);
+      toast.success('Added', 'Tracking information added');
+      fetchOrders();
+    } catch (e) { toast.error('Error', handleAPIError(e).message); }
+    finally { setActionLoading(null); }
   };
 
   const handleConfirmDelivery = (orderId: string) => {
-    Alert.alert('Confirm Delivery', 'Have you delivered this order?',
-      [{ text: 'Cancel', style: 'cancel' },
-       { text: 'Confirm', onPress: async () => {
-          try {
-            setActionLoading(orderId);
-            await orderAPI.confirmDelivery(orderId, 'seller');
-            Alert.alert('Confirmed', 'Delivery confirmed');
-            fetchOrders();
-          } catch (e) { Alert.alert('Error', handleAPIError(e).message); }
-          finally { setActionLoading(null); }
-       }}]
-    );
+    setConfirmModal({
+      visible: true,
+      title: 'Confirm Delivery',
+      message: 'Have you delivered this order?',
+      onConfirm: async () => {
+        try {
+          setActionLoading(orderId);
+          await orderAPI.confirmDelivery(orderId, 'seller');
+          toast.success('Confirmed', 'Delivery confirmed');
+          fetchOrders();
+        } catch (e) { toast.error('Error', handleAPIError(e).message); }
+        finally { setActionLoading(null); }
+      },
+    });
   };
 
   // ── Action buttons ────────────────────────────────────────────────────────
@@ -544,6 +549,46 @@ const VendorProductOrdersScreen: React.FC = () => {
           </View>
         )}
       </ScrollView>
+
+      <ConfirmationModal
+        visible={confirmModal.visible}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        onConfirm={() => { confirmModal.onConfirm(); setConfirmModal(prev => ({...prev, visible: false})); }}
+        onCancel={() => setConfirmModal(prev => ({...prev, visible: false}))}
+      />
+
+      {/* Tracking Number Input Modal */}
+      <Modal visible={trackingModal.visible} transparent animationType="fade">
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          <View style={{ backgroundColor: '#fff', borderRadius: 20, padding: 24, width: '100%', maxWidth: 400 }}>
+            <Text style={{ fontSize: 18, fontWeight: '700', color: BRAND.textPrimary, marginBottom: 8 }}>Add Tracking</Text>
+            <Text style={{ fontSize: 13, color: BRAND.textSecondary, marginBottom: 16 }}>Enter tracking number, courier (comma-separated)</Text>
+            <TextInput
+              style={{ borderWidth: 1.5, borderColor: BRAND.border, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 14, color: BRAND.textPrimary, marginBottom: 20 }}
+              placeholder="e.g. TRK123456, DHL"
+              placeholderTextColor={BRAND.textMuted}
+              value={trackingModal.value}
+              onChangeText={(text) => setTrackingModal(prev => ({ ...prev, value: text }))}
+              autoFocus
+            />
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              <TouchableOpacity
+                onPress={() => setTrackingModal(prev => ({ ...prev, visible: false }))}
+                style={{ flex: 1, paddingVertical: 12, borderRadius: 12, backgroundColor: BRAND.surfaceAlt, alignItems: 'center', borderWidth: 1, borderColor: BRAND.border }}
+              >
+                <Text style={{ fontSize: 14, fontWeight: '600', color: BRAND.textSecondary }}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={submitTracking}
+                style={{ flex: 1, paddingVertical: 12, borderRadius: 12, backgroundColor: BRAND.primary, alignItems: 'center' }}
+              >
+                <Text style={{ fontSize: 14, fontWeight: '700', color: '#fff' }}>Add</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };

@@ -6,11 +6,12 @@ import {
   ScrollView,
   ActivityIndicator,
   RefreshControl,
-  Alert,
   TextInput,
   Modal,
   Platform,
 } from 'react-native';
+import { toast } from '@/components/ui/Toast';
+import ConfirmationModal from '@/components/ConfirmationModal';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -53,6 +54,7 @@ const VendorMyResponsesScreen: React.FC = () => {
   const [selectedOffer, setSelectedOffer] = useState<any>(null);
   const [counterPrice, setCounterPrice] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [confirmModal, setConfirmModal] = useState({ visible: false, title: '', message: '', onConfirm: () => {} });
 
   const fetchMyResponses = async () => {
     try {
@@ -67,7 +69,7 @@ const VendorMyResponsesScreen: React.FC = () => {
       }
     } catch (error) {
       const apiError = handleAPIError(error);
-      Alert.alert('Error', apiError.message);
+      toast.error('Error', apiError.message);
     } finally {
       setLoading(false);
     }
@@ -89,47 +91,29 @@ const VendorMyResponsesScreen: React.FC = () => {
   }, []);
 
   const handleAcceptCounter = async (offerId: string, responseId: string) => {
-    Alert.alert(
-      'Accept Counter Offer',
-      "Do you want to accept the client's counter offer? A booking will be created.",
-      [
-        {
-          text: 'Cancel',
-          style: 'cancel',
-        },
-        {
-          text: 'Accept',
-          onPress: async () => {
-            try {
-              setActionLoading(responseId);
-              const response = await offerAPI.acceptCounterOffer(offerId, responseId);
-              if (response.success) {
-                Alert.alert(
-                  'Success',
-                  'Counter offer accepted! Your booking has been created.',
-                  [
-                    {
-                      text: 'View Booking',
-                      onPress: () => {
-                        navigation.navigate('BookingDetail', {
-                          bookingId: response.data.booking._id,
-                        });
-                      },
-                    },
-                  ]
-                );
-                fetchMyResponses();
-              }
-            } catch (error) {
-              const apiError = handleAPIError(error);
-              Alert.alert('Error', apiError.message);
-            } finally {
-              setActionLoading(null);
-            }
-          },
-        },
-      ]
-    );
+    setConfirmModal({
+      visible: true,
+      title: 'Accept Counter Offer',
+      message: "Do you want to accept the client's counter offer? A booking will be created.",
+      onConfirm: async () => {
+        try {
+          setActionLoading(responseId);
+          const response = await offerAPI.acceptCounterOffer(offerId, responseId);
+          if (response.success) {
+            toast.success('Success', 'Counter offer accepted! Your booking has been created.');
+            fetchMyResponses();
+            navigation.navigate('BookingDetail', {
+              bookingId: response.data.booking._id,
+            });
+          }
+        } catch (error) {
+          const apiError = handleAPIError(error);
+          toast.error('Error', apiError.message);
+        } finally {
+          setActionLoading(null);
+        }
+      },
+    });
   };
 
   const handleVendorCounter = (offerId: string, responseId: string, currentCounter: number) => {
@@ -147,7 +131,7 @@ const VendorMyResponsesScreen: React.FC = () => {
 
     const price = parseFloat(counterPrice);
     if (price <= 0) {
-      Alert.alert('Error', 'Please enter a valid price');
+      toast.error('Error', 'Please enter a valid price');
       return;
     }
 
@@ -159,13 +143,13 @@ const VendorMyResponsesScreen: React.FC = () => {
         price
       );
       if (response.success) {
-        Alert.alert('Success', 'Counter offer submitted successfully');
+        toast.success('Success', 'Counter offer submitted successfully');
         setShowCounterModal(false);
         fetchMyResponses();
       }
     } catch (error) {
       const apiError = handleAPIError(error);
-      Alert.alert('Error', apiError.message);
+      toast.error('Error', apiError.message);
     } finally {
       setSubmitting(false);
     }
@@ -572,6 +556,14 @@ const VendorMyResponsesScreen: React.FC = () => {
           )}
         </View>
       </ScrollView>
+
+      <ConfirmationModal
+        visible={confirmModal.visible}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        onConfirm={() => { confirmModal.onConfirm(); setConfirmModal(prev => ({...prev, visible: false})); }}
+        onCancel={() => setConfirmModal(prev => ({...prev, visible: false}))}
+      />
 
       {/* Enhanced Modal */}
       <Modal visible={showCounterModal} transparent animationType="slide">

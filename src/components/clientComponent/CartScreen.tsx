@@ -5,7 +5,6 @@ import {
   TouchableOpacity,
   ScrollView,
   Image,
-  Alert,
   ActivityIndicator,
   Platform,
   StatusBar,
@@ -17,6 +16,8 @@ import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '@/types/navigation.types';
 import { cartAPI } from '@/api/api';
+import { toast } from '@/components/ui/Toast';
+import ConfirmationModal from '@/components/ConfirmationModal';
 
 // ─── Brand Tokens ─────────────────────────────────────────────────────────────
 const BRAND = {
@@ -68,6 +69,7 @@ const CartScreen: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [updating, setUpdating] = useState<string | null>(null);
+  const [confirmModal, setConfirmModal] = useState({ visible: false, title: '', message: '', onConfirm: () => {} });
 
   // ── Data ───────────────────────────────────────────────────────────────────
   const loadCart = async () => {
@@ -76,7 +78,7 @@ const CartScreen: React.FC = () => {
       const cartData = await cartAPI.getCart();
       setCart(cartData);
     } catch {
-      Alert.alert('Error', 'Failed to load cart');
+      toast.error('Error', 'Failed to load cart');
     } finally {
       setLoading(false);
     }
@@ -89,49 +91,45 @@ const CartScreen: React.FC = () => {
       setUpdating(productId);
       setCart(await cartAPI.updateCartItem(productId, newQty, variant));
     } catch {
-      Alert.alert('Error', 'Failed to update quantity');
+      toast.error('Error', 'Failed to update quantity');
     } finally {
       setUpdating(null);
     }
   };
 
   const handleRemoveItem = (productId: string, variant?: any) => {
-    Alert.alert('Remove Item', 'Remove this item from your cart?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Remove',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            setCart(await cartAPI.removeFromCart(productId, variant));
-          } catch {
-            Alert.alert('Error', 'Failed to remove item');
-          }
-        },
+    setConfirmModal({
+      visible: true,
+      title: 'Remove Item',
+      message: 'Remove this item from your cart?',
+      onConfirm: async () => {
+        try {
+          setCart(await cartAPI.removeFromCart(productId, variant));
+        } catch {
+          toast.error('Error', 'Failed to remove item');
+        }
       },
-    ]);
+    });
   };
 
   const handleClearCart = () => {
-    Alert.alert('Clear Cart', 'Remove all items from your cart?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Clear All',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            await cartAPI.clearCart();
-            setCart([]);
-          } catch {
-            Alert.alert('Error', 'Failed to clear cart');
-          }
-        },
+    setConfirmModal({
+      visible: true,
+      title: 'Clear Cart',
+      message: 'Remove all items from your cart?',
+      onConfirm: async () => {
+        try {
+          await cartAPI.clearCart();
+          setCart([]);
+        } catch {
+          toast.error('Error', 'Failed to clear cart');
+        }
       },
-    ]);
+    });
   };
 
   const handleCheckout = () => {
-    if (cart.length === 0) { Alert.alert('Empty Cart', 'Your cart is empty'); return; }
+    if (cart.length === 0) { toast.info('Empty Cart', 'Your cart is empty'); return; }
     const itemsBySeller = cart.reduce((acc, item) => {
       const id = item.product.seller._id;
       if (!acc[id]) acc[id] = [];
@@ -643,6 +641,13 @@ const CartScreen: React.FC = () => {
           </View>
         </>
       )}
+      <ConfirmationModal
+        visible={confirmModal.visible}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        onConfirm={() => { confirmModal.onConfirm(); setConfirmModal(prev => ({...prev, visible: false})); }}
+        onCancel={() => setConfirmModal(prev => ({...prev, visible: false}))}
+      />
     </SafeAreaView>
   );
 };

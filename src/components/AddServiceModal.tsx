@@ -9,7 +9,6 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
-  Alert,
   Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -17,6 +16,8 @@ import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
 import { useNavigation } from '@react-navigation/native';
 import { categoriesAPI, handleAPIError } from '@/api/api';
+import { toast } from '@/components/ui/Toast';
+import ConfirmationModal from '@/components/ConfirmationModal';
 
 interface ServiceFormData {
   name: string;
@@ -68,6 +69,7 @@ const AddServiceModal: React.FC<AddServiceModalProps> = ({
   const [errors, setErrors] = useState<any>({});
   const [loading, setLoading] = useState(false);
   const [loadingLocation, setLoadingLocation] = useState(false);
+  const [confirmModal, setConfirmModal] = useState({ visible: false, title: '', message: '', onConfirm: () => {} });
 
   useEffect(() => {
     if (visible) {
@@ -120,7 +122,7 @@ const AddServiceModal: React.FC<AddServiceModalProps> = ({
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission denied', 'Location permission is required');
+        toast.error('Permission denied', 'Location permission is required');
         return;
       }
 
@@ -133,9 +135,9 @@ const AddServiceModal: React.FC<AddServiceModalProps> = ({
         },
       });
       setErrors({ ...errors, location: '' });
-      Alert.alert('Success', 'Location updated successfully');
+      toast.success('Success', 'Location updated successfully');
     } catch (error) {
-      Alert.alert('Error', 'Could not get location');
+      toast.error('Error', 'Could not get location');
     } finally {
       setLoadingLocation(false);
     }
@@ -143,7 +145,7 @@ const AddServiceModal: React.FC<AddServiceModalProps> = ({
 
   const pickImages = async () => {
     if (selectedImages.length >= 5) {
-      Alert.alert('Limit Reached', 'You can only upload up to 5 images');
+      toast.warning('Limit Reached', 'You can only upload up to 5 images');
       return;
     }
 
@@ -232,58 +234,39 @@ const AddServiceModal: React.FC<AddServiceModalProps> = ({
 
       // Handle specific backend errors
       if (apiError.message.includes('complete your vendor profile')) {
-        Alert.alert(
-          'Profile Incomplete',
-          'Please complete your vendor profile before creating services.',
-          [
-            { text: 'Cancel', style: 'cancel' },
-            {
-              text: 'Go to Profile',
-              onPress: () => {
-                handleClose();
-                navigation.navigate('Profile' as any);
-              },
-            },
-          ]
-        );
+        setConfirmModal({
+          visible: true,
+          title: 'Profile Incomplete',
+          message: 'Please complete your vendor profile before creating services.',
+          onConfirm: () => {
+            handleClose();
+            navigation.navigate('Profile' as any);
+          },
+        });
       } else if (apiError.message.includes('set your vendor type')) {
-        Alert.alert(
-          'Vendor Type Required',
-          'Please set your vendor type (In-Shop, Home Service, or Both) in your profile.',
-          [
-            { text: 'Cancel', style: 'cancel' },
-            {
-              text: 'Go to Profile',
-              onPress: () => {
-                handleClose();
-                navigation.navigate('Profile' as any);
-              },
-            },
-          ]
-        );
+        setConfirmModal({
+          visible: true,
+          title: 'Vendor Type Required',
+          message: 'Please set your vendor type (In-Shop, Home Service, or Both) in your profile.',
+          onConfirm: () => {
+            handleClose();
+            navigation.navigate('Profile' as any);
+          },
+        });
       } else if (apiError.message.includes('must subscribe') || apiError.message.includes('subscription')) {
-        Alert.alert(
-          'Subscription Required',
-          apiError.message,
-          [
-            { text: 'Cancel', style: 'cancel' },
-            {
-              text: 'View Plans',
-              onPress: () => {
-                handleClose();
-                navigation.navigate('Subscription' as any);
-              },
-            },
-          ]
-        );
+        setConfirmModal({
+          visible: true,
+          title: 'Subscription Required',
+          message: apiError.message,
+          onConfirm: () => {
+            handleClose();
+            navigation.navigate('Subscription' as any);
+          },
+        });
       } else if (apiError.message.includes('must be verified')) {
-        Alert.alert(
-          'Verification Required',
-          'Your vendor account must be verified before you can create services. Please contact support.',
-          [{ text: 'OK' }]
-        );
+        toast.error('Verification Required', 'Your vendor account must be verified before you can create services. Please contact support.');
       } else {
-        Alert.alert('Error', apiError.message || 'Failed to save service');
+        toast.error('Error', apiError.message || 'Failed to save service');
       }
     } finally {
       setLoading(false);
@@ -629,6 +612,13 @@ const AddServiceModal: React.FC<AddServiceModalProps> = ({
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
+      <ConfirmationModal
+        visible={confirmModal.visible}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        onConfirm={() => { confirmModal.onConfirm(); setConfirmModal(prev => ({...prev, visible: false})); }}
+        onCancel={() => setConfirmModal(prev => ({...prev, visible: false}))}
+      />
     </Modal>
   );
 };

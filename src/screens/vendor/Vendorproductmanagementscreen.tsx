@@ -1,8 +1,8 @@
 import React, { useState, useCallback } from 'react';
 import {
-  View, Text, TouchableOpacity, ScrollView, Image, Alert,
+  View, Text, TouchableOpacity, ScrollView, Image,
   ActivityIndicator, RefreshControl, Platform, TextInput,
-  Dimensions, StatusBar, ActionSheetIOS,
+  Dimensions, StatusBar, ActionSheetIOS, Modal, KeyboardAvoidingView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -11,6 +11,8 @@ import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '@/types/navigation.types';
 import { productAPI, handleAPIError } from '@/api/api';
+import ConfirmationModal from '@/components/ConfirmationModal';
+import { toast } from '@/components/ui/Toast';
 
 // ─── Brand Tokens ─────────────────────────────────────────────────────────────
 const BRAND = {
@@ -71,6 +73,9 @@ const VendorProductManagementScreen: React.FC = () => {
   const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
   const [searchQuery, setSearchQuery]         = useState('');
   const [activeFilter, setActiveFilter]       = useState<FilterStatus>('all');
+  const [deleteModal, setDeleteModal]         = useState({ visible: false, productId: '' });
+  const [stockModal, setStockModal]           = useState({ visible: false, product: null as Product | null, value: '' });
+  const [menuModal, setMenuModal]             = useState({ visible: false, product: null as Product | null });
 
   // ── Fetch ─────────────────────────────────────────────────────────────────
   const fetchProducts = async () => {
@@ -85,10 +90,10 @@ const VendorProductManagementScreen: React.FC = () => {
           (Array.isArray(response.data?.data) ? response.data.data : []);
         setProducts(list);
       } else {
-        Alert.alert('Error', 'Failed to fetch products');
+        toast.error('Error', 'Failed to fetch products');
       }
     } catch (error) {
-      Alert.alert('Error', handleAPIError(error).message);
+      toast.error('Error', handleAPIError(error).message);
     } finally { setLoading(false); }
   };
 
@@ -110,26 +115,27 @@ const VendorProductManagementScreen: React.FC = () => {
   const handleEditProduct   = (id: string) => navigation.navigate('EditProduct', { productId: id });
 
   const handleDeleteProduct = (id: string) => {
-    Alert.alert('Delete Product', 'This action cannot be undone.', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete', style: 'destructive', onPress: async () => {
-        try { await productAPI.deleteProduct(id); Alert.alert('Deleted', 'Product removed'); fetchProducts(); }
-        catch (e) { Alert.alert('Error', handleAPIError(e).message); }
-      }},
-    ]);
+    setDeleteModal({ visible: true, productId: id });
+  };
+
+  const confirmDeleteProduct = async () => {
+    const id = deleteModal.productId;
+    setDeleteModal({ visible: false, productId: '' });
+    try { await productAPI.deleteProduct(id); toast.success('Deleted', 'Product removed'); fetchProducts(); }
+    catch (e) { toast.error('Error', handleAPIError(e).message); }
   };
 
   const handleUpdateStock = (product: Product) => {
-    Alert.prompt('Update Stock', `Current: ${product.stock}`,
-      [{ text: 'Cancel', style: 'cancel' },
-       { text: 'Update', onPress: async (val) => {
-          const qty = parseInt(val || '0');
-          if (isNaN(qty) || qty < 0) { Alert.alert('Invalid', 'Enter a valid number'); return; }
-          try { await productAPI.updateStock(product._id, qty); Alert.alert('Updated', 'Stock updated'); fetchProducts(); }
-          catch (e) { Alert.alert('Error', handleAPIError(e).message); }
-       }}],
-      'plain-text', product.stock.toString(), 'number-pad'
-    );
+    setStockModal({ visible: true, product, value: product.stock.toString() });
+  };
+
+  const confirmUpdateStock = async () => {
+    if (!stockModal.product) return;
+    const qty = parseInt(stockModal.value || '0');
+    if (isNaN(qty) || qty < 0) { toast.error('Invalid', 'Enter a valid number'); return; }
+    setStockModal({ visible: false, product: null, value: '' });
+    try { await productAPI.updateStock(stockModal.product._id, qty); toast.success('Updated', 'Stock updated'); fetchProducts(); }
+    catch (e) { toast.error('Error', handleAPIError(e).message); }
   };
 
   const openProductMenu = (product: Product) => {
@@ -139,12 +145,7 @@ const VendorProductManagementScreen: React.FC = () => {
         (i) => { if (i === 0) handleEditProduct(product._id); else if (i === 1) handleUpdateStock(product); else if (i === 2) handleDeleteProduct(product._id); }
       );
     } else {
-      Alert.alert('Product Options', '', [
-        { text: 'Edit', onPress: () => handleEditProduct(product._id) },
-        { text: 'Update Stock', onPress: () => handleUpdateStock(product) },
-        { text: 'Delete', style: 'destructive', onPress: () => handleDeleteProduct(product._id) },
-        { text: 'Cancel', style: 'cancel' },
-      ], { cancelable: true });
+      setMenuModal({ visible: true, product });
     }
   };
 
@@ -389,6 +390,80 @@ const VendorProductManagementScreen: React.FC = () => {
       >
         <Ionicons name="add" size={28} color="#fff" />
       </TouchableOpacity>
+
+      {/* ── Delete Confirmation Modal ─────────────────────────────────── */}
+      <ConfirmationModal
+        visible={deleteModal.visible}
+        title="Delete Product"
+        message="This action cannot be undone."
+        icon="trash-outline"
+        iconColor={BRAND.red}
+        confirmText="Delete"
+        confirmColor={BRAND.red}
+        onConfirm={confirmDeleteProduct}
+        onCancel={() => setDeleteModal({ visible: false, productId: '' })}
+      />
+
+      {/* ── Stock Update Modal ────────────────────────────────────────── */}
+      <Modal visible={stockModal.visible} transparent animationType="fade" onRequestClose={() => setStockModal({ visible: false, product: null, value: '' })}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+          <TouchableOpacity activeOpacity={1} onPress={() => setStockModal({ visible: false, product: null, value: '' })}
+            style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 20 }}>
+            <TouchableOpacity activeOpacity={1} onPress={() => {}}
+              style={[{ width: '100%', backgroundColor: BRAND.surface, borderRadius: 24, padding: 24 }, shadow('#000', 0.2, 24, 10)]}>
+              <Text style={{ fontSize: 18, fontWeight: '800', color: BRAND.textPrimary, marginBottom: 8 }}>Update Stock</Text>
+              <Text style={{ fontSize: 13, color: BRAND.textSecondary, marginBottom: 16 }}>Current: {stockModal.product?.stock}</Text>
+              <TextInput
+                style={{
+                  backgroundColor: BRAND.surfaceAlt, borderRadius: 14, padding: 14,
+                  fontSize: 16, color: BRAND.textPrimary, borderWidth: 1.5, borderColor: BRAND.border, marginBottom: 18,
+                }}
+                placeholder="Enter new quantity"
+                placeholderTextColor={BRAND.textMuted}
+                value={stockModal.value}
+                onChangeText={(t) => setStockModal((prev) => ({ ...prev, value: t }))}
+                keyboardType="number-pad"
+                autoFocus
+              />
+              <View style={{ flexDirection: 'row', gap: 10 }}>
+                <TouchableOpacity onPress={() => setStockModal({ visible: false, product: null, value: '' })} activeOpacity={0.8}
+                  style={{ flex: 1, backgroundColor: BRAND.surfaceAlt, borderRadius: 14, paddingVertical: 14, alignItems: 'center', borderWidth: 1, borderColor: BRAND.borderStrong }}>
+                  <Text style={{ fontSize: 14, fontWeight: '700', color: BRAND.textSecondary }}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={confirmUpdateStock} activeOpacity={0.85}
+                  style={{ flex: 1, backgroundColor: BRAND.primary, borderRadius: 14, paddingVertical: 14, alignItems: 'center' }}>
+                  <Text style={{ color: '#fff', fontSize: 14, fontWeight: '700' }}>Update</Text>
+                </TouchableOpacity>
+              </View>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* ── Android Product Menu Modal ────────────────────────────────── */}
+      <Modal visible={menuModal.visible} transparent animationType="fade" onRequestClose={() => setMenuModal({ visible: false, product: null })}>
+        <TouchableOpacity activeOpacity={1} onPress={() => setMenuModal({ visible: false, product: null })}
+          style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end', paddingHorizontal: 16, paddingBottom: 32 }}>
+          <View style={[{ backgroundColor: BRAND.surface, borderRadius: 20, overflow: 'hidden' }, shadow('#000', 0.2, 24, 10)]}>
+            <Text style={{ fontSize: 16, fontWeight: '800', color: BRAND.textPrimary, padding: 16, borderBottomWidth: 1, borderBottomColor: BRAND.border }}>Product Options</Text>
+            {[
+              { label: 'Edit Product', icon: 'create-outline' as const, color: BRAND.textPrimary, onPress: () => { setMenuModal({ visible: false, product: null }); if (menuModal.product) handleEditProduct(menuModal.product._id); } },
+              { label: 'Update Stock', icon: 'cube-outline' as const, color: BRAND.textPrimary, onPress: () => { setMenuModal({ visible: false, product: null }); if (menuModal.product) handleUpdateStock(menuModal.product); } },
+              { label: 'Delete Product', icon: 'trash-outline' as const, color: BRAND.red, onPress: () => { setMenuModal({ visible: false, product: null }); if (menuModal.product) handleDeleteProduct(menuModal.product._id); } },
+            ].map((item, i) => (
+              <TouchableOpacity key={i} onPress={item.onPress} activeOpacity={0.7}
+                style={{ flexDirection: 'row', alignItems: 'center', padding: 16, gap: 12, borderBottomWidth: 1, borderBottomColor: BRAND.border }}>
+                <Ionicons name={item.icon} size={20} color={item.color} />
+                <Text style={{ fontSize: 15, fontWeight: '600', color: item.color }}>{item.label}</Text>
+              </TouchableOpacity>
+            ))}
+            <TouchableOpacity onPress={() => setMenuModal({ visible: false, product: null })} activeOpacity={0.7}
+              style={{ padding: 16, alignItems: 'center' }}>
+              <Text style={{ fontSize: 15, fontWeight: '700', color: BRAND.textMuted }}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </SafeAreaView>
   );
 };

@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, ActivityIndicator, Alert, Platform } from 'react-native';
+import { View, Text, TouchableOpacity, ActivityIndicator, Platform } from 'react-native';
+import { toast } from '@/components/ui/Toast';
+import ConfirmationModal from '@/components/ConfirmationModal';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
@@ -24,6 +26,7 @@ const OrderPaymentScreen: React.FC = () => {
   const [paymentConfirmed, setPaymentConfirmed] = useState(false);
   const [socketConnected, setSocketConnected] = useState(false);
   const [showManualButton, setShowManualButton] = useState(false);
+  const [confirmModal, setConfirmModal] = useState({ visible: false, title: '', message: '', onConfirm: () => {} });
 
   
   useEffect(() => {
@@ -69,19 +72,10 @@ const OrderPaymentScreen: React.FC = () => {
         setVerifying(false);
         setShowManualButton(false);
 
-        
+
         setTimeout(() => {
-          Alert.alert(
-            'Payment Successful! 🎉',
-            `Your order #${orderNumber} has been paid successfully. The seller will process your order shortly.`,
-            [
-              {
-                text: 'View Order',
-                onPress: () => navigation.replace('OrderDetail', { orderId }),
-              },
-            ],
-            { cancelable: false }
-          );
+          toast.success('Payment Successful!', `Your order #${orderNumber} has been paid successfully. The seller will process your order shortly.`);
+          navigation.replace('OrderDetail', { orderId });
         }, 500);
       }
     };
@@ -92,14 +86,12 @@ const OrderPaymentScreen: React.FC = () => {
 
       if (data.reference === reference || data.orderId === orderId) {
         setVerifying(false);
-        Alert.alert(
-          'Payment Failed',
-          data.reason || 'Your payment could not be completed. Please try again.',
-          [
-            { text: 'Try Again', onPress: () => initializePayment() },
-            { text: 'Cancel', style: 'cancel', onPress: () => navigation.goBack() },
-          ]
-        );
+        setConfirmModal({
+          visible: true,
+          title: 'Payment Failed',
+          message: data.reason || 'Your payment could not be completed. Please try again.',
+          onConfirm: () => initializePayment(),
+        });
       }
     };
 
@@ -140,14 +132,12 @@ const OrderPaymentScreen: React.FC = () => {
       const apiError = handleAPIError(error);
       console.error('Payment initialization error:', apiError);
 
-      Alert.alert(
-        'Payment Error',
-        apiError.message || 'Failed to initialize payment',
-        [
-          { text: 'Try Again', onPress: () => initializePayment() },
-          { text: 'Cancel', style: 'cancel', onPress: () => navigation.goBack() },
-        ]
-      );
+      setConfirmModal({
+        visible: true,
+        title: 'Payment Error',
+        message: apiError.message || 'Failed to initialize payment',
+        onConfirm: () => initializePayment(),
+      });
     } finally {
       setLoading(false);
     }
@@ -171,63 +161,42 @@ const OrderPaymentScreen: React.FC = () => {
           setPaymentConfirmed(true);
           setShowManualButton(false);
 
-          Alert.alert(
-            'Payment Successful! 🎉',
-            `Your order #${orderNumber} has been paid successfully. The seller will process your order shortly.`,
-            [
-              {
-                text: 'View Order',
-                onPress: () => navigation.replace('OrderDetail', { orderId }),
-              },
-            ],
-            { cancelable: false }
-          );
+          toast.success('Payment Successful!', `Your order #${orderNumber} has been paid successfully. The seller will process your order shortly.`);
+          navigation.replace('OrderDetail', { orderId });
         } else {
           setVerifying(false);
 
-          Alert.alert(
-            'Payment Pending',
-            'Your payment is still being processed. Please wait a moment and try again.',
-            [{ text: 'OK' }]
-          );
+          toast.info('Payment Pending', 'Your payment is still being processed. Please wait a moment and try again.');
         }
       } else {
         setVerifying(false);
-        Alert.alert('Error', 'Could not verify payment. Please try again.');
+        toast.error('Error', 'Could not verify payment. Please try again.');
       }
     } catch (error) {
       const apiError = handleAPIError(error);
       console.error('❌ Payment verification error:', apiError);
       setVerifying(false);
 
-      Alert.alert(
-        'Verification Error',
-        'Could not verify payment. Please contact support if you were charged.',
-        [{ text: 'OK' }]
-      );
+      toast.error('Verification Error', 'Could not verify payment. Please contact support if you were charged.');
     }
   };
 
   const handleCancel = () => {
-    Alert.alert(
-      'Cancel Payment',
-      'Are you sure you want to cancel this payment? Your order will not be processed.',
-      [
-        { text: 'No', style: 'cancel' },
-        { text: 'Yes', style: 'destructive', onPress: () => navigation.goBack() },
-      ]
-    );
+    setConfirmModal({
+      visible: true,
+      title: 'Cancel Payment',
+      message: 'Are you sure you want to cancel this payment? Your order will not be processed.',
+      onConfirm: () => navigation.goBack(),
+    });
   };
 
   const handleWebViewError = () => {
-    Alert.alert(
-      'Connection Error',
-      'Failed to load payment page. Please check your internet connection.',
-      [
-        { text: 'Try Again', onPress: () => initializePayment() },
-        { text: 'Cancel', style: 'cancel', onPress: () => navigation.goBack() },
-      ]
-    );
+    setConfirmModal({
+      visible: true,
+      title: 'Connection Error',
+      message: 'Failed to load payment page. Please check your internet connection.',
+      onConfirm: () => initializePayment(),
+    });
   };
 
   
@@ -403,6 +372,14 @@ const OrderPaymentScreen: React.FC = () => {
           </Text>
         </View>
       </View>
+
+      <ConfirmationModal
+        visible={confirmModal.visible}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        onConfirm={() => { confirmModal.onConfirm(); setConfirmModal(prev => ({...prev, visible: false})); }}
+        onCancel={() => setConfirmModal(prev => ({...prev, visible: false}))}
+      />
     </SafeAreaView>
   );
 };

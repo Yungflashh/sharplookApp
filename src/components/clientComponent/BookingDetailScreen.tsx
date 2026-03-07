@@ -5,10 +5,12 @@ import {
   TouchableOpacity,
   ScrollView,
   ActivityIndicator,
-  Alert,
   Image,
   Platform,
+  StyleSheet,
 } from 'react-native';
+import { toast } from '@/components/ui/Toast';
+import ConfirmationModal from '@/components/ConfirmationModal';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -27,13 +29,11 @@ interface VendorPartyInfo {
   data: BookingDetail['vendor'];
   label: 'Vendor';
 }
-
 interface ClientPartyInfo {
   type: 'client';
   data: BookingDetail['client'];
   label: 'Client';
 }
-
 type OtherPartyResult = VendorPartyInfo | ClientPartyInfo | null;
 
 interface BookingDetail {
@@ -78,11 +78,7 @@ interface BookingDetail {
   scheduledDate: string;
   scheduledTime?: string;
   duration: number;
-  location?: {
-    address: string;
-    city: string;
-    state: string;
-  };
+  location?: { address: string; city: string; state: string };
   servicePrice: number;
   distanceCharge: number;
   totalAmount: number;
@@ -106,6 +102,33 @@ interface BookingDetail {
   vendorMarkedComplete: boolean;
 }
 
+// ─── Sub-components ───────────────────────────────────────────────────────────
+
+const Card: React.FC<{ children: React.ReactNode; style?: any }> = ({ children, style }) => (
+  <View style={[styles.card, style]}>{children}</View>
+);
+
+const CardTitle: React.FC<{ title: string; style?: any }> = ({ title, style }) => (
+  <Text style={[styles.cardTitle, style]}>{title}</Text>
+);
+
+const InfoRow: React.FC<{
+  iconName: string;
+  iconBg: string;
+  iconColor: string;
+  label: string;
+  alignStart?: boolean;
+}> = ({ iconName, iconBg, iconColor, label, alignStart }) => (
+  <View style={[styles.infoRow, alignStart && { alignItems: 'flex-start' }]}>
+    <View style={[styles.infoIconWrap, { backgroundColor: iconBg }]}>
+      <Ionicons name={iconName as any} size={18} color={iconColor} />
+    </View>
+    <Text style={styles.infoLabel}>{label}</Text>
+  </View>
+);
+
+// ─── Main Screen ──────────────────────────────────────────────────────────────
+
 const BookingDetailScreen: React.FC = () => {
   const navigation = useNavigation<BookingDetailNavigationProp>();
   const route = useRoute<BookingDetailRouteProp>();
@@ -117,10 +140,9 @@ const BookingDetailScreen: React.FC = () => {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [isVendor, setIsVendor] = useState(false);
   const [showCancelModal, setShowCancelModal] = useState(false);
+  const [confirmModal, setConfirmModal] = useState({ visible: false, title: '', message: '', onConfirm: () => {} });
 
-  useEffect(() => {
-    loadCurrentUser();
-  }, []);
+  useEffect(() => { loadCurrentUser(); }, []);
 
   const loadCurrentUser = async () => {
     try {
@@ -129,263 +151,142 @@ const BookingDetailScreen: React.FC = () => {
         setCurrentUserId(userData._id);
         setIsVendor(userData.isVendor || false);
       }
-    } catch (error) {
-      console.error('Error loading user:', error);
-    }
+    } catch (error) { console.error('Error loading user:', error); }
   };
 
   const fetchBookingDetails = async () => {
     try {
       setLoading(true);
       const response = await bookingAPI.getBookingById(bookingId);
-      console.log('Booking detail:', response);
-
       if (response.success) {
-        const bookingData = response.data.booking || response.data;
-        setBooking(bookingData);
+        setBooking(response.data.booking || response.data);
       }
     } catch (error) {
       const apiError = handleAPIError(error);
-      console.error('Booking detail error:', apiError);
-      Alert.alert('Error', apiError.message || 'Failed to load booking details');
+      toast.error('Error', apiError.message || 'Failed to load booking details');
       navigation.goBack();
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   };
 
-  useEffect(() => {
-    fetchBookingDetails();
-  }, [bookingId]);
+  useEffect(() => { fetchBookingDetails(); }, [bookingId]);
 
-  // Auto-refresh for pending Paystack payments
   useEffect(() => {
     let interval: NodeJS.Timeout;
-    
     if (booking?.paymentStatus === 'pending' && booking?.paymentExpiresAt) {
-      // Poll every 5 seconds for payment status updates
-      interval = setInterval(() => {
-        fetchBookingDetails();
-      }, 5000);
+      interval = setInterval(() => { fetchBookingDetails(); }, 5000);
     }
-    
-    return () => {
-      if (interval) clearInterval(interval);
-    };
+    return () => { if (interval) clearInterval(interval); };
   }, [booking?.paymentStatus, booking?.paymentExpiresAt]);
 
   const getServiceInfo = () => {
     if (!booking) return null;
-
-    if (booking.service) {
-      return {
-        name: booking.service.name,
-        description: booking.service.description,
-        images: booking.service.images,
-      };
-    }
-
-    if (booking.offer && typeof booking.offer === 'object') {
-      return {
-        name: booking.offer.title || 'Custom Offer',
-        description: booking.offer.description,
-        images: booking.offer.images,
-      };
-    }
-
-    return {
-      name: 'Custom Service Offer',
-      description: 'Service details from accepted offer',
-      images: undefined,
-    };
+    if (booking.service) return { name: booking.service.name, description: booking.service.description, images: booking.service.images };
+    if (booking.offer && typeof booking.offer === 'object') return { name: booking.offer.title || 'Custom Offer', description: booking.offer.description, images: booking.offer.images };
+    return { name: 'Custom Service Offer', description: 'Service details from accepted offer', images: undefined };
   };
 
   const getOtherParty = (): OtherPartyResult => {
     if (!booking || !currentUserId) return null;
-
-    if (booking.client._id === currentUserId) {
-      return {
-        type: 'vendor',
-        data: booking.vendor,
-        label: 'Vendor',
-      };
-    }
-
-    if (booking.vendor._id === currentUserId) {
-      return {
-        type: 'client',
-        data: booking.client,
-        label: 'Client',
-      };
-    }
-
-    return {
-      type: 'vendor',
-      data: booking.vendor,
-      label: 'Vendor',
-    };
+    if (booking.client._id === currentUserId) return { type: 'vendor', data: booking.vendor, label: 'Vendor' };
+    if (booking.vendor._id === currentUserId) return { type: 'client', data: booking.client, label: 'Client' };
+    return { type: 'vendor', data: booking.vendor, label: 'Vendor' };
   };
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', {
-      weekday: 'long',
-      month: 'long',
-      day: 'numeric',
-      year: 'numeric',
-    });
-  };
+  const formatDate = (dateString: string) =>
+    new Date(dateString).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
 
-  const formatPrice = (price: number) => {
-    return `₦${price.toLocaleString()}`;
-  };
+  const formatPrice = (price: number) => `₦${price.toLocaleString()}`;
 
-  const getStatusColor = (status: string) => {
+  const getStatusStyle = (status: string) => {
     switch (status.toLowerCase()) {
-      case 'pending':
-        return { bg: '#fef3c7', text: '#92400e', border: '#fde68a' };
-      case 'accepted':
-        return { bg: '#dbeafe', text: '#1e40af', border: '#bfdbfe' };
-      case 'in_progress':
-        return { bg: '#f3e8ff', text: '#6b21a8', border: '#e9d5ff' };
-      case 'completed':
-        return { bg: '#d1fae5', text: '#065f46', border: '#a7f3d0' };
-      case 'cancelled':
-        return { bg: '#fee2e2', text: '#991b1b', border: '#fecaca' };
-      default:
-        return { bg: '#f3f4f6', text: '#374151', border: '#e5e7eb' };
+      case 'pending':      return { bg: '#FFF7ED', text: '#C2410C', border: '#FED7AA' };
+      case 'accepted':     return { bg: '#EFF6FF', text: '#1D4ED8', border: '#BFDBFE' };
+      case 'in_progress':  return { bg: '#FAF5FF', text: '#6D28D9', border: '#DDD6FE' };
+      case 'completed':    return { bg: '#F0FDF4', text: '#15803D', border: '#BBF7D0' };
+      case 'cancelled':    return { bg: '#FEF2F2', text: '#B91C1C', border: '#FECACA' };
+      default:             return { bg: '#F9FAFB', text: '#374151', border: '#E5E7EB' };
     }
   };
 
-  const getPaymentStatusInfo = (paymentStatus: string) => {
-    switch (paymentStatus) {
-      case 'pending':
-        return { bg: '#fef3c7', text: '#92400e', label: 'Payment Pending', icon: 'time' };
-      case 'escrowed':
-        return { bg: '#dbeafe', text: '#1e40af', label: 'Payment Secured', icon: 'shield-checkmark' };
-      case 'released':
-        return { bg: '#d1fae5', text: '#065f46', label: 'Payment Released', icon: 'checkmark-circle' };
-      case 'refunded':
-        return { bg: '#e0e7ff', text: '#3730a3', label: 'Fully Refunded', icon: 'refresh-circle' };
-      case 'partially_refunded':
-        return { bg: '#fef3c7', text: '#92400e', label: 'Partially Refunded', icon: 'alert-circle' };
-      default:
-        return { bg: '#f3f4f6', text: '#374151', label: paymentStatus, icon: 'help-circle' };
+  const getPaymentInfo = (ps: string) => {
+    switch (ps) {
+      case 'pending':            return { bg: '#FFF7ED', text: '#C2410C', label: 'Payment Pending',    icon: 'time-outline' };
+      case 'escrowed':           return { bg: '#EFF6FF', text: '#1D4ED8', label: 'Payment Secured',    icon: 'shield-checkmark-outline' };
+      case 'released':           return { bg: '#F0FDF4', text: '#15803D', label: 'Payment Released',   icon: 'checkmark-circle-outline' };
+      case 'refunded':           return { bg: '#EEF2FF', text: '#4338CA', label: 'Fully Refunded',     icon: 'refresh-circle-outline' };
+      case 'partially_refunded': return { bg: '#FFF7ED', text: '#C2410C', label: 'Partially Refunded', icon: 'alert-circle-outline' };
+      default:                   return { bg: '#F9FAFB', text: '#374151', label: ps,                   icon: 'help-circle-outline' };
     }
   };
 
-  const formatStatus = (status: string) => {
-    return status
-      .split('_')
-      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-      .join(' ');
-  };
+  const formatStatus = (s: string) =>
+    s.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
 
   const getTimeUntilExpiry = () => {
     if (!booking?.paymentExpiresAt) return null;
-    
-    const expiresAt = new Date(booking.paymentExpiresAt);
-    const now = new Date();
-    const diff = expiresAt.getTime() - now.getTime();
-    
+    const diff = new Date(booking.paymentExpiresAt).getTime() - Date.now();
     if (diff <= 0) return 'Expired';
-    
-    const minutes = Math.floor(diff / 60000);
-    const seconds = Math.floor((diff % 60000) / 1000);
-    
-    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+    const m = Math.floor(diff / 60000);
+    const s = Math.floor((diff % 60000) / 1000);
+    return `${m}:${s.toString().padStart(2, '0')}`;
   };
 
   const handleCreateDispute = () => {
     if (!booking) return;
-
     if (!['accepted', 'in_progress', 'completed'].includes(booking.status.toLowerCase())) {
-      Alert.alert(
-        'Cannot Create Dispute',
-        'Disputes can only be created for accepted, in-progress, or completed bookings.'
-      );
+      toast.warning('Cannot Create Dispute', 'Disputes can only be created for active bookings.');
       return;
     }
-
     if (booking.hasDispute) {
-      Alert.alert(
-        'Dispute Already Exists',
-        'A dispute already exists for this booking. Would you like to view it?',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'View Dispute',
-            onPress: () => {
-              if (booking.disputeId) {
-                navigation.navigate('DisputeDetail', { disputeId: booking.disputeId });
-              } else {
-                navigation.navigate('Disputes');
-              }
-            },
-          },
-        ]
-      );
+      setConfirmModal({
+        visible: true,
+        title: 'Dispute Already Exists',
+        message: 'A dispute already exists for this booking. Would you like to view it?',
+        onConfirm: () => {
+          booking.disputeId
+            ? navigation.navigate('DisputeDetail', { disputeId: booking.disputeId })
+            : navigation.navigate('Disputes');
+        },
+      });
       return;
     }
-
     navigation.navigate('CreateDispute', { bookingId: booking._id });
   };
 
   const handleViewDispute = () => {
-    if (booking?.disputeId) {
-      navigation.navigate('DisputeDetail', { disputeId: booking.disputeId });
-    } else {
-      navigation.navigate('Disputes');
-    }
+    booking?.disputeId
+      ? navigation.navigate('DisputeDetail', { disputeId: booking.disputeId })
+      : navigation.navigate('Disputes');
   };
 
   const handleMessage = () => {
-    const otherParty = getOtherParty();
-    if (!booking || !otherParty) {
-      Alert.alert('Error', 'Unable to start conversation');
-      return;
-    }
-
+    const op = getOtherParty();
+    if (!booking || !op) { toast.error('Error', 'Unable to start conversation'); return; }
     navigation.navigate('ChatDetail', {
-      otherUserId: otherParty.data._id,
-      otherUserName:
-        otherParty.type === 'vendor'
-          ? otherParty.data?.vendorProfile?.businessName ||
-            `${otherParty.data?.firstName} ${otherParty.data?.lastName}`
-          : `${otherParty.data?.firstName} ${otherParty.data?.lastName}`,
-      otherUserAvatar: otherParty.data?.avatar,
+      otherUserId: op.data._id,
+      otherUserName: op.type === 'vendor'
+        ? op.data?.vendorProfile?.businessName || `${op.data?.firstName} ${op.data?.lastName}`
+        : `${op.data?.firstName} ${op.data?.lastName}`,
+      otherUserAvatar: op.data?.avatar,
     });
   };
 
   const handleCancelBooking = async (reason: string) => {
     if (!booking) return;
-
-    // Calculate time until appointment for warning
     const appointmentDate = new Date(booking.scheduledDate);
     if (booking.scheduledTime) {
-      const [hours, minutes] = booking.scheduledTime.split(':').map(Number);
-      appointmentDate.setHours(hours, minutes, 0, 0);
+      const [h, m] = booking.scheduledTime.split(':').map(Number);
+      appointmentDate.setHours(h, m, 0, 0);
     }
-    const now = new Date();
-    const minutesUntilAppointment = Math.floor((appointmentDate.getTime() - now.getTime()) / 60000);
-
-    // Show penalty warning if within 59 minutes
-    if (minutesUntilAppointment < 59 && minutesUntilAppointment > 0 && !isVendor) {
-      const penaltyAmount = booking.totalAmount * 0.2;
-      const refundAmount = booking.totalAmount * 0.8;
-
-      Alert.alert(
-        '⚠️ Cancellation Penalty',
-        `Your appointment is in ${minutesUntilAppointment} minutes.\n\nCancelling now will result in a 20% penalty:\n• Penalty: ${formatPrice(penaltyAmount)}\n• Refund: ${formatPrice(refundAmount)}\n\nDo you want to proceed?`,
-        [
-          { text: 'Keep Booking', style: 'cancel' },
-          {
-            text: 'Cancel Anyway',
-            style: 'destructive',
-            onPress: () => processCancellation(reason),
-          },
-        ]
-      );
+    const mins = Math.floor((appointmentDate.getTime() - Date.now()) / 60000);
+    if (mins < 59 && mins > 0 && !isVendor) {
+      const penalty = booking.totalAmount * 0.2;
+      setConfirmModal({
+        visible: true,
+        title: 'Cancellation Penalty',
+        message: `Appointment is in ${mins} minutes.\n\nA 20% penalty applies:\n• Penalty: ${formatPrice(penalty)}\n• Refund: ${formatPrice(booking.totalAmount * 0.8)}\n\nProceed?`,
+        onConfirm: () => processCancellation(reason),
+      });
     } else {
       processCancellation(reason);
     }
@@ -395,82 +296,63 @@ const BookingDetailScreen: React.FC = () => {
     try {
       setActionLoading(true);
       const response = await bookingAPI.cancelBooking(bookingId, reason);
-
       if (response.success) {
-        const message = response.data.penaltyApplied
-          ? `Booking cancelled. A 20% penalty (${formatPrice(response.data.penaltyAmount || 0)}) was applied. Refund: ${formatPrice(response.data.refundAmount || 0)}`
-          : 'Booking cancelled successfully. Full refund has been processed.';
-
-        Alert.alert('Booking Cancelled', message);
+        const msg = response.data.penaltyApplied
+          ? `Cancelled with 20% penalty (${formatPrice(response.data.penaltyAmount || 0)}). Refund: ${formatPrice(response.data.refundAmount || 0)}`
+          : 'Booking cancelled. Full refund processed.';
+        toast.success('Booking Cancelled', msg);
         setShowCancelModal(false);
         fetchBookingDetails();
       }
     } catch (error) {
       const apiError = handleAPIError(error);
-      Alert.alert('Error', apiError.message || 'Failed to cancel booking');
-    } finally {
-      setActionLoading(false);
-    }
+      toast.error('Error', apiError.message || 'Failed to cancel booking');
+    } finally { setActionLoading(false); }
   };
 
   const handleMarkComplete = () => {
-    Alert.alert(
-      'Mark as Complete',
-      'Confirm that the service has been completed satisfactorily?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Confirm',
-          onPress: async () => {
-            try {
-              setActionLoading(true);
-              const response = await bookingAPI.markComplete(bookingId);
-
-              if (response.success) {
-                Alert.alert('Success', 'Booking marked as complete');
-                fetchBookingDetails();
-              }
-            } catch (error) {
-              const apiError = handleAPIError(error);
-              Alert.alert('Error', apiError.message || 'Failed to mark complete');
-            } finally {
-              setActionLoading(false);
-            }
-          },
-        },
-      ]
-    );
+    setConfirmModal({
+      visible: true,
+      title: 'Mark as Complete',
+      message: 'Confirm the service has been completed satisfactorily?',
+      onConfirm: async () => {
+        try {
+          setActionLoading(true);
+          const response = await bookingAPI.markComplete(bookingId);
+          if (response.success) { toast.success('Success', 'Marked as complete'); fetchBookingDetails(); }
+        } catch (error) {
+          const apiError = handleAPIError(error);
+          toast.error('Error', apiError.message || 'Failed to mark complete');
+        } finally { setActionLoading(false); }
+      },
+    });
   };
+
+  // ── Banners ──────────────────────────────────────────────────────────────────
 
   const renderPaymentPendingBanner = () => {
     if (!booking || booking.paymentStatus !== 'pending') return null;
-
     const timeRemaining = getTimeUntilExpiry();
+    const expired = timeRemaining === 'Expired';
 
     return (
-      <View className="bg-amber-50 border-2 border-amber-300 rounded-2xl p-4 mb-4">
-        <View className="flex-row items-center mb-2">
-          <Ionicons name="time" size={24} color="#f59e0b" />
-          <Text className="ml-2 text-amber-800 font-bold text-base">
-            Payment Pending
-          </Text>
-        </View>
-        <Text className="text-amber-700 text-sm mb-2">
-          Complete your payment on Paystack to confirm this booking.
-        </Text>
-        {timeRemaining && timeRemaining !== 'Expired' && (
-          <View className="bg-amber-100 rounded-lg p-2 flex-row items-center justify-center">
-            <Ionicons name="hourglass" size={16} color="#92400e" />
-            <Text className="ml-2 text-amber-900 font-bold">
-              Expires in: {timeRemaining}
+      <View style={[styles.banner, { borderColor: '#FED7AA', backgroundColor: '#FFF7ED' }]}>
+        <View style={styles.bannerRow}>
+          <View style={[styles.bannerIconWrap, { backgroundColor: '#FFEDD5' }]}>
+            <Ionicons name="time" size={20} color="#EA580C" />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.bannerTitle, { color: '#9A3412' }]}>Payment Pending</Text>
+            <Text style={[styles.bannerBody, { color: '#C2410C' }]}>
+              Complete your payment on Paystack to confirm this booking.
             </Text>
           </View>
-        )}
-        {timeRemaining === 'Expired' && (
-          <View className="bg-red-100 rounded-lg p-2 flex-row items-center justify-center">
-            <Ionicons name="close-circle" size={16} color="#dc2626" />
-            <Text className="ml-2 text-red-700 font-bold">
-              Payment window expired. Booking will be cancelled.
+        </View>
+        {timeRemaining && (
+          <View style={[styles.timerRow, { backgroundColor: expired ? '#FEE2E2' : '#FFEDD5' }]}>
+            <Ionicons name={expired ? 'close-circle' : 'hourglass'} size={14} color={expired ? '#DC2626' : '#92400E'} />
+            <Text style={[styles.timerText, { color: expired ? '#DC2626' : '#92400E' }]}>
+              {expired ? 'Payment window expired. Booking will be cancelled.' : `Expires in: ${timeRemaining}`}
             </Text>
           </View>
         )}
@@ -480,95 +362,83 @@ const BookingDetailScreen: React.FC = () => {
 
   const renderRefundInfo = () => {
     if (!booking) return null;
-
     if (booking.paymentStatus === 'refunded') {
       return (
-        <View className="bg-indigo-50 border-2 border-indigo-200 rounded-2xl p-4 mb-4">
-          <View className="flex-row items-center mb-2">
-            <Ionicons name="refresh-circle" size={24} color="#4f46e5" />
-            <Text className="ml-2 text-indigo-800 font-bold text-base">
-              Full Refund Processed
-            </Text>
+        <View style={[styles.banner, { borderColor: '#C7D2FE', backgroundColor: '#EEF2FF' }]}>
+          <View style={styles.bannerRow}>
+            <View style={[styles.bannerIconWrap, { backgroundColor: '#E0E7FF' }]}>
+              <Ionicons name="refresh-circle" size={20} color="#4338CA" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.bannerTitle, { color: '#312E81' }]}>Full Refund Processed</Text>
+              <Text style={[styles.bannerBody, { color: '#4338CA' }]}>
+                {formatPrice(booking.totalAmount)} has been returned to your wallet.
+              </Text>
+            </View>
           </View>
-          <Text className="text-indigo-700 text-sm">
-            {formatPrice(booking.totalAmount)} has been refunded to your wallet.
-          </Text>
         </View>
       );
     }
-
     if (booking.paymentStatus === 'partially_refunded' && booking.cancellationPenalty) {
-      const refundAmount = booking.totalAmount - booking.cancellationPenalty;
+      const refund = booking.totalAmount - booking.cancellationPenalty;
       return (
-        <View className="bg-amber-50 border-2 border-amber-200 rounded-2xl p-4 mb-4">
-          <View className="flex-row items-center mb-2">
-            <Ionicons name="alert-circle" size={24} color="#f59e0b" />
-            <Text className="ml-2 text-amber-800 font-bold text-base">
-              Partial Refund (Penalty Applied)
-            </Text>
+        <View style={[styles.banner, { borderColor: '#FED7AA', backgroundColor: '#FFF7ED' }]}>
+          <View style={styles.bannerRow}>
+            <View style={[styles.bannerIconWrap, { backgroundColor: '#FFEDD5' }]}>
+              <Ionicons name="alert-circle" size={20} color="#EA580C" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.bannerTitle, { color: '#9A3412' }]}>Partial Refund</Text>
+            </View>
           </View>
-          <View className="gap-1">
-            <Text className="text-amber-700 text-sm">
-              • Original Amount: {formatPrice(booking.totalAmount)}
-            </Text>
-            <Text className="text-red-600 text-sm font-medium">
-              • Cancellation Penalty (20%): -{formatPrice(booking.cancellationPenalty)}
-            </Text>
-            <Text className="text-green-700 text-sm font-bold">
-              • Refunded to Wallet: {formatPrice(refundAmount)}
-            </Text>
+          <View style={styles.refundRows}>
+            <View style={styles.refundRow}>
+              <Text style={styles.refundLabel}>Original amount</Text>
+              <Text style={styles.refundValue}>{formatPrice(booking.totalAmount)}</Text>
+            </View>
+            <View style={styles.refundRow}>
+              <Text style={[styles.refundLabel, { color: '#DC2626' }]}>Penalty (20%)</Text>
+              <Text style={[styles.refundValue, { color: '#DC2626' }]}>-{formatPrice(booking.cancellationPenalty)}</Text>
+            </View>
+            <View style={[styles.refundRow, styles.refundRowTotal]}>
+              <Text style={[styles.refundLabel, { color: '#15803D', fontWeight: '700' }]}>Refunded to wallet</Text>
+              <Text style={[styles.refundValue, { color: '#15803D', fontWeight: '700' }]}>{formatPrice(refund)}</Text>
+            </View>
           </View>
         </View>
       );
     }
-
     return null;
   };
 
   const renderActionButtons = () => {
     if (!booking) return null;
-
     const status = booking.status.toLowerCase();
     const serviceInfo = getServiceInfo();
 
-    // Don't show action buttons if payment is still pending (Paystack redirect)
     if (booking.paymentStatus === 'pending') {
       return (
-        <View className="bg-gray-100 rounded-2xl p-4">
-          <Text className="text-gray-600 text-center text-sm">
-            Complete payment to unlock booking actions
-          </Text>
+        <View style={styles.lockedActions}>
+          <Ionicons name="lock-closed-outline" size={16} color="#8E8E93" />
+          <Text style={styles.lockedActionsText}>Complete payment to unlock booking actions</Text>
         </View>
       );
     }
 
     return (
-      <View style={{ gap: 12 }}>
-        {/* Mark Complete Button */}
+      <View style={{ gap: 10 }}>
+        {/* Mark Complete */}
         {['accepted', 'in_progress'].includes(status) && !isVendor && (
           <TouchableOpacity
             onPress={handleMarkComplete}
             disabled={actionLoading || booking.clientMarkedComplete}
-            className={`py-4 rounded-2xl ${
-              booking.clientMarkedComplete ? 'bg-gray-300' : 'bg-green-600'
-            }`}
-            style={{
-              shadowColor: booking.clientMarkedComplete ? '#9ca3af' : '#10b981',
-              shadowOffset: { width: 0, height: 4 },
-              shadowOpacity: 0.3,
-              shadowRadius: 8,
-              elevation: 4,
-            }}
+            style={[styles.actionBtn, booking.clientMarkedComplete ? styles.actionBtnDisabled : styles.actionBtnGreen]}
             activeOpacity={0.8}
           >
-            {actionLoading ? (
-              <ActivityIndicator size="small" color="#fff" />
-            ) : (
-              <View className="flex-row items-center justify-center">
-                {booking.clientMarkedComplete && (
-                  <Ionicons name="checkmark-circle" size={20} color="#fff" />
-                )}
-                <Text className="text-white text-center font-bold text-base ml-2">
+            {actionLoading ? <ActivityIndicator size="small" color="#fff" /> : (
+              <View style={styles.actionBtnInner}>
+                <Ionicons name={booking.clientMarkedComplete ? 'checkmark-circle' : 'checkmark-circle-outline'} size={19} color="#fff" />
+                <Text style={styles.actionBtnText}>
                   {booking.clientMarkedComplete ? 'Marked Complete' : 'Mark as Complete'}
                 </Text>
               </View>
@@ -576,519 +446,457 @@ const BookingDetailScreen: React.FC = () => {
           </TouchableOpacity>
         )}
 
-        {/* Leave Review Button */}
+        {/* Leave Review */}
         {status === 'completed' && !booking.hasReview && !isVendor && (
           <TouchableOpacity
-            onPress={() =>
-              navigation.navigate('CreateReview', {
-                bookingId: booking._id,
-                vendorName:
-                  booking.vendor?.vendorProfile?.businessName ||
-                  `${booking.vendor?.firstName} ${booking.vendor?.lastName}`,
-                serviceName: serviceInfo?.name || 'Service',
-              })
-            }
-            className="bg-yellow-500 py-4 rounded-2xl flex-row items-center justify-center"
-            style={{
-              shadowColor: '#eab308',
-              shadowOffset: { width: 0, height: 4 },
-              shadowOpacity: 0.3,
-              shadowRadius: 8,
-              elevation: 4,
-            }}
+            onPress={() => navigation.navigate('CreateReview', {
+              bookingId: booking._id,
+              vendorName: booking.vendor?.vendorProfile?.businessName || `${booking.vendor?.firstName} ${booking.vendor?.lastName}`,
+              serviceName: serviceInfo?.name || 'Service',
+            })}
+            style={[styles.actionBtn, styles.actionBtnYellow]}
             activeOpacity={0.8}
           >
-            <Ionicons name="star" size={20} color="#fff" />
-            <Text className="ml-2 text-base font-bold text-white">Leave a Review</Text>
+            <View style={styles.actionBtnInner}>
+              <Ionicons name="star-outline" size={19} color="#fff" />
+              <Text style={styles.actionBtnText}>Leave a Review</Text>
+            </View>
           </TouchableOpacity>
         )}
 
-        {/* Review Submitted Button */}
+        {/* Review Submitted */}
         {status === 'completed' && booking.hasReview && !isVendor && (
-          <TouchableOpacity
-            onPress={() => {
-              Alert.alert('Review Submitted', 'Thank you for your feedback!');
-            }}
-            className="flex-row items-center justify-center rounded-2xl bg-green-500 py-4"
-            activeOpacity={0.8}
-          >
-            <Ionicons name="checkmark-circle" size={20} color="#fff" />
-            <Text className="ml-2 text-base font-bold text-white">✓ Review Submitted</Text>
-          </TouchableOpacity>
+          <View style={[styles.actionBtn, styles.actionBtnGreen]}>
+            <View style={styles.actionBtnInner}>
+              <Ionicons name="checkmark-circle" size={19} color="#fff" />
+              <Text style={styles.actionBtnText}>Review Submitted</Text>
+            </View>
+          </View>
         )}
 
-        {/* Cancel Booking Button */}
+        {/* Cancel */}
         {['pending', 'accepted'].includes(status) && booking.paymentStatus === 'escrowed' && (
           <TouchableOpacity
             onPress={() => setShowCancelModal(true)}
             disabled={actionLoading}
-            className="bg-red-500 py-4 rounded-2xl"
-            style={{
-              shadowColor: '#ef4444',
-              shadowOffset: { width: 0, height: 4 },
-              shadowOpacity: 0.3,
-              shadowRadius: 8,
-              elevation: 4,
-            }}
+            style={[styles.actionBtn, styles.actionBtnOutlineRed]}
             activeOpacity={0.8}
           >
-            {actionLoading ? (
-              <ActivityIndicator size="small" color="#fff" />
-            ) : (
-              <Text className="text-white text-center font-bold text-base">Cancel Booking</Text>
+            {actionLoading ? <ActivityIndicator size="small" color="#E8166D" /> : (
+              <View style={styles.actionBtnInner}>
+                <Ionicons name="close-circle-outline" size={19} color="#DC2626" />
+                <Text style={[styles.actionBtnText, { color: '#DC2626' }]}>Cancel Booking</Text>
+              </View>
             )}
           </TouchableOpacity>
         )}
 
-        {/* Dispute Buttons */}
+        {/* Dispute */}
         {['accepted', 'in_progress', 'completed'].includes(status) && (
-          <>
-            {booking.hasDispute ? (
-              <TouchableOpacity
-                onPress={handleViewDispute}
-                className="bg-orange-500 py-4 rounded-2xl flex-row items-center justify-center"
-                style={{
-                  shadowColor: '#f97316',
-                  shadowOffset: { width: 0, height: 4 },
-                  shadowOpacity: 0.3,
-                  shadowRadius: 8,
-                  elevation: 4,
-                }}
-                activeOpacity={0.8}
-              >
-                <Ionicons name="alert-circle" size={20} color="#fff" />
-                <Text className="ml-2 text-base font-bold text-white">View Active Dispute</Text>
-              </TouchableOpacity>
-            ) : (
-              <TouchableOpacity
-                onPress={handleCreateDispute}
-                className="flex-row items-center justify-center rounded-2xl border-2 border-red-500 bg-white py-4"
-                activeOpacity={0.8}
-              >
-                <Ionicons name="alert-circle-outline" size={20} color="#ef4444" />
-                <Text className="ml-2 text-base font-bold text-red-500">Report Issue</Text>
-              </TouchableOpacity>
-            )}
-          </>
+          booking.hasDispute ? (
+            <TouchableOpacity onPress={handleViewDispute} style={[styles.actionBtn, styles.actionBtnOrange]} activeOpacity={0.8}>
+              <View style={styles.actionBtnInner}>
+                <Ionicons name="alert-circle-outline" size={19} color="#fff" />
+                <Text style={styles.actionBtnText}>View Active Dispute</Text>
+              </View>
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity onPress={handleCreateDispute} style={[styles.actionBtn, styles.actionBtnOutlineOrange]} activeOpacity={0.8}>
+              <View style={styles.actionBtnInner}>
+                <Ionicons name="flag-outline" size={19} color="#EA580C" />
+                <Text style={[styles.actionBtnText, { color: '#EA580C' }]}>Report an Issue</Text>
+              </View>
+            </TouchableOpacity>
+          )
         )}
       </View>
     );
   };
 
+  // ── Loading / Empty ───────────────────────────────────────────────────────────
+
   if (loading) {
     return (
-      <SafeAreaView className="flex-1 bg-gray-50">
-        <View className="flex-1 items-center justify-center">
-          <ActivityIndicator size="large" color="#eb278d" />
-          <Text className="mt-4 text-sm font-medium text-gray-500">Loading booking...</Text>
-        </View>
+      <SafeAreaView style={styles.centeredScreen}>
+        <ActivityIndicator size="large" color="#E8166D" />
+        <Text style={styles.loadingText}>Loading booking…</Text>
       </SafeAreaView>
     );
   }
 
   if (!booking) {
     return (
-      <SafeAreaView className="flex-1 bg-gray-50">
-        <View className="flex-1 items-center justify-center">
-          <Ionicons name="document-text-outline" size={64} color="#d1d5db" />
-          <Text className="mt-4 text-lg font-bold text-gray-900">Booking not found</Text>
-        </View>
+      <SafeAreaView style={styles.centeredScreen}>
+        <Ionicons name="document-text-outline" size={56} color="#D1D5DB" />
+        <Text style={styles.emptyTitle}>Booking not found</Text>
       </SafeAreaView>
     );
   }
 
-  const statusColors = getStatusColor(booking.status);
-  const paymentStatusInfo = getPaymentStatusInfo(booking.paymentStatus);
+  const statusStyle = getStatusStyle(booking.status);
+  const paymentInfo = getPaymentInfo(booking.paymentStatus);
   const otherParty = getOtherParty();
   const serviceInfo = getServiceInfo();
 
   return (
-    <SafeAreaView className="flex-1 bg-gray-50" edges={['top']}>
-      {/* Header */}
-      <LinearGradient
-        colors={['#eb278d', '#f472b6']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-      >
-        <View className="px-5 py-4">
-          <View className="mb-4 flex-row items-center justify-between">
-            <TouchableOpacity
-              onPress={() => navigation.goBack()}
-              className="h-10 w-10 items-center justify-center rounded-full bg-white/20"
-              activeOpacity={0.7}
-            >
-              <Ionicons name="arrow-back" size={24} color="#fff" />
-            </TouchableOpacity>
+    <SafeAreaView style={styles.root} edges={['top']}>
 
-            <Text className="text-lg font-bold text-white">Booking Details</Text>
+      {/* ── Header ──────────────────────────────────────────────────────── */}
+      <LinearGradient colors={['#E8166D', '#FF5FA0']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.header}>
+        <View style={styles.headerTop}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn} activeOpacity={0.75}>
+            <Ionicons name="chevron-back" size={22} color="#fff" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Booking Details</Text>
+          <View style={{ width: 36 }} />
+        </View>
 
-            <View className="w-10" />
+        <View style={styles.headerMeta}>
+          <View style={[styles.statusPill, { backgroundColor: statusStyle.bg, borderColor: statusStyle.border }]}>
+            <Text style={[styles.statusPillText, { color: statusStyle.text }]}>{formatStatus(booking.status)}</Text>
           </View>
-
-          {/* Status Badge */}
-          <View className="flex-row items-center justify-between">
-            <View
-              className="px-4 py-2 rounded-full"
-              style={{
-                backgroundColor: statusColors.bg,
-                borderWidth: 2,
-                borderColor: statusColors.border,
-              }}
-            >
-              <Text className="font-bold text-sm" style={{ color: statusColors.text }}>
-                {formatStatus(booking.status)}
-              </Text>
+          {booking.bookingNumber && (
+            <View style={styles.bookingNumberPill}>
+              <Text style={styles.bookingNumberText}>#{booking.bookingNumber}</Text>
             </View>
-
-            {booking.bookingNumber && (
-              <View className="rounded-full bg-white/20 px-3 py-1.5">
-                <Text className="text-xs font-bold text-white">#{booking.bookingNumber}</Text>
-              </View>
-            )}
-          </View>
+          )}
         </View>
       </LinearGradient>
 
-      <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
-        <View className="px-5 py-4" style={{ gap: 16 }}>
-          {/* Payment Pending Banner */}
-          {renderPaymentPendingBanner()}
+      {/* ── Content ─────────────────────────────────────────────────────── */}
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
 
-          {/* Refund Info */}
-          {renderRefundInfo()}
+        {renderPaymentPendingBanner()}
+        {renderRefundInfo()}
 
-          {/* Active Dispute Alert */}
-          {booking.hasDispute && (
-            <TouchableOpacity
-              onPress={handleViewDispute}
-              className="bg-orange-50 border-2 border-orange-200 rounded-2xl p-4 flex-row items-start"
-              activeOpacity={0.7}
-            >
-              <View className="w-10 h-10 rounded-full bg-orange-100 items-center justify-center mr-3">
-                <Ionicons name="alert-circle" size={24} color="#f97316" />
-              </View>
-              <View className="flex-1">
-                <Text className="mb-1 text-base font-bold text-orange-900">Active Dispute</Text>
-                <Text className="text-sm text-orange-700">
-                  There is an active dispute for this booking. Tap to view details.
-                </Text>
-              </View>
-              <Ionicons name="chevron-forward" size={20} color="#f97316" />
-            </TouchableOpacity>
+        {/* Dispute Alert */}
+        {booking.hasDispute && (
+          <TouchableOpacity onPress={handleViewDispute} style={styles.disputeAlert} activeOpacity={0.75}>
+            <View style={styles.disputeAlertIcon}>
+              <Ionicons name="alert-circle" size={20} color="#EA580C" />
+            </View>
+            <View style={{ flex: 1, marginLeft: 12 }}>
+              <Text style={styles.disputeAlertTitle}>Active Dispute</Text>
+              <Text style={styles.disputeAlertBody}>Tap to view dispute details</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color="#EA580C" />
+          </TouchableOpacity>
+        )}
+
+        {/* Service Card */}
+        <Card>
+          {serviceInfo?.images && serviceInfo.images.length > 0 && (
+            <Image source={{ uri: serviceInfo.images[0] }} style={styles.serviceImage} resizeMode="cover" />
           )}
+          <View style={styles.serviceBody}>
+            <Text style={styles.serviceName}>{serviceInfo?.name || 'Unknown Service'}</Text>
+            {serviceInfo?.description && (
+              <Text style={styles.serviceDesc}>{serviceInfo.description}</Text>
+            )}
+            <View style={styles.serviceMetaRow}>
+              <View style={styles.serviceMetaItem}>
+                <View style={[styles.metaIconWrap, { backgroundColor: '#EFF6FF' }]}>
+                  <Ionicons name="time-outline" size={15} color="#3B82F6" />
+                </View>
+                <Text style={styles.metaText}>{booking.duration} mins</Text>
+              </View>
+              <View style={styles.serviceMetaItem}>
+                <View style={[styles.metaIconWrap, { backgroundColor: '#F0FDF4' }]}>
+                  <Ionicons name="cash-outline" size={15} color="#22C55E" />
+                </View>
+                <Text style={styles.metaText}>{formatPrice(booking.servicePrice)}</Text>
+              </View>
+            </View>
+          </View>
+        </Card>
 
-          {/* Service Card */}
-          <View
-            className="bg-white rounded-3xl overflow-hidden"
-            style={{
-              ...Platform.select({
-                ios: {
-                  shadowColor: '#000',
-                  shadowOffset: { width: 0, height: 2 },
-                  shadowOpacity: 0.08,
-                  shadowRadius: 12,
-                },
-                android: { elevation: 4 },
-              }),
-            }}
-          >
-            {serviceInfo?.images && serviceInfo.images.length > 0 && (
-              <Image
-                source={{ uri: serviceInfo.images[0] }}
-                className="w-full h-48"
-                resizeMode="cover"
+        {/* Other Party Card */}
+        {otherParty && (
+          <Card>
+            <CardTitle title={`${otherParty.label} Information`} />
+            <View style={styles.partyRow}>
+              <View style={styles.avatarWrap}>
+                {otherParty.data?.avatar ? (
+                  <Image source={{ uri: otherParty.data.avatar }} style={styles.avatar} />
+                ) : (
+                  <LinearGradient colors={['#E8166D', '#FF5FA0']} style={styles.avatarFallback}>
+                    <Ionicons name="person" size={26} color="#fff" />
+                  </LinearGradient>
+                )}
+              </View>
+              <View style={{ flex: 1, marginLeft: 14 }}>
+                <Text style={styles.partyName}>
+                  {otherParty.type === 'vendor'
+                    ? otherParty.data?.vendorProfile?.businessName || `${otherParty.data?.firstName} ${otherParty.data?.lastName}`
+                    : `${otherParty.data?.firstName} ${otherParty.data?.lastName}`}
+                </Text>
+                {otherParty.type === 'vendor' && otherParty.data?.vendorProfile && (
+                  <View style={styles.ratingRow}>
+                    <Ionicons name="star" size={13} color="#FBBF24" />
+                    <Text style={styles.ratingText}>
+                      {otherParty.data.vendorProfile.rating?.toFixed(1) || 'New'} · {otherParty.data.vendorProfile.completedBookings || 0} jobs
+                    </Text>
+                  </View>
+                )}
+              </View>
+            </View>
+            <TouchableOpacity onPress={handleMessage} style={styles.messageBtn} activeOpacity={0.8}>
+              <Ionicons name="chatbubble-outline" size={17} color="#fff" />
+              <Text style={styles.messageBtnText}>Send Message</Text>
+            </TouchableOpacity>
+          </Card>
+        )}
+
+        {/* Schedule Card */}
+        <Card>
+          <CardTitle title="Schedule" />
+          <View style={{ gap: 14 }}>
+            <InfoRow iconName="calendar-outline" iconBg="#FAF5FF" iconColor="#A855F7" label={formatDate(booking.scheduledDate)} />
+            {booking.scheduledTime && (
+              <InfoRow iconName="time-outline" iconBg="#EFF6FF" iconColor="#3B82F6" label={booking.scheduledTime} />
+            )}
+            {booking.location && (
+              <InfoRow
+                iconName="location-outline"
+                iconBg="#F0FDF4"
+                iconColor="#22C55E"
+                label={`${booking.location.address}, ${booking.location.city}, ${booking.location.state}`}
+                alignStart
               />
             )}
-
-            <View className="p-5">
-              <Text className="mb-2 text-xl font-bold text-gray-900">
-                {serviceInfo?.name || 'Unknown Service'}
-              </Text>
-
-              {serviceInfo?.description && (
-                <Text className="mb-4 text-sm leading-5 text-gray-600">
-                  {serviceInfo.description}
-                </Text>
-              )}
-
-              <View className="flex-row" style={{ gap: 20 }}>
-                <View className="flex-row items-center">
-                  <View className="mr-2 h-8 w-8 items-center justify-center rounded-lg bg-blue-100">
-                    <Ionicons name="time" size={16} color="#3b82f6" />
-                  </View>
-                  <Text className="font-medium text-gray-700">{booking.duration} mins</Text>
-                </View>
-
-                <View className="flex-row items-center">
-                  <View className="mr-2 h-8 w-8 items-center justify-center rounded-lg bg-green-100">
-                    <Ionicons name="cash" size={16} color="#10b981" />
-                  </View>
-                  <Text className="font-medium text-gray-700">
-                    {formatPrice(booking.servicePrice)}
-                  </Text>
-                </View>
-              </View>
-            </View>
           </View>
+        </Card>
 
-          {/* Other Party Info */}
-          {otherParty && (
-            <View
-              className="bg-white rounded-3xl p-5"
-              style={{
-                ...Platform.select({
-                  ios: {
-                    shadowColor: '#000',
-                    shadowOffset: { width: 0, height: 2 },
-                    shadowOpacity: 0.08,
-                    shadowRadius: 12,
-                  },
-                  android: { elevation: 4 },
-                }),
-              }}
-            >
-              <Text className="text-lg font-bold text-gray-900 mb-4">
-                {otherParty.label} Information
-              </Text>
-
-              <View className="mb-4 flex-row items-center">
-                <View className="mr-3 h-16 w-16 items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-pink-400 to-pink-600">
-                  {otherParty.data?.avatar ? (
-                    <Image
-                      source={{ uri: otherParty.data.avatar }}
-                      className="h-16 w-16 rounded-full"
-                    />
-                  ) : (
-                    <Ionicons name="person" size={32} color="#fff" />
-                  )}
-                </View>
-
-                <View className="flex-1">
-                  <Text className="text-base font-bold text-gray-900">
-                    {otherParty.type === 'vendor'
-                      ? otherParty.data?.vendorProfile?.businessName ||
-                        `${otherParty.data?.firstName} ${otherParty.data?.lastName}`
-                      : `${otherParty.data?.firstName} ${otherParty.data?.lastName}`}
-                  </Text>
-
-                  {otherParty.type === 'vendor' && otherParty.data?.vendorProfile && (
-                    <View className="mt-1 flex-row items-center">
-                      <Ionicons name="star" size={14} color="#fbbf24" />
-                      <Text className="ml-1 text-sm text-gray-600">
-                        {otherParty.data.vendorProfile.rating?.toFixed(1) || 'New'} •{' '}
-                        {otherParty.data.vendorProfile.completedBookings || 0} jobs
-                      </Text>
-                    </View>
-                  )}
-                </View>
-              </View>
-
-              <TouchableOpacity
-                onPress={handleMessage}
-                className="bg-blue-500 py-3 rounded-xl flex-row items-center justify-center"
-                style={{
-                  shadowColor: '#3b82f6',
-                  shadowOffset: { width: 0, height: 2 },
-                  shadowOpacity: 0.2,
-                  shadowRadius: 4,
-                  elevation: 2,
-                }}
-                activeOpacity={0.8}
-              >
-                <Ionicons name="chatbubble" size={18} color="#fff" />
-                <Text className="text-white font-bold ml-2">Message</Text>
-              </TouchableOpacity>
+        {/* Price Card */}
+        <Card>
+          <CardTitle title="Price Breakdown" />
+          <View style={{ gap: 10 }}>
+            <View style={styles.priceRow}>
+              <Text style={styles.priceLabel}>Service fee</Text>
+              <Text style={styles.priceValue}>{formatPrice(booking.servicePrice)}</Text>
             </View>
-          )}
-
-          {/* Schedule Card */}
-          <View
-            className="bg-white rounded-3xl p-5"
-            style={{
-              ...Platform.select({
-                ios: {
-                  shadowColor: '#000',
-                  shadowOffset: { width: 0, height: 2 },
-                  shadowOpacity: 0.08,
-                  shadowRadius: 12,
-                },
-                android: { elevation: 4 },
-              }),
-            }}
-          >
-            <Text className="text-lg font-bold text-gray-900 mb-4">Schedule</Text>
-
-            <View style={{ gap: 16 }}>
-              <View className="flex-row items-center">
-                <View className="mr-3 h-10 w-10 items-center justify-center rounded-xl bg-purple-100">
-                  <Ionicons name="calendar" size={20} color="#a855f7" />
-                </View>
-                <Text className="flex-1 font-medium text-gray-700">
-                  {formatDate(booking.scheduledDate)}
-                </Text>
+            {booking.distanceCharge > 0 && (
+              <View style={styles.priceRow}>
+                <Text style={styles.priceLabel}>Distance charge</Text>
+                <Text style={styles.priceValue}>{formatPrice(booking.distanceCharge)}</Text>
               </View>
+            )}
+            {!!booking.cancellationPenalty && booking.cancellationPenalty > 0 && (
+              <View style={styles.priceRow}>
+                <Text style={[styles.priceLabel, { color: '#DC2626' }]}>Cancellation penalty</Text>
+                <Text style={[styles.priceValue, { color: '#DC2626' }]}>-{formatPrice(booking.cancellationPenalty)}</Text>
+              </View>
+            )}
+            <View style={styles.priceDivider} />
+            <View style={styles.priceRow}>
+              <Text style={styles.priceTotalLabel}>Total</Text>
+              <Text style={styles.priceTotalValue}>{formatPrice(booking.totalAmount)}</Text>
+            </View>
 
-              {booking.scheduledTime && (
-                <View className="flex-row items-center">
-                  <View className="mr-3 h-10 w-10 items-center justify-center rounded-xl bg-blue-100">
-                    <Ionicons name="time" size={20} color="#3b82f6" />
-                  </View>
-                  <Text className="font-medium text-gray-700">{booking.scheduledTime}</Text>
-                </View>
-              )}
-
-              {booking.location && (
-                <View className="flex-row items-start">
-                  <View className="mr-3 h-10 w-10 items-center justify-center rounded-xl bg-green-100">
-                    <Ionicons name="location" size={20} color="#10b981" />
-                  </View>
-                  <Text className="flex-1 font-medium text-gray-700">
-                    {booking.location.address}, {booking.location.city}, {booking.location.state}
-                  </Text>
-                </View>
+            {/* Payment Status Pill */}
+            <View style={[styles.paymentStatusRow, { backgroundColor: paymentInfo.bg }]}>
+              <View style={styles.paymentStatusLeft}>
+                <Ionicons name={paymentInfo.icon as any} size={16} color={paymentInfo.text} />
+                <Text style={[styles.paymentStatusLabel, { color: paymentInfo.text }]}>{paymentInfo.label}</Text>
+              </View>
+              {booking.paymentReference && (
+                <Text style={[styles.paymentRef, { color: paymentInfo.text }]}>
+                  Ref: {booking.paymentReference.slice(-8)}
+                </Text>
               )}
             </View>
           </View>
+        </Card>
 
-          {/* Price Card */}
-          <View
-            className="bg-white rounded-3xl p-5"
-            style={{
-              ...Platform.select({
-                ios: {
-                  shadowColor: '#000',
-                  shadowOffset: { width: 0, height: 2 },
-                  shadowOpacity: 0.08,
-                  shadowRadius: 12,
-                },
-                android: { elevation: 4 },
-              }),
-            }}
-          >
-            <Text className="text-lg font-bold text-gray-900 mb-4">Price Breakdown</Text>
-
-            <View style={{ gap: 12 }}>
-              <View className="flex-row justify-between items-center">
-                <Text className="text-gray-600 font-medium">Service Fee</Text>
-                <Text className="text-gray-900 font-bold">
-                  {formatPrice(booking.servicePrice)}
-                </Text>
-              </View>
-
-              {booking.distanceCharge > 0 && (
-                <View className="flex-row items-center justify-between">
-                  <Text className="font-medium text-gray-600">Distance Charge</Text>
-                  <Text className="font-bold text-gray-900">
-                    {formatPrice(booking.distanceCharge)}
-                  </Text>
-                </View>
-              )}
-
-              {booking.cancellationPenalty && booking.cancellationPenalty > 0 && (
-                <View className="flex-row items-center justify-between">
-                  <Text className="font-medium text-red-600">Cancellation Penalty</Text>
-                  <Text className="font-bold text-red-600">
-                    -{formatPrice(booking.cancellationPenalty)}
-                  </Text>
-                </View>
-              )}
-
-              <View className="flex-row items-center justify-between border-t-2 border-gray-100 pt-3">
-                <Text className="text-base font-bold text-gray-900">Total Amount</Text>
-                <Text className="text-xl font-bold text-pink-600">
-                  {formatPrice(booking.totalAmount)}
-                </Text>
-              </View>
-
-              {/* Payment Status */}
-              <View className="bg-gray-50 rounded-xl p-3 flex-row justify-between items-center mt-2">
-                <View className="flex-row items-center">
-                  <Ionicons 
-                    name={paymentStatusInfo.icon as any} 
-                    size={18} 
-                    color={paymentStatusInfo.text} 
-                  />
-                  <Text className="text-gray-600 font-medium ml-2">Payment Status</Text>
-                </View>
-                <View
-                  className="px-3 py-1.5 rounded-full"
-                  style={{ backgroundColor: paymentStatusInfo.bg }}
-                >
-                  <Text
-                    className="font-bold text-xs"
-                    style={{ color: paymentStatusInfo.text }}
-                  >
-                    {paymentStatusInfo.label}
-                  </Text>
-                </View>
-              </View>
-            </View>
-          </View>
-
-          {/* Notes Card */}
-          {(booking.clientNotes || booking.vendorNotes || booking.cancellationReason) && (
-            <View
-              className="bg-white rounded-3xl p-5"
-              style={{
-                ...Platform.select({
-                  ios: {
-                    shadowColor: '#000',
-                    shadowOffset: { width: 0, height: 2 },
-                    shadowOpacity: 0.08,
-                    shadowRadius: 12,
-                  },
-                  android: { elevation: 4 },
-                }),
-              }}
-            >
-              <Text className="text-lg font-bold text-gray-900 mb-4">Notes</Text>
-
+        {/* Notes Card */}
+        {(booking.clientNotes || booking.vendorNotes || booking.cancellationReason) && (
+          <Card>
+            <CardTitle title="Notes" />
+            <View style={{ gap: 10 }}>
               {booking.clientNotes && (
-                <View className="mb-3 rounded-xl bg-blue-50 p-4">
-                  <View className="mb-2 flex-row items-center">
-                    <Ionicons name="person-circle" size={20} color="#3b82f6" />
-                    <Text className="ml-2 text-sm font-bold text-blue-900">Client Notes:</Text>
+                <View style={[styles.noteBlock, { backgroundColor: '#EFF6FF' }]}>
+                  <View style={styles.noteHeader}>
+                    <Ionicons name="person-circle-outline" size={17} color="#3B82F6" />
+                    <Text style={[styles.noteHeaderText, { color: '#1D4ED8' }]}>Client Note</Text>
                   </View>
-                  <Text className="leading-5 text-gray-700">{booking.clientNotes}</Text>
+                  <Text style={styles.noteBody}>{booking.clientNotes}</Text>
                 </View>
               )}
-
               {booking.vendorNotes && (
-                <View className="mb-3 rounded-xl bg-pink-50 p-4">
-                  <View className="mb-2 flex-row items-center">
-                    <Ionicons name="briefcase" size={20} color="#eb278d" />
-                    <Text className="ml-2 text-sm font-bold text-pink-900">Vendor Notes:</Text>
+                <View style={[styles.noteBlock, { backgroundColor: '#FFF0F6' }]}>
+                  <View style={styles.noteHeader}>
+                    <Ionicons name="briefcase-outline" size={17} color="#E8166D" />
+                    <Text style={[styles.noteHeaderText, { color: '#BE185D' }]}>Vendor Note</Text>
                   </View>
-                  <Text className="leading-5 text-gray-700">{booking.vendorNotes}</Text>
+                  <Text style={styles.noteBody}>{booking.vendorNotes}</Text>
                 </View>
               )}
-
               {booking.cancellationReason && (
-                <View className="rounded-xl bg-red-50 p-4">
-                  <View className="mb-2 flex-row items-center">
-                    <Ionicons name="close-circle" size={20} color="#dc2626" />
-                    <Text className="ml-2 text-sm font-bold text-red-900">Cancellation Reason:</Text>
+                <View style={[styles.noteBlock, { backgroundColor: '#FEF2F2' }]}>
+                  <View style={styles.noteHeader}>
+                    <Ionicons name="close-circle-outline" size={17} color="#DC2626" />
+                    <Text style={[styles.noteHeaderText, { color: '#B91C1C' }]}>Cancellation Reason</Text>
                   </View>
-                  <Text className="leading-5 text-gray-700">{booking.cancellationReason}</Text>
+                  <Text style={styles.noteBody}>{booking.cancellationReason}</Text>
                 </View>
               )}
             </View>
-          )}
+          </Card>
+        )}
 
-          {/* Action Buttons */}
-          {renderActionButtons()}
-        </View>
+        {/* Action Buttons */}
+        {renderActionButtons()}
+
       </ScrollView>
 
-      {/* Cancel Modal */}
       <CancelBookingModal
         visible={showCancelModal}
         onClose={() => setShowCancelModal(false)}
         onConfirm={handleCancelBooking}
         loading={actionLoading}
       />
+      <ConfirmationModal
+        visible={confirmModal.visible}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        onConfirm={() => { confirmModal.onConfirm(); setConfirmModal(p => ({ ...p, visible: false })); }}
+        onCancel={() => setConfirmModal(p => ({ ...p, visible: false }))}
+      />
     </SafeAreaView>
   );
 };
+
+// ─── Styles ───────────────────────────────────────────────────────────────────
+
+const styles = StyleSheet.create({
+  root: { flex: 1, backgroundColor: '#F2F2F7' },
+
+  centeredScreen: { flex: 1, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center' },
+  loadingText: { marginTop: 12, fontSize: 14, color: '#8E8E93', fontWeight: '500' },
+  emptyTitle: { marginTop: 14, fontSize: 18, fontWeight: '700', color: '#1C1C1E' },
+
+  // Header
+  header: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 20 },
+  headerTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 },
+  backBtn: {
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.22)', alignItems: 'center', justifyContent: 'center',
+  },
+  headerTitle: { fontSize: 18, fontWeight: '700', color: '#fff', letterSpacing: -0.4 },
+  headerMeta: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  statusPill: {
+    paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20,
+    borderWidth: 1.5,
+  },
+  statusPillText: { fontSize: 13, fontWeight: '700', letterSpacing: 0.1 },
+  bookingNumberPill: {
+    backgroundColor: 'rgba(255,255,255,0.2)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16,
+  },
+  bookingNumberText: { fontSize: 12, fontWeight: '700', color: '#fff' },
+
+  // Scroll
+  scroll: { padding: 16, gap: 12, paddingBottom: 40 },
+
+  // Card
+  card: {
+    backgroundColor: '#fff', borderRadius: 20, overflow: 'hidden',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 2,
+  },
+  cardTitle: { fontSize: 15, fontWeight: '700', color: '#1C1C1E', letterSpacing: -0.3, marginBottom: 16, paddingHorizontal: 18, paddingTop: 18 },
+
+  // Banner
+  banner: {
+    borderRadius: 16, borderWidth: 1.5, padding: 14, gap: 10,
+  },
+  bannerRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
+  bannerIconWrap: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  bannerTitle: { fontSize: 14, fontWeight: '700', marginBottom: 2 },
+  bannerBody: { fontSize: 13, lineHeight: 18 },
+  timerRow: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10 },
+  timerText: { fontSize: 12, fontWeight: '700' },
+  refundRows: { gap: 6, marginTop: 4 },
+  refundRow: { flexDirection: 'row', justifyContent: 'space-between' },
+  refundRowTotal: { paddingTop: 8, borderTopWidth: 1, borderTopColor: '#FED7AA', marginTop: 4 },
+  refundLabel: { fontSize: 13, color: '#6C6C70' },
+  refundValue: { fontSize: 13, fontWeight: '600', color: '#1C1C1E' },
+
+  // Dispute Alert
+  disputeAlert: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: '#fff', borderRadius: 16, padding: 14,
+    borderWidth: 1.5, borderColor: '#FED7AA',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 6, elevation: 2,
+  },
+  disputeAlertIcon: { width: 38, height: 38, borderRadius: 10, backgroundColor: '#FFF7ED', alignItems: 'center', justifyContent: 'center' },
+  disputeAlertTitle: { fontSize: 14, fontWeight: '700', color: '#9A3412' },
+  disputeAlertBody: { fontSize: 12, color: '#C2410C', marginTop: 2 },
+
+  // Service
+  serviceImage: { width: '100%', height: 180 },
+  serviceBody: { padding: 18 },
+  serviceName: { fontSize: 18, fontWeight: '700', color: '#1C1C1E', letterSpacing: -0.4, marginBottom: 6 },
+  serviceDesc: { fontSize: 14, color: '#6C6C70', lineHeight: 20, marginBottom: 14 },
+  serviceMetaRow: { flexDirection: 'row', gap: 16 },
+  serviceMetaItem: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  metaIconWrap: { width: 30, height: 30, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+  metaText: { fontSize: 14, fontWeight: '600', color: '#3A3A3C' },
+
+  // Party
+  partyRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 18, marginBottom: 14 },
+  avatarWrap: { width: 56, height: 56, borderRadius: 28, overflow: 'hidden' },
+  avatar: { width: 56, height: 56 },
+  avatarFallback: { width: 56, height: 56, alignItems: 'center', justifyContent: 'center' },
+  partyName: { fontSize: 15, fontWeight: '700', color: '#1C1C1E' },
+  ratingRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 },
+  ratingText: { fontSize: 13, color: '#6C6C70' },
+  messageBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    backgroundColor: '#3B82F6', marginHorizontal: 18, marginBottom: 18, paddingVertical: 13, borderRadius: 14,
+  },
+  messageBtnText: { fontSize: 15, fontWeight: '700', color: '#fff' },
+
+  // Info Row
+  infoRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 18, gap: 12 },
+  infoIconWrap: { width: 38, height: 38, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  infoLabel: { flex: 1, fontSize: 14, fontWeight: '500', color: '#3A3A3C', lineHeight: 20 },
+
+  // Price
+  priceRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 18 },
+  priceLabel: { fontSize: 14, color: '#6C6C70', fontWeight: '500' },
+  priceValue: { fontSize: 14, color: '#1C1C1E', fontWeight: '600' },
+  priceDivider: { height: 1, backgroundColor: '#F2F2F7', marginHorizontal: 18 },
+  priceTotalLabel: { fontSize: 16, fontWeight: '700', color: '#1C1C1E' },
+  priceTotalValue: { fontSize: 20, fontWeight: '800', color: '#E8166D', letterSpacing: -0.5 },
+  paymentStatusRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    marginHorizontal: 18, marginBottom: 4, paddingHorizontal: 14, paddingVertical: 11, borderRadius: 12,
+  },
+  paymentStatusLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  paymentStatusLabel: { fontSize: 13, fontWeight: '700' },
+  paymentRef: { fontSize: 11, fontWeight: '600', opacity: 0.7 },
+
+  // Notes
+  noteBlock: { borderRadius: 12, padding: 14, marginHorizontal: 18 },
+  noteHeader: { flexDirection: 'row', alignItems: 'center', gap: 7, marginBottom: 8 },
+  noteHeaderText: { fontSize: 12, fontWeight: '700', letterSpacing: 0.2 },
+  noteBody: { fontSize: 14, color: '#3A3A3C', lineHeight: 20 },
+
+  // Action buttons
+  lockedActions: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    backgroundColor: '#fff', borderRadius: 16, paddingVertical: 16,
+    borderWidth: 1, borderColor: '#E5E5EA',
+  },
+  lockedActionsText: { fontSize: 14, color: '#8E8E93', fontWeight: '500' },
+  actionBtn: { paddingVertical: 15, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
+  actionBtnInner: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  actionBtnText: { fontSize: 15, fontWeight: '700', color: '#fff' },
+  actionBtnGreen: { backgroundColor: '#16A34A' },
+  actionBtnDisabled: { backgroundColor: '#D1D5DB' },
+  actionBtnYellow: { backgroundColor: '#D97706' },
+  actionBtnOrange: { backgroundColor: '#EA580C' },
+  actionBtnOutlineRed: { backgroundColor: '#fff', borderWidth: 1.5, borderColor: '#FCA5A5' },
+  actionBtnOutlineOrange: { backgroundColor: '#fff', borderWidth: 1.5, borderColor: '#FDBA74' },
+});
 
 export default BookingDetailScreen;

@@ -7,7 +7,6 @@ import {
   Platform,
   SafeAreaView,
   TouchableOpacity,
-  Alert,
   ActivityIndicator,
   TextInput,
 } from 'react-native';
@@ -15,6 +14,7 @@ import { useNavigation } from '@react-navigation/native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import { vendorAPI, categoriesAPI, handleAPIError } from '@/api/api';
+import { toast } from '@/components/ui/Toast';
 
 type VendorType = 'home_service' | 'in_shop' | 'both';
 
@@ -90,10 +90,7 @@ const VendorProfileSetup = () => {
       if (!locationPermissionGranted) {
         const granted = await requestLocationPermission();
         if (!granted) {
-          Alert.alert(
-            'Location Permission Required',
-            'Please enable location permissions in your device settings to use this feature.'
-          );
+          toast.info('Location Permission Required', 'Please enable location permissions in your device settings to use this feature.');
           setLocationLoading(false);
           return;
         }
@@ -124,17 +121,14 @@ const VendorProfileSetup = () => {
         };
 
         setLocation(locationData);
-        Alert.alert('Success', 'Location captured successfully!');
+        toast.success('Success', 'Location captured successfully!');
       } else {
         throw new Error('Unable to get address details');
       }
     } catch (error: any) {
       console.error('Location error:', error);
       setErrors({ ...errors, location: 'Failed to get location. Please try again.' });
-      Alert.alert(
-        'Location Error',
-        'Unable to get your location. Please ensure location services are enabled and try again.'
-      );
+      toast.error('Location Error', 'Unable to get your location. Please ensure location services are enabled and try again.');
     } finally {
       setLocationLoading(false);
     }
@@ -150,7 +144,7 @@ const VendorProfileSetup = () => {
     } catch (error) {
       console.error('Error fetching categories:', error);
       const apiError = handleAPIError(error);
-      Alert.alert('Error', apiError.message || 'Failed to load categories');
+      toast.error('Error', apiError.message || 'Failed to load categories');
     } finally {
       setLoadingCategories(false);
     }
@@ -214,15 +208,9 @@ const VendorProfileSetup = () => {
       const response = await vendorAPI.setupProfile(setupData);
 
       if (response.success) {
-        Alert.alert('Success', 'Vendor profile created successfully!', [
-          {
-            text: 'OK',
-            onPress: () => {
-              console.log('Vendor profile setup complete');
-              // Navigate to appropriate screen
-            },
-          },
-        ]);
+        toast.success('Success', 'Vendor profile created successfully!');
+        console.log('Vendor profile setup complete');
+        // Navigate to appropriate screen
       } else {
         setGeneralError(response.message || 'Failed to create vendor profile');
       }

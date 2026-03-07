@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, ActivityIndicator, RefreshControl, Alert, Image } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, ActivityIndicator, RefreshControl, Image } from 'react-native';
+import { toast } from '@/components/ui/Toast';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
@@ -78,7 +79,7 @@ const ReviewsScreen: React.FC = () => {
     } catch (error) {
       const apiError = handleAPIError(error);
       console.error('Reviews fetch error:', apiError);
-      Alert.alert('Error', apiError.message || 'Failed to load reviews');
+      toast.error('Error', apiError.message || 'Failed to load reviews');
     } finally {
       setLoading(false);
     }

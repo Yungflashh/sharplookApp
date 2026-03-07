@@ -4,7 +4,6 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  Alert,
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
@@ -14,6 +13,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { referralAPI } from '@/api/api';
+import { toast } from '@/components/ui/Toast';
+import ConfirmationModal from '@/components/ConfirmationModal';
 
 interface ApplyReferralCodeProps {
   navigation: any;
@@ -23,10 +24,11 @@ interface ApplyReferralCodeProps {
 const ApplyReferralCode: React.FC<ApplyReferralCodeProps> = ({ navigation, onSuccess }) => {
   const [referralCode, setReferralCode] = useState('');
   const [loading, setLoading] = useState(false);
+  const [confirmModal, setConfirmModal] = useState({ visible: false, title: '', message: '', onConfirm: () => {} });
 
   const handleApplyCode = async () => {
     if (!referralCode.trim()) {
-      Alert.alert('Error', 'Please enter a referral code');
+      toast.error('Error', 'Please enter a referral code');
       return;
     }
 
@@ -34,42 +36,24 @@ const ApplyReferralCode: React.FC<ApplyReferralCodeProps> = ({ navigation, onSuc
       setLoading(true);
       await referralAPI.applyReferralCode(referralCode.trim().toUpperCase());
       
-      Alert.alert(
-        'Success! 🎉',
-        'Referral code applied successfully! Complete your first booking to activate your rewards.',
-        [
-          {
-            text: 'OK',
-            onPress: () => {
-              onSuccess?.();
-              navigation.goBack();
-            },
-          },
-        ]
-      );
+      toast.success('Success!', 'Referral code applied successfully! Complete your first booking to activate your rewards.');
+      onSuccess?.();
+      navigation.goBack();
     } catch (error: any) {
       const message = error.response?.data?.message || 'Failed to apply referral code';
-      Alert.alert('Error', message);
+      toast.error('Error', message);
     } finally {
       setLoading(false);
     }
   };
 
   const handleSkip = () => {
-    Alert.alert(
-      'Skip Referral Code?',
-      'You can still add a referral code later from your profile settings.',
-      [
-        {
-          text: 'Cancel',
-          style: 'cancel',
-        },
-        {
-          text: 'Skip',
-          onPress: () => navigation.goBack(),
-        },
-      ]
-    );
+    setConfirmModal({
+      visible: true,
+      title: 'Skip Referral Code?',
+      message: 'You can still add a referral code later from your profile settings.',
+      onConfirm: () => navigation.goBack(),
+    });
   };
 
   return (
@@ -208,6 +192,13 @@ const ApplyReferralCode: React.FC<ApplyReferralCodeProps> = ({ navigation, onSuc
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+      <ConfirmationModal
+        visible={confirmModal.visible}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        onConfirm={() => { confirmModal.onConfirm(); setConfirmModal(prev => ({...prev, visible: false})); }}
+        onCancel={() => setConfirmModal(prev => ({...prev, visible: false}))}
+      />
     </SafeAreaView>
   );
 };

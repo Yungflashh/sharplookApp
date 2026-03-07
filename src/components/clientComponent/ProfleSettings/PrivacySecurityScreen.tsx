@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, Switch, Alert, ActivityIndicator, Platform } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, Switch, ActivityIndicator, Platform } from 'react-native';
+import { toast } from '@/components/ui/Toast';
+import ConfirmationModal from '@/components/ConfirmationModal';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
@@ -17,6 +19,7 @@ const PrivacySecurityScreen: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [preferencesLoading, setPreferencesLoading] = useState(true);
   const [hasWithdrawalPin, setHasWithdrawalPin] = useState(false);
+  const [confirmModal, setConfirmModal] = useState({ visible: false, title: '', message: '', confirmText: 'Confirm', onConfirm: () => {} });
 
   useEffect(() => {
     checkBiometrics();
@@ -83,7 +86,7 @@ const PrivacySecurityScreen: React.FC = () => {
 
   const handleBiometricsToggle = async () => {
     if (!biometricsAvailable) {
-      Alert.alert('Not Available', 'Biometric authentication is not available on this device');
+      toast.info('Not Available', 'Biometric authentication is not available on this device');
       return;
     }
 
@@ -91,22 +94,18 @@ const PrivacySecurityScreen: React.FC = () => {
       try {
         const enrolled = await LocalAuthentication.isEnrolledAsync();
         if (!enrolled) {
-          Alert.alert(
-            'Setup Required',
-            `Please set up ${biometricsType || 'biometric authentication'} in your device settings first.`,
-            [
-              { text: 'Cancel', style: 'cancel' },
-              {
-                text: 'Open Settings',
-                onPress: () => {
-                  
-                  if (Platform.OS === 'ios') {
-                    
-                  }
-                },
-              },
-            ]
-          );
+          setConfirmModal({
+            visible: true,
+            title: 'Setup Required',
+            message: `Please set up ${biometricsType || 'biometric authentication'} in your device settings first.`,
+            confirmText: 'Open Settings',
+            onConfirm: () => {
+
+              if (Platform.OS === 'ios') {
+
+              }
+            },
+          });
           return;
         }
 
@@ -120,7 +119,7 @@ const PrivacySecurityScreen: React.FC = () => {
         if (result.success) {
           await updateBiometricPreference(true);
         } else {
-          Alert.alert(
+          toast.error(
             'Authentication Failed',
             result.error === 'user_cancel'
               ? 'Authentication was cancelled'
@@ -129,21 +128,16 @@ const PrivacySecurityScreen: React.FC = () => {
         }
       } catch (error) {
         console.error('Biometric auth error:', error);
-        Alert.alert('Error', 'Failed to enable biometric authentication');
+        toast.error('Error', 'Failed to enable biometric authentication');
       }
     } else {
-      Alert.alert(
-        'Disable Biometrics',
-        'Are you sure you want to disable biometric authentication?',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Disable',
-            style: 'destructive',
-            onPress: () => updateBiometricPreference(false),
-          },
-        ]
-      );
+      setConfirmModal({
+        visible: true,
+        title: 'Disable Biometrics',
+        message: 'Are you sure you want to disable biometric authentication?',
+        confirmText: 'Disable',
+        onConfirm: () => updateBiometricPreference(false),
+      });
     }
   };
 
@@ -154,13 +148,13 @@ const PrivacySecurityScreen: React.FC = () => {
         fingerprintEnabled: enabled,
       });
       setBiometricsEnabled(enabled);
-      Alert.alert(
+      toast.success(
         'Success',
         `Biometric authentication ${enabled ? 'enabled' : 'disabled'} successfully`
       );
     } catch (error) {
       const apiError = handleAPIError(error);
-      Alert.alert('Error', apiError.message);
+      toast.error('Error', apiError.message);
       setBiometricsEnabled(!enabled);
     } finally {
       setLoading(false);
@@ -175,25 +169,21 @@ const PrivacySecurityScreen: React.FC = () => {
     if (hasWithdrawalPin) {
       console.log('✅ User has PIN, showing alert to change');
       
-      Alert.alert(
-        'PIN Already Set',
-        'You already have a withdrawal PIN. Would you like to change it?',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Change PIN',
-            onPress: () => {
-              console.log('🔄 Navigating to ChangeWithdrawalPin');
-              try {
-                navigation.navigate('ChangeWithdrawalPin' as never);
-              } catch (error) {
-                console.error('❌ Navigation error:', error);
-                Alert.alert('Navigation Error', 'Could not navigate to Change PIN screen. Make sure "ChangeWithdrawalPin" is registered in your navigation stack.');
-              }
-            },
-          },
-        ]
-      );
+      setConfirmModal({
+        visible: true,
+        title: 'PIN Already Set',
+        message: 'You already have a withdrawal PIN. Would you like to change it?',
+        confirmText: 'Change PIN',
+        onConfirm: () => {
+          console.log('🔄 Navigating to ChangeWithdrawalPin');
+          try {
+            navigation.navigate('ChangeWithdrawalPin' as never);
+          } catch (error) {
+            console.error('❌ Navigation error:', error);
+            toast.error('Navigation Error', 'Could not navigate to Change PIN screen. Make sure "ChangeWithdrawalPin" is registered in your navigation stack.');
+          }
+        },
+      });
     } else {
       console.log('⚠️ User has NO PIN, navigating to SetWithdrawalPin');
       
@@ -201,7 +191,7 @@ const PrivacySecurityScreen: React.FC = () => {
         navigation.navigate('SetWithdrawalPin' as never);
       } catch (error) {
         console.error('❌ Navigation error:', error);
-        Alert.alert('Navigation Error', 'Could not navigate to Set PIN screen. Make sure "SetWithdrawalPin" is registered in your navigation stack.');
+        toast.error('Navigation Error', 'Could not navigate to Set PIN screen. Make sure "SetWithdrawalPin" is registered in your navigation stack.');
       }
     }
   };
@@ -390,8 +380,20 @@ const PrivacySecurityScreen: React.FC = () => {
         onClose={() => setShowPasswordModal(false)}
         onSuccess={() => {
           setShowPasswordModal(false);
-          Alert.alert('Success', 'Password changed successfully');
+          toast.success('Success', 'Password changed successfully');
         }}
+      />
+
+      <ConfirmationModal
+        visible={confirmModal.visible}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        confirmText={confirmModal.confirmText}
+        onConfirm={() => {
+          confirmModal.onConfirm();
+          setConfirmModal(prev => ({...prev, visible: false}));
+        }}
+        onCancel={() => setConfirmModal(prev => ({...prev, visible: false}))}
       />
     </SafeAreaView>
   );

@@ -5,6 +5,7 @@ import { StatusBar } from 'expo-status-bar';
 import { linking, navigationRef } from './src/utils/linking';
 import * as TrackingTransparency from 'expo-tracking-transparency';
 import { Platform, AppState } from 'react-native';
+import { ToastProvider } from '@/components/ui/Toast';
 
 import './global.css';
 
@@ -61,9 +62,11 @@ export default function App() {
   }, [isReady]);
 
   return (
-    <NavigationContainer linking={linking} ref={navigationRef}>
-      <RootNavigator />
-      <StatusBar style="auto" />
-    </NavigationContainer>
+    <ToastProvider>
+      <NavigationContainer linking={linking} ref={navigationRef}>
+        <RootNavigator />
+        <StatusBar style="auto" />
+      </NavigationContainer>
+    </ToastProvider>
   );
 }

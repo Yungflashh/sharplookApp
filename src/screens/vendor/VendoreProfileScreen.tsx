@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, Dimensions, Switch, Platform, Image, Share, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, Dimensions, Switch, Platform, Image, Share } from 'react-native';
 import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { getStoredUser, logoutUser } from '@/utils/authHelper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import ConfirmationModal from '@/components/ConfirmationModal';
+import { toast } from '@/components/ui/Toast';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -161,7 +162,7 @@ const VendorProfileScreen: React.FC = () => {
 
  const handleShareProfile = async () => {
   if (!user?._id) {
-    Alert.alert('Error', 'Unable to share profile at this time');
+    toast.error('Error', 'Unable to share profile at this time');
     return;
   }
 
@@ -190,7 +191,7 @@ const VendorProfileScreen: React.FC = () => {
     }
   } catch (error) {
     console.error('❌ Error sharing profile:', error);
-    Alert.alert('Error', 'Failed to share profile. Please try again.');
+    toast.error('Error', 'Failed to share profile. Please try again.');
   }
 };
   const stats: Stat[] = [];

@@ -8,7 +8,6 @@ import {
   ActivityIndicator,
   Dimensions,
   Image,
-  Alert,
   Share,
   Platform,
   StatusBar,
@@ -23,6 +22,7 @@ import { RootStackParamList } from '@/types/navigation.types';
 import { vendorAPI, handleAPIError } from '@/api/api';
 import ServiceCard from '@/components/clientComponent/ServiceCard';
 import ReviewCard from '@/components/clientComponent/ReviewCard';
+import { toast } from '@/components/ui/Toast';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -294,11 +294,11 @@ const VendorDetailScreen: React.FC = () => {
         url: `https://lookreal.beauty/share/vendor/${vendorId}`,
         title: vendor.vendorProfile.businessName,
       });
-    } catch { Alert.alert('Error', 'Failed to share vendor profile.'); }
+    } catch { toast.error('Error', 'Failed to share vendor profile.'); }
   };
 
   const handleMessageVendor = () => {
-    if (!vendor?._id) { Alert.alert('Error', 'Cannot open chat — vendor information is incomplete'); return; }
+    if (!vendor?._id) { toast.error('Error', 'Cannot open chat — vendor information is incomplete'); return; }
     navigation.navigate('ChatDetail', {
       otherUserId: vendor._id,
       otherUserName: vendor.vendorProfile.businessName,
@@ -310,7 +310,7 @@ const VendorDetailScreen: React.FC = () => {
     const service = services.find((s) => s._id === serviceId);
     if (!service || !vendor) return;
     if (service.isActive === false) {
-      Alert.alert('Service Unavailable', 'This service is currently not available.');
+      toast.warning('Service Unavailable', 'This service is currently not available.');
       return;
     }
     navigation.navigate('CreateBooking', {
@@ -1016,7 +1016,7 @@ const VendorDetailScreen: React.FC = () => {
         <TouchableOpacity
           onPress={() => {
             if (services.length === 0) {
-              Alert.alert('No Services', 'This vendor has not added any services yet.');
+              toast.info('No Services', 'This vendor has not added any services yet.');
               return;
             }
             if (activeTab === 'services') {

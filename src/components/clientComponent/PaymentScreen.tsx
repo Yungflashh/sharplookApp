@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, ActivityIndicator, Alert, Platform } from 'react-native';
+import { View, Text, TouchableOpacity, ActivityIndicator, Platform } from 'react-native';
+import { toast } from '@/components/ui/Toast';
+import ConfirmationModal from '@/components/ConfirmationModal';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
@@ -42,6 +44,7 @@ const PaymentScreen: React.FC = () => {
   const [paymentConfirmed, setPaymentConfirmed] = useState(false);
   const [socketConnected, setSocketConnected] = useState(false);
   const [showManualButton, setShowManualButton] = useState(false);
+  const [confirmModal, setConfirmModal] = useState({ visible: false, title: '', message: '', onConfirm: () => {} });
 
   // Initialize payment only if authorizationUrl wasn't provided
   useEffect(() => {
@@ -127,11 +130,8 @@ const PaymentScreen: React.FC = () => {
 
           if (data.reference === reference || data.bookingId === bookingId) {
             setVerifying(false);
-            Alert.alert(
-              'Payment Failed',
-              data.reason || 'Your payment could not be completed. Please try again.',
-              [{ text: 'Go Back', onPress: () => navigation.goBack() }]
-            );
+            toast.error('Payment Failed', data.reason || 'Your payment could not be completed. Please try again.');
+            navigation.goBack();
           }
         };
 
@@ -206,20 +206,14 @@ const PaymentScreen: React.FC = () => {
           setPaymentConfirmed(true);
         } else if (booking.paymentStatus === 'pending') {
           // Need to show error - no payment URL available
-          Alert.alert(
-            'Payment Required',
-            'This booking requires payment. Please go back and create a new booking.',
-            [{ text: 'OK', onPress: () => navigation.goBack() }]
-          );
+          toast.warning('Payment Required', 'This booking requires payment. Please go back and create a new booking.');
+          navigation.goBack();
         }
       }
     } catch (error) {
       console.error('Error checking booking status:', error);
-      Alert.alert(
-        'Error',
-        'Could not load booking information.',
-        [{ text: 'OK', onPress: () => navigation.goBack() }]
-      );
+      toast.error('Error', 'Could not load booking information.');
+      navigation.goBack();
     } finally {
       setLoading(false);
     }
@@ -246,56 +240,40 @@ const PaymentScreen: React.FC = () => {
           setShowManualButton(false);
         } else {
           setVerifying(false);
-          Alert.alert(
-            'Payment Pending',
-            'Your payment is still being processed. Please wait a moment and try again.',
-            [{ text: 'OK' }]
-          );
+          toast.info('Payment Pending', 'Your payment is still being processed. Please wait a moment and try again.');
         }
       } else {
         setVerifying(false);
-        Alert.alert('Error', response.message || 'Could not verify payment. Please try again.');
+        toast.error('Error', response.message || 'Could not verify payment. Please try again.');
       }
     } catch (error) {
       const apiError = handleAPIError(error);
       console.error('❌ Payment verification error:', apiError);
       setVerifying(false);
 
-      Alert.alert(
-        'Verification Error',
-        apiError.message || 'Could not verify payment. Please contact support if you were charged.',
-        [{ text: 'OK' }]
-      );
+      toast.error('Verification Error', apiError.message || 'Could not verify payment. Please contact support if you were charged.');
     }
   };
 
   const handleCancel = () => {
-    Alert.alert(
-      'Cancel Payment',
-      'Are you sure you want to cancel? Your booking will expire if payment is not completed within 30 minutes.',
-      [
-        { text: 'Continue Payment', style: 'cancel' },
-        {
-          text: 'Cancel',
-          style: 'destructive',
-          onPress: () => {
-            // Navigate to booking detail to show pending status
-            navigation.replace('BookingDetail', { bookingId });
-          },
-        },
-      ]
-    );
+    setConfirmModal({
+      visible: true,
+      title: 'Cancel Payment',
+      message: 'Are you sure you want to cancel? Your booking will expire if payment is not completed within 30 minutes.',
+      onConfirm: () => {
+        // Navigate to booking detail to show pending status
+        navigation.replace('BookingDetail', { bookingId });
+      },
+    });
   };
 
   const handleWebViewError = () => {
-    Alert.alert(
-      'Connection Error',
-      'Failed to load payment page. Please check your internet connection.',
-      [
-        { text: 'Try Again', onPress: () => setPaymentUrl(initialAuthUrl || '') },
-        { text: 'Cancel', style: 'cancel', onPress: () => navigation.goBack() },
-      ]
-    );
+    setConfirmModal({
+      visible: true,
+      title: 'Connection Error',
+      message: 'Failed to load payment page. Please check your internet connection.',
+      onConfirm: () => setPaymentUrl(initialAuthUrl || ''),
+    });
   };
 
   const handleViewBooking = () => {
@@ -541,6 +519,14 @@ const PaymentScreen: React.FC = () => {
           </Text>
         </View>
       </View>
+
+      <ConfirmationModal
+        visible={confirmModal.visible}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        onConfirm={() => { confirmModal.onConfirm(); setConfirmModal(prev => ({...prev, visible: false})); }}
+        onCancel={() => setConfirmModal(prev => ({...prev, visible: false}))}
+      />
     </SafeAreaView>
   );
 };

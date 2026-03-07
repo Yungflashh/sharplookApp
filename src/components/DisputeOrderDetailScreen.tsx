@@ -5,7 +5,6 @@ import {
   TouchableOpacity,
   ScrollView,
   Image,
-  Alert,
   ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -15,6 +14,7 @@ import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '@/types/navigation.types';
 import { orderAPI, handleAPIError } from '@/api/api';
+import { toast } from '@/components/ui/Toast';
 
 type DisputeDetailRouteProp = RouteProp<RootStackParamList, 'DisputeOrderDetail'>;
 type DisputeDetailNavigationProp = NativeStackNavigationProp<RootStackParamList, 'DisputeOrderDetail'>;
@@ -98,7 +98,7 @@ const DisputeOrderDetailScreen: React.FC = () => {
     } catch (error) {
       const apiError = handleAPIError(error);
       console.error('Fetch dispute error:', apiError);
-      Alert.alert('Error', apiError.message);
+      toast.error('Error', apiError.message);
       navigation.goBack();
     } finally {
       setLoading(false);

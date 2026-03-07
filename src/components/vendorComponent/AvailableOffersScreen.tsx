@@ -6,11 +6,11 @@ import {
   ScrollView,
   ActivityIndicator,
   RefreshControl,
-  Alert,
   TextInput,
   Modal,
   Platform,
 } from 'react-native';
+import { toast } from '@/components/ui/Toast';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -117,7 +117,7 @@ const AvailableOffersScreen: React.FC = () => {
     if (!selectedOffer) return;
 
     if (!responseData.proposedPrice || parseFloat(responseData.proposedPrice) <= 0) {
-      Alert.alert('Error', 'Please enter a valid price');
+      toast.error('Error', 'Please enter a valid price');
       return;
     }
 
@@ -135,13 +135,13 @@ const AvailableOffersScreen: React.FC = () => {
       const response = await offerAPI.respondToOffer(selectedOffer._id, data);
 
       if (response.success) {
-        Alert.alert('Success', 'Your response has been submitted successfully!');
+        toast.success('Success', 'Your response has been submitted successfully!');
         setShowRespondModal(false);
         fetchOffers();
       }
     } catch (error) {
       const apiError = handleAPIError(error);
-      Alert.alert('Error', apiError.message);
+      toast.error('Error', apiError.message);
     } finally {
       setSubmitting(false);
     }

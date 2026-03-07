@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, TextInput, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, TextInput, ActivityIndicator } from 'react-native';
+import { toast } from '@/components/ui/Toast';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
@@ -26,11 +27,11 @@ const CreateReviewScreen: React.FC = () => {
   const [valueRating, setValueRating] = useState(0);
   const handleSubmitReview = async () => {
     if (rating === 0) {
-      Alert.alert('Error', 'Please select a rating');
+      toast.error('Error', 'Please select a rating');
       return;
     }
     if (!comment || comment.trim().length < 10) {
-      Alert.alert('Error', 'Please write a review (minimum 10 characters)');
+      toast.error('Error', 'Please write a review (minimum 10 characters)');
       return;
     }
     try {
@@ -49,14 +50,12 @@ const CreateReviewScreen: React.FC = () => {
       };
       const response = await reviewAPI.createReview(reviewData);
       if (response.success) {
-        Alert.alert('Review Submitted', 'Thank you for your feedback!', [{
-          text: 'OK',
-          onPress: () => navigation.goBack()
-        }]);
+        toast.success('Review Submitted', 'Thank you for your feedback!');
+        navigation.goBack();
       }
     } catch (error) {
       const apiError = handleAPIError(error);
-      Alert.alert('Error', apiError.message || 'Failed to submit review');
+      toast.error('Error', apiError.message || 'Failed to submit review');
     } finally {
       setLoading(false);
     }

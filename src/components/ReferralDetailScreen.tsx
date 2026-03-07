@@ -7,13 +7,13 @@ import {
   ActivityIndicator,
   Image,
   TouchableOpacity,
-  Alert,
   StatusBar,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { referralAPI } from '../api/api';
+import { toast } from '@/components/ui/Toast';
 
 interface ReferralDetail {
   _id: string;
@@ -70,7 +70,7 @@ const ReferralDetailScreen = ({ route, navigation }: any) => {
       setReferral(response.data.referral);
     } catch (error: any) {
       console.error('Error loading referral detail:', error);
-      Alert.alert('Error', 'Failed to load referral details');
+      toast.error('Error', 'Failed to load referral details');
       navigation.goBack();
     } finally {
       setLoading(false);

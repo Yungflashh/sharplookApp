@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Modal, View, Text, TouchableOpacity, ActivityIndicator, Alert, TextInput, SafeAreaView } from 'react-native';
+import { Modal, View, Text, TouchableOpacity, ActivityIndicator, TextInput, SafeAreaView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import MapView, { Marker } from 'react-native-maps';
 import * as Location from 'expo-location';
+import { toast } from '@/components/ui/Toast';
 interface LocationData {
   coordinates: number[];
   address: string;
@@ -60,7 +61,7 @@ const LocationPicker: React.FC<LocationPickerProps> = ({
         status
       } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission Required', 'Location permission is needed to find your current location.');
+        toast.info('Permission Required', 'Location permission is needed to find your current location.');
         setLoadingLocation(false);
         return;
       }
@@ -82,7 +83,7 @@ const LocationPicker: React.FC<LocationPickerProps> = ({
       await reverseGeocode(latitude, longitude);
     } catch (error) {
       console.error('Error getting current location:', error);
-      Alert.alert('Error', 'Failed to get your current location');
+      toast.error('Error', 'Failed to get your current location');
     } finally {
       setLoadingLocation(false);
     }
@@ -119,7 +120,7 @@ const LocationPicker: React.FC<LocationPickerProps> = ({
   };
   const handleConfirm = () => {
     if (!address || address === 'Unknown location') {
-      Alert.alert('Error', 'Please select a valid location');
+      toast.error('Error', 'Please select a valid location');
       return;
     }
     const locationData: LocationData = {

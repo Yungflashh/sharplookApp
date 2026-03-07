@@ -5,8 +5,9 @@ import {
   TouchableOpacity,
   Modal,
   ActivityIndicator,
-  Alert,
 } from 'react-native';
+import { toast } from '@/components/ui/Toast';
+import ConfirmationModal from '@/components/ConfirmationModal';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
@@ -34,6 +35,7 @@ const PaymentMethodModal: React.FC<PaymentMethodModalProps> = ({
   const [walletBalance, setWalletBalance] = useState(0);
   const [canPayFromWallet, setCanPayFromWallet] = useState(false);
   const [shortfall, setShortfall] = useState(0);
+  const [confirmModal, setConfirmModal] = useState({ visible: false, title: '', message: '', onConfirm: () => {} });
 
   useEffect(() => {
     if (visible) {
@@ -59,7 +61,7 @@ const PaymentMethodModal: React.FC<PaymentMethodModalProps> = ({
     } catch (error) {
       const apiError = handleAPIError(error);
       console.error('Error checking wallet balance:', apiError);
-      Alert.alert('Error', 'Failed to check wallet balance');
+      toast.error('Error', 'Failed to check wallet balance');
     } finally {
       setLoading(false);
     }
@@ -67,62 +69,42 @@ const PaymentMethodModal: React.FC<PaymentMethodModalProps> = ({
 
  const handlePayFromWallet = async () => {
   if (!canPayFromWallet) {
-    Alert.alert(
-      'Insufficient Balance',
-      `You need ₦${shortfall.toLocaleString()} more in your wallet. Would you like to fund your wallet?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Fund Wallet',
-          onPress: () => {
-            onClose();
-            Alert.alert('Fund Wallet', 'Wallet funding feature coming soon!');
-          },
-        },
-      ]
-    );
+    setConfirmModal({
+      visible: true,
+      title: 'Insufficient Balance',
+      message: `You need ₦${shortfall.toLocaleString()} more in your wallet. Would you like to fund your wallet?`,
+      onConfirm: () => {
+        onClose();
+        toast.info('Fund Wallet', 'Wallet funding feature coming soon!');
+      },
+    });
     return;
   }
 
-  Alert.alert(
-    'Confirm Payment',
-    `Pay ₦${bookingAmount.toLocaleString()} from your wallet?`,
-    [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Pay Now',
-        onPress: async () => {
-          try {
-            setPaying(true);
+  setConfirmModal({
+    visible: true,
+    title: 'Confirm Payment',
+    message: `Pay ₦${bookingAmount.toLocaleString()} from your wallet?`,
+    onConfirm: async () => {
+      try {
+        setPaying(true);
 
-            // ✅ FIX: Send bookingId as a string, not as an object
-            const response = await bookingAPI.payFromWallet(bookingId);
+        // ✅ FIX: Send bookingId as a string, not as an object
+        const response = await bookingAPI.payFromWallet(bookingId);
 
-            if (response.success) {
-              Alert.alert(
-                'Success! 🎉',
-                'Payment successful! Your booking is now confirmed.',
-                [
-                  {
-                    text: 'OK',
-                    onPress: () => {
-                      onClose();
-                      onPaymentSuccess();
-                    },
-                  },
-                ]
-              );
-            }
-          } catch (error) {
-            const apiError = handleAPIError(error);
-            Alert.alert('Payment Failed', apiError.message);
-          } finally {
-            setPaying(false);
-          }
-        },
-      },
-    ]
-  );
+        if (response.success) {
+          toast.success('Success!', 'Payment successful! Your booking is now confirmed.');
+          onClose();
+          onPaymentSuccess();
+        }
+      } catch (error) {
+        const apiError = handleAPIError(error);
+        toast.error('Payment Failed', apiError.message);
+      } finally {
+        setPaying(false);
+      }
+    },
+  });
 };
 
   const handlePayWithCard = () => {
@@ -140,6 +122,7 @@ const PaymentMethodModal: React.FC<PaymentMethodModalProps> = ({
   const formatPrice = (price: number) => `₦${price.toLocaleString()}`;
 
   return (
+    <>
     <Modal
       visible={visible}
       transparent
@@ -338,6 +321,15 @@ const PaymentMethodModal: React.FC<PaymentMethodModalProps> = ({
         </View>
       </View>
     </Modal>
+
+    <ConfirmationModal
+      visible={confirmModal.visible}
+      title={confirmModal.title}
+      message={confirmModal.message}
+      onConfirm={() => { confirmModal.onConfirm(); setConfirmModal(prev => ({...prev, visible: false})); }}
+      onCancel={() => setConfirmModal(prev => ({...prev, visible: false}))}
+    />
+    </>
   );
 };
 

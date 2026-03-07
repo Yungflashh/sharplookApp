@@ -6,7 +6,6 @@ import {
   ScrollView,
   TextInput,
   ActivityIndicator,
-  Alert,
   Image,
   KeyboardAvoidingView,
   Platform,
@@ -19,6 +18,7 @@ import { useNavigation } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
 import { categoriesAPI, offerAPI, handleAPIError } from '@/api/api';
+import { toast } from '@/components/ui/Toast';
 
 // ─── Brand Tokens ─────────────────────────────────────────────────────────────
 const BRAND = {
@@ -166,9 +166,9 @@ const CreateOfferScreen: React.FC = () => {
       const apiData = response.data || response;
       const categoryData = apiData.data || apiData || [];
       setCategories(categoryData);
-      if (categoryData.length === 0) Alert.alert('Notice', 'No categories available. Please try again later.');
+      if (categoryData.length === 0) toast.info('Notice', 'No categories available. Please try again later.');
     } catch {
-      Alert.alert('Error', 'Failed to load categories. Please check your connection.');
+      toast.error('Error', 'Failed to load categories. Please check your connection.');
     } finally {
       setLoadingCategories(false);
     }
@@ -178,7 +178,7 @@ const CreateOfferScreen: React.FC = () => {
     setLoadingLocation(true);
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') { Alert.alert('Permission denied', 'Location permission is required'); return; }
+      if (status !== 'granted') { toast.error('Permission denied', 'Location permission is required'); return; }
       const loc = await Location.getCurrentPositionAsync({});
       const [addr] = await Location.reverseGeocodeAsync({ latitude: loc.coords.latitude, longitude: loc.coords.longitude });
       setFormData({
@@ -191,16 +191,16 @@ const CreateOfferScreen: React.FC = () => {
         },
       });
       setErrors({ ...errors, location: '' });
-      Alert.alert('Done', 'Location updated successfully.');
+      toast.success('Done', 'Location updated successfully.');
     } catch {
-      Alert.alert('Error', 'Could not get location.');
+      toast.error('Error', 'Could not get location.');
     } finally {
       setLoadingLocation(false);
     }
   };
 
   const pickImages = async () => {
-    if (selectedImages.length >= 5) { Alert.alert('Limit Reached', 'You can only upload up to 5 images'); return; }
+    if (selectedImages.length >= 5) { toast.warning('Limit Reached', 'You can only upload up to 5 images'); return; }
     const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsMultipleSelection: true, quality: 0.8 });
     if (!result.canceled) {
       const slots = 5 - selectedImages.length;
@@ -242,10 +242,11 @@ const CreateOfferScreen: React.FC = () => {
       if (formData.serviceType === 'home' || formData.serviceType === 'both') offerData.location = formData.location;
       const response = await offerAPI.createOffer(offerData, selectedImages);
       if (response.success) {
-        Alert.alert('Offer Created!', 'Vendors will be able to respond soon.', [{ text: 'OK', onPress: () => navigation.goBack() }]);
+        toast.success('Offer Created!', 'Vendors will be able to respond soon.');
+        navigation.goBack();
       }
     } catch (error) {
-      Alert.alert('Error', handleAPIError(error).message);
+      toast.error('Error', handleAPIError(error).message);
     } finally {
       setLoading(false);
     }

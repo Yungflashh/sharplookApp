@@ -5,13 +5,13 @@ import {
   Modal,
   TouchableOpacity,
   TextInput,
-  Alert,
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { authAPI, handleAPIError } from '@/api/api';
+import { toast } from '@/components/ui/Toast';
 
 interface ConfirmPasswordModalProps {
   visible: boolean;
@@ -49,22 +49,22 @@ const ConfirmPasswordModal: React.FC<ConfirmPasswordModalProps> = ({
   const handleChangePassword = async () => {
     
     if (!currentPassword || !newPassword || !confirmPassword) {
-      Alert.alert('Error', 'Please fill in all fields');
+      toast.error('Error', 'Please fill in all fields');
       return;
     }
 
     if (newPassword !== confirmPassword) {
-      Alert.alert('Error', 'New passwords do not match');
+      toast.error('Error', 'New passwords do not match');
       return;
     }
 
     if (newPassword.length < 8) {
-      Alert.alert('Error', 'Password must be at least 8 characters long');
+      toast.error('Error', 'Password must be at least 8 characters long');
       return;
     }
 
     if (currentPassword === newPassword) {
-      Alert.alert('Error', 'New password must be different from current password');
+      toast.error('Error', 'New password must be different from current password');
       return;
     }
 
@@ -75,11 +75,7 @@ const ConfirmPasswordModal: React.FC<ConfirmPasswordModalProps> = ({
     const hasSpecialChar = /[!@#$%^&*(),.?":{}|<>]/.test(newPassword);
 
     if (!hasUpperCase || !hasLowerCase || !hasNumbers) {
-      Alert.alert(
-        'Weak Password',
-        'Password should contain uppercase, lowercase, and numbers',
-        [{ text: 'OK' }]
-      );
+      toast.warning('Weak Password', 'Password should contain uppercase, lowercase, and numbers');
       return;
     }
 
@@ -91,12 +87,12 @@ const ConfirmPasswordModal: React.FC<ConfirmPasswordModalProps> = ({
       // Simulated API call
       await new Promise((resolve) => setTimeout(resolve, 1500));
       
-      Alert.alert('Success', 'Password changed successfully');
+      toast.success('Success', 'Password changed successfully');
       resetForm();
       onSuccess();
     } catch (error) {
       const apiError = handleAPIError(error);
-      Alert.alert('Error', apiError.message || 'Failed to change password');
+      toast.error('Error', apiError.message || 'Failed to change password');
     } finally {
       setLoading(false);
     }

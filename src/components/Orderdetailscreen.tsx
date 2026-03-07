@@ -5,7 +5,6 @@ import {
   TouchableOpacity,
   ScrollView,
   Image,
-  Alert,
   ActivityIndicator,
   Platform,
   TextInput,
@@ -18,6 +17,7 @@ import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '@/types/navigation.types';
 import { orderAPI, handleAPIError } from '@/api/api';
+import { toast } from '@/components/ui/Toast';
 
 // ─── Brand Tokens ─────────────────────────────────────────────────────────────
 const BRAND = {
@@ -361,7 +361,7 @@ const OrderDetailScreen: React.FC = () => {
         }
       }
     } catch (error) {
-      Alert.alert('Error', handleAPIError(error).message);
+      toast.error('Error', handleAPIError(error).message);
       navigation.goBack();
     } finally {
       setLoading(false);
@@ -371,19 +371,18 @@ const OrderDetailScreen: React.FC = () => {
   const handleCreateDispute = async () => {
     if (!order) return;
     const trimmed = disputeDescription.trim();
-    if (!trimmed)              { Alert.alert('Required', 'Please provide a description');                          return; }
-    if (trimmed.length < 20)   { Alert.alert('Too Short', 'Please provide at least 20 characters');               return; }
-    if (trimmed.length > 2000) { Alert.alert('Too Long', 'Description cannot exceed 2000 characters');             return; }
+    if (!trimmed)              { toast.error('Required', 'Please provide a description');                          return; }
+    if (trimmed.length < 20)   { toast.error('Too Short', 'Please provide at least 20 characters');               return; }
+    if (trimmed.length > 2000) { toast.error('Too Long', 'Description cannot exceed 2000 characters');             return; }
     try {
       setCreatingDispute(true);
       const response = await orderAPI.createDispute({ order: order._id, reason: disputeReason, description: trimmed });
       if (response.success) {
-        Alert.alert('Dispute Created', 'Your dispute has been submitted. Our team will review it shortly.', [
-          { text: 'OK', onPress: () => { setShowDisputeForm(false); setDisputeDescription(''); fetchOrder(); } },
-        ]);
+        toast.success('Dispute Created', 'Your dispute has been submitted. Our team will review it shortly.');
+        setShowDisputeForm(false); setDisputeDescription(''); fetchOrder();
       }
     } catch (error) {
-      Alert.alert('Error', handleAPIError(error).message || 'Failed to create dispute');
+      toast.error('Error', handleAPIError(error).message || 'Failed to create dispute');
     } finally {
       setCreatingDispute(false);
     }

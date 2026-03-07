@@ -6,9 +6,10 @@ import {
   ScrollView,
   TextInput,
   ActivityIndicator,
-  Alert,
   Platform,
 } from 'react-native';
+import { toast } from '@/components/ui/Toast';
+import ConfirmationModal from '@/components/ConfirmationModal';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
@@ -59,6 +60,7 @@ const CreateBookingScreen: React.FC = () => {
   // Location
   const [locationLoading, setLocationLoading] = useState(false);
   const [locationError, setLocationError] = useState('');
+  const [confirmModal, setConfirmModal] = useState({ visible: false, title: '', message: '', onConfirm: () => {} });
   const [locationPermissionGranted, setLocationPermissionGranted] = useState(false);
 
   const isHomeServiceAvailable =
@@ -175,11 +177,7 @@ const CreateBookingScreen: React.FC = () => {
         const granted = await requestLocationPermission();
         if (!granted) {
           setLocationError('Location permission is required');
-          Alert.alert(
-            'Location Permission Required',
-            'Please enable location permissions in your device settings to use this feature.',
-            [{ text: 'OK' }]
-          );
+          toast.error('Location Permission Required', 'Please enable location permissions in your device settings to use this feature.');
           setLocationLoading(false);
           return;
         }
@@ -205,18 +203,14 @@ const CreateBookingScreen: React.FC = () => {
         setCity(addressData.city || addressData.subregion || 'Unknown City');
         setState(addressData.region || 'Unknown State');
         setCoordinates([longitude, latitude]);
-        Alert.alert('Success', 'Location captured successfully!');
+        toast.success('Success', 'Location captured successfully!');
       } else {
         throw new Error('Unable to get address details');
       }
     } catch (error: any) {
       console.error('Location error:', error);
       setLocationError('Failed to get location. Please try again.');
-      Alert.alert(
-        'Location Error',
-        'Unable to get your location. Please ensure location services are enabled and try again.',
-        [{ text: 'OK' }]
-      );
+      toast.error('Location Error', 'Unable to get your location. Please ensure location services are enabled and try again.');
     } finally {
       setLocationLoading(false);
     }
@@ -254,11 +248,11 @@ const CreateBookingScreen: React.FC = () => {
 
   const validateStep1 = () => {
     if (!scheduledDate) {
-      Alert.alert('Error', 'Please select a date');
+      toast.error('Error', 'Please select a date');
       return false;
     }
     if (!scheduledTime) {
-      Alert.alert('Error', 'Please select a time');
+      toast.error('Error', 'Please select a time');
       return false;
     }
     return true;
@@ -267,15 +261,15 @@ const CreateBookingScreen: React.FC = () => {
   const validateStep2 = () => {
     if (locationType === 'home' && isHomeServiceAvailable) {
       if (!address.trim()) {
-        Alert.alert('Error', 'Please enter your address');
+        toast.error('Error', 'Please enter your address');
         return false;
       }
       if (!city.trim()) {
-        Alert.alert('Error', 'Please enter your city');
+        toast.error('Error', 'Please enter your city');
         return false;
       }
       if (!state.trim()) {
-        Alert.alert('Error', 'Please enter your state');
+        toast.error('Error', 'Please enter your state');
         return false;
       }
     }
@@ -284,15 +278,12 @@ const CreateBookingScreen: React.FC = () => {
 
   const validateStep3 = () => {
     if (paymentMethod === 'wallet' && walletBalance < totalAmount) {
-      Alert.alert(
-        'Insufficient Balance',
-        `Your wallet balance (₦${walletBalance.toLocaleString()}) is less than the booking amount (₦${totalAmount.toLocaleString()}). Please fund your wallet or use card payment.`,
-        [
-          { text: 'Use Card', onPress: () => setPaymentMethod('card') },
-          { text: 'Fund Wallet', onPress: () => navigation.navigate('FundWallet') },
-          { text: 'Cancel', style: 'cancel' },
-        ]
-      );
+      setConfirmModal({
+        visible: true,
+        title: 'Insufficient Balance',
+        message: `Your wallet balance (₦${walletBalance.toLocaleString()}) is less than the booking amount (₦${totalAmount.toLocaleString()}). Would you like to use card payment instead?`,
+        onConfirm: () => setPaymentMethod('card'),
+      });
       return false;
     }
     return true;
@@ -321,11 +312,7 @@ const CreateBookingScreen: React.FC = () => {
       setLoading(true);
 
       if (service.isActive === false) {
-        Alert.alert(
-          'Service Unavailable',
-          'This service is currently not available. Please choose another service or contact the vendor.',
-          [{ text: 'OK' }]
-        );
+        toast.error('Service Unavailable', 'This service is currently not available. Please choose another service or contact the vendor.');
         return;
       }
 
@@ -386,27 +373,13 @@ const CreateBookingScreen: React.FC = () => {
         } else if (paymentMethod === 'card' && !hasAuthUrl) {
           // Card was selected but no authorizationUrl returned - something went wrong
           console.error('❌ Card payment selected but no authorizationUrl in response!');
-          Alert.alert(
-            'Payment Error',
-            'Failed to initialize card payment. Please try again or use wallet.',
-            [{ text: 'OK' }]
-          );
+          toast.error('Payment Error', 'Failed to initialize card payment. Please try again or use wallet.');
         } else {
           // Wallet payment - booking is already paid!
-          Alert.alert(
-            '🎉 Booking Confirmed!',
-            `Your booking has been created and payment of ₦${actualAmount.toLocaleString()} was successful!${backendDistanceCharge > 0 ? `\n\n(Includes ₦${backendDistanceCharge.toLocaleString()} distance charge)` : ''}\n\nThe vendor will be notified and can accept your booking.`,
-            [
-              {
-                text: 'View Booking',
-                onPress: () => {
-                  navigation.navigate('BookingDetail', {
-                    bookingId: response.data.booking._id,
-                  });
-                },
-              },
-            ]
-          );
+          toast.success('Booking Confirmed!', `Your booking has been created and payment of ₦${actualAmount.toLocaleString()} was successful!${backendDistanceCharge > 0 ? `\n\n(Includes ₦${backendDistanceCharge.toLocaleString()} distance charge)` : ''}\n\nThe vendor will be notified and can accept your booking.`);
+          navigation.navigate('BookingDetail', {
+            bookingId: response.data.booking._id,
+          });
         }
       }
     } catch (error: any) {
@@ -422,7 +395,7 @@ const CreateBookingScreen: React.FC = () => {
         errorMessage = apiError.message;
       }
 
-      Alert.alert('Booking Error', errorMessage);
+      toast.error('Booking Error', errorMessage);
     } finally {
       setLoading(false);
     }
@@ -1130,6 +1103,14 @@ const CreateBookingScreen: React.FC = () => {
           </TouchableOpacity>
         )}
       </View>
+
+      <ConfirmationModal
+        visible={confirmModal.visible}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        onConfirm={() => { confirmModal.onConfirm(); setConfirmModal(prev => ({...prev, visible: false})); }}
+        onCancel={() => setConfirmModal(prev => ({...prev, visible: false}))}
+      />
     </SafeAreaView>
   );
 };

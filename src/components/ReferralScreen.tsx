@@ -6,7 +6,6 @@ import {
   RefreshControl,
   Share,
   Clipboard,
-  Alert,
   ActivityIndicator,
   FlatList,
   Image,
@@ -17,6 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { referralAPI } from '@/api/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { toast } from '@/components/ui/Toast';
 
 interface ReferralStats {
   totalReferrals: number;
@@ -95,7 +95,7 @@ const ReferralScreen = ({ navigation }: any) => {
       setHasMore(pagination?.hasNextPage || false);
     } catch (error) {
       console.error('Error loading referral data:', error);
-      Alert.alert('Error', 'Failed to load referral data');
+      toast.error('Error', 'Failed to load referral data');
     } finally {
       setLoading(false);
     }
@@ -143,7 +143,7 @@ const ReferralScreen = ({ navigation }: any) => {
 
   const copyReferralCode = () => {
     Clipboard.setString(referralCode);
-    Alert.alert('Success', 'Referral code copied to clipboard!');
+    toast.success('Success', 'Referral code copied to clipboard!');
   };
 
   const getStatusColor = (status: string) => {

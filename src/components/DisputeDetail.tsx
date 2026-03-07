@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, ActivityIndicator, Alert, TextInput, KeyboardAvoidingView, Platform, RefreshControl } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, ActivityIndicator, TextInput, KeyboardAvoidingView, Platform, RefreshControl } from 'react-native';
+import { toast } from '@/components/ui/Toast';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp, useFocusEffect } from '@react-navigation/native';
@@ -95,7 +96,7 @@ const DisputeDetailScreen: React.FC = () => {
     } catch (error) {
       const apiError = handleAPIError(error);
       console.error('Dispute detail error:', apiError);
-      Alert.alert('Error', apiError.message || 'Failed to load dispute details');
+      toast.error('Error', apiError.message || 'Failed to load dispute details');
       navigation.goBack();
     } finally {
       setLoading(false);
@@ -113,7 +114,7 @@ const DisputeDetailScreen: React.FC = () => {
   }, []);
   const handleSendMessage = async () => {
     if (!newMessage.trim()) {
-      Alert.alert('Error', 'Please enter a message');
+      toast.error('Error', 'Please enter a message');
       return;
     }
     try {
@@ -125,7 +126,7 @@ const DisputeDetailScreen: React.FC = () => {
       }
     } catch (error) {
       const apiError = handleAPIError(error);
-      Alert.alert('Error', apiError.message || 'Failed to send message');
+      toast.error('Error', apiError.message || 'Failed to send message');
     } finally {
       setSendingMessage(false);
     }

@@ -5,7 +5,6 @@ import {
   TouchableOpacity,
   ScrollView,
   Image,
-  Alert,
   ActivityIndicator,
   Platform,
   Dimensions,
@@ -18,6 +17,8 @@ import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '@/types/navigation.types';
 import { productAPI, cartAPI, handleAPIError } from '@/api/api';
+import { toast } from '@/components/ui/Toast';
+import ConfirmationModal from '@/components/ConfirmationModal';
 
 const { width } = Dimensions.get('window');
 
@@ -87,6 +88,7 @@ const ProductDetailScreen: React.FC = () => {
   const [selectedVariants, setSelectedVariants] = useState<Record<string, string>>({});
   const [quantity, setQuantity] = useState(1);
   const [addingToCart, setAddingToCart] = useState(false);
+  const [confirmModal, setConfirmModal] = useState({ visible: false, title: '', message: '', onConfirm: () => {} });
 
   useEffect(() => {
     fetchProduct();
@@ -102,7 +104,7 @@ const ProductDetailScreen: React.FC = () => {
       }
     } catch (error) {
       const apiError = handleAPIError(error);
-      Alert.alert('Error', apiError.message);
+      toast.error('Error', apiError.message);
       navigation.goBack();
     } finally {
       setLoading(false);
@@ -117,14 +119,14 @@ const ProductDetailScreen: React.FC = () => {
       const allSelected = product.variants.every((variant) => selectedVariants[variant.name]);
 
       if (!allSelected) {
-        Alert.alert('Select Options', 'Please select all product options');
+        toast.error('Select Options', 'Please select all product options');
         return;
       }
     }
 
     
     if (quantity > product.stock) {
-      Alert.alert('Out of Stock', `Only ${product.stock} items available`);
+      toast.error('Out of Stock', `Only ${product.stock} items available`);
       return;
     }
 
@@ -145,16 +147,15 @@ const ProductDetailScreen: React.FC = () => {
         selectedVariant,
       });
 
-      Alert.alert('Success', 'Product added to cart', [
-        { text: 'Continue Shopping', style: 'cancel' },
-        {
-          text: 'View Cart',
-          onPress: () => navigation.navigate('Cart'),
-        },
-      ]);
+      setConfirmModal({
+        visible: true,
+        title: 'Success',
+        message: 'Product added to cart',
+        onConfirm: () => navigation.navigate('Cart'),
+      });
     } catch (error) {
       console.error('Add to cart error:', error);
-      Alert.alert('Error', 'Failed to add product to cart');
+      toast.error('Error', 'Failed to add product to cart');
     } finally {
       setAddingToCart(false);
     }
@@ -593,6 +594,13 @@ const ProductDetailScreen: React.FC = () => {
           </View>
         </View>
       )}
+      <ConfirmationModal
+        visible={confirmModal.visible}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        onConfirm={() => { confirmModal.onConfirm(); setConfirmModal(prev => ({...prev, visible: false})); }}
+        onCancel={() => setConfirmModal(prev => ({...prev, visible: false}))}
+      />
     </SafeAreaView>
   );
 };

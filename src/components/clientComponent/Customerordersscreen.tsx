@@ -5,7 +5,7 @@ import {
   TouchableOpacity,
   ScrollView,
   Image,
-  Alert,
+  Alert, // kept for Alert.prompt (text input dialogs)
   ActivityIndicator,
   RefreshControl,
   Platform,
@@ -19,6 +19,8 @@ import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '@/types/navigation.types';
 import { orderAPI, handleAPIError } from '@/api/api';
+import { toast } from '@/components/ui/Toast';
+import ConfirmationModal from '@/components/ConfirmationModal';
 
 // ─── Brand Tokens ─────────────────────────────────────────────────────────────
 const BRAND = {
@@ -122,6 +124,7 @@ const CustomerOrdersScreen: React.FC = () => {
   const [searchFocused, setSearchFocused]   = useState(false);
   const [activeFilter, setActiveFilter]     = useState<FilterStatus>('all');
   const [actionLoading, setActionLoading]   = useState<string | null>(null);
+  const [confirmModal, setConfirmModal] = useState({ visible: false, title: '', message: '', onConfirm: () => {} });
 
   // ── Data ───────────────────────────────────────────────────────────────────
   const fetchOrders = async () => {
@@ -136,7 +139,7 @@ const CustomerOrdersScreen: React.FC = () => {
         setOrders(list.map((o: any) => ({ ...o, items: Array.isArray(o.items) ? o.items : [] })));
       }
     } catch (error) {
-      Alert.alert('Error', handleAPIError(error).message);
+      toast.error('Error', handleAPIError(error).message);
     } finally {
       setLoading(false);
     }
@@ -176,14 +179,14 @@ const CustomerOrdersScreen: React.FC = () => {
         text: 'Confirm',
         style: 'destructive',
         onPress: async (reason) => {
-          if (!reason?.trim()) { Alert.alert('Required', 'Please provide a cancellation reason'); return; }
+          if (!reason?.trim()) { toast.error('Required', 'Please provide a cancellation reason'); return; }
           try {
             setActionLoading(orderId);
             await orderAPI.cancelOrder(orderId, reason);
-            Alert.alert('Cancelled', 'Order cancelled. Refund will be processed.');
+            toast.success('Cancelled', 'Order cancelled. Refund will be processed.');
             fetchOrders();
           } catch (error) {
-            Alert.alert('Error', handleAPIError(error).message || 'Failed to cancel order');
+            toast.error('Error', handleAPIError(error).message || 'Failed to cancel order');
           } finally { setActionLoading(null); }
         },
       },
@@ -191,22 +194,21 @@ const CustomerOrdersScreen: React.FC = () => {
   };
 
   const handleConfirmDelivery = (orderId: string) => {
-    Alert.alert('Confirm Delivery', 'Have you received this order in good condition?', [
-      { text: 'No', style: 'cancel' },
-      {
-        text: 'Yes, Received',
-        onPress: async () => {
-          try {
-            setActionLoading(orderId);
-            await orderAPI.confirmDelivery(orderId, 'customer');
-            Alert.alert('Confirmed!', 'Payment will be released to the seller.');
-            fetchOrders();
-          } catch (error) {
-            Alert.alert('Error', handleAPIError(error).message || 'Failed to confirm delivery');
-          } finally { setActionLoading(null); }
-        },
+    setConfirmModal({
+      visible: true,
+      title: 'Confirm Delivery',
+      message: 'Have you received this order in good condition?',
+      onConfirm: async () => {
+        try {
+          setActionLoading(orderId);
+          await orderAPI.confirmDelivery(orderId, 'customer');
+          toast.success('Confirmed!', 'Payment will be released to the seller.');
+          fetchOrders();
+        } catch (error) {
+          toast.error('Error', handleAPIError(error).message || 'Failed to confirm delivery');
+        } finally { setActionLoading(null); }
       },
-    ]);
+    });
   };
 
   const formatPrice = (p: number) => `₦${p.toLocaleString()}`;
@@ -748,6 +750,13 @@ const CustomerOrdersScreen: React.FC = () => {
           </View>
         )}
       </ScrollView>
+      <ConfirmationModal
+        visible={confirmModal.visible}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        onConfirm={() => { confirmModal.onConfirm(); setConfirmModal(prev => ({...prev, visible: false})); }}
+        onCancel={() => setConfirmModal(prev => ({...prev, visible: false}))}
+      />
     </SafeAreaView>
   );
 };

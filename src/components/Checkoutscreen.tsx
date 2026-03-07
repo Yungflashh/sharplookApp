@@ -5,12 +5,13 @@ import {
   TouchableOpacity,
   ScrollView,
   TextInput,
-  Alert,
   ActivityIndicator,
   Platform,
   Modal,
   StatusBar,
 } from 'react-native';
+import { toast } from '@/components/ui/Toast';
+import ConfirmationModal from '@/components/ConfirmationModal';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -258,6 +259,7 @@ const CheckoutScreen: React.FC = () => {
   const [walletBalance, setWalletBalance] = useState(0);
   const [walletLoading, setWalletLoading] = useState(false);
   const [paymentProcessing, setPaymentProcessing] = useState(false);
+  const [confirmModal, setConfirmModal] = useState({ visible: false, title: '', message: '', onConfirm: () => {} });
 
   const [addressError, setAddressError] = useState('');
 
@@ -310,7 +312,7 @@ const CheckoutScreen: React.FC = () => {
       });
       setShowLocationOptions(false);
       if (savedLocation.address?.trim().length >= 10) setAddressError('');
-      Alert.alert('Applied', 'Saved location applied to your address.');
+      toast.success('Applied', 'Saved location applied to your address.');
     }
   };
 
@@ -319,7 +321,7 @@ const CheckoutScreen: React.FC = () => {
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission Required', 'Location permission is needed to calculate delivery fees.');
+        toast.error('Permission Required', 'Location permission is needed to calculate delivery fees.');
         return;
       }
       const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
@@ -338,10 +340,10 @@ const CheckoutScreen: React.FC = () => {
         });
         if (addr.trim().length >= 10) setAddressError('');
         setShowLocationOptions(false);
-        Alert.alert('Got it', 'Your current location has been applied.');
+        toast.success('Got it', 'Your current location has been applied.');
       }
     } catch {
-      Alert.alert('Location Error', 'Unable to get your location. Please ensure location services are enabled.');
+      toast.error('Location Error', 'Unable to get your location. Please ensure location services are enabled.');
     } finally {
       setLocationLoading(false);
     }
@@ -358,11 +360,11 @@ const CheckoutScreen: React.FC = () => {
       if (response.success) {
         setDeliveryFeeInfo(response.data);
         if (!response.data.canDeliver) {
-          Alert.alert('Delivery Not Available', response.data.message || 'This location is outside the delivery range.');
+          toast.error('Delivery Not Available', response.data.message || 'This location is outside the delivery range.');
         }
       }
     } catch (error) {
-      Alert.alert('Error', handleAPIError(error).message || 'Failed to calculate delivery fee');
+      toast.error('Error', handleAPIError(error).message || 'Failed to calculate delivery fee');
     } finally {
       setDeliveryFeeLoading(false);
     }
@@ -375,19 +377,20 @@ const CheckoutScreen: React.FC = () => {
 
   const validateForm = () => {
     if (deliveryType === 'home_delivery') {
-      if (!deliveryAddress.fullName.trim()) { Alert.alert('Required', 'Please enter your full name'); return false; }
-      if (!deliveryAddress.phone.trim()) { Alert.alert('Required', 'Please enter your phone number'); return false; }
+      if (!deliveryAddress.fullName.trim()) { toast.error('Required', 'Please enter your full name'); return false; }
+      if (!deliveryAddress.phone.trim()) { toast.error('Required', 'Please enter your phone number'); return false; }
       const addr = deliveryAddress.address.trim();
-      if (!addr) { Alert.alert('Required', 'Please enter your delivery address'); setAddressError('Address is required'); return false; }
-      if (addr.length < 10) { Alert.alert('Invalid Address', 'Address must be at least 10 characters'); setAddressError('Address must be at least 10 characters'); return false; }
-      if (!deliveryAddress.city.trim()) { Alert.alert('Required', 'Please enter your city'); return false; }
-      if (!deliveryAddress.state.trim()) { Alert.alert('Required', 'Please enter your state'); return false; }
+      if (!addr) { toast.error('Required', 'Please enter your delivery address'); setAddressError('Address is required'); return false; }
+      if (addr.length < 10) { toast.error('Invalid Address', 'Address must be at least 10 characters'); setAddressError('Address must be at least 10 characters'); return false; }
+      if (!deliveryAddress.city.trim()) { toast.error('Required', 'Please enter your city'); return false; }
+      if (!deliveryAddress.state.trim()) { toast.error('Required', 'Please enter your state'); return false; }
       if (!deliveryAddress.coordinates?.length) {
-        Alert.alert('Location Required', 'Please select your location to calculate delivery fee.', [{ text: 'Add Location', onPress: () => setShowLocationOptions(true) }]);
+        toast.error('Location Required', 'Please select your location to calculate delivery fee.');
+        setShowLocationOptions(true);
         return false;
       }
       if (deliveryFeeInfo && !deliveryFeeInfo.canDeliver) {
-        Alert.alert('Delivery Not Available', deliveryFeeInfo.message || 'This location is outside the delivery range.');
+        toast.error('Delivery Not Available', deliveryFeeInfo.message || 'This location is outside the delivery range.');
         return false;
       }
     }
@@ -410,38 +413,39 @@ const CheckoutScreen: React.FC = () => {
 
   const handlePayFromWallet = async () => {
     if (walletBalance < total) {
-      Alert.alert(
-        'Insufficient Balance',
-        `You need ${formatPrice(total - walletBalance)} more in your wallet.`,
-        [{ text: 'Cancel', style: 'cancel' }, { text: 'Fund Wallet', onPress: () => { setShowPaymentModal(false); Alert.alert('Fund Wallet', 'Wallet funding coming soon!'); } }]
-      );
+      setConfirmModal({
+        visible: true,
+        title: 'Insufficient Balance',
+        message: `You need ${formatPrice(total - walletBalance)} more in your wallet.`,
+        onConfirm: () => { setShowPaymentModal(false); toast.info('Fund Wallet', 'Wallet funding coming soon!'); },
+      });
       return;
     }
-    Alert.alert('Confirm Payment', `Pay ${formatPrice(total)} from your wallet?`, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Pay Now',
-        onPress: async () => {
-          try {
-            setPaymentProcessing(true);
-            const orderRes = await orderAPI.createOrder(buildOrderData('wallet'));
-            if (orderRes.success) {
-              const order = orderRes.data.order;
-              const payRes = await paymentAPI.payOrderFromWallet(order._id);
-              if (payRes.success) {
-                await cartAPI.clearCart();
-                setShowPaymentModal(false);
-                Alert.alert('Payment Successful 🎉', 'Your order has been placed!', [{ text: 'View Order', onPress: () => navigation.replace('OrderDetail', { orderId: order._id }) }]);
-              }
+    setConfirmModal({
+      visible: true,
+      title: 'Confirm Payment',
+      message: `Pay ${formatPrice(total)} from your wallet?`,
+      onConfirm: async () => {
+        try {
+          setPaymentProcessing(true);
+          const orderRes = await orderAPI.createOrder(buildOrderData('wallet'));
+          if (orderRes.success) {
+            const order = orderRes.data.order;
+            const payRes = await paymentAPI.payOrderFromWallet(order._id);
+            if (payRes.success) {
+              await cartAPI.clearCart();
+              setShowPaymentModal(false);
+              toast.success('Payment Successful!', 'Your order has been placed!');
+              navigation.replace('OrderDetail', { orderId: order._id });
             }
-          } catch (error) {
-            Alert.alert('Payment Failed', handleAPIError(error).message);
-          } finally {
-            setPaymentProcessing(false);
           }
-        },
+        } catch (error) {
+          toast.error('Payment Failed', handleAPIError(error).message);
+        } finally {
+          setPaymentProcessing(false);
+        }
       },
-    ]);
+    });
   };
 
   const handlePayWithCard = async () => {
@@ -455,7 +459,7 @@ const CheckoutScreen: React.FC = () => {
         navigation.replace('OrderPayment', { orderId: order._id, amount: order.totalAmount, orderNumber: order.orderNumber });
       }
     } catch (error) {
-      Alert.alert('Error', handleAPIError(error).message || 'Failed to create order');
+      toast.error('Error', handleAPIError(error).message || 'Failed to create order');
     } finally {
       setLoading(false);
     }
@@ -1179,6 +1183,13 @@ const CheckoutScreen: React.FC = () => {
           </View>
         </View>
       </Modal>
+      <ConfirmationModal
+        visible={confirmModal.visible}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        onConfirm={() => { confirmModal.onConfirm(); setConfirmModal(prev => ({...prev, visible: false})); }}
+        onCancel={() => setConfirmModal(prev => ({...prev, visible: false}))}
+      />
     </SafeAreaView>
   );
 };

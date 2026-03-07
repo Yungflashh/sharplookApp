@@ -5,9 +5,9 @@ import {
   TouchableOpacity,
   ScrollView,
   ActivityIndicator,
-  Alert,
   Platform,
 } from 'react-native';
+import { toast } from '@/components/ui/Toast';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -186,7 +186,7 @@ const VendorAnalyticsScreen: React.FC = () => {
     } catch (error) {
       const apiError = handleAPIError(error);
       console.error('Analytics error:', apiError);
-      Alert.alert('Error', apiError.message || 'Failed to load analytics');
+      toast.error('Error', apiError.message || 'Failed to load analytics');
     } finally {
       setLoading(false);
       setRefreshing(false);

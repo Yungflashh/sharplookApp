@@ -6,11 +6,12 @@ import {
   ScrollView,
   TextInput,
   Platform,
-  Alert,
   ActivityIndicator,
   Switch,
   Image,
 } from 'react-native';
+import { toast } from '@/components/ui/Toast';
+import ConfirmationModal from '@/components/ConfirmationModal';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -50,9 +51,10 @@ const VendorStoreSettingsScreen: React.FC = () => {
   const [uploadingDocument, setUploadingDocument] = useState(false);
   
   const [isEditMode, setIsEditMode] = useState(false);
-  const [vendorTypeSet, setVendorTypeSet] = useState(false); 
-  
-  
+  const [vendorTypeSet, setVendorTypeSet] = useState(false);
+  const [confirmModal, setConfirmModal] = useState({ visible: false, title: '', message: '', onConfirm: () => {} });
+
+
   const [businessName, setBusinessName] = useState('');
   const [businessDescription, setBusinessDescription] = useState('');
   const [vendorType, setVendorType] = useState<'home_service' | 'in_shop' | 'both'>('home_service');
@@ -96,7 +98,7 @@ const VendorStoreSettingsScreen: React.FC = () => {
     if (Platform.OS !== 'web') {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission Required', 'We need camera roll permissions to upload documents.');
+        toast.warning('Permission Required', 'We need camera roll permissions to upload documents.');
       }
     }
   };
@@ -130,10 +132,9 @@ const VendorStoreSettingsScreen: React.FC = () => {
         const granted = await requestLocationPermission();
         if (!granted) {
           setLocationError('Location permission is required');
-          Alert.alert(
+          toast.warning(
             'Location Permission Required',
-            'Please enable location permissions in your device settings to use this feature.',
-            [{ text: 'OK' }]
+            'Please enable location permissions in your device settings to use this feature.'
           );
           setLocationLoading(false);
           return;
@@ -164,17 +165,16 @@ const VendorStoreSettingsScreen: React.FC = () => {
         };
 
         setLocation(locationData);
-        Alert.alert('Success', 'Location captured successfully!');
+        toast.success('Success', 'Location captured successfully!');
       } else {
         throw new Error('Unable to get address details');
       }
     } catch (error: any) {
       console.error('Location error:', error);
       setLocationError('Failed to get location. Please try again.');
-      Alert.alert(
+      toast.error(
         'Location Error',
-        'Unable to get your location. Please ensure location services are enabled and try again.',
-        [{ text: 'OK' }]
+        'Unable to get your location. Please ensure location services are enabled and try again.'
       );
     } finally {
       setLocationLoading(false);
@@ -187,7 +187,7 @@ const VendorStoreSettingsScreen: React.FC = () => {
       await Promise.all([loadVendorProfile(), loadCategories()]);
     } catch (error) {
       console.error('❌ Error loading data:', error);
-      Alert.alert('Error', 'Failed to load store settings');
+      toast.error('Error', 'Failed to load store settings');
     } finally {
       setLoading(false);
     }
@@ -294,7 +294,7 @@ const VendorStoreSettingsScreen: React.FC = () => {
       }
     } catch (error) {
       console.error('Error picking document:', error);
-      Alert.alert('Error', 'Failed to pick document');
+      toast.error('Error', 'Failed to pick document');
     }
   };
 
@@ -340,63 +340,57 @@ const VendorStoreSettingsScreen: React.FC = () => {
           }));
         }
 
-        Alert.alert('Success', 'Document uploaded successfully');
+        toast.success('Success', 'Document uploaded successfully');
       }
     } catch (error: any) {
       console.error('❌ Error uploading document:', error);
-      Alert.alert('Error', error.response?.data?.message || 'Failed to upload document');
+      toast.error('Error', error.response?.data?.message || 'Failed to upload document');
     } finally {
       setUploadingDocument(false);
     }
   };
 
   const removeDocument = (documentType: 'idCard' | 'businessLicense', index?: number) => {
-    Alert.alert(
-      'Remove Document',
-      'Are you sure you want to remove this document?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Remove',
-          style: 'destructive',
-          onPress: () => {
-            if (documentType === 'certification' && index !== undefined) {
-              setDocuments((prev) => ({
-                ...prev,
-                certification: prev.certification?.filter((_, i) => i !== index) || [],
-              }));
-            } else {
-              setDocuments((prev) => ({
-                ...prev,
-                [documentType]: undefined,
-              }));
-            }
-          },
-        },
-      ]
-    );
+    setConfirmModal({
+      visible: true,
+      title: 'Remove Document',
+      message: 'Are you sure you want to remove this document?',
+      onConfirm: () => {
+        if (documentType === 'certification' && index !== undefined) {
+          setDocuments((prev) => ({
+            ...prev,
+            certification: prev.certification?.filter((_, i) => i !== index) || [],
+          }));
+        } else {
+          setDocuments((prev) => ({
+            ...prev,
+            [documentType]: undefined,
+          }));
+        }
+      },
+    });
   };
 
   const handleSave = async () => {
     try {
       
       if (!businessName.trim()) {
-        Alert.alert('Error', 'Business name is required');
+        toast.warning('Error', 'Business name is required');
         return;
       }
 
       if (!businessDescription.trim()) {
-        Alert.alert('Error', 'Business description is required');
+        toast.warning('Error', 'Business description is required');
         return;
       }
 
       if (selectedCategories.length === 0) {
-        Alert.alert('Error', 'Please select at least one category');
+        toast.warning('Error', 'Please select at least one category');
         return;
       }
 
       if (!location) {
-        Alert.alert('Error', 'Please add your business location');
+        toast.warning('Error', 'Please add your business location');
         return;
       }
 
@@ -442,12 +436,12 @@ const VendorStoreSettingsScreen: React.FC = () => {
         
         setIsEditMode(false);
 
-        Alert.alert('Success', 'Store settings updated successfully');
+        toast.success('Success', 'Store settings updated successfully');
       }
     } catch (error: any) {
       console.error('❌ Error saving store settings:', error);
       console.error('❌ Error details:', error.response?.data);
-      Alert.alert(
+      toast.error(
         'Error',
         error.response?.data?.message || 'Failed to update store settings'
       );
@@ -485,21 +479,15 @@ const VendorStoreSettingsScreen: React.FC = () => {
   const toggleEditMode = () => {
     if (isEditMode) {
       
-      Alert.alert(
-        'Discard Changes?',
-        'You have unsaved changes. Do you want to discard them?',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Discard',
-            style: 'destructive',
-            onPress: () => {
-              setIsEditMode(false);
-              loadData(); 
-            },
-          },
-        ]
-      );
+      setConfirmModal({
+        visible: true,
+        title: 'Discard Changes?',
+        message: 'You have unsaved changes. Do you want to discard them?',
+        onConfirm: () => {
+          setIsEditMode(false);
+          loadData();
+        },
+      });
     } else {
       
       setIsEditMode(true);
@@ -1118,6 +1106,13 @@ const VendorStoreSettingsScreen: React.FC = () => {
           </TouchableOpacity>
         </View>
       )}
+      <ConfirmationModal
+        visible={confirmModal.visible}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        onConfirm={() => { confirmModal.onConfirm(); setConfirmModal(prev => ({...prev, visible: false})); }}
+        onCancel={() => setConfirmModal(prev => ({...prev, visible: false}))}
+      />
     </SafeAreaView>
   );
 };

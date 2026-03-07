@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   View, Text, TouchableOpacity, ScrollView,
-  RefreshControl, Alert, ActivityIndicator, StatusBar, Platform,
+  RefreshControl, ActivityIndicator, StatusBar, Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -12,6 +12,7 @@ import AddServiceModal from '@/components/AddServiceModal';
 import ServiceCard from '@/components/ServiceCard';
 import ConfirmationModal from '@/components/ConfirmationModal';
 import FilterModal, { FilterOptions } from '@/components/FilterModal';
+import { toast } from '@/components/ui/Toast';
 
 // ─── Brand Tokens ─────────────────────────────────────────────────────────────
 const BRAND = {
@@ -80,7 +81,7 @@ const VendorServicesScreen: React.FC = () => {
         setServices(data);
       } else { setServices([]); }
     } catch (error) {
-      Alert.alert('Error', handleAPIError(error).message);
+      toast.error('Error', handleAPIError(error).message);
       setServices([]);
     } finally { setLoading(false); }
   };
@@ -139,23 +140,23 @@ const VendorServicesScreen: React.FC = () => {
     try {
       const res = await servicesAPI.createService(serviceData, images);
       if (res.success) {
-        Alert.alert('Success', 'Service created');
+        toast.success('Success', 'Service created');
         await loadServices();
         setShowAddModal(false);
       }
-    } catch (error) { Alert.alert('Error', handleAPIError(error).message); throw error; }
+    } catch (error) { toast.error('Error', handleAPIError(error).message); throw error; }
   };
 
   const handleUpdateService = async (id: string, serviceData: any, images: any[]) => {
     try {
       const res = await servicesAPI.updateService(id, serviceData, images);
       if (res.success) {
-        Alert.alert('Success', 'Service updated');
+        toast.success('Success', 'Service updated');
         await loadServices();
         setShowAddModal(false);
         setSelectedService(null);
       }
-    } catch (error) { Alert.alert('Error', handleAPIError(error).message); throw error; }
+    } catch (error) { toast.error('Error', handleAPIError(error).message); throw error; }
   };
 
   const handleDeleteService = async () => {
@@ -164,12 +165,12 @@ const VendorServicesScreen: React.FC = () => {
     try {
       const res = await servicesAPI.deleteService(selectedService._id);
       if (res.success) {
-        Alert.alert('Success', 'Service deleted');
+        toast.success('Success', 'Service deleted');
         await loadServices();
         setShowDeleteModal(false);
         setSelectedService(null);
       }
-    } catch (error) { Alert.alert('Error', handleAPIError(error).message); }
+    } catch (error) { toast.error('Error', handleAPIError(error).message); }
     finally { setLoading(false); }
   };
 

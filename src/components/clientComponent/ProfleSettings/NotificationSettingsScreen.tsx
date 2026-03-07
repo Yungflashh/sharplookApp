@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, Switch, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, Switch, ActivityIndicator } from 'react-native';
+import { toast } from '@/components/ui/Toast';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
@@ -54,7 +55,7 @@ const NotificationSettingsScreen: React.FC = () => {
     } catch (error) {
       const apiError = handleAPIError(error);
       console.error('❌ Error loading settings:', apiError.message);
-      Alert.alert('Error', 'Failed to load notification settings. Using defaults.');
+      toast.error('Error', 'Failed to load notification settings. Using defaults.');
     } finally {
       setLoading(false);
     }
@@ -64,11 +65,11 @@ const NotificationSettingsScreen: React.FC = () => {
     try {
       const response = await notificationAPI.updateNotificationSettings(preferences);
       console.log('✅ Settings saved:', response);
-      Alert.alert('Success', 'Notification settings updated successfully');
+      toast.success('Success', 'Notification settings updated successfully');
     } catch (error) {
       const apiError = handleAPIError(error);
       console.error('❌ Error saving settings:', apiError.message);
-      Alert.alert('Error', apiError.message);
+      toast.error('Error', apiError.message);
     } finally {
       setSaving(false);
     }

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, TouchableOpacity, Text, Alert, Image, ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator, TextInput } from 'react-native';
+import { View, TouchableOpacity, Text, Image, ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator, TextInput } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
@@ -7,6 +7,8 @@ import * as Location from 'expo-location';
 import { AuthStackParamList } from '@/types/navigation.types';
 import { authAPI, handleAPIError, referralAPI } from '@/api/api';
 import { Input, PasswordInput, Button, Checkbox, SocialLoginButton, PhoneInput, CountryCodePicker } from '@/components/ui/forms';
+import { toast } from '@/components/ui/Toast';
+import ConfirmationModal from '@/components/ConfirmationModal';
 
 type RegisterScreenNavigationProp = NativeStackNavigationProp<AuthStackParamList, 'Register'>;
 
@@ -49,6 +51,8 @@ const RegisterScreen = () => {
   const [locationError, setLocationError] = useState('');
   const [locationPermissionGranted, setLocationPermissionGranted] = useState(false);
   
+  const [confirmModal, setConfirmModal] = useState({ visible: false, title: '', message: '', onConfirm: () => {} });
+
   const [errors, setErrors] = useState({
     firstName: '',
     lastName: '',
@@ -150,11 +154,7 @@ const validateReferralCode = async (code: string) => {
         const granted = await requestLocationPermission();
         if (!granted) {
           setLocationError('Location permission is required');
-          Alert.alert(
-            'Location Permission Required',
-            'Please enable location permissions in your device settings to use this feature.',
-            [{ text: 'OK' }]
-          );
+          toast.info('Location Permission Required', 'Please enable location permissions in your device settings to use this feature.');
           setLocationLoading(false);
           return;
         }
@@ -184,18 +184,14 @@ const validateReferralCode = async (code: string) => {
         };
 
         setLocation(locationData);
-        Alert.alert('Success', 'Location captured successfully!');
+        toast.success('Success', 'Location captured successfully!');
       } else {
         throw new Error('Unable to get address details');
       }
     } catch (error: any) {
       console.error('Location error:', error);
       setLocationError('Failed to get location. Please try again.');
-      Alert.alert(
-        'Location Error',
-        'Unable to get your location. Please ensure location services are enabled and try again.',
-        [{ text: 'OK' }]
-      );
+      toast.error('Location Error', 'Unable to get your location. Please ensure location services are enabled and try again.');
     } finally {
       setLocationLoading(false);
     }
@@ -266,23 +262,14 @@ const validateReferralCode = async (code: string) => {
 
   const handleVendorCheckboxPress = (checked: boolean) => {
     if (checked) {
-      Alert.alert(
-        'Register as Vendor',
-        'Are you sure you want to register as a vendor? You will need to complete additional profile setup and provide business information.',
-        [
-          {
-            text: 'Cancel',
-            style: 'cancel',
-            onPress: () => {}
-          },
-          {
-            text: 'Yes, Continue',
-            onPress: () => {
-              setRegisterAsVendor(true);
-            }
-          }
-        ]
-      );
+      setConfirmModal({
+        visible: true,
+        title: 'Register as Vendor',
+        message: 'Are you sure you want to register as a vendor? You will need to complete additional profile setup and provide business information.',
+        onConfirm: () => {
+          setRegisterAsVendor(true);
+        },
+      });
     } else {
       setRegisterAsVendor(false);
     }
@@ -296,26 +283,17 @@ const validateReferralCode = async (code: string) => {
     }
 
     if (!location) {
-      Alert.alert(
-        'Add Location?',
-        'Would you like to add your location? This will help us provide better services.',
-        [
-          {
-            text: 'Skip',
-            style: 'cancel',
-            onPress: () => proceedWithRegistration()
-          },
-          {
-            text: 'Add Location',
-            onPress: async () => {
-              await getCurrentLocation();
-              if (location) {
-                proceedWithRegistration();
-              }
-            }
+      setConfirmModal({
+        visible: true,
+        title: 'Add Location?',
+        message: 'Would you like to add your location? This will help us provide better services. Press confirm to add location, or cancel to skip.',
+        onConfirm: async () => {
+          await getCurrentLocation();
+          if (location) {
+            proceedWithRegistration();
           }
-        ]
-      );
+        },
+      });
       return;
     }
 
@@ -351,32 +329,16 @@ const validateReferralCode = async (code: string) => {
 
       if (response.success) {
         if (registerAsVendor) {
-          Alert.alert(
-            'Success',
-            'Account created successfully! Please complete your vendor profile.',
-            [
-              {
-                text: 'OK',
-                onPress: () => navigation.navigate('Login')
-              }
-            ]
-          );
+          toast.success('Success', 'Account created successfully! Please complete your vendor profile.');
+          navigation.navigate('Login');
         } else {
-          
-          const successMessage = referralCodeValid === true 
-            ? `Account created successfully! 🎉\n\nYou've been referred by ${referrerName}. Complete your first booking to unlock your rewards!`
+
+          const successMessage = referralCodeValid === true
+            ? `Account created successfully! You've been referred by ${referrerName}. Complete your first booking to unlock your rewards!`
             : 'Account created successfully!';
-            
-          Alert.alert(
-            'Success',
-            successMessage,
-            [
-              {
-                text: 'OK',
-                onPress: () => navigation.navigate('Login')
-              }
-            ]
-          );
+
+          toast.success('Success', successMessage);
+          navigation.navigate('Login');
         }
       } else {
         setGeneralError(response.message || 'Unable to create account. Please try again.');
@@ -762,6 +724,14 @@ const validateReferralCode = async (code: string) => {
         onClose={() => setShowCountryPicker(false)}
         onSelect={setCountryCode}
         selectedCode={countryCode}
+      />
+
+      <ConfirmationModal
+        visible={confirmModal.visible}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        onConfirm={() => { confirmModal.onConfirm(); setConfirmModal(prev => ({...prev, visible: false})); }}
+        onCancel={() => setConfirmModal(prev => ({...prev, visible: false}))}
       />
     </View>
   );

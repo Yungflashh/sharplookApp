@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, ActivityIndicator, RefreshControl, Alert, TextInput } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, ActivityIndicator, RefreshControl, TextInput } from 'react-native';
+import { toast } from '@/components/ui/Toast';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
@@ -70,7 +71,7 @@ const DisputesScreen: React.FC = () => {
     } catch (error) {
       const apiError = handleAPIError(error);
       console.error('Disputes fetch error:', apiError);
-      Alert.alert('Error', apiError.message || 'Failed to load disputes');
+      toast.error('Error', apiError.message || 'Failed to load disputes');
     } finally {
       setLoading(false);
     }

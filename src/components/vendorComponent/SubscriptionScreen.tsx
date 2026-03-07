@@ -6,9 +6,10 @@ import {
   ScrollView,
   ActivityIndicator,
   RefreshControl,
-  Alert,
   Modal,
 } from 'react-native';
+import { toast } from '@/components/ui/Toast';
+import ConfirmationModal from '@/components/ConfirmationModal';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
@@ -135,6 +136,7 @@ const SubscriptionScreen: React.FC = () => {
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<PlanOption | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
+  const [confirmModal, setConfirmModal] = useState({ visible: false, title: '', message: '', onConfirm: () => {} });
 
   const fetchSubscription = async () => {
     try {
@@ -195,18 +197,14 @@ const SubscriptionScreen: React.FC = () => {
         
         // If it's a paid plan, show payment option
         if (plan.monthlyFee > 0) {
-          Alert.alert(
-            'Subscription Created',
-            'Your subscription has been created. Please pay to activate it.',
-            [{ text: 'OK' }]
-          );
+          toast.info('Subscription Created', 'Your subscription has been created. Please pay to activate it.');
         } else {
-          Alert.alert('Success', 'Subscription created and activated successfully!');
+          toast.success('Success', 'Subscription created and activated successfully!');
         }
       }
     } catch (error) {
       const apiError = handleAPIError(error);
-      Alert.alert('Error', apiError.message || 'Failed to create subscription');
+      toast.error('Error', apiError.message || 'Failed to create subscription');
     } finally {
       setActionLoading(false);
     }
@@ -217,51 +215,37 @@ const SubscriptionScreen: React.FC = () => {
 
     // Check balance first
     if (walletBalance < subscription.monthlyFee) {
-      Alert.alert(
-        'Insufficient Balance',
-        `You need ₦${(subscription.monthlyFee - walletBalance).toLocaleString()} more to pay for this subscription.`,
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Fund Wallet',
-            onPress: () => navigation.navigate('WalletFunding' as any),
-          },
-        ]
-      );
+      setConfirmModal({
+        visible: true,
+        title: 'Insufficient Balance',
+        message: `You need ₦${(subscription.monthlyFee - walletBalance).toLocaleString()} more to pay for this subscription.`,
+        onConfirm: () => navigation.navigate('WalletFunding' as any),
+      });
       return;
     }
 
-    Alert.alert(
-      'Confirm Payment',
-      `Pay ₦${subscription.monthlyFee.toLocaleString()} from your wallet to activate your subscription?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Pay Now',
-          onPress: async () => {
-            try {
-              setActionLoading(true);
-              const response = await subscriptionAPI.paySubscription(subscription._id);
+    setConfirmModal({
+      visible: true,
+      title: 'Confirm Payment',
+      message: `Pay ₦${subscription.monthlyFee.toLocaleString()} from your wallet to activate your subscription?`,
+      onConfirm: async () => {
+        try {
+          setActionLoading(true);
+          const response = await subscriptionAPI.paySubscription(subscription._id);
 
-              if (response.success) {
-                setSubscription(response.data.subscription);
-                await fetchWalletBalance(); // Refresh balance
-                Alert.alert(
-                  'Success!',
-                  'Your subscription has been activated.',
-                  [{ text: 'OK' }]
-                );
-              }
-            } catch (error) {
-              const apiError = handleAPIError(error);
-              Alert.alert('Payment Failed', apiError.message || 'Could not process payment');
-            } finally {
-              setActionLoading(false);
-            }
-          },
-        },
-      ]
-    );
+          if (response.success) {
+            setSubscription(response.data.subscription);
+            await fetchWalletBalance(); // Refresh balance
+            toast.success('Success!', 'Your subscription has been activated.');
+          }
+        } catch (error) {
+          const apiError = handleAPIError(error);
+          toast.error('Payment Failed', apiError.message || 'Could not process payment');
+        } finally {
+          setActionLoading(false);
+        }
+      },
+    });
   };
 
   const handleChangePlan = async (plan: PlanOption) => {
@@ -274,11 +258,11 @@ const SubscriptionScreen: React.FC = () => {
       if (response.success) {
         setSubscription(response.data.subscription);
         setShowPlanModal(false);
-        Alert.alert('Success', 'Plan changed successfully!');
+        toast.success('Success', 'Plan changed successfully!');
       }
     } catch (error) {
       const apiError = handleAPIError(error);
-      Alert.alert('Error', apiError.message || 'Failed to change plan');
+      toast.error('Error', apiError.message || 'Failed to change plan');
     } finally {
       setActionLoading(false);
     }
@@ -294,11 +278,11 @@ const SubscriptionScreen: React.FC = () => {
       if (response.success) {
         setSubscription(response.data.subscription);
         setShowCancelModal(false);
-        Alert.alert('Success', 'Subscription cancelled successfully');
+        toast.success('Success', 'Subscription cancelled successfully');
       }
     } catch (error) {
       const apiError = handleAPIError(error);
-      Alert.alert('Error', apiError.message || 'Failed to cancel subscription');
+      toast.error('Error', apiError.message || 'Failed to cancel subscription');
     } finally {
       setActionLoading(false);
     }
@@ -783,17 +767,12 @@ const SubscriptionScreen: React.FC = () => {
               onPress={() => {
                 if (selectedPlan) {
                   if (isChangePlan) {
-                    Alert.alert(
-                      'Confirm Change',
-                      `Are you sure you want to switch to the ${selectedPlan.name} plan?`,
-                      [
-                        { text: 'Cancel', style: 'cancel' },
-                        {
-                          text: 'Confirm',
-                          onPress: () => handleChangePlan(selectedPlan),
-                        },
-                      ]
-                    );
+                    setConfirmModal({
+                      visible: true,
+                      title: 'Confirm Change',
+                      message: `Are you sure you want to switch to the ${selectedPlan.name} plan?`,
+                      onConfirm: () => handleChangePlan(selectedPlan),
+                    });
                   } else {
                     handleCreateSubscription(selectedPlan);
                   }
@@ -903,7 +882,7 @@ const SubscriptionScreen: React.FC = () => {
           </View>
 
           <TouchableOpacity
-            onPress={() => Alert.alert('Info', 'Subscription history coming soon!')}
+            onPress={() => toast.info('Info', 'Subscription history coming soon!')}
             className="w-10 h-10 rounded-full bg-gray-100 items-center justify-center"
           >
             <Ionicons name="receipt-outline" size={20} color="#374151" />
@@ -953,6 +932,13 @@ const SubscriptionScreen: React.FC = () => {
       {/* Modals */}
       {renderPlanModal()}
       {renderCancelModal()}
+      <ConfirmationModal
+        visible={confirmModal.visible}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        onConfirm={() => { confirmModal.onConfirm(); setConfirmModal(prev => ({...prev, visible: false})); }}
+        onCancel={() => setConfirmModal(prev => ({...prev, visible: false}))}
+      />
     </SafeAreaView>
   );
 };

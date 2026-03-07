@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, ActivityIndicator, Alert, Image, TextInput, Modal } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, ActivityIndicator, Image, TextInput, Modal } from 'react-native';
+import { toast } from '@/components/ui/Toast';
+import ConfirmationModal from '@/components/ConfirmationModal';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -62,6 +64,7 @@ const OfferDetailScreen: React.FC = () => {
   const [selectedResponseForAccept, setSelectedResponseForAccept] = useState<string | null>(null); // ✅ NEW
   const [counterPrice, setCounterPrice] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [confirmModal, setConfirmModal] = useState({ visible: false, title: '', message: '', onConfirm: () => {} });
 
   useEffect(() => {
     fetchOfferDetail();
@@ -76,7 +79,7 @@ const OfferDetailScreen: React.FC = () => {
       }
     } catch (error) {
       const apiError = handleAPIError(error);
-      Alert.alert('Error', apiError.message);
+      toast.error('Error', apiError.message);
       navigation.goBack();
     } finally {
       setLoading(false);
@@ -113,41 +116,17 @@ const OfferDetailScreen: React.FC = () => {
           });
         } else if (booking.paymentStatus === 'escrowed') {
           // Payment already completed (wallet payment)
-          Alert.alert(
-            'Success',
-            'Response accepted! Your booking has been created and paid.',
-            [
-              {
-                text: 'View Booking',
-                onPress: () => {
-                  navigation.navigate('BookingDetail', {
-                    bookingId: booking._id,
-                  });
-                },
-              },
-            ]
-          );
+          toast.success('Success', 'Response accepted! Your booking has been created and paid.');
+          navigation.navigate('BookingDetail', { bookingId: booking._id });
         } else {
           // Unknown payment status
-          Alert.alert(
-            'Success',
-            'Response accepted! Your booking has been created.',
-            [
-              {
-                text: 'View Booking',
-                onPress: () => {
-                  navigation.navigate('BookingDetail', {
-                    bookingId: booking._id,
-                  });
-                },
-              },
-            ]
-          );
+          toast.success('Success', 'Response accepted! Your booking has been created.');
+          navigation.navigate('BookingDetail', { bookingId: booking._id });
         }
       }
     } catch (error) {
       const apiError = handleAPIError(error);
-      Alert.alert('Error', apiError.message);
+      toast.error('Error', apiError.message);
     } finally {
       setSubmitting(false);
       setSelectedResponseForAccept(null);
@@ -165,7 +144,7 @@ const OfferDetailScreen: React.FC = () => {
 
     const price = parseFloat(counterPrice);
     if (price <= 0) {
-      Alert.alert('Error', 'Please enter a valid price');
+      toast.error('Error', 'Please enter a valid price');
       return;
     }
 
@@ -173,49 +152,39 @@ const OfferDetailScreen: React.FC = () => {
       setSubmitting(true);
       const response = await offerAPI.counterOffer(offerId, selectedResponse, price);
       if (response.success) {
-        Alert.alert('Success', 'Counter offer submitted successfully');
+        toast.success('Success', 'Counter offer submitted successfully');
         setShowCounterModal(false);
         fetchOfferDetail();
       }
     } catch (error) {
       const apiError = handleAPIError(error);
-      Alert.alert('Error', apiError.message);
+      toast.error('Error', apiError.message);
     } finally {
       setSubmitting(false);
     }
   };
 
   const handleCloseOffer = async () => {
-    Alert.alert(
-      'Close Offer',
-      'Are you sure you want to close this offer? This cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Close',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              setSubmitting(true);
-              const response = await offerAPI.closeOffer(offerId);
-              if (response.success) {
-                Alert.alert('Success', 'Offer closed successfully', [
-                  {
-                    text: 'OK',
-                    onPress: () => navigation.goBack(),
-                  },
-                ]);
-              }
-            } catch (error) {
-              const apiError = handleAPIError(error);
-              Alert.alert('Error', apiError.message);
-            } finally {
-              setSubmitting(false);
-            }
-          },
-        },
-      ]
-    );
+    setConfirmModal({
+      visible: true,
+      title: 'Close Offer',
+      message: 'Are you sure you want to close this offer? This cannot be undone.',
+      onConfirm: async () => {
+        try {
+          setSubmitting(true);
+          const response = await offerAPI.closeOffer(offerId);
+          if (response.success) {
+            toast.success('Success', 'Offer closed successfully');
+            navigation.goBack();
+          }
+        } catch (error) {
+          const apiError = handleAPIError(error);
+          toast.error('Error', apiError.message);
+        } finally {
+          setSubmitting(false);
+        }
+      },
+    });
   };
 
   const formatDate = (dateString: string) => {
@@ -900,6 +869,14 @@ const OfferDetailScreen: React.FC = () => {
           </View>
         </View>
       </Modal>
+
+      <ConfirmationModal
+        visible={confirmModal.visible}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        onConfirm={() => { confirmModal.onConfirm(); setConfirmModal(prev => ({...prev, visible: false})); }}
+        onCancel={() => setConfirmModal(prev => ({...prev, visible: false}))}
+      />
     </SafeAreaView>
   );
 };

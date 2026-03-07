@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, TextInput, ActivityIndicator, Alert, Image } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, TextInput, ActivityIndicator, Image } from 'react-native';
+import { toast } from '@/components/ui/Toast';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
@@ -54,7 +55,7 @@ const PersonalInformationScreen: React.FC = () => {
         status
       } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission Denied', 'We need camera roll permissions to change your profile picture');
+        toast.warning('Permission Denied', 'We need camera roll permissions to change your profile picture');
         return;
       }
       const result = await ImagePicker.launchImageLibraryAsync({
@@ -68,7 +69,7 @@ const PersonalInformationScreen: React.FC = () => {
       }
     } catch (error) {
       console.error('Error picking image:', error);
-      Alert.alert('Error', 'Failed to pick image');
+      toast.error('Error', 'Failed to pick image');
     }
   };
  
@@ -103,21 +104,21 @@ const uploadProfileImage = async (imageUri: string) => {
         await updateStoredUser(userData);
       }
 
-      Alert.alert('Success', 'Profile picture updated successfully');
+      toast.success('Success', 'Profile picture updated successfully');
     } else {
       throw new Error(response.message || 'Failed to upload image');
     }
   } catch (error) {
     console.error('❌ Upload error:', error);
     const apiError = handleAPIError(error);
-    Alert.alert('Error', apiError.message);
+    toast.error('Error', apiError.message);
   } finally {
     setUploadingImage(false);
   }
 };
   const handleUpdate = async () => {
     if (!formData.firstName.trim() || !formData.lastName.trim()) {
-      Alert.alert('Error', 'Please fill in all required fields');
+      toast.error('Error', 'Please fill in all required fields');
       return;
     }
     setLoading(true);
@@ -142,15 +143,13 @@ const uploadProfileImage = async (imageUri: string) => {
           await updateStoredUser(userData);
           console.log('✅ User data updated in storage');
         }
-        Alert.alert('Success', 'Profile updated successfully', [{
-          text: 'OK',
-          onPress: () => navigation.goBack()
-        }]);
+        toast.success('Success', 'Profile updated successfully');
+        navigation.goBack();
       }
     } catch (error) {
       console.error('❌ Update error:', error);
       const apiError = handleAPIError(error);
-      Alert.alert('Error', apiError.message);
+      toast.error('Error', apiError.message);
     } finally {
       setLoading(false);
     }

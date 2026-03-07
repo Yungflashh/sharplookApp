@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, TextInput, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, TextInput, ActivityIndicator } from 'react-native';
+import { toast } from '@/components/ui/Toast';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
@@ -63,15 +64,15 @@ const CreateDisputeScreen: React.FC = () => {
   const [description, setDescription] = useState('');
   const handleSubmitDispute = async () => {
     if (!selectedCategory) {
-      Alert.alert('Error', 'Please select a dispute category');
+      toast.error('Error', 'Please select a dispute category');
       return;
     }
     if (!selectedReason) {
-      Alert.alert('Error', 'Please select a reason');
+      toast.error('Error', 'Please select a reason');
       return;
     }
     if (!description || description.trim().length < 20) {
-      Alert.alert('Error', 'Please provide a detailed description (minimum 20 characters)');
+      toast.error('Error', 'Please provide a detailed description (minimum 20 characters)');
       return;
     }
     try {
@@ -84,16 +85,12 @@ const CreateDisputeScreen: React.FC = () => {
       };
       const response = await disputeAPI.createDispute(disputeData);
       if (response.success) {
-        Alert.alert('Dispute Created', 'Your dispute has been submitted. Our team will review it shortly.', [{
-          text: 'OK',
-          onPress: () => {
-            navigation.goBack();
-          }
-        }]);
+        toast.success('Dispute Created', 'Your dispute has been submitted. Our team will review it shortly.');
+        navigation.goBack();
       }
     } catch (error) {
       const apiError = handleAPIError(error);
-      Alert.alert('Error', apiError.message || 'Failed to create dispute');
+      toast.error('Error', apiError.message || 'Failed to create dispute');
     } finally {
       setLoading(false);
     }

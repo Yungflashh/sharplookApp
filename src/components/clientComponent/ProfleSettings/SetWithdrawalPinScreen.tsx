@@ -4,12 +4,12 @@ import {
   Text,
   TouchableOpacity,
   TextInput,
-  Alert,
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
 } from 'react-native';
+import { toast } from '@/components/ui/Toast';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
@@ -26,33 +26,29 @@ const SetWithdrawalPinScreen: React.FC = () => {
   const handleSetPin = async () => {
     
     if (!pin || !confirmPin) {
-      Alert.alert('Error', 'Please enter and confirm your PIN');
+      toast.error('Error', 'Please enter and confirm your PIN');
       return;
     }
 
     if (pin.length !== 4) {
-      Alert.alert('Error', 'PIN must be exactly 4 digits');
+      toast.error('Error', 'PIN must be exactly 4 digits');
       return;
     }
 
     if (!/^\d+$/.test(pin)) {
-      Alert.alert('Error', 'PIN must contain only numbers');
+      toast.error('Error', 'PIN must contain only numbers');
       return;
     }
 
     if (pin !== confirmPin) {
-      Alert.alert('Error', 'PINs do not match. Please try again.');
+      toast.error('Error', 'PINs do not match. Please try again.');
       return;
     }
 
     
     const weakPins = ['0000', '1111', '2222', '3333', '4444', '5555', '6666', '7777', '8888', '9999', '1234', '4321'];
     if (weakPins.includes(pin)) {
-      Alert.alert(
-        'Weak PIN',
-        'This PIN is too common. Please choose a more secure PIN.',
-        [{ text: 'OK' }]
-      );
+      toast.warning('Weak PIN', 'This PIN is too common. Please choose a more secure PIN.');
       return;
     }
 
@@ -60,21 +56,11 @@ const SetWithdrawalPinScreen: React.FC = () => {
     try {
       await walletAPI.setWithdrawalPin(pin, confirmPin);
       
-      Alert.alert(
-        'Success',
-        'Your withdrawal PIN has been set successfully',
-        [
-          {
-            text: 'OK',
-            onPress: () => {
-              navigation.goBack();
-            },
-          },
-        ]
-      );
+      toast.success('Success', 'Your withdrawal PIN has been set successfully');
+      navigation.goBack();
     } catch (error) {
       const apiError = handleAPIError(error);
-      Alert.alert('Error', apiError.message);
+      toast.error('Error', apiError.message);
     } finally {
       setLoading(false);
     }

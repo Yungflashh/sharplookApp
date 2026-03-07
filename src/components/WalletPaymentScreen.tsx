@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { toast } from '@/components/ui/Toast';
+import ConfirmationModal from '@/components/ConfirmationModal';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
@@ -22,6 +24,7 @@ const WalletPaymentScreen: React.FC = () => {
   const [paymentConfirmed, setPaymentConfirmed] = useState(false);
   const [socketConnected, setSocketConnected] = useState(false);
   const [showManualButton, setShowManualButton] = useState(false);
+  const [confirmModal, setConfirmModal] = useState({ visible: false, title: '', message: '', onConfirm: () => {} });
 
   
   useEffect(() => {
@@ -65,11 +68,8 @@ const WalletPaymentScreen: React.FC = () => {
       console.log('❌ Payment failed received via socket:', data);
       
       if (data.reference === reference) {
-        Alert.alert(
-          'Payment Failed',
-          data.reason || 'Your wallet funding could not be completed. Please try again.',
-          [{ text: 'OK', onPress: () => navigation.goBack() }]
-        );
+        toast.error('Payment Failed', data.reason || 'Your wallet funding could not be completed. Please try again.');
+        navigation.goBack();
       }
     };
 
@@ -102,80 +102,45 @@ const WalletPaymentScreen: React.FC = () => {
           setVerifying(false);
           setPaymentConfirmed(true);
 
-          Alert.alert(
-            'Wallet Funded! 🎉',
-            `Your wallet has been credited with ₦${amount.toLocaleString()}`,
-            [
-              {
-                text: 'View Wallet',
-                onPress: () => navigation.navigate('Main'),
-              },
-            ],
-            { cancelable: false }
-          );
+          toast.success('Wallet Funded!', `Your wallet has been credited with ₦${amount.toLocaleString()}`);
         } else if (payment.status === 'failed') {
           setVerifying(false);
 
-          Alert.alert(
-            'Payment Failed',
-            'Your wallet funding could not be processed. Please try again.',
-            [{ text: 'OK' }]
-          );
+          toast.error('Payment Failed', 'Your wallet funding could not be processed. Please try again.');
         } else if (payment.status === 'pending') {
           setVerifying(false);
 
-          Alert.alert(
-            'Payment Pending',
-            'Your payment is still being processed. Please wait a moment and try again.',
-            [{ text: 'OK' }]
-          );
+          toast.info('Payment Pending', 'Your payment is still being processed. Please wait a moment and try again.');
         } else {
           setVerifying(false);
 
-          Alert.alert(
-            'Payment Status',
-            `Current status: ${payment.status}. Please try again or contact support.`,
-            [{ text: 'OK' }]
-          );
+          toast.info('Payment Status', `Current status: ${payment.status}. Please try again or contact support.`);
         }
       } else {
         setVerifying(false);
-        Alert.alert('Error', 'Could not verify payment. Please try again.');
+        toast.error('Error', 'Could not verify payment. Please try again.');
       }
     } catch (error) {
       const apiError = handleAPIError(error);
       console.error('❌ Verification error:', apiError);
       setVerifying(false);
 
-      Alert.alert(
-        'Verification Error',
-        'Could not verify payment. Please check your wallet balance or contact support if you were charged.',
-        [{ text: 'OK' }]
-      );
+      toast.error('Verification Error', 'Could not verify payment. Please check your wallet balance or contact support if you were charged.');
     }
   };
 
   const handleCancel = () => {
-    Alert.alert(
-      'Cancel Payment',
-      'Are you sure you want to cancel this payment?',
-      [
-        { text: 'No', style: 'cancel' },
-        {
-          text: 'Yes',
-          style: 'destructive',
-          onPress: () => navigation.goBack(),
-        },
-      ]
-    );
+    setConfirmModal({
+      visible: true,
+      title: 'Cancel Payment',
+      message: 'Are you sure you want to cancel this payment?',
+      onConfirm: () => navigation.goBack(),
+    });
   };
 
   const handleWebViewError = () => {
-    Alert.alert(
-      'Connection Error',
-      'Failed to load payment page. Please check your internet connection.',
-      [{ text: 'OK', onPress: () => navigation.goBack() }]
-    );
+    toast.error('Connection Error', 'Failed to load payment page. Please check your internet connection.');
+    navigation.goBack();
   };
 
   
@@ -322,6 +287,13 @@ const WalletPaymentScreen: React.FC = () => {
           </Text>
         </View>
       </View>
+      <ConfirmationModal
+        visible={confirmModal.visible}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        onConfirm={() => { confirmModal.onConfirm(); setConfirmModal(prev => ({...prev, visible: false})); }}
+        onCancel={() => setConfirmModal(prev => ({...prev, visible: false}))}
+      />
     </SafeAreaView>
   );
 };

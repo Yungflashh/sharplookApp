@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, RefreshControl, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, RefreshControl, ActivityIndicator } from 'react-native';
+import { toast } from '@/components/ui/Toast';
+import ConfirmationModal from '@/components/ConfirmationModal';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
@@ -31,6 +33,7 @@ const NotificationsScreen: React.FC<NotificationsScreenProps> = ({
   const [hasMore, setHasMore] = useState(true);
   const [filter, setFilter] = useState<'all' | 'unread'>('all');
   const [unreadCount, setUnreadCount] = useState(0);
+  const [confirmModal, setConfirmModal] = useState({ visible: false, title: '', message: '', onConfirm: () => {} });
   useEffect(() => {
     loadNotifications(true);
   }, [filter]);
@@ -80,7 +83,7 @@ const NotificationsScreen: React.FC<NotificationsScreenProps> = ({
     } catch (error) {
       const apiError = handleAPIError(error);
       console.error('Error loading notifications:', apiError.message);
-      Alert.alert('Error', apiError.message);
+      toast.error('Error', apiError.message);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -121,20 +124,18 @@ const NotificationsScreen: React.FC<NotificationsScreenProps> = ({
         isRead: true
       })));
       setUnreadCount(0);
-      Alert.alert('Success', 'All notifications marked as read');
+      toast.success('Success', 'All notifications marked as read');
     } catch (error) {
       const apiError = handleAPIError(error);
-      Alert.alert('Error', apiError.message);
+      toast.error('Error', apiError.message);
     }
   };
   const handleDeleteNotification = async (notificationId: string) => {
-    Alert.alert('Delete Notification', 'Are you sure you want to delete this notification?', [{
-      text: 'Cancel',
-      style: 'cancel'
-    }, {
-      text: 'Delete',
-      style: 'destructive',
-      onPress: async () => {
+    setConfirmModal({
+      visible: true,
+      title: 'Delete Notification',
+      message: 'Are you sure you want to delete this notification?',
+      onConfirm: async () => {
         try {
           await notificationAPI.deleteNotification(notificationId);
           const deletedNotification = notifications.find(n => n._id === notificationId);
@@ -144,10 +145,10 @@ const NotificationsScreen: React.FC<NotificationsScreenProps> = ({
           }
         } catch (error) {
           const apiError = handleAPIError(error);
-          Alert.alert('Error', apiError.message);
+          toast.error('Error', apiError.message);
         }
-      }
-    }]);
+      },
+    });
   };
   const getNotificationIcon = (type: string) => {
     const normalizedType = type.toUpperCase().replace(/-/g, '_');
@@ -316,6 +317,13 @@ const NotificationsScreen: React.FC<NotificationsScreenProps> = ({
               </View>}
           </View>}
       </ScrollView>
+      <ConfirmationModal
+        visible={confirmModal.visible}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        onConfirm={() => { confirmModal.onConfirm(); setConfirmModal(prev => ({...prev, visible: false})); }}
+        onCancel={() => setConfirmModal(prev => ({...prev, visible: false}))}
+      />
     </SafeAreaView>;
 };
 export default NotificationsScreen;

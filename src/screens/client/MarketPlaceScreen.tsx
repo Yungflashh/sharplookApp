@@ -8,7 +8,6 @@ import {
   TextInput,
   ActivityIndicator,
   RefreshControl,
-  Alert,
   Platform,
   Dimensions,
   StatusBar,
@@ -21,6 +20,7 @@ import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '@/types/navigation.types';
 import { productAPI, cartAPI, categoriesAPI, handleAPIError } from '@/api/api';
+import { toast } from '@/components/ui/Toast';
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = (width - 48) / 2;
@@ -429,7 +429,7 @@ const MarketplaceScreen: React.FC = () => {
         setPage(pageNum);
       }
     } catch (error) {
-      Alert.alert('Error', handleAPIError(error).message);
+      toast.error('Error', handleAPIError(error).message);
     } finally {
       setLoading(false);
       setLoadingMore(false);
@@ -453,9 +453,9 @@ const MarketplaceScreen: React.FC = () => {
     try {
       await cartAPI.addToCart({ product, quantity: 1 });
       await updateCartCount();
-      Alert.alert('Added to cart', product.name);
+      toast.success('Added to cart', product.name);
     } catch {
-      Alert.alert('Error', 'Failed to add product to cart');
+      toast.error('Error', 'Failed to add product to cart');
     }
   };
 

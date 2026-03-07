@@ -4,12 +4,12 @@ import {
   Text,
   TouchableOpacity,
   TextInput,
-  Alert,
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
 } from 'react-native';
+import { toast } from '@/components/ui/Toast';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
@@ -27,43 +27,39 @@ const ChangeWithdrawalPinScreen: React.FC = () => {
   const handleChangePin = async () => {
     
     if (!currentPin || !newPin || !confirmNewPin) {
-      Alert.alert('Error', 'Please fill in all PIN fields');
+      toast.error('Error', 'Please fill in all PIN fields');
       return;
     }
 
     if (currentPin.length !== 4) {
-      Alert.alert('Error', 'Current PIN must be exactly 4 digits');
+      toast.error('Error', 'Current PIN must be exactly 4 digits');
       return;
     }
 
     if (newPin.length !== 4) {
-      Alert.alert('Error', 'New PIN must be exactly 4 digits');
+      toast.error('Error', 'New PIN must be exactly 4 digits');
       return;
     }
 
     if (!/^\d+$/.test(newPin)) {
-      Alert.alert('Error', 'New PIN must contain only numbers');
+      toast.error('Error', 'New PIN must contain only numbers');
       return;
     }
 
     if (newPin !== confirmNewPin) {
-      Alert.alert('Error', 'New PINs do not match. Please try again.');
+      toast.error('Error', 'New PINs do not match. Please try again.');
       return;
     }
 
     if (currentPin === newPin) {
-      Alert.alert('Error', 'New PIN must be different from current PIN');
+      toast.error('Error', 'New PIN must be different from current PIN');
       return;
     }
 
     
     const weakPins = ['0000', '1111', '2222', '3333', '4444', '5555', '6666', '7777', '8888', '9999', '1234', '4321'];
     if (weakPins.includes(newPin)) {
-      Alert.alert(
-        'Weak PIN',
-        'This PIN is too common. Please choose a more secure PIN.',
-        [{ text: 'OK' }]
-      );
+      toast.warning('Weak PIN', 'This PIN is too common. Please choose a more secure PIN.');
       return;
     }
 
@@ -71,21 +67,11 @@ const ChangeWithdrawalPinScreen: React.FC = () => {
     try {
       await walletAPI.changeWithdrawalPin(currentPin, newPin, confirmNewPin);
       
-      Alert.alert(
-        'Success! 🎉',
-        'Your withdrawal PIN has been changed successfully',
-        [
-          {
-            text: 'OK',
-            onPress: () => {
-              navigation.goBack();
-            },
-          },
-        ]
-      );
+      toast.success('Success!', 'Your withdrawal PIN has been changed successfully');
+      navigation.goBack();
     } catch (error) {
       const apiError = handleAPIError(error);
-      Alert.alert('Error', apiError.message);
+      toast.error('Error', apiError.message);
     } finally {
       setLoading(false);
     }

@@ -7,7 +7,6 @@ import {
   FlatList,
   Image,
   ActivityIndicator,
-  Alert,
   KeyboardAvoidingView,
   Platform,
   Keyboard,
@@ -30,6 +29,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import { Audio } from 'expo-av';
 import socketService from '@/services/socket.service';
 import callService from '@/services/call.service';
+import { toast } from '@/components/ui/Toast';
 
 // ─── Brand Tokens ─────────────────────────────────────────────────────────────
 const BRAND = {
@@ -275,7 +275,7 @@ const ChatDetailScreen: React.FC = () => {
         await loadMessages(conv._id);
       }
     } catch (error) {
-      Alert.alert('Error', handleAPIError(error).message || 'Failed to load conversation');
+      toast.error('Error', handleAPIError(error).message || 'Failed to load conversation');
     } finally { setLoading(false); }
   };
 
@@ -315,7 +315,7 @@ const ChatDetailScreen: React.FC = () => {
         },
       });
     } catch (error) {
-      Alert.alert('Error', 'Failed to initiate call. Please try again.');
+      toast.error('Error', 'Failed to initiate call. Please try again.');
     }
   };
 
@@ -365,7 +365,7 @@ const ChatDetailScreen: React.FC = () => {
 
       await messageAPI.sendMessage(messageData);
     } catch (error) {
-      Alert.alert('Error', handleAPIError(error).message || 'Failed to send message');
+      toast.error('Error', handleAPIError(error).message || 'Failed to send message');
       if (mediaUri && conversationId) socketService.emit('uploading:stop', conversationId);
     } finally { setSending(false); setSelectedMedia(null); }
   };
@@ -436,13 +436,13 @@ const ChatDetailScreen: React.FC = () => {
       setPlayingAudioId(messageId);
       if ((status as any).isLoaded && (status as any).durationMillis)
         setAudioDurations((p) => ({ ...p, [messageId]: (status as any).durationMillis / 1000 }));
-    } catch { Alert.alert('Error', 'Failed to play audio message'); setPlayingAudioId(null); }
+    } catch { toast.error('Error', 'Failed to play audio message'); setPlayingAudioId(null); }
   };
 
   // ── Scroll to reply ───────────────────────────────────────────────────────
   const scrollToMessage = (messageId: string) => {
     const idx = messages.findIndex((m) => m._id === messageId);
-    if (idx === -1) { Alert.alert('Not Found', 'The original message may have been deleted.'); return; }
+    if (idx === -1) { toast.info('Not Found', 'The original message may have been deleted.'); return; }
     try {
       flatListRef.current?.scrollToIndex({ index: idx, animated: true, viewPosition: 0.5 });
       setHighlightedMessageId(messageId);

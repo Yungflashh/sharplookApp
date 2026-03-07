@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, TouchableOpacity, ScrollView, ActivityIndicator,
-  RefreshControl, Alert, TextInput, Platform, Modal,
+  RefreshControl, TextInput, Platform, Modal,
   KeyboardAvoidingView, Keyboard, StatusBar,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -11,6 +11,8 @@ import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '@/types/navigation.types';
 import { bookingAPI, handleAPIError } from '@/api/api';
+import ConfirmationModal from '@/components/ConfirmationModal';
+import { toast } from '@/components/ui/Toast';
 
 // ─── Brand Tokens ─────────────────────────────────────────────────────────────
 const BRAND = {
@@ -167,6 +169,7 @@ const VendorBookingsScreen: React.FC = () => {
   const [rejectModalVisible, setRejectModalVisible] = useState(false);
   const [rejectingBookingId, setRejectingBookingId] = useState<string | null>(null);
   const [rejectionReason, setRejectionReason]       = useState('');
+  const [confirmModal, setConfirmModal]             = useState({ visible: false, title: '', message: '', confirmLabel: 'Confirm', onConfirm: () => {} });
 
   // ── Stats ─────────────────────────────────────────────────────────────────
   const calcStats = useCallback((data: VendorBooking[]) => {
@@ -195,7 +198,7 @@ const VendorBookingsScreen: React.FC = () => {
         setPage(pageNum);
       }
     } catch (error) {
-      Alert.alert('Error', handleAPIError(error).message || 'Failed to load bookings');
+      toast.error('Error', handleAPIError(error).message || 'Failed to load bookings');
     } finally { setLoading(false); }
   };
 
@@ -223,25 +226,28 @@ const VendorBookingsScreen: React.FC = () => {
   }, []);
 
   // ── Actions ───────────────────────────────────────────────────────────────
-  const confirmAction = (title: string, msg: string, onConfirm: () => void, confirmLabel = 'Confirm') => {
-    Alert.alert(title, msg, [{ text: 'Cancel', style: 'cancel' }, { text: confirmLabel, onPress: onConfirm }]);
+  const showConfirm = (title: string, message: string, onConfirm: () => void, confirmLabel = 'Confirm') => {
+    setConfirmModal({ visible: true, title, message, confirmLabel, onConfirm });
   };
 
-  const handleAccept = (id: string) => confirmAction('Accept Booking', 'Accept this booking request?', async () => {
-    try { setActionLoading(id); const r = await bookingAPI.acceptBooking(id); if (r.success) { Alert.alert('Success', 'Booking accepted'); fetchBookings(1); } }
-    catch (e) { Alert.alert('Error', handleAPIError(e).message); }
+  const handleAccept = (id: string) => showConfirm('Accept Booking', 'Accept this booking request?', async () => {
+    setConfirmModal((p) => ({ ...p, visible: false }));
+    try { setActionLoading(id); const r = await bookingAPI.acceptBooking(id); if (r.success) { toast.success('Success', 'Booking accepted'); fetchBookings(1); } }
+    catch (e) { toast.error('Error', handleAPIError(e).message); }
     finally { setActionLoading(null); }
   }, 'Accept');
 
-  const handleStartService = (id: string) => confirmAction('Start Service', 'Mark this booking as in progress?', async () => {
-    try { setActionLoading(id); const r = await bookingAPI.startBooking(id); if (r.success) { Alert.alert('Success', 'Service started'); fetchBookings(1); } }
-    catch (e) { Alert.alert('Error', handleAPIError(e).message); }
+  const handleStartService = (id: string) => showConfirm('Start Service', 'Mark this booking as in progress?', async () => {
+    setConfirmModal((p) => ({ ...p, visible: false }));
+    try { setActionLoading(id); const r = await bookingAPI.startBooking(id); if (r.success) { toast.success('Success', 'Service started'); fetchBookings(1); } }
+    catch (e) { toast.error('Error', handleAPIError(e).message); }
     finally { setActionLoading(null); }
   }, 'Start');
 
-  const handleComplete = (id: string) => confirmAction('Complete Service', 'Mark this service as completed?', async () => {
-    try { setActionLoading(id); const r = await bookingAPI.markComplete(id); if (r.success) { Alert.alert('Success', 'Service completed'); fetchBookings(1); } }
-    catch (e) { Alert.alert('Error', handleAPIError(e).message); }
+  const handleComplete = (id: string) => showConfirm('Complete Service', 'Mark this service as completed?', async () => {
+    setConfirmModal((p) => ({ ...p, visible: false }));
+    try { setActionLoading(id); const r = await bookingAPI.markComplete(id); if (r.success) { toast.success('Success', 'Service completed'); fetchBookings(1); } }
+    catch (e) { toast.error('Error', handleAPIError(e).message); }
     finally { setActionLoading(null); }
   }, 'Complete');
 
@@ -249,15 +255,15 @@ const VendorBookingsScreen: React.FC = () => {
 
   const submitRejection = async () => {
     const t = rejectionReason.trim();
-    if (t.length < 10) { Alert.alert('Too Short', `Need at least 10 characters (${10 - t.length} more).`); return; }
-    if (t.length > 500) { Alert.alert('Too Long', `Must not exceed 500 characters.`); return; }
+    if (t.length < 10) { toast.warning('Too Short', `Need at least 10 characters (${10 - t.length} more).`); return; }
+    if (t.length > 500) { toast.warning('Too Long', `Must not exceed 500 characters.`); return; }
     try {
       setActionLoading(rejectingBookingId!); setRejectModalVisible(false);
       const r = await bookingAPI.rejectBooking(rejectingBookingId!, t);
-      if (r.success) { Alert.alert('Success', 'Booking rejected'); fetchBookings(1); }
+      if (r.success) { toast.success('Success', 'Booking rejected'); fetchBookings(1); }
     } catch (error) {
       const e = handleAPIError(error);
-      Alert.alert('Error', e.message || 'Failed to reject booking');
+      toast.error('Error', e.message || 'Failed to reject booking');
       setRejectModalVisible(true);
     } finally { setActionLoading(null); }
   };
@@ -600,6 +606,16 @@ const VendorBookingsScreen: React.FC = () => {
           )}
         </View>
       </ScrollView>
+
+      <ConfirmationModal
+        visible={confirmModal.visible}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        confirmText={confirmModal.confirmLabel}
+        confirmColor={BRAND.primary}
+        onConfirm={confirmModal.onConfirm}
+        onCancel={() => setConfirmModal((p) => ({ ...p, visible: false }))}
+      />
 
       <RejectionModal
         visible={rejectModalVisible}
