@@ -289,7 +289,7 @@ const NotificationsScreen: React.FC<NotificationsScreenProps> = ({
                       </Text>
                       {!notification.isRead && <View className="w-2 h-2 rounded-full bg-pink-500 mt-1" />}
                     </View>
-                    <Text className="text-sm text-gray-600 mb-2" numberOfLines={2}>
+                    <Text className="text-sm text-gray-600 mb-2">
                       {notification.message}
                     </Text>
                     <View className="flex-row items-center justify-between">

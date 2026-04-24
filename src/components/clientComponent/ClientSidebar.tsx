@@ -1,8 +1,8 @@
 import React, { useEffect, useRef } from 'react';
-import { View, Text, TouchableOpacity, Modal, Animated, Dimensions, TouchableWithoutFeedback, ScrollView, Platform } from 'react-native';
+import { View, Text, TouchableOpacity, Modal, Animated, Dimensions, TouchableWithoutFeedback, ScrollView, Platform, StatusBar } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { Image } from 'react-native';
 
@@ -41,6 +41,7 @@ const ClientSidebar: React.FC<ClientSidebarProps> = ({
 }) => {
   const slideAnim = useRef(new Animated.Value(DRAWER_WIDTH)).current;
   const overlayOpacity = useRef(new Animated.Value(0)).current;
+  const insets = useSafeAreaInsets();
   const navigation = useNavigation()
   useEffect(() => {
     if (visible) {
@@ -117,7 +118,16 @@ const ClientSidebar: React.FC<ClientSidebarProps> = ({
           navigation.navigate("MyOffers")
         onClose();
       }
-    }  
+    },
+    {
+      id: 'disputes',
+      title: 'Disputes',
+      icon: 'shield-half',
+      onPress: () => {
+        navigation.navigate("Disputes");
+        onClose();
+      }
+    }
   ]
   }, {
     title: 'SUPPORT',
@@ -170,7 +180,7 @@ const ClientSidebar: React.FC<ClientSidebarProps> = ({
           }
         })
       }}>
-          <SafeAreaView className="flex-1" edges={['top']}>
+          <View className="flex-1">
             {}
             <LinearGradient colors={['#eb278d', '#f472b6']} start={{
             x: 0,
@@ -180,7 +190,7 @@ const ClientSidebar: React.FC<ClientSidebarProps> = ({
             y: 1
           }} className="pb-6">
               {}
-              <View className="flex-row justify-end px-5 pt-3 pb-4">
+              <View className="flex-row justify-end px-5 pb-4" style={{ paddingTop: insets.top + 8 }}>
                 <TouchableOpacity onPress={onClose} className="w-10 h-10 items-center justify-center rounded-full" style={{
                 backgroundColor: 'rgba(255, 255, 255, 0.2)'
               }} activeOpacity={0.7}>
@@ -259,7 +269,7 @@ const ClientSidebar: React.FC<ClientSidebarProps> = ({
                 <Text className="text-gray-400 text-[10px] mt-1">© 2024 LookReal</Text>
               </View>
             </ScrollView>
-          </SafeAreaView>
+          </View>
         </Animated.View>
       </View>
     </Modal>;

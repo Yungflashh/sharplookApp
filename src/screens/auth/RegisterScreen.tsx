@@ -38,6 +38,8 @@ const RegisterScreen = () => {
   const [countryCode, setCountryCode] = useState('+234');
   const [showCountryPicker, setShowCountryPicker] = useState(false);
   const [generalError, setGeneralError] = useState('');
+  const [hearAboutUs, setHearAboutUs] = useState('');
+  const [showHearAboutUsDropdown, setShowHearAboutUsDropdown] = useState(false);
   
   
   const [referralCodeValid, setReferralCodeValid] = useState<boolean | null>(null);
@@ -60,7 +62,8 @@ const RegisterScreen = () => {
     phone: '',
     password: '',
     confirmPassword: '',
-    terms: ''
+    terms: '',
+    hearAboutUs: ''
   });
 
   
@@ -206,7 +209,8 @@ const validateReferralCode = async (code: string) => {
       phone: '',
       password: '',
       confirmPassword: '',
-      terms: ''
+      terms: '',
+      hearAboutUs: ''
     };
 
     if (!firstName.trim()) {
@@ -248,6 +252,11 @@ const validateReferralCode = async (code: string) => {
       valid = false;
     } else if (password !== confirmPassword) {
       newErrors.confirmPassword = 'Passwords do not match';
+      valid = false;
+    }
+
+    if (!hearAboutUs) {
+      newErrors.hearAboutUs = 'Please tell us how you heard about us';
       valid = false;
     }
 
@@ -311,6 +320,7 @@ const validateReferralCode = async (code: string) => {
         phone: `${countryCode}${phone.trim()}`,
         password: password,
         confirmPassword: confirmPassword,
+        hearAboutUs: hearAboutUs,
         isVendor: registerAsVendor
       };
 
@@ -390,7 +400,7 @@ const validateReferralCode = async (code: string) => {
           {/* Logo */}
           <View className="items-center mb-8">
             <Image
-              source={require('@/assets/app-icon.png')}
+              source={require('@/assets/app-icon.jpg')}
               className="w-28 h-16"
               resizeMode="contain"
             />
@@ -518,16 +528,40 @@ const validateReferralCode = async (code: string) => {
             
             {location ? (
               <View className="bg-green-50 border border-green-200 rounded-xl p-4 mb-2">
-                <View className="flex-row items-center mb-2">
+                <View className="flex-row items-center mb-3">
                   <Ionicons name="location" size={20} color="#059669" />
                   <Text className="text-green-700 font-semibold ml-2">Location Added</Text>
                 </View>
-                <Text className="text-gray-700 text-sm mb-1">
-                  {location.address}
-                </Text>
-                <Text className="text-gray-600 text-xs">
-                  {location.city}, {location.state}, {location.country}
-                </Text>
+                <Text className="text-gray-500 text-xs mb-1">Address</Text>
+                <TextInput
+                  className="bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 mb-2"
+                  value={location.address}
+                  onChangeText={(text) => setLocation({ ...location, address: text })}
+                  placeholder="Enter your address"
+                  editable={!loading}
+                />
+                <View className="flex-row gap-2">
+                  <View className="flex-1">
+                    <Text className="text-gray-500 text-xs mb-1">City</Text>
+                    <TextInput
+                      className="bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800"
+                      value={location.city}
+                      onChangeText={(text) => setLocation({ ...location, city: text })}
+                      placeholder="City"
+                      editable={!loading}
+                    />
+                  </View>
+                  <View className="flex-1">
+                    <Text className="text-gray-500 text-xs mb-1">State</Text>
+                    <TextInput
+                      className="bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800"
+                      value={location.state}
+                      onChangeText={(text) => setLocation({ ...location, state: text })}
+                      placeholder="State"
+                      editable={!loading}
+                    />
+                  </View>
+                </View>
                 <TouchableOpacity
                   onPress={() => setLocation(null)}
                   className="mt-3"
@@ -566,6 +600,109 @@ const validateReferralCode = async (code: string) => {
             <Text className="text-gray-500 text-xs mt-2">
               Adding your location helps us provide better services and find vendors near you.
             </Text>
+          </View>
+
+          {/* How Did You Hear About Us Section */}
+          <View className="mb-4">
+            <Text className="text-sm font-semibold text-gray-700 mb-2">
+              How did you hear about us? <Text className="text-red-500">*</Text>
+            </Text>
+
+            <TouchableOpacity
+              onPress={() => setShowHearAboutUsDropdown(!showHearAboutUsDropdown)}
+              disabled={loading}
+              className={`flex-row items-center justify-between bg-white border rounded-xl px-4 py-3.5 ${
+                errors.hearAboutUs ? 'border-red-500' : hearAboutUs ? 'border-pink-500' : 'border-gray-300'
+              }`}
+              activeOpacity={0.7}
+            >
+              <View className="flex-row items-center flex-1">
+                <Ionicons
+                  name="megaphone-outline"
+                  size={20}
+                  color={hearAboutUs ? '#EC4899' : '#9CA3AF'}
+                />
+                <Text className={`ml-3 text-base ${hearAboutUs ? 'text-gray-900' : 'text-gray-400'}`}>
+                  {hearAboutUs
+                    ? [
+                        { value: 'instagram', label: 'Instagram' },
+                        { value: 'facebook', label: 'Facebook' },
+                        { value: 'tiktok', label: 'TikTok' },
+                        { value: 'twitter', label: 'Twitter / X' },
+                        { value: 'youtube', label: 'YouTube' },
+                        { value: 'linkedin', label: 'LinkedIn' },
+                        { value: 'whatsapp', label: 'WhatsApp' },
+                        { value: 'google_search', label: 'Google Search' },
+                        { value: 'friend_family', label: 'Friend / Family' },
+                        { value: 'referral', label: 'Referral' },
+                        { value: 'blog_article', label: 'Blog / Article' },
+                        { value: 'other', label: 'Other' },
+                      ].find((o) => o.value === hearAboutUs)?.label
+                    : 'Select an option'}
+                </Text>
+              </View>
+              <Ionicons
+                name={showHearAboutUsDropdown ? 'chevron-up' : 'chevron-down'}
+                size={20}
+                color="#9CA3AF"
+              />
+            </TouchableOpacity>
+
+            {showHearAboutUsDropdown && (
+              <View className="bg-white border border-gray-200 rounded-xl mt-1 overflow-hidden" style={{ elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4 }}>
+                {[
+                  { value: 'instagram', label: 'Instagram', icon: 'logo-instagram' },
+                  { value: 'facebook', label: 'Facebook', icon: 'logo-facebook' },
+                  { value: 'tiktok', label: 'TikTok', icon: 'logo-tiktok' },
+                  { value: 'twitter', label: 'Twitter / X', icon: 'logo-twitter' },
+                  { value: 'youtube', label: 'YouTube', icon: 'logo-youtube' },
+                  { value: 'linkedin', label: 'LinkedIn', icon: 'logo-linkedin' },
+                  { value: 'whatsapp', label: 'WhatsApp', icon: 'logo-whatsapp' },
+                  { value: 'google_search', label: 'Google Search', icon: 'search-outline' },
+                  { value: 'friend_family', label: 'Friend / Family', icon: 'people-outline' },
+                  { value: 'referral', label: 'Referral', icon: 'gift-outline' },
+                  { value: 'blog_article', label: 'Blog / Article', icon: 'newspaper-outline' },
+                  { value: 'other', label: 'Other', icon: 'ellipsis-horizontal-outline' },
+                ].map((option, index) => (
+                  <TouchableOpacity
+                    key={option.value}
+                    onPress={() => {
+                      setHearAboutUs(option.value);
+                      setShowHearAboutUsDropdown(false);
+                      setErrors({ ...errors, hearAboutUs: '' });
+                      setGeneralError('');
+                    }}
+                    className={`flex-row items-center px-4 py-3 ${
+                      hearAboutUs === option.value ? 'bg-pink-50' : ''
+                    } ${index < 11 ? 'border-b border-gray-100' : ''}`}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons
+                      name={option.icon as any}
+                      size={20}
+                      color={hearAboutUs === option.value ? '#EC4899' : '#6B7280'}
+                    />
+                    <Text
+                      className={`ml-3 text-base ${
+                        hearAboutUs === option.value ? 'text-pink-600 font-semibold' : 'text-gray-700'
+                      }`}
+                    >
+                      {option.label}
+                    </Text>
+                    {hearAboutUs === option.value && (
+                      <Ionicons name="checkmark" size={20} color="#EC4899" style={{ marginLeft: 'auto' }} />
+                    )}
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+
+            {errors.hearAboutUs ? (
+              <View className="flex-row items-center mt-2">
+                <Ionicons name="alert-circle" size={16} color="#EF4444" />
+                <Text className="text-red-600 text-xs ml-1">{errors.hearAboutUs}</Text>
+              </View>
+            ) : null}
           </View>
 
           {/* Referral Code Section */}

@@ -140,7 +140,7 @@ const LoginScreen = () => {
             {/* Logo */}
             <View className="items-center mb-10">
               <Image
-                source={require('@/assets/app-icon.png')}
+                source={require('@/assets/app-icon.jpg')}
                 className="w-32 h-20"
                 resizeMode="contain"
               />

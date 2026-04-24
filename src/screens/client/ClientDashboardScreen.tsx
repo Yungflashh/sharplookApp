@@ -147,26 +147,73 @@ const ClientDashboardScreen: React.FC = () => {
     }
   };
 
+  // Keep only one product per seller/vendor (used for the recommended fallback)
+  const dedupeProductsBySeller = (products: any[]): any[] => {
+    const seen = new Set<string>();
+    const out: any[] = [];
+    for (const p of products) {
+      const sellerId = p?.seller?._id || p?.seller?.id || p?.seller || p?.vendor?._id || p?.vendor?.id || p?.vendor;
+      const key = String(sellerId || p?._id || '');
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      out.push(p);
+    }
+    return out;
+  };
+
+  // Only show approved, active, non-deleted, in-stock products in the fallback
+  const onlyShowableProducts = (products: any[]): any[] =>
+    products.filter(p => {
+      if (!p) return false;
+      if (p.isDeleted === true) return false;
+      if (p.isActive === false) return false;
+      if (p.approvalStatus && p.approvalStatus !== 'approved') return false;
+      // 'status' can be either an approval-style or lifecycle string — block known bad ones
+      if (p.status && ['pending', 'rejected', 'draft', 'archived', 'inactive'].includes(String(p.status).toLowerCase())) return false;
+      // Must have at least one image to show in the card
+      if (!Array.isArray(p.images) || p.images.length === 0) return false;
+      return true;
+    });
+
   const fetchSponsoredProducts = async () => {
+    const fetchFallback = async () => {
+      const fallbackRes = await productAPI.getAllProducts({ limit: 50, sortBy: 'rating', sortOrder: 'desc' });
+      if (fallbackRes.success) {
+        const fallbackData = Array.isArray(fallbackRes.data)
+          ? fallbackRes.data
+          : (fallbackRes.data.products || []);
+        const showable = onlyShowableProducts(fallbackData);
+        const deduped = dedupeProductsBySeller(showable).slice(0, 10);
+        setSponsoredProducts(deduped);
+        console.log('✅ Loaded fallback recommended products (filtered + deduped):', deduped.length);
+      } else {
+        setSponsoredProducts([]);
+      }
+    };
+
     try {
       const response = await productAPI.getSponsoredProducts(10);
       console.log('Sponsored products response:', response);
 
+      let productsData: any[] = [];
       if (response.success) {
-        const productsData = Array.isArray(response.data) 
-          ? response.data 
+        productsData = Array.isArray(response.data)
+          ? response.data
           : (response.data.products || []);
-        
+      }
+
+      if (productsData.length > 0) {
         setSponsoredProducts(productsData);
         console.log('✅ Loaded sponsored products:', productsData.length);
       } else {
-        console.log('Sponsored products fetch unsuccessful:', response);
-        setSponsoredProducts([]);
+        // Fallback — no sponsored products, fetch recommended (all products) instead
+        console.log('ℹ️ No sponsored products, falling back to recommended');
+        await fetchFallback();
       }
     } catch (error) {
       const apiError = handleAPIError(error);
       console.error('Sponsored products fetch error:', apiError);
-      setSponsoredProducts([]);
+      try { await fetchFallback(); } catch { setSponsoredProducts([]); }
     }
   };
 
@@ -290,24 +337,68 @@ const ClientDashboardScreen: React.FC = () => {
     ]);
   };
 
+  // Keep only one entry per vendor (used for the all-vendors fallback)
+  const dedupeVendors = (vendors: any[]): any[] => {
+    const seen = new Set<string>();
+    const out: any[] = [];
+    for (const v of vendors) {
+      const id = v?.id || v?._id || v?.vendorId || v?.userId;
+      const key = String(id || '');
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      out.push(v);
+    }
+    return out;
+  };
+
+  // Only keep vendors that have a profile image
+  const onlyWithImage = (vendors: any[]): any[] =>
+    vendors.filter(v => {
+      const img = v?.image || v?.avatar || v?.profileImage || v?.vendorProfile?.profileImage;
+      return typeof img === 'string' && img.trim().length > 0;
+    });
+
   const fetchTopVendors = async () => {
+    const fetchFallback = async () => {
+      const fallbackRes = await vendorAPI.getAllVendors({ limit: 50 });
+      if (fallbackRes.success) {
+        const rawVendors = extractVendorsFromResponse(fallbackRes);
+        const formattedVendors = parseVendors(rawVendors);
+        const sorted = sortVendors(formattedVendors, 'rating', 'desc');
+        const deduped = dedupeVendors(sorted);
+        const withImage = onlyWithImage(deduped).slice(0, 10);
+        setTopVendors(withImage);
+        console.log('✅ Loaded fallback vendors (deduped + image-only):', withImage.length);
+      } else {
+        setTopVendors([]);
+      }
+    };
+
     try {
       const response = await vendorAPI.getTopVendors();
       console.log('Top vendors response:', response);
-      
+
+      let sortedVendors: any[] = [];
       if (response.success) {
         const rawVendors = extractVendorsFromResponse(response);
         const formattedVendors = parseVendors(rawVendors);
-        const sortedVendors = sortVendors(formattedVendors, 'rating', 'desc');
-        setTopVendors(sortedVendors);
+        sortedVendors = sortVendors(formattedVendors, 'rating', 'desc');
+      }
+
+      // Always filter to image-only vendors (real or fallback)
+      const sortedWithImage = onlyWithImage(dedupeVendors(sortedVendors));
+
+      if (sortedWithImage.length > 0) {
+        setTopVendors(sortedWithImage);
       } else {
-        console.log('Top vendors fetch unsuccessful:', response);
-        setTopVendors([]);
+        // Fallback — no top vendors with images, use the all-vendors endpoint
+        console.log('ℹ️ No top vendors with images, falling back to all vendors');
+        await fetchFallback();
       }
     } catch (error) {
       const apiError = handleAPIError(error);
       console.error('Top vendors fetch error:', apiError);
-      setTopVendors([]);
+      try { await fetchFallback(); } catch { setTopVendors([]); }
     }
   };
 
@@ -428,36 +519,50 @@ const ClientDashboardScreen: React.FC = () => {
         setSearchLoading(false);
         return;
       }
-      
+
       setSearchLoading(true);
-      
-      const response = await servicesAPI.searchServices({
-        query: query.trim(),
-      });
-      
-      console.log('Search vendors response:', response);
-      
-      if (response.success) {
-        let vendorsData = response.data;
-        
-        // Handle different response structures
+
+      // Search both services/vendors API and also filter local vendors
+      const [serviceSearchRes] = await Promise.all([
+        servicesAPI.searchServices({ query: query.trim() }).catch(() => ({ success: false, data: [] })),
+      ]);
+
+      let vendorsFromSearch: any[] = [];
+
+      if (serviceSearchRes.success) {
+        let vendorsData = serviceSearchRes.data;
         if (vendorsData && !Array.isArray(vendorsData)) {
           vendorsData = vendorsData.vendors || vendorsData.data || [];
         }
-        
-        if (!Array.isArray(vendorsData)) {
-          console.log('Vendors data is not an array:', vendorsData);
-          setRecommendedServices([]);
-          setSearchLoading(false);
-          return;
+        if (Array.isArray(vendorsData)) {
+          vendorsFromSearch = vendorsData;
         }
-        
-        console.log('✅ Found vendors:', vendorsData.length);
-        setRecommendedServices(vendorsData);
-      } else {
-        console.log('Search vendors unsuccessful:', response);
-        setRecommendedServices([]);
       }
+
+      // Also filter locally loaded vendors by search query
+      const q = query.trim().toLowerCase();
+      const localMatches = allVendors.filter(v =>
+        v.businessName.toLowerCase().includes(q) ||
+        v.service?.toLowerCase().includes(q) ||
+        v.vendorType?.toLowerCase().includes(q)
+      );
+
+      // Merge results, avoiding duplicates
+      const seenIds = new Set(vendorsFromSearch.map((v: any) => v._id));
+      const localUnique = localMatches.filter(v => !seenIds.has(v.id)).map(v => ({
+        _id: v.id,
+        businessName: v.businessName,
+        avatar: v.image,
+        rating: v.rating,
+        totalReviews: v.reviews,
+        isVerified: v.isVerified,
+        vendorType: v.vendorType,
+        services: [],
+      }));
+
+      const combined = [...vendorsFromSearch, ...localUnique];
+      console.log('✅ Search results:', combined.length, '(API:', vendorsFromSearch.length, '+ local:', localUnique.length, ')');
+      setRecommendedServices(combined);
     } catch (error) {
       const apiError = handleAPIError(error);
       console.error('Vendor search error:', apiError);
@@ -1133,141 +1238,189 @@ const ClientDashboardScreen: React.FC = () => {
 
         {/* Sponsored Products - Only show when no filters active and not searching */}
         {!searchQuery.trim() && !hasActiveFilters && sponsoredProducts.length > 0 && (
-          <View className="py-6">
+          <View className="pt-6 pb-4">
+            {/* Section header */}
             <View className="flex-row items-center justify-between px-5 mb-4">
-              <View className="flex-row items-center">
-                <View className="w-8 h-8 rounded-full bg-purple-100 items-center justify-center mr-2">
-                  <Ionicons name="star" size={16} color="#a855f7" />
-                </View>
-                <View>
-                  <Text className="text-xl font-bold text-gray-900">Sponsored Products</Text>
-                  <Text className="text-xs text-gray-500 mt-0.5">Featured marketplace items</Text>
-                </View>
+              <View>
+                <Text className="text-[19px] font-bold text-gray-900 tracking-tight">For you</Text>
+                <Text className="text-[12px] text-gray-500 mt-0.5">Picked from the marketplace</Text>
               </View>
               <TouchableOpacity
                 className="flex-row items-center"
-                activeOpacity={0.7}
+                activeOpacity={0.6}
                 onPress={() => navigation.navigate('Marketplace')}
               >
-                <Text className="text-sm text-pink-600 font-semibold mr-1">See All</Text>
-                <Ionicons name="chevron-forward" size={16} color="#eb278d" />
+                <Text className="text-[13px] text-pink-600 font-semibold mr-0.5">See all</Text>
+                <Ionicons name="chevron-forward" size={15} color="#eb278d" />
               </TouchableOpacity>
             </View>
 
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
-              contentContainerStyle={{ paddingHorizontal: 20, paddingRight: 20 }}
+              contentContainerStyle={{ paddingHorizontal: 20, paddingRight: 24 }}
+              decelerationRate="fast"
+              snapToInterval={SCREEN_WIDTH * 0.46 + 14}
+              snapToAlignment="start"
             >
-              {sponsoredProducts.map((product, index) => {
+              {sponsoredProducts.map((product) => {
                 const discount = calculateDiscount(product.price, product.compareAtPrice);
                 const averageRating = product.rating || 0;
+                const cardWidth = SCREEN_WIDTH * 0.46;
+                const sellerName = product.seller?.vendorProfile?.businessName || product.seller?.fullName;
 
                 return (
                   <TouchableOpacity
                     key={product._id}
                     onPress={() => handleProductPress(product._id)}
-                    activeOpacity={0.7}
-                    className="mr-4"
-                    style={{ width: SCREEN_WIDTH * 0.45 }}
+                    activeOpacity={0.85}
+                    style={{ width: cardWidth, marginRight: 14 }}
                   >
                     <View
-                      className="bg-white rounded-3xl overflow-hidden"
                       style={{
-                        shadowColor: '#000',
-                        shadowOffset: { width: 0, height: 4 },
-                        shadowOpacity: 0.1,
-                        shadowRadius: 8,
-                        elevation: 5,
+                        backgroundColor: '#fff',
+                        borderRadius: 18,
+                        overflow: 'hidden',
+                        borderWidth: 1,
+                        borderColor: '#F1F2F4',
+                        shadowColor: '#0F172A',
+                        shadowOffset: { width: 0, height: 6 },
+                        shadowOpacity: 0.06,
+                        shadowRadius: 12,
+                        elevation: 3,
                       }}
                     >
-                      {/* Product Image */}
-                      <View className="relative">
+                      {/* Image area */}
+                      <View style={{ width: '100%', aspectRatio: 1, backgroundColor: '#F8F9FB' }}>
                         <Image
-                          source={{
-                            uri: product.images?.[0] || 'https://via.placeholder.com/150',
-                          }}
-                          className="w-full h-48"
+                          source={{ uri: product.images?.[0] || 'https://via.placeholder.com/300' }}
+                          style={{ width: '100%', height: '100%' }}
                           resizeMode="cover"
                         />
 
-                        {/* Sponsored Badge */}
-                        <View className="absolute top-3 left-3">
-                          <LinearGradient
-                            colors={['#a855f7', '#9333ea']}
-                            className="px-2.5 py-1 rounded-full flex-row items-center"
+                        {/* Discount pill (top-left) */}
+                        {discount > 0 && (
+                          <View
                             style={{
-                              shadowColor: '#a855f7',
-                              shadowOffset: { width: 0, height: 2 },
-                              shadowOpacity: 0.3,
-                              shadowRadius: 4,
-                              elevation: 4,
+                              position: 'absolute',
+                              top: 10, left: 10,
+                              backgroundColor: '#EF4444',
+                              paddingHorizontal: 8, paddingVertical: 3,
+                              borderRadius: 999,
                             }}
                           >
-                            <Ionicons name="star" size={10} color="#fff" />
-                            <Text className="text-white text-[10px] font-bold ml-1">
-                              SPONSORED
+                            <Text style={{ color: '#fff', fontSize: 10, fontWeight: '800', letterSpacing: 0.3 }}>
+                              -{discount}%
                             </Text>
-                          </LinearGradient>
-                        </View>
-
-                        {/* Discount Badge */}
-                        {discount > 0 && (
-                          <View className="absolute top-3 right-3 bg-red-500 px-2 py-1 rounded-full">
-                            <Text className="text-white text-xs font-bold">-{discount}%</Text>
                           </View>
                         )}
 
-                        {/* Stock Warning */}
+                        {/* Sponsored dot (top-right) — minimal */}
+                        {product.isSponsored && (
+                          <View
+                            style={{
+                              position: 'absolute',
+                              top: 10, right: 10,
+                              backgroundColor: 'rgba(255,255,255,0.95)',
+                              paddingHorizontal: 7, paddingVertical: 3,
+                              borderRadius: 999,
+                              flexDirection: 'row', alignItems: 'center',
+                            }}
+                          >
+                            <View style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: '#a855f7', marginRight: 4 }} />
+                            <Text style={{ color: '#6B21A8', fontSize: 9, fontWeight: '700', letterSpacing: 0.3 }}>
+                              AD
+                            </Text>
+                          </View>
+                        )}
+
+                        {/* Out of stock overlay */}
                         {product.stock === 0 && (
-                          <View className="absolute bottom-0 left-0 right-0 bg-black/70 py-1.5">
-                            <Text className="text-white text-xs font-bold text-center">
+                          <View
+                            style={{
+                              position: 'absolute',
+                              left: 0, right: 0, bottom: 0,
+                              backgroundColor: 'rgba(15,23,42,0.78)',
+                              paddingVertical: 6,
+                              alignItems: 'center',
+                            }}
+                          >
+                            <Text style={{ color: '#fff', fontSize: 10, fontWeight: '700', letterSpacing: 0.5 }}>
                               OUT OF STOCK
                             </Text>
                           </View>
                         )}
                       </View>
 
-                      {/* Product Info */}
-                      <View className="p-4">
-                        <Text className="text-gray-900 text-base font-bold mb-1" numberOfLines={2}>
+                      {/* Info */}
+                      <View style={{ padding: 12 }}>
+                        <Text
+                          numberOfLines={1}
+                          style={{ fontSize: 13.5, fontWeight: '700', color: '#0F172A', letterSpacing: -0.1 }}
+                        >
                           {product.name}
                         </Text>
 
-                        <Text className="text-gray-500 text-xs mb-2" numberOfLines={1}>
-                          {product.seller?.vendorProfile?.businessName || product.seller?.fullName}
-                        </Text>
+                        {sellerName ? (
+                          <Text
+                            numberOfLines={1}
+                            style={{ fontSize: 11, color: '#94A3B8', marginTop: 2, fontWeight: '500' }}
+                          >
+                            {sellerName}
+                          </Text>
+                        ) : null}
 
-                        {/* Rating */}
+                        {/* Rating row */}
                         {averageRating > 0 && (
-                          <View className="flex-row items-center mb-2">
-                            <Ionicons name="star" size={12} color="#fbbf24" />
-                            <Text className="text-gray-600 text-xs ml-1">
+                          <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 6 }}>
+                            <Ionicons name="star" size={11} color="#F59E0B" />
+                            <Text style={{ fontSize: 11, color: '#475569', marginLeft: 3, fontWeight: '600' }}>
                               {averageRating.toFixed(1)}
                             </Text>
                             {product.totalRatings ? (
-                              <Text className="text-gray-400 text-xs ml-1">
+                              <Text style={{ fontSize: 10, color: '#94A3B8', marginLeft: 3 }}>
                                 ({product.totalRatings})
                               </Text>
                             ) : null}
                           </View>
                         )}
 
-                        {/* Price */}
-                        <View className="flex-row items-center justify-between">
-                          <View>
-                            <Text className="text-pink-600 text-lg font-bold">
+                        {/* Price + cart row */}
+                        <View
+                          style={{
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            marginTop: 10,
+                          }}
+                        >
+                          <View style={{ flex: 1 }}>
+                            <Text
+                              numberOfLines={1}
+                              style={{ fontSize: 15, fontWeight: '800', color: '#eb278d', letterSpacing: -0.3 }}
+                            >
                               {formatPrice(product.finalPrice || product.price)}
                             </Text>
                             {product.compareAtPrice && product.compareAtPrice > product.price && (
-                              <Text className="text-gray-400 text-xs line-through">
+                              <Text
+                                numberOfLines={1}
+                                style={{ fontSize: 10, color: '#CBD5E1', textDecorationLine: 'line-through', marginTop: 1 }}
+                              >
                                 {formatPrice(product.compareAtPrice)}
                               </Text>
                             )}
                           </View>
 
-                          <View className="w-8 h-8 rounded-full bg-pink-500 items-center justify-center">
-                            <Ionicons name="cart" size={16} color="#fff" />
+                          <View
+                            style={{
+                              width: 30, height: 30, borderRadius: 15,
+                              backgroundColor: '#FDF2F8',
+                              borderWidth: 1, borderColor: '#FBCFE8',
+                              alignItems: 'center', justifyContent: 'center',
+                              marginLeft: 8,
+                            }}
+                          >
+                            <Ionicons name="add" size={16} color="#eb278d" />
                           </View>
                         </View>
                       </View>

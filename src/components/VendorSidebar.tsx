@@ -1,9 +1,10 @@
 import React, { useEffect, useRef } from 'react';
-import { View, Text, TouchableOpacity, Modal, Animated, Dimensions, TouchableWithoutFeedback, ScrollView, Platform, Image } from 'react-native';
+import { View, Text, TouchableOpacity, Modal, Animated, Dimensions, TouchableWithoutFeedback, ScrollView, Platform, Image, Alert } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
+import { logoutUser } from '@/utils/authHelper';
 
 const {
   width: SCREEN_WIDTH
@@ -40,6 +41,7 @@ const VendorSidebar: React.FC<VendorSidebarProps> = ({
   userAvatar
 }) => {
   const navigation = useNavigation()
+  const insets = useSafeAreaInsets();
   const slideAnim = useRef(new Animated.Value(-DRAWER_WIDTH)).current;
   const overlayOpacity = useRef(new Animated.Value(0)).current;
 
@@ -77,6 +79,15 @@ const VendorSidebar: React.FC<VendorSidebarProps> = ({
   const menuSections: MenuSection[] = [{
     items: [
       {
+        id: 'messages',
+        title: 'Messages',
+        icon: 'chatbubbles',
+        onPress: () => {
+          navigation.navigate("ChatList")
+          onClose();
+        }
+      },
+      {
         id: 'orders',
         title: 'Orders',
         icon: 'cart',
@@ -84,16 +95,7 @@ const VendorSidebar: React.FC<VendorSidebarProps> = ({
           navigation.navigate("MyOrders");
           onClose();
         }
-      }, 
-      {
-        id: 'products',
-        title: 'My Products',
-        icon: 'cube',
-        onPress: () => {
-          navigation.navigate("MyProducts")
-          onClose();
-        }
-      }
+      },
     ]
   }, {
     title: 'MANAGEMENT',
@@ -108,11 +110,20 @@ const VendorSidebar: React.FC<VendorSidebarProps> = ({
         }
       },
       {
-        id: 'Subscriptons',
-        title: 'Subsriptions',
-        icon: 'share-social',
+        id: 'Subscriptions',
+        title: 'Subscriptions',
+        icon: 'card-outline',
         onPress: () => {
           navigation.navigate("Subsriptions")
+          onClose();
+        }
+      },
+      {
+        id: 'upgrade',
+        title: 'Upgrade Plan',
+        icon: 'arrow-up-circle',
+        onPress: () => {
+          navigation.navigate("UpgradeTier")
           onClose();
         }
       },
@@ -136,18 +147,38 @@ const VendorSidebar: React.FC<VendorSidebarProps> = ({
         navigation.navigate("VendorStoreSettings")
         onClose();
       }
-    }]
-  }, {
-    title: 'SUPPORT',
-    items: [{
-      id: 'help',
-      title: 'Help Center',
-      icon: 'help-circle',
+    },
+    {
+      id: 'browse-vendors',
+      title: 'Browse Vendors',
+      icon: 'people',
       onPress: () => {
-        navigation.navigate("HelpCenter")
+        navigation.navigate("AllVendors")
         onClose();
       }
     }]
+  }, {
+    title: 'SUPPORT',
+    items: [
+      {
+        id: 'disputes',
+        title: 'Disputes',
+        icon: 'shield-half',
+        onPress: () => {
+          navigation.navigate("Disputes");
+          onClose();
+        }
+      },
+      {
+        id: 'help',
+        title: 'Help Center',
+        icon: 'help-circle',
+        onPress: () => {
+          navigation.navigate("HelpCenter")
+          onClose();
+        }
+      }
+    ]
   }];
 
   const renderIcon = (iconFamily: string = 'ionicons', iconName: string, size: number = 22, color: string = '#6b7280') => {
@@ -197,16 +228,16 @@ const VendorSidebar: React.FC<VendorSidebarProps> = ({
             })
           }}
         >
-          <SafeAreaView className="flex-1" edges={['top']}>
+          <View className="flex-1">
             {}
-            <LinearGradient 
-              colors={['#ec4899', '#f472b6']} 
-              start={{ x: 0, y: 0 }} 
-              end={{ x: 1, y: 1 }} 
+            <LinearGradient
+              colors={['#ec4899', '#f472b6']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
               className="pb-6"
             >
               {}
-              <View className="flex-row justify-end px-4 pt-2 pb-4">
+              <View className="flex-row justify-end px-4 pb-4" style={{ paddingTop: insets.top + 8 }}>
                 <TouchableOpacity 
                   onPress={onClose} 
                   className="w-10 h-10 items-center justify-center rounded-full" 
@@ -299,8 +330,25 @@ const VendorSidebar: React.FC<VendorSidebarProps> = ({
                   className="flex-row items-center justify-center bg-red-50 py-3.5 rounded-xl border border-red-200" 
                   activeOpacity={0.7} 
                   onPress={() => {
-                    console.log('Logout');
-                    onClose();
+                    Alert.alert(
+                      'Logout',
+                      'Are you sure you want to logout?',
+                      [
+                        { text: 'Cancel', style: 'cancel' },
+                        {
+                          text: 'Logout',
+                          style: 'destructive',
+                          onPress: async () => {
+                            onClose();
+                            try {
+                              await logoutUser();
+                            } catch (error) {
+                              console.error('Logout error:', error);
+                            }
+                          },
+                        },
+                      ]
+                    );
                   }}
                 >
                   <Ionicons name="log-out-outline" size={20} color="#ef4444" />
@@ -314,7 +362,7 @@ const VendorSidebar: React.FC<VendorSidebarProps> = ({
                 <Text className="text-gray-400 text-[10px] mt-1">© 2024 VendorHub</Text>
               </View>
             </ScrollView>
-          </SafeAreaView>
+          </View>
         </Animated.View>
       </View>
     </Modal>

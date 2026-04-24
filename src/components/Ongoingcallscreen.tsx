@@ -22,6 +22,7 @@ import { Audio } from 'expo-av';
 import callService from '@/services/call.service';
 import callSounds from '@/services/call-sounds.service';
 import webrtcService from '@/services/webrtc.service';
+import { webrtcHtml } from '@/services/webrtc-html';
 
 const WEBRTC_URL = 'https://sharplook-backend-production.onrender.com/webrtc';
 
@@ -109,7 +110,9 @@ const OngoingCallScreen: React.FC = () => {
   const [isConnected, setIsConnected]       = useState(false);
   const [hasRemoteStream, setHasRemoteStream] = useState(false);
   const [webViewLoaded, setWebViewLoaded]   = useState(false);
+  const [webrtcReady, setWebrtcReady]       = useState(false);
   const webViewLoadedRef    = useRef(false);
+  const webrtcReadyRef      = useRef(false);
   const currentCallIdRef    = useRef<string | undefined>(callId);
 
   const durationInterval    = useRef<NodeJS.Timeout | null>(null);
@@ -122,16 +125,22 @@ const OngoingCallScreen: React.FC = () => {
   const processedIce        = useRef(new Set<string>());
   const hasEnded            = useRef(false);
   const wasConnected        = useRef(false);
+  const pendingOfferRef     = useRef<any>(null);
 
   // ── Effects ────────────────────────────────────────────────────────────────
   useEffect(() => {
     // Configure audio session for calls (critical for iOS audio routing)
+    // For voice calls, route to earpiece by default; for video calls, use speaker
+    const useEarpiece = callType === 'voice';
+    // Use .then() to ensure audio mode is set before anything else proceeds
     Audio.setAudioModeAsync({
       allowsRecordingIOS: true,
       playsInSilentModeIOS: true,
       staysActiveInBackground: true,
       shouldDuckAndroid: false,
-      playThroughEarpieceAndroid: false,
+      playThroughEarpieceAndroid: useEarpiece,
+    }).then(() => {
+      console.log('📞 Audio mode configured (earpiece:', useEarpiece, ')');
     }).catch((err) => console.warn('Audio mode error:', err));
 
     // Play outgoing ring tone while waiting for answer
@@ -154,23 +163,32 @@ const OngoingCallScreen: React.FC = () => {
         console.log('📞 Got real callId:', data.call._id);
         setCurrentCallId(data.call._id);
         currentCallIdRef.current = data.call._id;
-        // Now that we have a real callId, create the offer if WebView is ready
-        if (isOutgoing && webViewLoadedRef.current && !hasInitiatedCall.current) {
+        // Now that we have a real callId, create the offer if WebRTC is fully ready
+        if (isOutgoing && webrtcReadyRef.current && !hasInitiatedCall.current) {
           hasInitiatedCall.current = true;
-          setTimeout(() => webrtcService.createOffer(), 500);
+          console.log('📞 Creating offer (callId arrived after WebRTC ready)');
+          webrtcService.createOffer();
         }
       }
     };
 
+    const handleCallRinging    = () => { setCallStatus('Ringing…'); };
     const handleCallAccepted  = () => { callSounds.stopAll(); setCallStatus('Connecting…'); };
-    const handleCallRejected  = () => { if (hasEnded.current) return; hasEnded.current = true; callSounds.stopAll(); callSounds.playHangup(); cleanup(); navigation.goBack(); };
-    const handleCallEnded     = () => { if (hasEnded.current) return; hasEnded.current = true; callSounds.stopAll(); callSounds.playHangup(); cleanup(); navigation.goBack(); };
-    const handleCallCancelled = () => { if (hasEnded.current) return; hasEnded.current = true; callSounds.stopAll(); callSounds.playHangup(); cleanup(); navigation.goBack(); };
+    const handleCallRejected  = async () => { if (hasEnded.current) return; hasEnded.current = true; callSounds.stopAll(); callSounds.playHangup(); await cleanup(); navigation.goBack(); };
+    const handleCallEnded     = async () => { if (hasEnded.current) return; hasEnded.current = true; callSounds.stopAll(); callSounds.playHangup(); await cleanup(); navigation.goBack(); };
+    const handleCallCancelled = async () => { if (hasEnded.current) return; hasEnded.current = true; callSounds.stopAll(); callSounds.playHangup(); await cleanup(); navigation.goBack(); };
 
     const handleSignalOffer = (data: any) => {
-      if (!isOutgoing && data.offer && webViewLoaded && !hasProcessedOffer.current) {
-        hasProcessedOffer.current = true;
-        setTimeout(() => webrtcService.createAnswer(data.offer), 500);
+      if (!isOutgoing && data.offer && !hasProcessedOffer.current) {
+        if (webrtcReadyRef.current) {
+          hasProcessedOffer.current = true;
+          console.log('📞 Creating answer (offer received, WebRTC ready)');
+          webrtcService.createAnswer(data.offer);
+        } else {
+          // Store the offer; it will be processed when WebRTC is ready
+          console.log('📞 Offer received but WebRTC not ready yet, storing...');
+          pendingOfferRef.current = data.offer;
+        }
       }
     };
 
@@ -193,6 +211,7 @@ const OngoingCallScreen: React.FC = () => {
     };
 
     callService.on('call:initiated',    handleCallInitiated);
+    callService.on('call:ringing',      handleCallRinging);
     callService.on('call:accepted',     handleCallAccepted);
     callService.on('call:rejected',     handleCallRejected);
     callService.on('call:ended',        handleCallEnded);
@@ -209,13 +228,33 @@ const OngoingCallScreen: React.FC = () => {
         case 'remoteStream':
           console.log('Remote stream received:', event.data);
           setHasRemoteStream(true); setCallStatus('Connected');
-          setIsConnected(true); startCallDuration(); break;
+          setIsConnected(true); startCallDuration();
+          // Re-apply audio mode when remote stream arrives to ensure audio plays
+          Audio.setAudioModeAsync({
+            allowsRecordingIOS: true,
+            playsInSilentModeIOS: true,
+            staysActiveInBackground: true,
+            shouldDuckAndroid: false,
+            playThroughEarpieceAndroid: callType === 'voice' && !isSpeakerOn,
+          }).catch((err) => console.warn('Audio mode (remoteStream) error:', err));
+          break;
         case 'connectionState':
           console.log('WebRTC connection state:', event.data?.state);
           if (event.data?.state === 'connected') {
             if (!wasConnected.current) {
               callSounds.stopAll(); callSounds.playConnected();
               if (callTimeoutRef.current) { clearTimeout(callTimeoutRef.current); callTimeoutRef.current = null; }
+              // Re-apply audio mode once WebRTC connects — some devices lose
+              // audio routing between the initial setAudioModeAsync and the
+              // moment the remote stream actually starts playing.
+              const earpiece = callType === 'voice' && !isSpeakerOn;
+              Audio.setAudioModeAsync({
+                allowsRecordingIOS: true,
+                playsInSilentModeIOS: true,
+                staysActiveInBackground: true,
+                shouldDuckAndroid: false,
+                playThroughEarpieceAndroid: earpiece,
+              }).catch((err) => console.warn('Audio re-apply error:', err));
             }
             wasConnected.current = true;
             setCallStatus('Connected');
@@ -226,15 +265,41 @@ const OngoingCallScreen: React.FC = () => {
             if (hasEnded.current) return;
             hasEnded.current = true;
             callSounds.stopAll(); callSounds.playHangup();
-            cleanup();
-            navigation.goBack();
+            cleanup().then(() => navigation.goBack());
           }
           break;
         case 'localStream':
           console.log('Local stream ready:', event.data);
           break;
+        case 'initComplete':
+          console.log('📞 WebRTC fully initialized (PeerConnection + media ready)');
+          webrtcReadyRef.current = true;
+          setWebrtcReady(true);
+          // If we're the caller and already have a callId, create the offer now
+          if (isOutgoing && currentCallIdRef.current && currentCallIdRef.current !== 'pending' && !hasInitiatedCall.current) {
+            hasInitiatedCall.current = true;
+            console.log('📞 Creating offer (WebRTC ready, callId already available)');
+            webrtcService.createOffer();
+          }
+          // If we're the receiver and already got an offer, process it now
+          if (!isOutgoing && pendingOfferRef.current && !hasProcessedOffer.current) {
+            hasProcessedOffer.current = true;
+            console.log('📞 Processing stored offer now that WebRTC is ready');
+            webrtcService.createAnswer(pendingOfferRef.current);
+            pendingOfferRef.current = null;
+          }
+          // Also handle the offer passed via route params
+          if (!isOutgoing && offer && !hasProcessedOffer.current) {
+            hasProcessedOffer.current = true;
+            console.log('📞 Processing route offer now that WebRTC is ready');
+            webrtcService.createAnswer(offer);
+          }
+          break;
         case 'muteStatus':    setIsMuted(event.data.muted);            break;
         case 'videoStatus':   setIsVideoOff(!event.data.enabled);      break;
+        case 'diagnostic':
+          console.log('📊 DIAGNOSTIC [' + event.data?.label + ']:', event.data?.log);
+          break;
         case 'error':
           console.error('WebRTC error:', event.data?.message);
           break;
@@ -245,6 +310,7 @@ const OngoingCallScreen: React.FC = () => {
 
     return () => {
       callService.removeListener('call:initiated',     handleCallInitiated);
+      callService.removeListener('call:ringing',       handleCallRinging);
       callService.removeListener('call:accepted',      handleCallAccepted);
       callService.removeListener('call:rejected',      handleCallRejected);
       callService.removeListener('call:ended',         handleCallEnded);
@@ -253,7 +319,7 @@ const OngoingCallScreen: React.FC = () => {
       callService.removeListener('call:signal:answer', handleSignalAnswer);
       callService.removeListener('call:signal:ice',    handleSignalIce);
     };
-  }, [callType, isOutgoing, navigation, otherUser._id, webViewLoaded]);
+  }, [callType, isOutgoing, navigation, otherUser._id]);
 
   // ── Helpers ────────────────────────────────────────────────────────────────
   const startPulseAnimation = () => {
@@ -296,20 +362,12 @@ const OngoingCallScreen: React.FC = () => {
   };
 
   const onWebViewLoad = () => {
+    console.log('📞 WebView loaded, sending init command');
     setWebViewLoaded(true);
     webViewLoadedRef.current = true;
+    // This triggers getLocalStream + createPeerConnection inside the WebView.
+    // When done, the WebView sends 'initComplete' which we handle above.
     webrtcService.initialize(callType === 'video');
-    if (isOutgoing) {
-      // Only create offer if we already have a real callId from call:initiated
-      // (if call:initiated hasn't fired yet, handleCallInitiated will handle it)
-      if (currentCallIdRef.current && currentCallIdRef.current !== 'pending' && !hasInitiatedCall.current) {
-        hasInitiatedCall.current = true;
-        setTimeout(() => webrtcService.createOffer(), 500);
-      }
-    } else if (offer && !hasProcessedOffer.current) {
-      hasProcessedOffer.current = true;
-      setTimeout(() => webrtcService.createAnswer(offer), 1000);
-    }
   };
 
   const startCallDuration = () => {
@@ -324,29 +382,31 @@ const OngoingCallScreen: React.FC = () => {
       : `${m}:${sec.toString().padStart(2, '0')}`;
   };
 
-  const endCall = () => {
+  const endCall = async () => {
     if (hasEnded.current) return;
     hasEnded.current = true;
     if (durationInterval.current) clearInterval(durationInterval.current);
     callSounds.stopAll(); callSounds.playHangup();
     callService.endCall();
-    cleanup();
+    await cleanup();
     navigation.goBack();
   };
 
-  const cleanup = () => {
+  const cleanup = async () => {
     webrtcService.close();
     callSounds.stopAll();
     if (callTimeoutRef.current) { clearTimeout(callTimeoutRef.current); callTimeoutRef.current = null; }
     if (durationInterval.current) { clearInterval(durationInterval.current); durationInterval.current = null; }
-    // Reset audio mode
-    Audio.setAudioModeAsync({
-      allowsRecordingIOS: false,
-      playsInSilentModeIOS: false,
-      staysActiveInBackground: false,
-      shouldDuckAndroid: true,
-      playThroughEarpieceAndroid: false,
-    }).catch(() => {});
+    // Reset audio mode — await it so a quick re-call doesn't race against it
+    try {
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: false,
+        playsInSilentModeIOS: false,
+        staysActiveInBackground: false,
+        shouldDuckAndroid: true,
+        playThroughEarpieceAndroid: false,
+      });
+    } catch {}
   };
 
   const toggleMute    = () => webrtcService.toggleMute();
@@ -376,7 +436,7 @@ const OngoingCallScreen: React.FC = () => {
       <View style={{ flex: 1 }}>
         <WebView
           ref={(ref) => { if (ref) webrtcService.setWebViewRef(ref); }}
-          source={{ uri: WEBRTC_URL }}
+          source={{ html: webrtcHtml, baseUrl: 'https://sharplook-backend-production.onrender.com' }}
           onMessage={(e) => webrtcService.handleWebViewMessage(e)}
           onLoadEnd={onWebViewLoad}
           style={callType === 'video' ? styles.webViewVideo : styles.webViewHidden}
@@ -615,9 +675,13 @@ const styles = StyleSheet.create({
   },
   webViewHidden: {
     position: 'absolute',
-    width: 1,
-    height: 1,
-    opacity: 0,
+    // Some Android WebViews suspend audio from tiny/invisible views.
+    // Use a small but non-trivial size with near-zero opacity so the
+    // OS keeps the media pipeline alive.
+    width: 50,
+    height: 50,
+    opacity: 0.01,
+    pointerEvents: 'none',
   },
 });
 

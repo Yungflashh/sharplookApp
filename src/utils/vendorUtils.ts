@@ -6,6 +6,7 @@ export interface RawVendorData {
   fullName?: string;
   email?: string;
   phone?: string;
+  avatar?: string;
   isVendor?: boolean;
   isEmailVerified?: boolean;
   isPhoneVerified?: boolean;
@@ -17,6 +18,7 @@ export interface RawVendorData {
     coverImage?: string;
     rating?: number;
     totalReviews?: number;
+    totalRatings?: number;
     isVerified?: boolean;
     vendorType?: 'home_service' | 'in_shop' | 'both';
     serviceCategories?: string[];
@@ -74,11 +76,11 @@ export const parseVendor = (rawVendor: RawVendorData): FormattedVendor => {
     fullName: rawVendor.fullName || `${rawVendor.firstName || ''} ${rawVendor.lastName || ''}`.trim(),
     email: rawVendor.email,
     phone: rawVendor.phone,
-    image: vendorProfile.profileImage,
+    image: vendorProfile.profileImage || rawVendor.avatar,
     coverImage: vendorProfile.coverImage,
     service: formatVendorType(vendorProfile.vendorType),
     rating: vendorProfile.rating || 0,
-    reviews: vendorProfile.totalReviews || 0,
+    reviews: vendorProfile.totalReviews || vendorProfile.totalRatings || 0,
     vendorType: vendorProfile.vendorType,
     isVerified: vendorProfile.isVerified || false,
     isEmailVerified: rawVendor.isEmailVerified || false,

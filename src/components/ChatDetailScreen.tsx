@@ -65,10 +65,11 @@ interface Message {
   _id: string;
   sender: { _id: string; firstName: string; lastName: string; avatar?: string };
   receiver: { _id: string; firstName: string; lastName: string; avatar?: string };
-  messageType: 'text' | 'image' | 'file' | 'audio' | 'video';
+  messageType: 'text' | 'image' | 'file' | 'audio' | 'video' | 'call';
   text?: string;
   attachments?: Array<{ url: string; type: string; name?: string }>;
-  status: 'sent' | 'delivered' | 'read';
+  callInfo?: { type: 'voice' | 'video'; status: 'missed' | 'completed' | 'rejected' | 'cancelled'; duration?: number };
+  status: 'sending' | 'failed' | 'sent' | 'delivered' | 'read';
   readAt?: string;
   deliveredAt?: string;
   createdAt: string;
@@ -84,7 +85,6 @@ const ChatDetailScreen: React.FC = () => {
 
   const [messages, setMessages]                   = useState<Message[]>([]);
   const [loading, setLoading]                     = useState(true);
-  const [sending, setSending]                     = useState(false);
   const [inputText, setInputText]                 = useState('');
   const [conversationId, setConversationId]       = useState<string | null>(null);
   const [currentUserId, setCurrentUserId]         = useState<string | null>(null);
@@ -121,7 +121,23 @@ const ChatDetailScreen: React.FC = () => {
     socketService.onMessageReceived((data) => {
       const newMessage = data.message;
       setMessages((prev) => {
+        // Skip if we already have this exact message
         if (prev.some((m) => m._id === newMessage._id)) return prev;
+        // If this is our own message echoed back, replace any temp/optimistic version
+        if (newMessage.sender._id === currentUserId) {
+          const hasTemp = prev.some((m) => m._id.startsWith('temp_'));
+          if (hasTemp) {
+            // Replace the oldest temp message with the real one (match by prefix alone)
+            let replaced = false;
+            return prev.map((m) => {
+              if (!replaced && m._id.startsWith('temp_')) {
+                replaced = true;
+                return { ...newMessage };
+              }
+              return m;
+            });
+          }
+        }
         return [...prev, newMessage];
       });
       setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
@@ -333,6 +349,33 @@ const ChatDetailScreen: React.FC = () => {
   };
 
   // ── Send ──────────────────────────────────────────────────────────────────
+  const getMessageType = (rawType?: string): 'text' | 'image' | 'video' | 'audio' | 'file' => {
+    if (!rawType) return 'text';
+    const t = rawType.toLowerCase();
+    if (t === 'image' || t.startsWith('image/')) return 'image';
+    if (t === 'video' || t.startsWith('video/')) return 'video';
+    if (t === 'audio' || t.startsWith('audio/')) return 'audio';
+    if (t === 'file' || t === 'document') return 'file';
+    return 'file';
+  };
+
+  const getMimeType = (rawType?: string, ext?: string): string => {
+    if (rawType && rawType.includes('/')) return rawType; // already a MIME type
+    const mimeMap: Record<string, string> = {
+      jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif', webp: 'image/webp', heic: 'image/heic',
+      mp4: 'video/mp4', mov: 'video/quicktime',
+      m4a: 'audio/x-m4a', mp3: 'audio/mpeg', wav: 'audio/wav', aac: 'audio/aac',
+    };
+    if (ext) {
+      const mapped = mimeMap[ext.toLowerCase()];
+      if (mapped) return mapped;
+    }
+    if (rawType === 'image') return 'image/jpeg';
+    if (rawType === 'video') return 'video/mp4';
+    if (rawType === 'audio') return 'audio/x-m4a';
+    return 'application/octet-stream';
+  };
+
   const handleSendMessage = async (mediaUri?: string, mediaType?: string, fileObject?: any) => {
     if ((!inputText.trim() && !mediaUri) || !conversationId || !currentUserId) return;
     const messageText = inputText.trim();
@@ -342,51 +385,130 @@ const ChatDetailScreen: React.FC = () => {
     if (conversationId) socketService.stopTyping(conversationId);
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
 
+    const msgType = getMessageType(mediaType);
+    const tempId = `temp_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const replySnapshot = replyingTo ? { _id: replyingTo._id, text: replyingTo.text || '', sender: { firstName: replyingTo.sender.firstName, lastName: replyingTo.sender.lastName } } : undefined;
+    if (replyingTo) setReplyingTo(null);
+
+    // Build optimistic message and show it immediately
+    const optimisticMsg: Message = {
+      _id: tempId,
+      sender: { _id: currentUserId, firstName: '', lastName: '', avatar: undefined },
+      receiver: { _id: otherUserId, firstName: '', lastName: '' },
+      messageType: msgType,
+      text: messageText || undefined,
+      attachments: mediaUri ? [{ url: mediaUri, type: msgType, name: 'Sending…' }] : undefined,
+      replyTo: replySnapshot,
+      status: 'sending',
+      createdAt: new Date().toISOString(),
+    };
+
+    setMessages((prev) => [...prev, optimisticMsg]);
+    setSelectedMedia(null);
+    setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 50);
+
+    // Send to backend in background
     try {
-      setSending(true);
       if (mediaUri) socketService.emit('uploading:start', conversationId);
 
-      let messageData: any = { receiverId: otherUserId, messageType: mediaType || 'text' };
+      let messageData: any = { receiverId: otherUserId, messageType: msgType };
       if (messageText) messageData.text = messageText;
-      if (replyingTo) { messageData.replyTo = replyingTo._id; setReplyingTo(null); }
+      if (replySnapshot) messageData.replyTo = replySnapshot._id;
 
       if (mediaUri) {
+        const ext = mediaUri.split('.').pop()?.split('?')[0] || '';
+        const mime = getMimeType(mediaType, ext);
         const uploadFile = fileObject || {
           uri: mediaUri,
-          type: mediaType === 'audio' ? 'audio/m4a' : mediaType,
-          name: `${mediaType}_${Date.now()}.${mediaType === 'audio' ? 'm4a' : 'jpg'}`,
+          type: mime,
+          name: `${msgType}_${Date.now()}.${ext || (msgType === 'image' ? 'jpg' : msgType === 'video' ? 'mp4' : 'm4a')}`,
         };
+        console.log('📤 Uploading attachment:', { uri: uploadFile.uri?.substring(0, 50), type: uploadFile.type, name: uploadFile.name });
         const uploadRes = await messageAPI.uploadAttachment(uploadFile);
         if (uploadRes.success) {
-          messageData.attachments = [{ url: uploadRes.data.url, type: mediaType, name: uploadRes.data.name, size: uploadRes.data.size }];
+          messageData.attachments = [{ url: uploadRes.data.url, type: msgType, name: uploadRes.data.name, size: uploadRes.data.size }];
         }
         socketService.emit('uploading:stop', conversationId);
       }
 
-      await messageAPI.sendMessage(messageData);
+      const res = await messageAPI.sendMessage(messageData);
+      // Replace temp message with the real one from the server
+      const realMsg = res.data?.message || res.data;
+      if (realMsg?._id) {
+        setMessages((prev) => prev.map((m) => m._id === tempId ? { ...realMsg, status: realMsg.status || 'sent' } : m));
+      } else {
+        // Server responded OK but no message returned — just mark as sent
+        setMessages((prev) => prev.map((m) => m._id === tempId ? { ...m, status: 'sent' as const } : m));
+      }
     } catch (error) {
-      toast.error('Error', handleAPIError(error).message || 'Failed to send message');
+      console.error('❌ Send message error:', error);
+      // Mark the optimistic message as failed so user can retry
+      setMessages((prev) => prev.map((m) => m._id === tempId ? { ...m, status: 'failed' as const } : m));
       if (mediaUri && conversationId) socketService.emit('uploading:stop', conversationId);
-    } finally { setSending(false); setSelectedMedia(null); }
+    }
+  };
+
+  const handleRetryMessage = (failedMsg: Message) => {
+    // Remove the failed message and re-send
+    setMessages((prev) => prev.filter((m) => m._id !== failedMsg._id));
+    if (failedMsg.text) setInputText(failedMsg.text);
+    if (failedMsg.attachments?.[0]) {
+      handleSendMessage(failedMsg.attachments[0].url, failedMsg.attachments[0].type);
+    } else {
+      // Re-send directly without going through input
+      handleSendMessage();
+    }
   };
 
   // ── Media pickers ─────────────────────────────────────────────────────────
-  const handlePickImage = async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: true, quality: 0.8 });
-    if (!result.canceled && result.assets[0]) { setSelectedMedia(result.assets[0]); setShowAttachmentMenu(false); }
+  // On iOS, we must close the attachment modal BEFORE launching a picker,
+  // otherwise iOS blocks the picker from presenting over the modal.
+  const launchPickerAfterModalClose = (pickerFn: () => Promise<void>) => {
+    setShowAttachmentMenu(false);
+    // Wait for modal dismiss animation to complete on iOS
+    setTimeout(pickerFn, Platform.OS === 'ios' ? 600 : 100);
   };
-  const handleTakePhoto = async () => {
-    const result = await ImagePicker.launchCameraAsync({ allowsEditing: true, quality: 0.8 });
-    if (!result.canceled && result.assets[0]) { setSelectedMedia(result.assets[0]); setShowAttachmentMenu(false); }
-  };
-  const handlePickVideo = async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Videos, allowsEditing: true, quality: 0.8 });
-    if (!result.canceled && result.assets[0]) { setSelectedMedia(result.assets[0]); setShowAttachmentMenu(false); }
-  };
-  const handlePickDocument = async () => {
-    const result = await DocumentPicker.getDocumentAsync({ type: '*/*', copyToCacheDirectory: true });
-    if (result.type === 'success') { setSelectedMedia(result); setShowAttachmentMenu(false); }
-  };
+
+  const handlePickImage = () => launchPickerAfterModalClose(async () => {
+    try {
+      console.log('📸 handlePickImage: launching picker');
+      const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.8 });
+      console.log('📸 Picker result:', result.canceled ? 'canceled' : 'selected');
+      if (!result.canceled && result.assets[0]) setSelectedMedia(result.assets[0]);
+    } catch (error) {
+      console.error('📸 handlePickImage ERROR:', error);
+      toast.error('Error', 'Failed to open photo library');
+    }
+  });
+
+  const handleTakePhoto = () => launchPickerAfterModalClose(async () => {
+    try {
+      const result = await ImagePicker.launchCameraAsync({ quality: 0.8 });
+      if (!result.canceled && result.assets[0]) setSelectedMedia(result.assets[0]);
+    } catch (error) {
+      console.error('📷 handleTakePhoto ERROR:', error);
+      toast.error('Error', 'Failed to open camera');
+    }
+  });
+
+  const handlePickVideo = () => launchPickerAfterModalClose(async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['videos'], quality: 0.8 });
+      if (!result.canceled && result.assets[0]) setSelectedMedia(result.assets[0]);
+    } catch (error) {
+      console.error('🎬 handlePickVideo ERROR:', error);
+      toast.error('Error', 'Failed to open video library');
+    }
+  });
+  const handlePickDocument = () => launchPickerAfterModalClose(async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({ type: '*/*', copyToCacheDirectory: true });
+      if (!result.canceled && result.assets?.[0]) setSelectedMedia(result.assets[0]);
+    } catch (error) {
+      console.error('📄 handlePickDocument ERROR:', error);
+      toast.error('Error', 'Failed to open document picker');
+    }
+  });
 
   // ── Recording ─────────────────────────────────────────────────────────────
   const startRecording = async () => {
@@ -526,12 +648,12 @@ const ChatDetailScreen: React.FC = () => {
 
   // ─────────────────────────────────────────────────────────────────────────
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: BRAND.chatBg }} edges={['top']}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: BRAND.chatBg }} edges={['top', 'bottom']}>
       <StatusBar barStyle="light-content" backgroundColor={BRAND.primary} />
 
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
       >
         {/* ── HEADER ─────────────────────────────────────────────────────── */}
@@ -604,8 +726,8 @@ const ChatDetailScreen: React.FC = () => {
               </View>
             </TouchableOpacity>
 
-            {/* Call buttons */}
-            <View style={{ flexDirection: 'row', gap: 8 }}>
+            {/* Call buttons — temporarily disabled, will be re-enabled in future */}
+            {/* <View style={{ flexDirection: 'row', gap: 8 }}>
               <TouchableOpacity
                 onPress={() => handleCall('voice')}
                 activeOpacity={0.75}
@@ -618,7 +740,7 @@ const ChatDetailScreen: React.FC = () => {
                 <Ionicons name="call-outline" size={18} color="#fff" />
               </TouchableOpacity>
 
-              {/* <TouchableOpacity
+              <TouchableOpacity
                 onPress={() => handleCall('video')}
                 activeOpacity={0.75}
                 style={{
@@ -628,8 +750,8 @@ const ChatDetailScreen: React.FC = () => {
                 }}
               >
                 <Ionicons name="videocam-outline" size={18} color="#fff" />
-              </TouchableOpacity> */}
-            </View>
+              </TouchableOpacity>
+            </View> */}
           </View>
         </LinearGradient>
 
@@ -791,7 +913,7 @@ const ChatDetailScreen: React.FC = () => {
             borderTopColor: BRAND.border,
             paddingHorizontal: 12,
             paddingTop: 10,
-            paddingBottom: Platform.OS === 'ios' ? insets.bottom + 6 : 10,
+            paddingBottom: 10,
             ...Platform.select({
               ios: { shadowColor: '#000', shadowOffset: { width: 0, height: -3 }, shadowOpacity: 0.05, shadowRadius: 8 },
               android: { elevation: 8 },
@@ -853,10 +975,9 @@ const ChatDetailScreen: React.FC = () => {
             {inputText.trim() || selectedMedia ? (
               <TouchableOpacity
                 onPress={() => {
-                  if (selectedMedia) handleSendMessage(selectedMedia.uri, selectedMedia.type || 'image');
+                  if (selectedMedia) handleSendMessage(selectedMedia.uri, selectedMedia.mimeType || selectedMedia.type || 'image');
                   else handleSendMessage();
                 }}
-                disabled={sending}
                 activeOpacity={0.85}
                 style={{ marginBottom: 2, borderRadius: 20, overflow: 'hidden' }}
               >
@@ -872,10 +993,7 @@ const ChatDetailScreen: React.FC = () => {
                     }),
                   }}
                 >
-                  {sending
-                    ? <ActivityIndicator size="small" color="#fff" />
-                    : <Ionicons name="send" size={16} color="#fff" style={{ marginLeft: 2 }} />
-                  }
+                  <Ionicons name="send" size={16} color="#fff" style={{ marginLeft: 2 }} />
                 </LinearGradient>
               </TouchableOpacity>
             ) : (
@@ -956,6 +1074,60 @@ const SwipeableMessage: React.FC<{
     const m = Math.floor(secs / 60), s = Math.floor(secs % 60);
     return `${m}:${s.toString().padStart(2, '0')}`;
   };
+
+  // Call message rendering
+  if (message.messageType === 'call') {
+    const callStatus = message.callInfo?.status || (message.text?.toLowerCase().includes('missed') ? 'missed' : message.text?.toLowerCase().includes('rejected') ? 'rejected' : 'completed');
+    const callType = message.callInfo?.type || (message.text?.toLowerCase().includes('video') ? 'video' : 'voice');
+    const duration = message.callInfo?.duration;
+
+    const callConfig: Record<string, { icon: string; color: string; bg: string; label: string }> = {
+      missed:    { icon: 'call-outline',       color: '#EF4444', bg: '#FEF2F2', label: 'Missed call' },
+      rejected:  { icon: 'call-outline',       color: '#F59E0B', bg: '#FFFBEB', label: 'Declined call' },
+      cancelled: { icon: 'call-outline',       color: '#9CA3AF', bg: '#F9FAFB', label: 'Cancelled call' },
+      completed: { icon: 'checkmark-circle',   color: '#10B981', bg: '#ECFDF5', label: 'Call ended' },
+    };
+
+    const cfg = callConfig[callStatus] || callConfig.completed;
+
+    const formatCallDuration = (secs?: number) => {
+      if (!secs) return '';
+      const m = Math.floor(secs / 60);
+      const s = secs % 60;
+      return m > 0 ? `${m}m ${s}s` : `${s}s`;
+    };
+
+    return (
+      <View style={{ alignItems: 'center', marginVertical: 10, paddingHorizontal: 20 }}>
+        <View
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            backgroundColor: cfg.bg,
+            paddingHorizontal: 16,
+            paddingVertical: 10,
+            borderRadius: 20,
+            gap: 8,
+            borderWidth: 1,
+            borderColor: cfg.color + '20',
+          }}
+        >
+          <View style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: cfg.color + '15', alignItems: 'center', justifyContent: 'center' }}>
+            <Ionicons name={(callType === 'video' ? 'videocam-outline' : cfg.icon) as any} size={16} color={cfg.color} />
+          </View>
+          <View>
+            <Text style={{ fontSize: 13, fontWeight: '600', color: cfg.color }}>
+              {isMyMessage ? (callStatus === 'missed' ? 'No answer' : cfg.label) : cfg.label}
+            </Text>
+            <Text style={{ fontSize: 10, color: BRAND.textMuted, marginTop: 1 }}>
+              {callType === 'video' ? 'Video' : 'Voice'} · {formatMessageTime(message.createdAt)}
+              {duration ? ` · ${formatCallDuration(duration)}` : ''}
+            </Text>
+          </View>
+        </View>
+      </View>
+    );
+  }
 
   return (
     <Animated.View
@@ -1060,11 +1232,19 @@ const SwipeableMessage: React.FC<{
                 <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 10, fontWeight: '500' }}>
                   {formatMessageTime(message.createdAt)}
                 </Text>
-                <Ionicons
-                  name={message.status === 'read' ? 'checkmark-done' : message.status === 'delivered' ? 'checkmark-done' : 'checkmark'}
-                  size={13}
-                  color={message.status === 'read' ? '#93C5FD' : 'rgba(255,255,255,0.75)'}
-                />
+                {message.status === 'failed' ? (
+                  <TouchableOpacity onPress={() => handleRetryMessage(message)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                    <Ionicons name="alert-circle" size={14} color="#EF4444" />
+                  </TouchableOpacity>
+                ) : message.status === 'sending' ? (
+                  <Ionicons name="time-outline" size={12} color="rgba(255,255,255,0.5)" />
+                ) : (
+                  <Ionicons
+                    name={message.status === 'read' ? 'checkmark-done' : message.status === 'delivered' ? 'checkmark-done' : 'checkmark'}
+                    size={13}
+                    color={message.status === 'read' ? '#93C5FD' : 'rgba(255,255,255,0.75)'}
+                  />
+                )}
               </View>
             </LinearGradient>
           ) : (
@@ -1165,7 +1345,7 @@ const AttachmentMenuModal: React.FC<{
             {ATTACH_OPTIONS.map((opt, i) => (
               <TouchableOpacity
                 key={opt.label}
-                onPress={() => { handlers[i](); onClose(); }}
+                onPress={() => handlers[i]()}
                 activeOpacity={0.8}
                 style={{ flex: 1, alignItems: 'center' }}
               >

@@ -8,7 +8,7 @@ import { WebView } from 'react-native-webview';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '@/types/navigation.types';
-import { walletAPI, handleAPIError } from '@/api/api';
+import api, { walletAPI, handleAPIError } from '@/api/api';
 import socketService from '@/services/socket.service';
 
 type WalletPaymentScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'WalletPayment'>;
@@ -18,7 +18,7 @@ const WalletPaymentScreen: React.FC = () => {
   const navigation = useNavigation<WalletPaymentScreenNavigationProp>();
   const route = useRoute<WalletPaymentScreenRouteProp>();
   
-  const { amount, reference, authorizationUrl } = route.params;
+  const { amount, reference, authorizationUrl, paymentType = 'wallet_funding' } = route.params;
   
   const [verifying, setVerifying] = useState(false);
   const [paymentConfirmed, setPaymentConfirmed] = useState(false);
@@ -90,42 +90,57 @@ const WalletPaymentScreen: React.FC = () => {
 
     try {
       setVerifying(true);
-      console.log('🔍 Manually verifying wallet payment:', reference);
+      console.log('🔍 Manually verifying payment:', reference, 'type:', paymentType);
 
-      const response = await walletAPI.verifyWalletFunding(reference);
-      console.log('📊 Verification response:', response);
+      if (paymentType === 'tier_upgrade') {
+        // Verify tier upgrade
+        const response = await api.get(`/subscriptions/verify-tier/${reference}`);
+        const result = response.data;
+        console.log('📊 Tier verification response:', result);
 
-      if (response.success) {
-        const payment = response.data.payment;
-
-        if (payment.status === 'completed' || payment.status === 'success') {
+        if (result.success) {
           setVerifying(false);
           setPaymentConfirmed(true);
-
-          toast.success('Wallet Funded!', `Your wallet has been credited with ₦${amount.toLocaleString()}`);
-        } else if (payment.status === 'failed') {
-          setVerifying(false);
-
-          toast.error('Payment Failed', 'Your wallet funding could not be processed. Please try again.');
-        } else if (payment.status === 'pending') {
-          setVerifying(false);
-
-          toast.info('Payment Pending', 'Your payment is still being processed. Please wait a moment and try again.');
+          toast.success('Plan Upgraded!', 'Your plan has been upgraded successfully.');
         } else {
           setVerifying(false);
-
-          toast.info('Payment Status', `Current status: ${payment.status}. Please try again or contact support.`);
+          toast.error('Error', result.message || 'Could not verify upgrade.');
         }
       } else {
-        setVerifying(false);
-        toast.error('Error', 'Could not verify payment. Please try again.');
+        // Verify wallet funding
+        const response = await walletAPI.verifyWalletFunding(reference);
+        console.log('📊 Verification response:', response);
+
+        if (response.success) {
+          const payment = response.data.payment;
+
+          if (payment.status === 'completed' || payment.status === 'success') {
+            setVerifying(false);
+            setPaymentConfirmed(true);
+            toast.success('Wallet Funded!', `Your wallet has been credited with ₦${amount.toLocaleString()}`);
+          } else if (payment.status === 'failed') {
+            setVerifying(false);
+            toast.error('Payment Failed', 'Your wallet funding could not be processed. Please try again.');
+          } else if (payment.status === 'pending') {
+            setVerifying(false);
+            toast.info('Payment Pending', 'Your payment is still being processed. Please wait a moment and try again.');
+          } else {
+            setVerifying(false);
+            toast.info('Payment Status', `Current status: ${payment.status}. Please try again or contact support.`);
+          }
+        } else {
+          setVerifying(false);
+          toast.error('Error', 'Could not verify payment. Please try again.');
+        }
       }
     } catch (error) {
       const apiError = handleAPIError(error);
       console.error('❌ Verification error:', apiError);
       setVerifying(false);
 
-      toast.error('Verification Error', 'Could not verify payment. Please check your wallet balance or contact support if you were charged.');
+      toast.error('Verification Error', paymentType === 'tier_upgrade'
+        ? 'Could not verify upgrade. Please check your plan status or contact support.'
+        : 'Could not verify payment. Please check your wallet balance or contact support if you were charged.');
     }
   };
 
@@ -151,15 +166,21 @@ const WalletPaymentScreen: React.FC = () => {
           <View className="w-24 h-24 rounded-full bg-green-100 items-center justify-center mb-6">
             <Ionicons name="checkmark-circle" size={60} color="#10b981" />
           </View>
-          <Text className="text-2xl font-bold text-gray-900 mb-2">Payment Successful!</Text>
+          <Text className="text-2xl font-bold text-gray-900 mb-2">
+            {paymentType === 'tier_upgrade' ? 'Plan Upgraded!' : 'Payment Successful!'}
+          </Text>
           <Text className="text-gray-600 text-center mb-6">
-            Your wallet has been credited with ₦{amount.toLocaleString()}
+            {paymentType === 'tier_upgrade'
+              ? 'Your plan has been upgraded successfully.'
+              : `Your wallet has been credited with ₦${amount.toLocaleString()}`}
           </Text>
           <TouchableOpacity
             onPress={() => navigation.navigate('Main')}
             className="bg-pink-600 px-8 py-4 rounded-2xl"
           >
-            <Text className="text-white font-bold text-base">View Wallet</Text>
+            <Text className="text-white font-bold text-base">
+              {paymentType === 'tier_upgrade' ? 'Continue' : 'View Wallet'}
+            </Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>

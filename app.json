@@ -2,8 +2,8 @@
   "expo": {
     "name": "LookReal",
     "slug": "LookReal",
-    "version": "1.2.0",
-    "scheme": "LookReal",
+    "version": "2.2",
+    "scheme": "lookreal",
     "web": {
       "favicon": "./assets/favicon.png"
     },
@@ -11,6 +11,18 @@
       "tsconfigPaths": true
     },
     "plugins": [
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true,
+            "networkInspector": true,
+            "extraPermissions": [
+              "com.google.android.gms.permission.AD_ID"
+            ]
+          }
+        }
+      ],
       [
         "expo-notifications",
         {
@@ -27,10 +39,10 @@
       ]
     ],
     "orientation": "portrait",
-    "icon": "./assets/app-icon.png",
+    "icon": "./assets/app-icon.jpg",
     "userInterfaceStyle": "light",
     "splash": {
-      "image": "./assets/app-icon.png",
+      "image": "./assets/app-icon.jpg",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
@@ -40,7 +52,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.techtrove.sharplook",
-      "buildNumber": "21",
+      "buildNumber": "23",
       "associatedDomains": [
         "applinks:lookreal.beauty"
       ],
@@ -48,7 +60,7 @@
         "CFBundleURLTypes": [
           {
             "CFBundleURLSchemes": [
-              "LookReal"
+              "lookreal"
             ]
           }
         ],
@@ -63,19 +75,21 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/app-icon.png",
+        "foregroundImage": "./assets/app-icon.jpg",
         "backgroundColor": "#ffffff"
       },
+      "navigationBarColor": "#ffffff",
+      "navigationBarStyle": "dark-content",
       "package": "com.inuud.sharplook",
       "googleServicesFile": "./google-services.json",
-      "versionCode": 47,
+      "versionCode": 49,
       "intentFilters": [
         {
           "action": "VIEW",
           "autoVerify": true,
           "data": [
             {
-              "scheme": "LookReal"
+              "scheme": "lookreal"
             }
           ],
           "category": [
@@ -129,7 +143,9 @@
       "policy": "appVersion"
     },
     "updates": {
-      "url": "https://u.expo.dev/2ac05c34-9b63-48bc-8f96-af019c5f2f0c"
+      "enabled": true,
+      "checkAutomatically": "ON_ERROR_RECOVERY",
+      "url": "https://u.expo.dev/6a6fc629-797c-4054-b04c-aeccbc956c41"
     },
     "extra": {
       "eas": {

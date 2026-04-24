@@ -456,6 +456,7 @@ const VendorDashboardScreen: React.FC = () => {
           <View style={{ flexDirection: 'row', gap: 12 }}>
             {[
               { title: 'Add Service', icon: 'add-circle-outline' as const, iconColor: BRAND.primary, bg: BRAND.primarySoft, onPress: () => navigation.navigate('Services') },
+              { title: 'Add Product', icon: 'cube-outline'       as const, iconColor: '#7C3AED',     bg: '#EDE9FE',         onPress: () => navigation.navigate('MyProducts') },
               { title: 'Bookings',    icon: 'calendar-outline'   as const, iconColor: BRAND.blue,    bg: BRAND.blueSoft,    onPress: () => navigation.navigate('Bookings')  },
             ].map((action, i) => (
               <TouchableOpacity

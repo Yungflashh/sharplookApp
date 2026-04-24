@@ -46,16 +46,23 @@ export const loginUser = async (email: string, password: string): Promise<AuthRe
     let deviceName: string = 'Unknown Device';
 
     try {
-      console.log('📱 Getting FCM token for login...');
-      fcmToken = await getFCMToken();
       const deviceInfo = getDeviceInfo();
       deviceType = deviceInfo.deviceType;
       deviceName = deviceInfo.deviceName;
 
-      if (fcmToken) {
-        console.log('✅ FCM token retrieved for login');
+      // Use cached FCM token to avoid a slow Expo network round-trip on every login
+      fcmToken = await AsyncStorage.getItem('cachedFcmToken');
+      if (!fcmToken) {
+        console.log('📱 No cached FCM token — fetching from Expo...');
+        fcmToken = await getFCMToken();
+        if (fcmToken) {
+          await AsyncStorage.setItem('cachedFcmToken', fcmToken);
+          console.log('✅ FCM token fetched and cached');
+        } else {
+          console.log('⚠️ No FCM token available (push notifications may not work)');
+        }
       } else {
-        console.log('⚠️ No FCM token available (push notifications may not work)');
+        console.log('✅ Using cached FCM token');
       }
     } catch (fcmError) {
       // Don't fail login if FCM fails
@@ -86,6 +93,7 @@ export const loginUser = async (email: string, password: string): Promise<AuthRe
       await AsyncStorage.setItem('refreshToken', refreshToken);
       await AsyncStorage.setItem('userData', JSON.stringify(user));
       await AsyncStorage.setItem('isAuthenticated', 'true');
+      await updateLastActive();
 
       const isVendor = user.isVendor === true;
 
@@ -339,5 +347,44 @@ export const getStoredToken = async (): Promise<string | null> => {
   } catch (error) {
     console.error('Error getting stored token:', error);
     return null;
+  }
+};
+
+const INACTIVITY_LIMIT_MS = 3 * 24 * 60 * 60 * 1000; // 3 days
+
+/**
+ * Record the current timestamp as the last active time.
+ * Call this on login and whenever the app comes to foreground.
+ */
+export const updateLastActive = async (): Promise<void> => {
+  try {
+    await AsyncStorage.setItem('lastActive', Date.now().toString());
+  } catch (error) {
+    console.error('Error updating last active:', error);
+  }
+};
+
+/**
+ * Check if the user has been inactive for more than 3 days.
+ * If so, logs them out and returns true.
+ */
+export const checkInactivityAndLogout = async (): Promise<boolean> => {
+  try {
+    const lastActiveStr = await AsyncStorage.getItem('lastActive');
+    if (!lastActiveStr) {
+      // No record yet — treat as active and set it now
+      await updateLastActive();
+      return false;
+    }
+    const elapsed = Date.now() - parseInt(lastActiveStr, 10);
+    if (elapsed > INACTIVITY_LIMIT_MS) {
+      console.log('🔒 User inactive for 3+ days — logging out');
+      await AsyncStorage.multiRemove(['accessToken', 'refreshToken', 'userData', 'isAuthenticated', 'lastActive']);
+      return true;
+    }
+    return false;
+  } catch (error) {
+    console.error('Error checking inactivity:', error);
+    return false;
   }
 };

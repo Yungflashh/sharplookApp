@@ -1,21 +1,29 @@
 import { io, Socket } from 'socket.io-client';
 import { getStoredToken } from '@/utils/authHelper';
 
-const SOCKET_URL = 'https://sharplook-backend-production.onrender.com';
+const SOCKET_URL='https://sharplook-backend-production.onrender.com';
+// const SOCKET_URL = 'http://10.195.125.66:5500';
 
 class SocketService {
   private socket: Socket | null = null;
   private isConnected: boolean = false;
+  private isConnecting: boolean = false;
   private connectionCallbacks: Array<() => void> = [];
   private pendingListeners: Array<{ event: string; callback: (data: any) => void }> = [];
+  private activeListeners: Array<{ event: string; originalCallback: (data: any) => void; wrappedCallback: (data: any) => void }> = [];
 
   
   async connect(): Promise<void> {
     try {
       if (this.socket?.connected) {
         console.log('🔌 Socket already connected, socket ID:', this.socket.id);
-
+        console.log('📌 Firing', this.connectionCallbacks.length, 'callbacks (already connected)');
         this.connectionCallbacks.forEach(cb => cb());
+        return;
+      }
+
+      if (this.isConnecting) {
+        console.log('⏳ Socket connection already in progress, skipping duplicate call');
         return;
       }
 
@@ -32,19 +40,24 @@ class SocketService {
         this.socket.removeAllListeners();
         this.socket.disconnect();
         this.socket = null;
-        this.pendingListeners = [];
+        // Move active listeners to pending so they get re-attached on the new socket
+        for (const listener of this.activeListeners) {
+          this.pendingListeners.push({ event: listener.event, callback: listener.wrappedCallback });
+        }
       }
 
+      this.isConnecting = true;
       console.log('🔵 Connecting to Socket.IO server...');
       console.log('   URL:', SOCKET_URL);
 
       this.socket = io(SOCKET_URL, {
         auth: { token },
-        transports: ['websocket', 'polling'],
+        transports: ['polling', 'websocket'],
         reconnection: true,
         reconnectionAttempts: Infinity,
         reconnectionDelay: 1000,
         reconnectionDelayMax: 10000,
+        upgrade: true,
       });
 
       this.setupEventListeners();
@@ -60,6 +73,7 @@ class SocketService {
 
     this.socket.on('connect', () => {
       this.isConnected = true;
+      this.isConnecting = false;
       console.log('✅ Socket connected successfully');
       console.log('   Socket ID:', this.socket?.id);
 
@@ -76,6 +90,7 @@ class SocketService {
       }
 
 
+      console.log('📌 Socket connect event: firing', this.connectionCallbacks.length, 'connection callbacks');
       this.connectionCallbacks.forEach(cb => cb());
     });
 
@@ -85,6 +100,7 @@ class SocketService {
     });
 
     this.socket.on('connect_error', (error) => {
+      this.isConnecting = false;
       console.error('❌ Socket connection error:', error.message);
     });
 
@@ -101,9 +117,10 @@ class SocketService {
   
   onConnected(callback: () => void): void {
     this.connectionCallbacks.push(callback);
-    
-    
+    console.log('📌 onConnected registered. isConnected:', this.isConnected, 'total callbacks:', this.connectionCallbacks.length);
+
     if (this.isConnected) {
+      console.log('📌 Socket already connected, firing callback immediately');
       callback();
     }
   }
@@ -115,6 +132,9 @@ class SocketService {
       this.socket.disconnect();
       this.socket = null;
       this.isConnected = false;
+      this.isConnecting = false;
+      this.activeListeners = [];
+      this.pendingListeners = [];
     }
   }
 
@@ -597,6 +617,9 @@ class SocketService {
 
   
   removeListener(event: string): void {
+    // Remove from active tracking
+    this.activeListeners = this.activeListeners.filter(l => l.event !== event);
+
     if (!this.socket) {
       console.warn('⚠️ Cannot remove listener - socket not initialized');
       return;
@@ -628,6 +651,9 @@ class SocketService {
       console.log('📥 RECEIVED custom event:', event);
       callback(data);
     };
+
+    // Track so we can re-attach after reconnect
+    this.activeListeners.push({ event, originalCallback: callback, wrappedCallback });
 
     if (!this.socket) {
       console.log('⏳ Socket not ready, queuing listener for:', event);

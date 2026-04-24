@@ -9,7 +9,17 @@
       "Bash(xargs grep:*)",
       "Bash(npx eas:*)",
       "Read(//c/Users/YUNGFL~1/AppData/Local/Temp/claude/C--Users-YungFlash-pfrank-sharplookApp/tasks/**)",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "Bash(grep -E \"\\\\.ts$\")",
+      "Bash(find /c/Users/YungFlash/pfrank/sharplookApp/src -type f \\\\\\(-name *model* -o -name *schema* -o -name *location* -o -name *geo* \\\\\\))",
+      "Bash(grep -rn \"\\\\.map.*\\\\[\\\\s*\\\\w\\\\+\\\\s*\\\\].*firstName\\\\|\\\\.map.*firstName\" /c/Users/YungFlash/pfrank/sharplookApp/src --include=*.tsx --include=*.ts)",
+      "Bash(grep -rn \"notification\\\\|Notification\" /c/Users/YungFlash/pfrank/sharplookApp/src/navigation --include=*.tsx --include=*.ts)",
+      "Bash(curl -s -o /dev/null -w \"HTTP Status: %{http_code}\\\\nTime: %{time_total}s\\\\n\" https://sharplook-backend-production.onrender.com/api/v1/auth/login)",
+      "Bash(npx expo:*)",
+      "Bash(npm install:*)",
+      "Bash(dir \"C:\\\\Users\\\\YungFlash\\\\Downloads\\\\sharplook-admin\")",
+      "Bash(npx tsc:*)",
+      "Bash(curl -s --max-time 10 -o /dev/null -w \"%{http_code}\" \"https://a.relay.metered.ca:443\")"
     ]
   }
 }

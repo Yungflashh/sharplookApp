@@ -1,9 +1,11 @@
 import axios, { AxiosInstance, AxiosError, InternalAxiosRequestConfig } from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
 const API_BASE_URL = 'https://sharplook-backend-production.onrender.com/api/v1';
+// const API_BASE_URL = 'http://10.195.125.66:5500/api/v1';
 const api: AxiosInstance = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 30000,
+  timeout: 60000,
   headers: {
     'Content-Type': 'application/json'
   }
@@ -47,7 +49,16 @@ api.interceptors.response.use(response => {
   });
   const originalRequest = error.config as InternalAxiosRequestConfig & {
     _retry?: boolean;
+    _networkRetry?: boolean;
   };
+
+  // Auto-retry once on network errors (handles Render cold starts)
+  if (!error.response && !originalRequest._networkRetry && error.code !== 'ECONNABORTED') {
+    originalRequest._networkRetry = true;
+    console.log('🔄 Network error, retrying request:', originalRequest.url);
+    return api(originalRequest);
+  }
+
   if (error.response?.status === 401 && !originalRequest._retry) {
     originalRequest._retry = true;
     try {
@@ -75,20 +86,38 @@ api.interceptors.response.use(response => {
 });
 export const authAPI = {
  login: async (
-  email: string, 
+  email: string,
   password: string,
   fcmToken?: string,
   deviceType?: 'ios' | 'android' | 'web',
   deviceName?: string
 ) => {
-  const response = await api.post('/auth/login', {
-    email,
-    password,
-    fcmToken,     // ✅ Send token
-    deviceType,   // ✅ Send device type
-    deviceName,   // ✅ Send device name
-  });
-  return response.data;
+  // Try axios first, fall back to fetch on network error (Android SSL compatibility)
+  try {
+    const response = await api.post('/auth/login', {
+      email,
+      password,
+      fcmToken,
+      deviceType,
+      deviceName,
+    });
+    return response.data;
+  } catch (axiosError: any) {
+    if (axiosError?.code === 'ERR_NETWORK' && Platform.OS === 'android') {
+      console.log('🔄 Axios failed on Android, trying fetch fallback...');
+      const fetchResponse = await fetch(`${API_BASE_URL}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password, fcmToken, deviceType, deviceName }),
+      });
+      const data = await fetchResponse.json();
+      if (!fetchResponse.ok) {
+        return { success: false, message: data?.message || 'Login failed' };
+      }
+      return data;
+    }
+    throw axiosError;
+  }
 },
   register: async (userData: {
   firstName: string;
@@ -873,8 +902,9 @@ export const bookingAPI = {
     description: string;
     category: string;
     service?: string;
+    serviceType: 'home' | 'shop' | 'both';
     proposedPrice: number;
-    location: {
+    location?: {
       address: string;
       city: string;
       state: string;
@@ -887,48 +917,24 @@ export const bookingAPI = {
   }, images?: any[]) => {
     try {
       const token = await AsyncStorage.getItem('accessToken');
-      
-      console.log('🔵 Creating offer with data:', offerData);
-      console.log('🖼️ Images count:', images?.length || 0);
 
       if (!images || images.length === 0) {
-        
-        console.log('📤 Sending JSON request (no images)');
         const response = await api.post('/offers', offerData);
         return response.data;
       }
 
-      
-      console.log('📤 Sending FormData request (with images)');
       const formData = new FormData();
-
-      
       formData.append('title', offerData.title);
       formData.append('description', offerData.description);
       formData.append('category', offerData.category);
-      
-      if (offerData.service) {
-        formData.append('service', offerData.service);
-      }
-      
+      if (offerData.service) formData.append('service', offerData.service);
+      formData.append('serviceType', offerData.serviceType);
       formData.append('proposedPrice', String(offerData.proposedPrice));
-      
-      
-      formData.append('location', JSON.stringify(offerData.location));
-      
-      
-      if (offerData.preferredDate) {
-        formData.append('preferredDate', offerData.preferredDate);
-      }
-      if (offerData.preferredTime) {
-        formData.append('preferredTime', offerData.preferredTime);
-      }
-      if (offerData.flexibility) {
-        formData.append('flexibility', offerData.flexibility);
-      }
-      if (offerData.expiresInDays) {
-        formData.append('expiresInDays', String(offerData.expiresInDays));
-      }
+      if (offerData.location) formData.append('location', JSON.stringify(offerData.location));
+      if (offerData.preferredDate) formData.append('preferredDate', offerData.preferredDate);
+      if (offerData.preferredTime) formData.append('preferredTime', offerData.preferredTime);
+      if (offerData.flexibility) formData.append('flexibility', offerData.flexibility);
+      if (offerData.expiresInDays) formData.append('expiresInDays', String(offerData.expiresInDays));
 
       
       for (let i = 0; i < images.length; i++) {
@@ -954,32 +960,13 @@ export const bookingAPI = {
       
       const response = await fetch(`${API_BASE_URL}/offers`, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          
-        },
+        headers: { 'Authorization': `Bearer ${token}` },
         body: formData
       });
-
-      console.log('📥 Response status:', response.status);
-
       const result = await response.json();
-      console.log('📥 Response data:', result);
-
-      if (!response.ok) {
-        console.error('❌ Response not OK:', result);
-        throw new Error(result.message || 'Failed to create offer');
-      }
-
-      console.log('✅ Offer created successfully');
+      if (!response.ok) throw new Error(result.message || 'Failed to create offer');
       return result;
     } catch (error) {
-      console.error('❌ Create offer error:', error);
-      console.error('Error details:', {
-        name: (error as any)?.name,
-        message: (error as any)?.message,
-        stack: (error as any)?.stack
-      });
       throw error;
     }
   },
@@ -1403,15 +1390,33 @@ export const messageAPI = {
   uploadAttachment: async (file: any) => {
     try {
       const token = await AsyncStorage.getItem('accessToken');
-      const filename = file.uri.split('/').pop() || 'attachment';
+      const filename = file.name || file.uri.split('/').pop() || 'attachment';
       const match = /\.(\w+)$/.exec(filename);
-      const type = match ? `image/${match[1]}` : 'image/jpeg';
+      const ext = match ? match[1].toLowerCase() : '';
+
+      // Determine correct MIME type based on file extension or provided type
+      let mimeType = file.type || 'application/octet-stream';
+      if (ext && (!file.type || file.type === 'image' || file.type === 'audio' || file.type === 'video')) {
+        const mimeMap: Record<string, string> = {
+          jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif', webp: 'image/webp',
+          mp4: 'video/mp4', mov: 'video/quicktime', avi: 'video/x-msvideo',
+          m4a: 'audio/x-m4a', mp3: 'audio/mpeg', wav: 'audio/wav', aac: 'audio/aac', ogg: 'audio/ogg',
+          pdf: 'application/pdf', doc: 'application/msword',
+        };
+        mimeType = mimeMap[ext] || `application/octet-stream`;
+      }
+
+      // On iOS, ensure the URI is correct for FormData
+      let uri = file.uri;
+      if (Platform.OS === 'ios' && !uri.startsWith('file://') && !uri.startsWith('http')) {
+        uri = `file://${uri}`;
+      }
 
       const formData = new FormData();
       formData.append('file', {
-        uri: file.uri,
+        uri,
         name: filename,
-        type: type,
+        type: mimeType,
       } as any);
 
       const response = await fetch(`${API_BASE_URL}/messages/upload`, {
@@ -2326,8 +2331,9 @@ export const offerAPI = {
     description: string;
     category: string;
     service?: string;
+    serviceType: 'home' | 'shop' | 'both';
     proposedPrice: number;
-    location: {
+    location?: {
       address: string;
       city: string;
       state: string;
@@ -2349,8 +2355,9 @@ export const offerAPI = {
       formData.append('description', offerData.description);
       formData.append('category', offerData.category);
       if (offerData.service) formData.append('service', offerData.service);
+      formData.append('serviceType', offerData.serviceType);
       formData.append('proposedPrice', String(offerData.proposedPrice));
-      formData.append('location', JSON.stringify(offerData.location));
+      if (offerData.location) formData.append('location', JSON.stringify(offerData.location));
       if (offerData.preferredDate) formData.append('preferredDate', offerData.preferredDate);
       if (offerData.preferredTime) formData.append('preferredTime', offerData.preferredTime);
       if (offerData.flexibility) formData.append('flexibility', offerData.flexibility);
@@ -2369,7 +2376,6 @@ export const offerAPI = {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
-          'Content-Type': 'multipart/form-data'
         },
         body: formData
       });
@@ -2463,11 +2469,11 @@ export const offerAPI = {
 };
 export const categoriesAPI = {
   getActiveCategories: async () => {
-    const response = await api.get('/categories');
+    const response = await api.get('/categories', { params: { limit: 100 } });
     return response.data;
   },
   getAll: async () => {
-    const response = await api.get('/categories');
+    const response = await api.get('/categories', { params: { limit: 100 } });
     return response.data;
   },
   getById: async (categoryId: string) => {
@@ -2637,4 +2643,11 @@ export const handleAPIError = (error: any): APIError => {
     status: 500
   };
 };
+export const appAPI = {
+  checkVersion: async () => {
+    const response = await api.get('/app/version');
+    return response.data;
+  },
+};
+
 export default api;

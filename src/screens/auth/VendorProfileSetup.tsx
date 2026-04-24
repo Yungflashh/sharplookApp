@@ -552,17 +552,43 @@ const VendorProfileSetup = () => {
                 <View className="pt-3 border-t border-gray-100">
                   {location ? (
                     <View className="bg-green-50 border border-green-200 rounded-xl p-4 mb-2">
-                      <View className="flex-row items-center mb-2">
+                      <View className="flex-row items-center mb-3">
                         <Ionicons name="location" size={20} color="#059669" />
                         <Text className="text-green-700 font-semibold ml-2">Location Added</Text>
                       </View>
-                      <Text className="text-gray-700 text-sm mb-1">{location.address}</Text>
-                      <Text className="text-gray-600 text-xs mb-3">
-                        {location.city}, {location.state}, {location.country}
-                      </Text>
+                      <Text className="text-gray-500 text-xs mb-1">Address</Text>
+                      <TextInput
+                        className="bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 mb-2"
+                        value={location.address}
+                        onChangeText={(text) => setLocation({ ...location, address: text })}
+                        placeholder="Enter your address"
+                        editable={!loading}
+                      />
+                      <View className="flex-row gap-2">
+                        <View className="flex-1">
+                          <Text className="text-gray-500 text-xs mb-1">City</Text>
+                          <TextInput
+                            className="bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800"
+                            value={location.city}
+                            onChangeText={(text) => setLocation({ ...location, city: text })}
+                            placeholder="City"
+                            editable={!loading}
+                          />
+                        </View>
+                        <View className="flex-1">
+                          <Text className="text-gray-500 text-xs mb-1">State</Text>
+                          <TextInput
+                            className="bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800"
+                            value={location.state}
+                            onChangeText={(text) => setLocation({ ...location, state: text })}
+                            placeholder="State"
+                            editable={!loading}
+                          />
+                        </View>
+                      </View>
                       <TouchableOpacity
                         onPress={() => setLocation(null)}
-                        className="mt-2"
+                        className="mt-3"
                         activeOpacity={0.7}
                       >
                         <Text className="text-red-600 text-sm font-semibold">

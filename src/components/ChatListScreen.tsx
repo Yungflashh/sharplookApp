@@ -175,9 +175,24 @@ const ChatListScreen: React.FC = () => {
 
     const isMyMessage = conversation.lastMessage.sender._id === currentUserId;
     const prefix = isMyMessage ? 'You: ' : '';
+    const msg = conversation.lastMessage;
 
-    
-    return `${prefix}${conversation.lastMessage.text}`;
+    if (msg.text) {
+      return `${prefix}${msg.text}`;
+    }
+
+    switch (msg.messageType) {
+      case 'image':
+        return `${prefix}Sent a photo`;
+      case 'audio':
+        return `${prefix}Sent a voice message`;
+      case 'video':
+        return `${prefix}Sent a video`;
+      case 'file':
+        return `${prefix}Sent a file`;
+      default:
+        return `${prefix}Sent a message`;
+    }
   };
 
   const formatTime = (dateString: string) => {

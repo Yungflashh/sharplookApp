@@ -1,66 +1,88 @@
 import React from 'react';
+import { Platform } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { ClientTabParamList } from '@/types/navigation.types';
 import ClientDashboardScreen from '@/screens/client/ClientDashboardScreen';
 import ClientProfileScreen from '@/screens/client/ClientProfileScreen';
 import BookingsScreen from '@/screens/client/BookingScreen';
 import MarketplaceScreen from '@/screens/client/MarketPlaceScreen';
+
 const Tab = createBottomTabNavigator<ClientTabParamList>();
+
 const ClientTabNavigator = () => {
-  return <Tab.Navigator screenOptions={{
-    tabBarActiveTintColor: '#E91E63',
-    tabBarInactiveTintColor: '#999',
-    tabBarStyle: {
-      backgroundColor: '#fff',
-      borderTopColor: '#E0E0E0',
-      borderTopWidth: 1,
-      height: 60,
-      paddingBottom: 8,
-      paddingTop: 8,
-      elevation: 8,
-      shadowColor: '#000',
-      shadowOffset: {
-        width: 0,
-        height: -2
-      },
-      shadowOpacity: 0.1,
-      shadowRadius: 4
-    },
-    tabBarLabelStyle: {
-      fontSize: 12,
-      fontWeight: '600'
-    },
-    headerShown: false
-  }}>
-      <Tab.Screen name="Home" component={ClientDashboardScreen} options={{
-      tabBarIcon: ({
-        color,
-        size
-      }) => <Ionicons name="home" size={size} color={color} />
-    }} />
-      
-      <Tab.Screen name="Bookings" component={BookingsScreen} options={{
-      tabBarIcon: ({
-        color,
-        size
-      }) => <Ionicons name="calendar" size={size} color={color} />
-    }} />
-      <Tab.Screen name="MarketPlace" component={MarketplaceScreen} options={{
-      tabBarIcon: ({
-        color,
-        size
-      }) => <Ionicons name="calendar" size={size} color={color} />
-    }} />
-      
-      {}
-      
-      <Tab.Screen name="Profile" component={ClientProfileScreen} options={{
-      tabBarIcon: ({
-        color,
-        size
-      }) => <Ionicons name="person" size={size} color={color} />
-    }} />
-    </Tab.Navigator>;
+  const insets = useSafeAreaInsets();
+
+  return (
+    <Tab.Navigator
+      screenOptions={{
+        tabBarActiveTintColor: '#E91E63',
+        tabBarInactiveTintColor: '#999',
+        tabBarStyle: {
+          backgroundColor: '#fff',
+          borderTopColor: '#E0E0E0',
+          borderTopWidth: 1,
+          height: Platform.OS === 'ios' ? 88 : 64 + Math.max(insets.bottom, 0),
+          paddingBottom: Platform.OS === 'ios' ? 28 : Math.max(insets.bottom, 8),
+          paddingTop: 8,
+          elevation: 8,
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: -2 },
+          shadowOpacity: 0.1,
+          shadowRadius: 4,
+        },
+        tabBarLabelStyle: {
+          fontSize: 12,
+          fontWeight: '600',
+        },
+        tabBarItemStyle: {
+          paddingVertical: 4,
+        },
+        headerShown: false,
+      }}
+    >
+      <Tab.Screen
+        name="Home"
+        component={ClientDashboardScreen}
+        options={{
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons name={focused ? 'home' : 'home-outline'} size={size} color={color} />
+          ),
+        }}
+      />
+
+      <Tab.Screen
+        name="Bookings"
+        component={BookingsScreen}
+        options={{
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons name={focused ? 'calendar' : 'calendar-outline'} size={size} color={color} />
+          ),
+        }}
+      />
+
+      <Tab.Screen
+        name="MarketPlace"
+        component={MarketplaceScreen}
+        options={{
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons name={focused ? 'storefront' : 'storefront-outline'} size={size} color={color} />
+          ),
+        }}
+      />
+
+      <Tab.Screen
+        name="Profile"
+        component={ClientProfileScreen}
+        options={{
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons name={focused ? 'person' : 'person-outline'} size={size} color={color} />
+          ),
+        }}
+      />
+    </Tab.Navigator>
+  );
 };
+
 export default ClientTabNavigator;

@@ -503,6 +503,18 @@ const MarketplaceScreen: React.FC = () => {
   const featuredProducts = allProducts.filter((p) => p.isFeatured);
   const regularProducts = allProducts.filter((p) => !p.isFeatured);
 
+  // Group regular products by vendor, max 2 per vendor
+  const groupedByVendor = regularProducts.reduce<Record<string, { seller: Product['seller']; products: Product[] }>>((acc, product) => {
+    const sellerId = product.seller?._id || 'unknown';
+    if (!acc[sellerId]) {
+      acc[sellerId] = { seller: product.seller, products: [] };
+    }
+    acc[sellerId].products.push(product);
+    return acc;
+  }, {});
+
+  const vendorGroups = Object.entries(groupedByVendor);
+
   const SORT_OPTIONS = [
     { key: 'createdAt', label: 'Latest', icon: 'time-outline' as const },
     { key: 'price', label: 'Price', icon: 'pricetag-outline' as const },
@@ -907,8 +919,8 @@ const MarketplaceScreen: React.FC = () => {
           />
         )}
 
-        {/* ── ALL / REGULAR PRODUCTS ───────────────────────────────────── */}
-        {regularProducts.length > 0 && (
+        {/* ── ALL / REGULAR PRODUCTS (grouped by vendor, max 2 each) ──── */}
+        {vendorGroups.length > 0 && (
           <View style={{ paddingHorizontal: 20 }}>
             {featuredProducts.length > 0 && (
               <View
@@ -959,16 +971,58 @@ const MarketplaceScreen: React.FC = () => {
               </View>
             )}
 
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' }}>
-              {regularProducts.map((product, index) => (
-                <ProductCard
-                  key={`regular-${product._id}-${index}`}
-                  product={product}
-                  onPress={() => navigation.navigate('ProductDetail', { productId: product._id })}
-                  onAddToCart={() => handleAddToCart(product)}
-                />
-              ))}
-            </View>
+            {vendorGroups.map(([sellerId, group]) => (
+              <View key={sellerId} style={{ marginBottom: 18 }}>
+                {/* Vendor header */}
+                <TouchableOpacity
+                  onPress={() => navigation.navigate('VendorDetail', { vendorId: sellerId })}
+                  activeOpacity={0.7}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    marginBottom: 10,
+                    gap: 8,
+                  }}
+                >
+                  <Image
+                    source={group.seller?.avatar ? { uri: group.seller.avatar } : require('../../../assets/app-icon.jpg')}
+                    style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: BRAND.border }}
+                  />
+                  <Text style={{ fontSize: 14, fontWeight: '700', color: BRAND.textPrimary, flex: 1 }}>
+                    {group.seller?.firstName} {group.seller?.lastName}
+                  </Text>
+                  {group.products.length > 2 && (
+                    <TouchableOpacity
+                      onPress={() => navigation.navigate('VendorDetail', { vendorId: sellerId })}
+                      style={{
+                        backgroundColor: BRAND.primarySoft,
+                        paddingHorizontal: 10,
+                        paddingVertical: 4,
+                        borderRadius: 12,
+                        borderWidth: 1,
+                        borderColor: BRAND.primaryMuted,
+                      }}
+                    >
+                      <Text style={{ fontSize: 11, color: BRAND.primary, fontWeight: '700' }}>
+                        +{group.products.length - 2} more
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+                </TouchableOpacity>
+
+                {/* Max 2 products per vendor */}
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' }}>
+                  {group.products.slice(0, 2).map((product, index) => (
+                    <ProductCard
+                      key={`regular-${product._id}-${index}`}
+                      product={product}
+                      onPress={() => navigation.navigate('ProductDetail', { productId: product._id })}
+                      onAddToCart={() => handleAddToCart(product)}
+                    />
+                  ))}
+                </View>
+              </View>
+            ))}
           </View>
         )}
 

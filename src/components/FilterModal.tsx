@@ -36,7 +36,8 @@ const FilterModal: React.FC<FilterModalProps> = ({
     setLocalFilters(filters);
   }, [filters, visible]);
   const handleApply = () => {
-    onApply(localFilters);
+    const { _showCategoryDropdown, ...cleanFilters } = localFilters as any;
+    onApply(cleanFilters);
     onClose();
   };
   const handleReset = () => {
@@ -70,28 +71,43 @@ const FilterModal: React.FC<FilterModalProps> = ({
           {}
           <View className="mb-6">
             <Text className="text-sm font-semibold text-gray-900 mb-2">Category</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mt-2">
-              <TouchableOpacity className={`px-4 py-2.5 rounded-full mr-2 ${localFilters.category === '' ? 'border border-gray-300' : 'bg-gray-100 border border-gray-300'}`} style={localFilters.category === '' ? {
-              backgroundColor: '#eb278d'
-            } : {}} onPress={() => setLocalFilters({
-              ...localFilters,
-              category: ''
-            })}>
-                <Text className={`text-sm font-medium ${localFilters.category === '' ? 'text-white' : 'text-gray-700'}`}>
-                  All
-                </Text>
-              </TouchableOpacity>
-              {categories.map(cat => <TouchableOpacity key={cat._id} className={`px-4 py-2.5 rounded-full mr-2 ${localFilters.category === cat._id ? 'border border-gray-300' : 'bg-gray-100 border border-gray-300'}`} style={localFilters.category === cat._id ? {
-              backgroundColor: '#eb278d'
-            } : {}} onPress={() => setLocalFilters({
-              ...localFilters,
-              category: cat._id
-            })}>
-                  <Text className={`text-sm font-medium ${localFilters.category === cat._id ? 'text-white' : 'text-gray-700'}`}>
-                    {cat.name}
-                  </Text>
-                </TouchableOpacity>)}
-            </ScrollView>
+            <TouchableOpacity
+              className="flex-row items-center justify-between px-4 py-3 mt-1 bg-gray-50 rounded-xl border border-gray-300"
+              activeOpacity={0.7}
+              onPress={() => setLocalFilters({ ...localFilters, _showCategoryDropdown: !localFilters._showCategoryDropdown } as any)}
+            >
+              <Text className={`text-sm font-medium ${localFilters.category ? 'text-gray-900' : 'text-gray-500'}`}>
+                {localFilters.category
+                  ? categories.find(c => c._id === localFilters.category)?.name || 'All Categories'
+                  : 'All Categories'}
+              </Text>
+              <Ionicons name={(localFilters as any)._showCategoryDropdown ? 'chevron-up' : 'chevron-down'} size={18} color="#6b7280" />
+            </TouchableOpacity>
+            {(localFilters as any)._showCategoryDropdown && (
+              <View className="mt-2 bg-white rounded-xl border border-gray-200" style={{ maxHeight: 200 }}>
+                <ScrollView showsVerticalScrollIndicator={false} nestedScrollEnabled>
+                  <TouchableOpacity
+                    className={`px-4 py-3 border-b border-gray-100 ${localFilters.category === '' ? 'bg-pink-50' : ''}`}
+                    onPress={() => setLocalFilters({ ...localFilters, category: '', _showCategoryDropdown: false } as any)}
+                  >
+                    <Text className={`text-sm font-medium ${localFilters.category === '' ? 'text-pink-600' : 'text-gray-700'}`}>
+                      All Categories
+                    </Text>
+                  </TouchableOpacity>
+                  {categories.map(cat => (
+                    <TouchableOpacity
+                      key={cat._id}
+                      className={`px-4 py-3 border-b border-gray-100 ${localFilters.category === cat._id ? 'bg-pink-50' : ''}`}
+                      onPress={() => setLocalFilters({ ...localFilters, category: cat._id, _showCategoryDropdown: false } as any)}
+                    >
+                      <Text className={`text-sm font-medium ${localFilters.category === cat._id ? 'text-pink-600' : 'text-gray-700'}`}>
+                        {cat.name}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+            )}
           </View>
 
           {}

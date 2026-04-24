@@ -10,7 +10,9 @@ import {
   KeyboardAvoidingView,
   Platform,
   StatusBar,
+  Modal,
 } from 'react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -144,6 +146,11 @@ const CreateOfferScreen: React.FC = () => {
   const [selectedImages, setSelectedImages] = useState<any[]>([]);
   const [errors, setErrors] = useState<any>({});
 
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showTimePicker, setShowTimePicker] = useState(false);
+  const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
+
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -259,9 +266,30 @@ const CreateOfferScreen: React.FC = () => {
   ];
 
   const FLEXIBILITY_OPTIONS = [
-    { key: 'flexible', label: 'Flexible', icon: 'time-outline' as const },
-    { key: 'specific', label: 'Specific', icon: 'calendar-outline' as const },
-    { key: 'urgent', label: 'Urgent', icon: 'flash-outline' as const },
+    {
+      key: 'flexible',
+      label: 'Anytime',
+      sub: 'No rush, I\'m flexible',
+      icon: 'time-outline' as const,
+      color: BRAND.green,
+      bg: BRAND.greenSoft,
+    },
+    {
+      key: 'specific',
+      label: 'Scheduled',
+      sub: 'I have a date in mind',
+      icon: 'calendar-outline' as const,
+      color: BRAND.blue,
+      bg: BRAND.blueSoft,
+    },
+    {
+      key: 'urgent',
+      label: 'ASAP',
+      sub: 'Need it right away',
+      icon: 'flash-outline' as const,
+      color: BRAND.orange,
+      bg: BRAND.orangeSoft,
+    },
   ];
 
   const SERVICE_HINTS: Record<string, { icon: keyof typeof Ionicons.glyphMap; text: string; color: string; bg: string }> = {
@@ -450,34 +478,159 @@ const CreateOfferScreen: React.FC = () => {
                 </TouchableOpacity>
               </View>
             ) : (
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-                {categories.map((cat) => {
-                  const isActive = formData.category === cat._id;
-                  return (
-                    <TouchableOpacity
-                      key={cat._id}
-                      onPress={() => { setFormData({ ...formData, category: cat._id }); setErrors({ ...errors, category: '' }); }}
-                      activeOpacity={0.8}
+              <>
+                {/* Dropdown trigger */}
+                <TouchableOpacity
+                  onPress={() => setShowCategoryDropdown(true)}
+                  activeOpacity={0.8}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    backgroundColor: BRAND.surfaceAlt,
+                    borderWidth: 1.5,
+                    borderColor: errors.category ? BRAND.red : formData.category ? BRAND.primary : BRAND.border,
+                    borderRadius: 13,
+                    paddingHorizontal: 14,
+                    paddingVertical: 14,
+                  }}
+                >
+                  <Ionicons
+                    name="grid-outline"
+                    size={16}
+                    color={formData.category ? BRAND.primary : BRAND.textMuted}
+                    style={{ marginRight: 10 }}
+                  />
+                  <Text
+                    style={{
+                      flex: 1,
+                      fontSize: 14,
+                      color: formData.category ? BRAND.textPrimary : BRAND.textMuted,
+                      fontWeight: formData.category ? '600' : '400',
+                    }}
+                  >
+                    {formData.category
+                      ? categories.find((c) => c._id === formData.category)?.name ?? 'Select a category'
+                      : 'Select a category'}
+                  </Text>
+                  <Ionicons name="chevron-down" size={16} color={BRAND.textMuted} />
+                </TouchableOpacity>
+
+                {/* Category modal */}
+                <Modal transparent animationType="slide" visible={showCategoryDropdown}>
+                  <TouchableOpacity
+                    style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}
+                    activeOpacity={1}
+                    onPress={() => setShowCategoryDropdown(false)}
+                  >
+                    <View
                       style={{
-                        paddingHorizontal: 16,
-                        paddingVertical: 8,
-                        borderRadius: 20,
-                        backgroundColor: isActive ? BRAND.primary : BRAND.surface,
-                        borderWidth: 1.5,
-                        borderColor: isActive ? BRAND.primary : BRAND.border,
-                        ...Platform.select({
-                          ios: isActive ? { shadowColor: BRAND.primary, shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.3, shadowRadius: 6 } : {},
-                          android: isActive ? { elevation: 3 } : {},
-                        }),
+                        backgroundColor: '#fff',
+                        borderTopLeftRadius: 24,
+                        borderTopRightRadius: 24,
+                        maxHeight: '70%',
+                        paddingBottom: 30,
                       }}
                     >
-                      <Text style={{ fontSize: 13, fontWeight: '700', color: isActive ? '#fff' : BRAND.textSecondary }}>
-                        {cat.name}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </ScrollView>
+                      {/* Header */}
+                      <View
+                        style={{
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          paddingHorizontal: 20,
+                          paddingTop: 18,
+                          paddingBottom: 12,
+                          borderBottomWidth: 1,
+                          borderBottomColor: BRAND.border,
+                        }}
+                      >
+                        <Text style={{ fontSize: 17, fontWeight: '800', color: BRAND.textPrimary }}>
+                          Select Category
+                        </Text>
+                        <TouchableOpacity
+                          onPress={() => setShowCategoryDropdown(false)}
+                          style={{
+                            width: 32,
+                            height: 32,
+                            borderRadius: 10,
+                            backgroundColor: BRAND.surfaceAlt,
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            borderWidth: 1,
+                            borderColor: BRAND.border,
+                          }}
+                        >
+                          <Ionicons name="close" size={17} color={BRAND.textPrimary} />
+                        </TouchableOpacity>
+                      </View>
+
+                      {/* Alphabetical list */}
+                      <ScrollView
+                        keyboardShouldPersistTaps="handled"
+                        showsVerticalScrollIndicator={false}
+                        contentContainerStyle={{ paddingVertical: 8, paddingHorizontal: 12 }}
+                      >
+                        {[...categories]
+                          .sort((a, b) => a.name.localeCompare(b.name))
+                          .map((cat) => {
+                            const isSelected = formData.category === cat._id;
+                            return (
+                              <TouchableOpacity
+                                key={cat._id}
+                                onPress={() => {
+                                  setFormData({ ...formData, category: cat._id });
+                                  setErrors({ ...errors, category: '' });
+                                  setShowCategoryDropdown(false);
+                                }}
+                                activeOpacity={0.7}
+                                style={{
+                                  flexDirection: 'row',
+                                  alignItems: 'center',
+                                  paddingHorizontal: 14,
+                                  paddingVertical: 14,
+                                  borderRadius: 12,
+                                  marginBottom: 4,
+                                  backgroundColor: isSelected ? BRAND.primarySoft : 'transparent',
+                                }}
+                              >
+                                <View
+                                  style={{
+                                    width: 36,
+                                    height: 36,
+                                    borderRadius: 10,
+                                    backgroundColor: isSelected ? BRAND.primaryMuted : BRAND.surfaceAlt,
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    marginRight: 12,
+                                    borderWidth: 1,
+                                    borderColor: isSelected ? BRAND.primaryLight : BRAND.border,
+                                  }}
+                                >
+                                  <Text style={{ fontSize: 14, fontWeight: '700', color: isSelected ? BRAND.primary : BRAND.textSecondary }}>
+                                    {cat.name.charAt(0).toUpperCase()}
+                                  </Text>
+                                </View>
+                                <Text
+                                  style={{
+                                    flex: 1,
+                                    fontSize: 15,
+                                    fontWeight: isSelected ? '700' : '500',
+                                    color: isSelected ? BRAND.primary : BRAND.textPrimary,
+                                  }}
+                                >
+                                  {cat.name}
+                                </Text>
+                                {isSelected && (
+                                  <Ionicons name="checkmark-circle" size={20} color={BRAND.primary} />
+                                )}
+                              </TouchableOpacity>
+                            );
+                          })}
+                      </ScrollView>
+                    </View>
+                  </TouchableOpacity>
+                </Modal>
+              </>
             )}
             {errors.category && <FieldError message={errors.category} />}
           </View>
@@ -593,62 +746,258 @@ const CreateOfferScreen: React.FC = () => {
 
           {/* ── FLEXIBILITY ──────────────────────────────────────────────── */}
           <View style={{ marginBottom: 18 }}>
-            <Label text="Time Flexibility" />
-            <View style={{ flexDirection: 'row', gap: 10 }}>
+            <Label text="When do you need it?" />
+            <View style={{ gap: 10 }}>
               {FLEXIBILITY_OPTIONS.map((opt) => {
                 const isActive = formData.flexibility === opt.key;
                 return (
                   <TouchableOpacity
                     key={opt.key}
-                    onPress={() => setFormData({ ...formData, flexibility: opt.key as any })}
+                    onPress={() => {
+                      setFormData({ ...formData, flexibility: opt.key as any, preferredDate: '', preferredTime: '' });
+                      setSelectedDate(new Date());
+                    }}
                     activeOpacity={0.8}
                     style={{
-                      flex: 1,
-                      paddingVertical: 14,
-                      borderRadius: 14,
-                      backgroundColor: isActive ? BRAND.primarySoft : BRAND.surface,
-                      borderWidth: 1.5,
-                      borderColor: isActive ? BRAND.primary : BRAND.border,
+                      flexDirection: 'row',
                       alignItems: 'center',
+                      padding: 14,
+                      borderRadius: 14,
+                      backgroundColor: isActive ? opt.bg : BRAND.surface,
+                      borderWidth: 1.5,
+                      borderColor: isActive ? opt.color : BRAND.border,
                     }}
                   >
-                    <Ionicons name={opt.icon} size={18} color={isActive ? BRAND.primary : BRAND.textMuted} />
-                    <Text
+                    <View
                       style={{
-                        fontSize: 11,
-                        fontWeight: '700',
-                        color: isActive ? BRAND.primary : BRAND.textSecondary,
-                        marginTop: 5,
+                        width: 42,
+                        height: 42,
+                        borderRadius: 12,
+                        backgroundColor: isActive ? `${opt.color}22` : BRAND.surfaceAlt,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        marginRight: 12,
                       }}
                     >
-                      {opt.label}
-                    </Text>
+                      <Ionicons name={opt.icon} size={20} color={isActive ? opt.color : BRAND.textMuted} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontSize: 14, fontWeight: '700', color: BRAND.textPrimary, marginBottom: 2 }}>
+                        {opt.label}
+                      </Text>
+                      <Text style={{ fontSize: 12, color: BRAND.textSecondary }}>{opt.sub}</Text>
+                    </View>
+                    <View
+                      style={{
+                        width: 22,
+                        height: 22,
+                        borderRadius: 11,
+                        borderWidth: 2,
+                        borderColor: isActive ? opt.color : BRAND.borderStrong,
+                        backgroundColor: isActive ? opt.color : 'transparent',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      {isActive && <Ionicons name="checkmark" size={13} color="#fff" />}
+                    </View>
                   </TouchableOpacity>
                 );
               })}
             </View>
           </View>
 
-          {/* ── DATE & TIME (conditional) ────────────────────────────────── */}
-          {formData.flexibility !== 'flexible' && (
+          {/* ── DATE & TIME (only for Scheduled) ────────────────────────── */}
+          {formData.flexibility === 'specific' && (
             <View style={{ marginBottom: 18 }}>
               <Label text="Preferred Date & Time" />
               <View style={{ flexDirection: 'row', gap: 10 }}>
-                <View style={{ flex: 1 }}>
-                  <StyledInput
-                    placeholder="YYYY-MM-DD"
-                    value={formData.preferredDate}
-                    onChangeText={(t) => setFormData({ ...formData, preferredDate: t })}
-                  />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <StyledInput
-                    placeholder="HH:MM"
-                    value={formData.preferredTime}
-                    onChangeText={(t) => setFormData({ ...formData, preferredTime: t })}
-                  />
-                </View>
+                {/* Date picker trigger */}
+                <TouchableOpacity
+                  onPress={() => setShowDatePicker(true)}
+                  activeOpacity={0.8}
+                  style={{
+                    flex: 1,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    backgroundColor: BRAND.surfaceAlt,
+                    borderWidth: 1.5,
+                    borderColor: BRAND.border,
+                    borderRadius: 13,
+                    paddingHorizontal: 12,
+                    paddingVertical: 13,
+                    gap: 8,
+                  }}
+                >
+                  <Ionicons name="calendar-outline" size={16} color={formData.preferredDate ? BRAND.blue : BRAND.textMuted} />
+                  <Text
+                    style={{
+                      fontSize: 14,
+                      color: formData.preferredDate ? BRAND.textPrimary : BRAND.textMuted,
+                      fontWeight: formData.preferredDate ? '600' : '400',
+                      flex: 1,
+                    }}
+                    numberOfLines={1}
+                  >
+                    {formData.preferredDate || 'Pick date'}
+                  </Text>
+                </TouchableOpacity>
+
+                {/* Time picker trigger */}
+                <TouchableOpacity
+                  onPress={() => setShowTimePicker(true)}
+                  activeOpacity={0.8}
+                  style={{
+                    flex: 1,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    backgroundColor: BRAND.surfaceAlt,
+                    borderWidth: 1.5,
+                    borderColor: BRAND.border,
+                    borderRadius: 13,
+                    paddingHorizontal: 12,
+                    paddingVertical: 13,
+                    gap: 8,
+                  }}
+                >
+                  <Ionicons name="time-outline" size={16} color={formData.preferredTime ? BRAND.blue : BRAND.textMuted} />
+                  <Text
+                    style={{
+                      fontSize: 14,
+                      color: formData.preferredTime ? BRAND.textPrimary : BRAND.textMuted,
+                      fontWeight: formData.preferredTime ? '600' : '400',
+                      flex: 1,
+                    }}
+                  >
+                    {formData.preferredTime || 'Pick time'}
+                  </Text>
+                </TouchableOpacity>
               </View>
+
+              {/* Android: inline pickers */}
+              {Platform.OS === 'android' && showDatePicker && (
+                <DateTimePicker
+                  value={selectedDate}
+                  mode="date"
+                  minimumDate={new Date()}
+                  display="default"
+                  onChange={(_, date) => {
+                    setShowDatePicker(false);
+                    if (date) {
+                      setSelectedDate(date);
+                      const y = date.getFullYear();
+                      const m = String(date.getMonth() + 1).padStart(2, '0');
+                      const d = String(date.getDate()).padStart(2, '0');
+                      setFormData((prev) => ({ ...prev, preferredDate: `${y}-${m}-${d}` }));
+                    }
+                  }}
+                />
+              )}
+              {Platform.OS === 'android' && showTimePicker && (
+                <DateTimePicker
+                  value={selectedDate}
+                  mode="time"
+                  display="default"
+                  onChange={(_, date) => {
+                    setShowTimePicker(false);
+                    if (date) {
+                      setSelectedDate(date);
+                      const h = String(date.getHours()).padStart(2, '0');
+                      const min = String(date.getMinutes()).padStart(2, '0');
+                      setFormData((prev) => ({ ...prev, preferredTime: `${h}:${min}` }));
+                    }
+                  }}
+                />
+              )}
+
+              {/* iOS: modal pickers */}
+              {Platform.OS === 'ios' && (
+                <>
+                  <Modal transparent animationType="slide" visible={showDatePicker}>
+                    <TouchableOpacity
+                      style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}
+                      activeOpacity={1}
+                      onPress={() => setShowDatePicker(false)}
+                    >
+                      <View style={{ backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingBottom: 34 }}>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingTop: 16, paddingBottom: 4, borderBottomWidth: 1, borderBottomColor: BRAND.border }}>
+                          <TouchableOpacity onPress={() => setShowDatePicker(false)}>
+                            <Text style={{ fontSize: 15, color: BRAND.textSecondary, fontWeight: '600' }}>Cancel</Text>
+                          </TouchableOpacity>
+                          <Text style={{ fontSize: 16, fontWeight: '700', color: BRAND.textPrimary }}>Select Date</Text>
+                          <TouchableOpacity onPress={() => {
+                            const y = selectedDate.getFullYear();
+                            const m = String(selectedDate.getMonth() + 1).padStart(2, '0');
+                            const d = String(selectedDate.getDate()).padStart(2, '0');
+                            setFormData((prev) => ({ ...prev, preferredDate: `${y}-${m}-${d}` }));
+                            setShowDatePicker(false);
+                          }}>
+                            <Text style={{ fontSize: 15, color: BRAND.blue, fontWeight: '700' }}>Done</Text>
+                          </TouchableOpacity>
+                        </View>
+                        <View style={{ backgroundColor: '#F9FAFB' }}>
+                          <DateTimePicker
+                            value={selectedDate}
+                            mode="date"
+                            minimumDate={new Date()}
+                            display="spinner"
+                            themeVariant="light"
+                            onChange={(_, date) => { if (date) setSelectedDate(date); }}
+                            style={{ height: 216, width: '100%' }}
+                          />
+                        </View>
+                      </View>
+                    </TouchableOpacity>
+                  </Modal>
+
+                  <Modal transparent animationType="slide" visible={showTimePicker}>
+                    <TouchableOpacity
+                      style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}
+                      activeOpacity={1}
+                      onPress={() => setShowTimePicker(false)}
+                    >
+                      <View style={{ backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingBottom: 34 }}>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingTop: 16, paddingBottom: 4, borderBottomWidth: 1, borderBottomColor: BRAND.border }}>
+                          <TouchableOpacity onPress={() => setShowTimePicker(false)}>
+                            <Text style={{ fontSize: 15, color: BRAND.textSecondary, fontWeight: '600' }}>Cancel</Text>
+                          </TouchableOpacity>
+                          <Text style={{ fontSize: 16, fontWeight: '700', color: BRAND.textPrimary }}>Select Time</Text>
+                          <TouchableOpacity onPress={() => {
+                            const h = String(selectedDate.getHours()).padStart(2, '0');
+                            const min = String(selectedDate.getMinutes()).padStart(2, '0');
+                            setFormData((prev) => ({ ...prev, preferredTime: `${h}:${min}` }));
+                            setShowTimePicker(false);
+                          }}>
+                            <Text style={{ fontSize: 15, color: BRAND.blue, fontWeight: '700' }}>Done</Text>
+                          </TouchableOpacity>
+                        </View>
+                        <View style={{ backgroundColor: '#F9FAFB' }}>
+                          <DateTimePicker
+                            value={selectedDate}
+                            mode="time"
+                            display="spinner"
+                            themeVariant="light"
+                            onChange={(_, date) => { if (date) setSelectedDate(date); }}
+                            style={{ height: 216, width: '100%' }}
+                          />
+                        </View>
+                      </View>
+                    </TouchableOpacity>
+                  </Modal>
+                </>
+              )}
+            </View>
+          )}
+
+          {/* ASAP hint */}
+          {formData.flexibility === 'urgent' && (
+            <View style={{ marginBottom: 18 }}>
+              <HintChip
+                icon="flash"
+                text="Vendors will see this as high priority and respond as quickly as possible."
+                color={BRAND.orange}
+                bg={BRAND.orangeSoft}
+              />
             </View>
           )}
 
@@ -691,18 +1040,13 @@ const CreateOfferScreen: React.FC = () => {
                   <Text
                     style={{
                       fontSize: 14,
-                      fontWeight: formData.location.address ? '600' : '400',
-                      color: formData.location.address ? BRAND.textPrimary : BRAND.textMuted,
+                      fontWeight: formData.location.coordinates?.length ? '600' : '400',
+                      color: formData.location.coordinates?.length ? BRAND.textPrimary : BRAND.textMuted,
                     }}
                     numberOfLines={1}
                   >
-                    {formData.location.address || 'Tap to set your location'}
+                    {formData.location.coordinates?.length ? 'Location captured — edit below' : 'Tap to set your location'}
                   </Text>
-                  {formData.location.city ? (
-                    <Text style={{ fontSize: 11, color: BRAND.textMuted, marginTop: 2 }}>
-                      {formData.location.city}, {formData.location.state}
-                    </Text>
-                  ) : null}
                 </View>
 
                 {loadingLocation ? (
@@ -720,10 +1064,68 @@ const CreateOfferScreen: React.FC = () => {
                       borderColor: BRAND.border,
                     }}
                   >
-                    <Ionicons name="navigate-outline" size={14} color={BRAND.textMuted} />
+                    <Ionicons name={formData.location.coordinates?.length ? 'checkmark-circle' : 'navigate-outline'} size={14} color={formData.location.coordinates?.length ? BRAND.green : BRAND.textMuted} />
                   </View>
                 )}
               </TouchableOpacity>
+
+              {/* Editable address fields — only show after coordinates are captured */}
+              {formData.location.coordinates?.length >= 2 && (
+                <View style={{ marginTop: 10, gap: 8 }}>
+                  <TextInput
+                    style={{
+                      backgroundColor: BRAND.surfaceAlt,
+                      borderWidth: 1,
+                      borderColor: BRAND.border,
+                      borderRadius: 10,
+                      paddingHorizontal: 12,
+                      paddingVertical: 10,
+                      fontSize: 14,
+                      color: BRAND.textPrimary,
+                    }}
+                    value={formData.location.address}
+                    onChangeText={(text) => setFormData({ ...formData, location: { ...formData.location, address: text } })}
+                    placeholder="Enter your address"
+                    placeholderTextColor={BRAND.textMuted}
+                  />
+                  <View style={{ flexDirection: 'row', gap: 8 }}>
+                    <TextInput
+                      style={{
+                        flex: 1,
+                        backgroundColor: BRAND.surfaceAlt,
+                        borderWidth: 1,
+                        borderColor: BRAND.border,
+                        borderRadius: 10,
+                        paddingHorizontal: 12,
+                        paddingVertical: 10,
+                        fontSize: 14,
+                        color: BRAND.textPrimary,
+                      }}
+                      value={formData.location.city}
+                      onChangeText={(text) => setFormData({ ...formData, location: { ...formData.location, city: text } })}
+                      placeholder="City"
+                      placeholderTextColor={BRAND.textMuted}
+                    />
+                    <TextInput
+                      style={{
+                        flex: 1,
+                        backgroundColor: BRAND.surfaceAlt,
+                        borderWidth: 1,
+                        borderColor: BRAND.border,
+                        borderRadius: 10,
+                        paddingHorizontal: 12,
+                        paddingVertical: 10,
+                        fontSize: 14,
+                        color: BRAND.textPrimary,
+                      }}
+                      value={formData.location.state}
+                      onChangeText={(text) => setFormData({ ...formData, location: { ...formData.location, state: text } })}
+                      placeholder="State"
+                      placeholderTextColor={BRAND.textMuted}
+                    />
+                  </View>
+                </View>
+              )}
               {errors.location && <FieldError message={errors.location} />}
             </View>
           )}

@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { View, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, ActivityIndicator, StyleSheet, AppState } from 'react-native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { checkAuthStatus, checkOnboardingStatus } from '@/utils/authHelper';
+import { checkAuthStatus, checkOnboardingStatus, checkInactivityAndLogout, updateLastActive } from '@/utils/authHelper';
 import AuthNavigator from '@/navigation/AuthNavigator';
 import MessageScreen from '@/screens/vendor/MessageScreen';
 import MainNavigator from '@/navigation/MainNavigator';
@@ -52,7 +52,10 @@ import callService from '@/services/call.service';
 import socketService from '@/services/socket.service';
 import { navigate } from '../utils/linking';
 import { initializeFCM, onForegroundNotification, onNotificationTap, getDeviceInfo } from '@/utils/fcm';
-import { notificationAPI } from '@/api/api';
+import { notificationAPI, appAPI } from '@/api/api';
+import Constants from 'expo-constants';
+import UpdateModal from '@/components/UpdateModal';
+import * as ExpoUpdates from 'expo-updates';
 import ReferralScreen from '@/components/ReferralScreen';
 import ReferralLeaderboard from '@/components/ReferralLeaderBoard';
 import ApplyReferralCode from '@/components/ApplyReferralCode';
@@ -60,16 +63,37 @@ import ReferralDetailScreen from '@/components/ReferralDetailScreen';
 import WalletPaymentScreen from '@/components/WalletPaymentScreen';
 import ChangeWithdrawalPinScreen from '@/components/clientComponent/ProfleSettings/ChangeWithdrawalPinScreen';
 import SubscriptionScreen from '@/components/vendorComponent/SubscriptionScreen';
+import UpgradeTierScreen from '@/components/vendorComponent/UpgradeTierScreen';
 import DisputeOrderDetailScreen from '@/components/DisputeOrderDetailScreen';
 import TermsPrivacyScreen from '@/components/TermsPrivacyScreen';
 import SharedContentScreen from '@/screens/shared/SharedContentScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
+// Compare two version strings like "2.1" or "2.2.1"
+const isVersionBelow = (current: string, minimum: string): boolean => {
+  const cur = current.split('.').map(Number);
+  const min = minimum.split('.').map(Number);
+  const len = Math.max(cur.length, min.length);
+  for (let i = 0; i < len; i++) {
+    const c = cur[i] ?? 0;
+    const m = min[i] ?? 0;
+    if (c < m) return true;
+    if (c > m) return false;
+  }
+  return false;
+};
+
 const RootNavigator = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isVendor, setIsVendor] = useState(false);
+  const [updateInfo, setUpdateInfo] = useState<{
+    visible: boolean;
+    latestVersion: string;
+    forceUpdate: boolean;
+    updateMessage: string;
+  }>({ visible: false, latestVersion: '', forceUpdate: false, updateMessage: '' });
 
   useEffect(() => {
     const handleIncomingCall = (data: any) => {
@@ -93,6 +117,16 @@ const RootNavigator = () => {
 
   useEffect(() => {
     initializeApp();
+  }, []);
+
+  // Update lastActive whenever app comes back to foreground
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        updateLastActive();
+      }
+    });
+    return () => sub.remove();
   }, []);
 
   // Set up push notification listeners
@@ -135,37 +169,23 @@ const RootNavigator = () => {
 
   const initializeApp = async () => {
     try {
-      console.log('🔄 Initializing app...');
+      // ── CRITICAL PATH: resolve auth as fast as possible ──────────────────
+      // checkAuthStatus reads from AsyncStorage — no network needed, very fast
       const authStatus = await checkAuthStatus();
-      setIsAuthenticated(authStatus.isAuthenticated);
-      setIsVendor(authStatus.isVendor);
 
+      // If authenticated, check 3-day inactivity before allowing access
       if (authStatus.isAuthenticated) {
-        console.log('🔌 Connecting socket...');
-        socketService.connect();
-
-        socketService.onConnected(() => {
-          console.log('📞 Initializing call service after socket connection');
-          callService.initialize();
-        });
-
-        // Initialize push notifications and re-register device token
-        try {
-          const token = await initializeFCM();
-          if (token) {
-            const deviceInfo = getDeviceInfo();
-            await notificationAPI.registerDeviceToken({
-              token,
-              deviceType: deviceInfo.deviceType,
-              deviceName: deviceInfo.deviceName,
-            });
-            console.log('✅ Device token registered on app launch');
-          }
-        } catch (error) {
-          console.error('⚠️ Failed to register device token on launch:', error);
+        const wasInactive = await checkInactivityAndLogout();
+        if (wasInactive) {
+          setIsAuthenticated(false);
+          setIsVendor(false);
+          return;
         }
+        await updateLastActive();
       }
 
+      setIsAuthenticated(authStatus.isAuthenticated);
+      setIsVendor(authStatus.isVendor);
       console.log('🔐 Auth status:', {
         isAuthenticated: authStatus.isAuthenticated,
         isVendor: authStatus.isVendor,
@@ -175,9 +195,66 @@ const RootNavigator = () => {
       console.error('❌ Error initializing app:', error);
       setIsAuthenticated(false);
     } finally {
+      // Clear loading screen immediately — user sees the app now
       setIsLoading(false);
       console.log('✅ App initialization complete');
     }
+
+    // ── BACKGROUND TASKS: run after app is visible ────────────────────────
+    // Re-read auth (non-blocking) to kick off socket + notifications
+    const authStatus = await checkAuthStatus().catch(() => ({ isAuthenticated: false, isVendor: false }));
+
+    if (authStatus.isAuthenticated) {
+      // Connect socket in background
+      socketService.connect();
+      socketService.onConnected(() => {
+        callService.initialize();
+      });
+
+      // Register push notification token in background
+      initializeFCM().then(async (token) => {
+        if (token) {
+          const deviceInfo = getDeviceInfo();
+          await notificationAPI.registerDeviceToken({
+            token,
+            deviceType: deviceInfo.deviceType,
+            deviceName: deviceInfo.deviceName,
+          }).catch(() => {});
+          console.log('✅ Device token registered on app launch');
+        }
+      }).catch(() => {});
+    }
+
+    // Version check — small delay so network stack is ready, fully non-blocking
+    setTimeout(async () => {
+      try {
+        const currentVersion = Constants.expoConfig?.version ?? '0.0';
+        const versionData = await appAPI.checkVersion();
+        const { minimumVersion, latestVersion, forceUpdate, updateMessage } = versionData.data;
+        if (isVersionBelow(currentVersion, minimumVersion)) {
+          setUpdateInfo({ visible: true, latestVersion, forceUpdate: true, updateMessage });
+        } else if (isVersionBelow(currentVersion, latestVersion)) {
+          setUpdateInfo({ visible: true, latestVersion, forceUpdate: false, updateMessage });
+        }
+      } catch {
+        // Non-critical — never block app launch
+      }
+
+      // OTA update check — also non-blocking
+      if (!__DEV__) {
+        try {
+          const update = await ExpoUpdates.checkForUpdateAsync();
+          if (update.isAvailable) {
+            console.log('📦 OTA update available — downloading...');
+            await ExpoUpdates.fetchUpdateAsync();
+            console.log('✅ OTA update downloaded — reloading app');
+            await ExpoUpdates.reloadAsync();
+          }
+        } catch {
+          // Never block app launch due to OTA failure
+        }
+      }
+    }, 1500);
   };
 
   if (isLoading) {
@@ -189,6 +266,14 @@ const RootNavigator = () => {
   }
 
   return (
+    <>
+    <UpdateModal
+      visible={updateInfo.visible}
+      latestVersion={updateInfo.latestVersion}
+      forceUpdate={updateInfo.forceUpdate}
+      updateMessage={updateInfo.updateMessage}
+      onDismiss={() => setUpdateInfo(prev => ({ ...prev, visible: false }))}
+    />
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       {!isAuthenticated ? (
         <Stack.Screen 
@@ -235,6 +320,7 @@ const RootNavigator = () => {
           <Stack.Screen name="ChatDetail" component={ChatDetailScreen} options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="ChatList" component={ChatListScreen} options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="Subsriptions" component={SubscriptionScreen} options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="UpgradeTier" component={UpgradeTierScreen} options={{ animation: 'slide_from_right' }} />
           
           <Stack.Screen name="Marketplace" component={MarketplaceScreen} options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="AddProduct" component={AddEditProductScreen} options={{ animation: 'slide_from_right' }} />
@@ -336,6 +422,7 @@ const RootNavigator = () => {
         </>
       )}
     </Stack.Navigator>
+    </>
   );
 };
 

@@ -749,32 +749,51 @@ const VendorStoreSettingsScreen: React.FC = () => {
                     <ActivityIndicator size="small" color="#ec4899" />
                   </View>
                 ) : availableCategories.length > 0 ? (
-                  <View className="flex-row flex-wrap gap-2">
-                    {availableCategories.map((category) => (
-                      <TouchableOpacity
-                        key={category._id}
-                        onPress={() => toggleCategory(category._id)}
-                        disabled={!isEditMode}
-                        className={`px-4 py-2.5 rounded-full border-2 ${
-                          selectedCategories.includes(category._id)
-                            ? 'border-pink-500 bg-pink-50'
-                            : isEditMode
-                            ? 'border-gray-200 bg-white'
-                            : 'border-gray-200 bg-gray-50'
-                        }`}
-                        activeOpacity={0.7}
-                      >
-                        <Text
-                          className={`text-sm font-medium ${
-                            selectedCategories.includes(category._id)
-                              ? 'text-pink-500'
-                              : 'text-gray-600'
-                          }`}
-                        >
-                          {category.name}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
+                  <View>
+                    <Text className="text-xs text-gray-400 mb-2">
+                      {selectedCategories.length} selected
+                    </Text>
+                    <ScrollView
+                      style={{ maxHeight: 220 }}
+                      showsVerticalScrollIndicator={false}
+                      nestedScrollEnabled
+                    >
+                      {availableCategories.map((category) => {
+                        const isSelected = selectedCategories.includes(category._id);
+                        return (
+                          <TouchableOpacity
+                            key={category._id}
+                            onPress={() => toggleCategory(category._id)}
+                            disabled={!isEditMode}
+                            className={`flex-row items-center px-4 py-3 mb-1.5 rounded-xl border ${
+                              isSelected
+                                ? 'border-pink-400 bg-pink-50'
+                                : isEditMode
+                                ? 'border-gray-200 bg-gray-50'
+                                : 'border-gray-100 bg-gray-50'
+                            }`}
+                            activeOpacity={0.7}
+                          >
+                            <View
+                              className={`w-5 h-5 rounded-md items-center justify-center mr-3 ${
+                                isSelected ? 'bg-pink-500' : 'border border-gray-300 bg-white'
+                              }`}
+                            >
+                              {isSelected && (
+                                <Ionicons name="checkmark" size={14} color="#fff" />
+                              )}
+                            </View>
+                            <Text
+                              className={`text-sm font-medium flex-1 ${
+                                isSelected ? 'text-pink-600' : 'text-gray-700'
+                              }`}
+                            >
+                              {category.name}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </ScrollView>
                   </View>
                 ) : (
                   <Text className="text-gray-500 text-center py-4">No categories available</Text>
@@ -806,20 +825,44 @@ const VendorStoreSettingsScreen: React.FC = () => {
               <View className="pt-3 border-t border-gray-100">
                 {location ? (
                   <View className="bg-green-50 border border-green-200 rounded-xl p-4 mb-4">
-                    <View className="flex-row items-center mb-2">
+                    <View className="flex-row items-center mb-3">
                       <Ionicons name="location" size={20} color="#059669" />
                       <Text className="text-green-700 font-semibold ml-2">Location Added</Text>
                     </View>
-                    <Text className="text-gray-700 text-sm mb-1">
-                      {location.address}
-                    </Text>
-                    <Text className="text-gray-600 text-xs mb-3">
-                      {location.city}, {location.state}, {location.country}
-                    </Text>
+                    <Text className="text-gray-500 text-xs mb-1">Address</Text>
+                    <TextInput
+                      className="bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 mb-2"
+                      value={location.address}
+                      onChangeText={(text) => setLocation({ ...location, address: text })}
+                      placeholder="Enter your address"
+                      editable={isEditMode}
+                    />
+                    <View className="flex-row gap-2">
+                      <View className="flex-1">
+                        <Text className="text-gray-500 text-xs mb-1">City</Text>
+                        <TextInput
+                          className="bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800"
+                          value={location.city}
+                          onChangeText={(text) => setLocation({ ...location, city: text })}
+                          placeholder="City"
+                          editable={isEditMode}
+                        />
+                      </View>
+                      <View className="flex-1">
+                        <Text className="text-gray-500 text-xs mb-1">State</Text>
+                        <TextInput
+                          className="bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800"
+                          value={location.state}
+                          onChangeText={(text) => setLocation({ ...location, state: text })}
+                          placeholder="State"
+                          editable={isEditMode}
+                        />
+                      </View>
+                    </View>
                     {isEditMode && (
                       <TouchableOpacity
                         onPress={() => setLocation(null)}
-                        className="mt-2"
+                        className="mt-3"
                         activeOpacity={0.7}
                       >
                         <Text className="text-red-600 text-sm font-semibold">Change Location</Text>

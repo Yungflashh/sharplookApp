@@ -388,6 +388,12 @@ const AddEditProductScreen: React.FC = () => {
       if (error?.message?.includes('Network request failed')) msg = 'Network error. Check your internet connection and try again.';
       else if (error?.message?.includes('timeout')) msg = 'Request timed out. Please try again.';
       else if (error?.message) msg = error.message;
+
+      if (msg.includes('Upgrade') || msg.includes('plan allows')) {
+        toast.info('Limit Reached', msg);
+        navigation.navigate('UpgradeTier' as never);
+        return;
+      }
       toast.error('Error', msg);
     } finally {
       setLoading(false);

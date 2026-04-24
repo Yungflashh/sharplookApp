@@ -4,24 +4,20 @@ const path = require('path');
 
 const config = getDefaultConfig(__dirname);
 
-// Force socket.io to use CommonJS builds
+// Force socket.io packages to resolve to their CJS entry files directly
 config.resolver.resolveRequest = (context, moduleName, platform) => {
-  if (moduleName.startsWith('socket.io-parser')) {
-    // Redirect to CJS build
-    const newModuleName = moduleName.replace(
-      'socket.io-parser',
-      'socket.io-parser/build/cjs'
-    );
-    return context.resolveRequest(context, newModuleName, platform);
+  if (moduleName === 'socket.io-client') {
+    return {
+      filePath: path.resolve(__dirname, 'node_modules/socket.io-client/build/cjs/index.js'),
+      type: 'sourceFile',
+    };
   }
 
-  if (moduleName.startsWith('socket.io-client')) {
-    // Redirect to CJS build
-    const newModuleName = moduleName.replace(
-      'socket.io-client',
-      'socket.io-client/build/cjs'
-    );
-    return context.resolveRequest(context, newModuleName, platform);
+  if (moduleName === 'socket.io-parser') {
+    return {
+      filePath: path.resolve(__dirname, 'node_modules/socket.io-parser/build/cjs/index.js'),
+      type: 'sourceFile',
+    };
   }
 
   // Default resolution

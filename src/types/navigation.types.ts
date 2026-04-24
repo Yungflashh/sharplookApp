@@ -13,8 +13,10 @@ export type RootStackParamList = {
   Chat: undefined;
   Cart: undefined;
   ChatDetail: {
-    vendorId: string;
-    vendorName: string;
+    otherUserId: string;
+    otherUserName: string;
+    otherUserAvatar?: string;
+    conversationId?: string;
   };
   ChatList: undefined;
   AllVendors: undefined;
@@ -125,9 +127,15 @@ export type RootStackParamList = {
   ReferralLeaderboard: undefined;
   ApplyReferralCode: undefined;
   ReferralDetail: undefined;
-  WalletPayment: undefined;
+  WalletPayment: {
+    amount: number;
+    reference: string;
+    authorizationUrl: string;
+    paymentType?: 'wallet_funding' | 'tier_upgrade';
+  };
   ChangeWithdrawalPin: undefined;
   Subsriptions: undefined;
+  UpgradeTier: undefined;
   DisputeOrderDetail: undefined;
   TermsPrivacy: undefined;
 };
@@ -143,12 +151,14 @@ export type AuthStackParamList = {
 export type ClientTabParamList = {
   Home: undefined;
   Bookings: undefined;
+  MarketPlace: undefined;
   Explore: undefined;
   Profile: undefined;
 };
 export type VendorTabParamList = {
   Dashboard: undefined;
   Bookings: undefined;
+  'My Products': undefined;
   Services: undefined;
   Profile: undefined;
 };

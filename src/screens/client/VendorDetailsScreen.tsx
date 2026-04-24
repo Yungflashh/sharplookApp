@@ -19,10 +19,11 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '@/types/navigation.types';
-import { vendorAPI, handleAPIError } from '@/api/api';
+import { vendorAPI, productAPI, handleAPIError } from '@/api/api';
 import ServiceCard from '@/components/clientComponent/ServiceCard';
 import ReviewCard from '@/components/clientComponent/ReviewCard';
 import { toast } from '@/components/ui/Toast';
+import * as Location from 'expo-location';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -69,8 +70,7 @@ interface VendorData {
     completedBookings: number;
     isVerified: boolean;
     categories: Array<{ _id: string; name: string; icon: string }>;
-    location?: { address: string; city: string; state: string };
-    serviceRadius?: number;
+    location?: { address: string; city: string; state: string; coordinates?: number[] };
   };
 }
 
@@ -254,12 +254,26 @@ const VendorDetailScreen: React.FC = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [vendor, setVendor] = useState<VendorData | null>(null);
   const [services, setServices] = useState<any[]>([]);
+  const [products, setProducts] = useState<any[]>([]);
   const [reviews, setReviews] = useState<any[]>([]);
   const [stats, setStats] = useState<any>(null);
-  const [activeTab, setActiveTab] = useState<'about' | 'services' | 'reviews'>('about');
+  const [activeTab, setActiveTab] = useState<'about' | 'products' | 'services' | 'reviews'>('about');
   const [isFavorite, setIsFavorite] = useState(false);
+  const [distanceKm, setDistanceKm] = useState<number | null>(null);
 
   const scrollY = new Animated.Value(0);
+
+  // Haversine formula to calculate distance between two coordinates
+  const getDistanceKm = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
+    const toRad = (deg: number) => (deg * Math.PI) / 180;
+    const R = 6371; // Earth's radius in km
+    const dLat = toRad(lat2 - lat1);
+    const dLon = toRad(lon2 - lon1);
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  };
 
   const fetchVendorDetails = async () => {
     try {
@@ -271,6 +285,17 @@ const VendorDetailScreen: React.FC = () => {
         setServices(d.services || []);
         setReviews(d.reviews || []);
         setStats(d.stats);
+
+        // Fetch vendor's products
+        try {
+          const prodRes = await productAPI.getAllProducts({ seller: vendorId, limit: 50 });
+          if (prodRes.success) {
+            const prods = Array.isArray(prodRes.data) ? prodRes.data : prodRes.data?.products || [];
+            setProducts(prods);
+          }
+        } catch (e) {
+          console.log('Vendor products fetch error:', e);
+        }
       }
     } catch (error) {
       console.error('Vendor detail fetch error:', handleAPIError(error));
@@ -280,6 +305,26 @@ const VendorDetailScreen: React.FC = () => {
   };
 
   useEffect(() => { fetchVendorDetails(); }, [vendorId]);
+
+  // Calculate distance from user to vendor
+  useEffect(() => {
+    if (!vendor?.vendorProfile?.location?.coordinates) return;
+    const coords = vendor.vendorProfile.location.coordinates;
+    if (!coords || coords.length < 2) return;
+
+    (async () => {
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== 'granted') return;
+        const pos = await Location.getCurrentPositionAsync({});
+        // Backend stores as [longitude, latitude]
+        const dist = getDistanceKm(pos.coords.latitude, pos.coords.longitude, coords[1], coords[0]);
+        setDistanceKm(dist);
+      } catch (e) {
+        console.log('Distance calc error:', e);
+      }
+    })();
+  }, [vendor]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
@@ -512,10 +557,18 @@ const VendorDetailScreen: React.FC = () => {
         )}
       </View>
 
+      {/* ── SCROLLABLE CONTENT ──────────────────────────────────────────── */}
+      <ScrollView
+        style={{ flex: 1, marginTop: -28 }}
+        contentContainerStyle={{ paddingBottom: 110 }}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={BRAND.primary} colors={[BRAND.primary]} />
+        }
+      >
       {/* ── PROFILE CARD (overlaps hero) ──────────────────────────────────── */}
       <View
         style={{
-          marginTop: -28,
           marginHorizontal: 16,
           backgroundColor: BRAND.surface,
           borderRadius: 22,
@@ -652,21 +705,14 @@ const VendorDetailScreen: React.FC = () => {
       {/* ── TABS ──────────────────────────────────────────────────────────── */}
       <View style={{ marginTop: 16, marginBottom: 12 }}>
         <TabBar
-          tabs={['about', 'services', 'reviews']}
+          tabs={['about', 'products', 'services', 'reviews']}
           active={activeTab}
           onChange={setActiveTab}
         />
       </View>
 
       {/* ── TAB CONTENT ───────────────────────────────────────────────────── */}
-      <ScrollView
-        style={{ flex: 1 }}
-        contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 110 }}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={BRAND.primary} colors={[BRAND.primary]} />
-        }
-      >
+      <View style={{ paddingHorizontal: 16 }}>
         {/* ── ABOUT ──────────────────────────────────────────────────────── */}
         {activeTab === 'about' && (
           <View style={{ paddingTop: 4 }}>
@@ -688,7 +734,7 @@ const VendorDetailScreen: React.FC = () => {
               </SectionCard>
             )}
 
-            {vendor.vendorProfile.serviceRadius && (
+            {distanceKm !== null && (
               <View
                 style={{
                   backgroundColor: BRAND.surface,
@@ -705,13 +751,16 @@ const VendorDetailScreen: React.FC = () => {
                   }),
                 }}
               >
-                <InfoRow
-                  icon="navigate-circle-outline"
-                  text="Service Radius"
-                  sub="Maximum coverage distance"
-                />
+                <View style={{ flex: 1, marginRight: 12 }}>
+                  <InfoRow
+                    icon="navigate-circle-outline"
+                    text="Distance from You"
+                    sub="Based on your current location"
+                  />
+                </View>
                 <View
                   style={{
+                    flexShrink: 0,
                     backgroundColor: BRAND.primarySoft,
                     paddingHorizontal: 12,
                     paddingVertical: 6,
@@ -721,13 +770,111 @@ const VendorDetailScreen: React.FC = () => {
                   }}
                 >
                   <Text style={{ fontSize: 15, fontWeight: '800', color: BRAND.primary }}>
-                    {vendor.vendorProfile.serviceRadius} km
+                    {distanceKm < 1 ? `${Math.round(distanceKm * 1000)} m` : `${distanceKm.toFixed(1)} km`}
                   </Text>
                 </View>
               </View>
             )}
 
-          
+          </View>
+        )}
+
+        {/* ── PRODUCTS ──────────────────────────────────────────────────── */}
+        {activeTab === 'products' && (
+          <View style={{ paddingTop: 4 }}>
+            {products.length > 0 ? (
+              <View style={{ gap: 12 }}>
+                {products.map((product: any) => (
+                  <TouchableOpacity
+                    key={product._id}
+                    onPress={() => navigation.navigate('ProductDetail', { productId: product._id })}
+                    activeOpacity={0.85}
+                    style={{
+                      backgroundColor: BRAND.surface,
+                      borderRadius: 18,
+                      overflow: 'hidden',
+                      borderWidth: 1,
+                      borderColor: BRAND.border,
+                      flexDirection: 'row',
+                      ...Platform.select({
+                        ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8 },
+                        android: { elevation: 2 },
+                      }),
+                    }}
+                  >
+                    <Image
+                      source={product.images?.[0] ? { uri: product.images[0] } : require('../../../assets/app-icon.jpg')}
+                      style={{ width: 100, height: 100, backgroundColor: BRAND.surfaceAlt }}
+                      resizeMode="cover"
+                    />
+                    <View style={{ flex: 1, padding: 12, justifyContent: 'center' }}>
+                      <Text numberOfLines={1} style={{ fontSize: 15, fontWeight: '700', color: BRAND.textPrimary, marginBottom: 4 }}>
+                        {product.name}
+                      </Text>
+                      {product.category?.name && (
+                        <Text style={{ fontSize: 12, color: BRAND.textMuted, marginBottom: 6 }}>
+                          {product.category.name}
+                        </Text>
+                      )}
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        <Text style={{ fontSize: 16, fontWeight: '800', color: BRAND.primary }}>
+                          ₦{(product.finalPrice ?? product.price)?.toLocaleString()}
+                        </Text>
+                        {product.compareAtPrice > product.finalPrice && (
+                          <Text style={{ fontSize: 12, color: BRAND.textMuted, textDecorationLine: 'line-through' }}>
+                            ₦{product.compareAtPrice?.toLocaleString()}
+                          </Text>
+                        )}
+                      </View>
+                      {product.rating > 0 && (
+                        <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4, gap: 4 }}>
+                          <Ionicons name="star" size={12} color={BRAND.gold} />
+                          <Text style={{ fontSize: 12, color: BRAND.textSecondary, fontWeight: '600' }}>
+                            {product.rating.toFixed(1)}
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+                    <View style={{ justifyContent: 'center', paddingRight: 12 }}>
+                      <Ionicons name="chevron-forward" size={18} color={BRAND.textMuted} />
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            ) : (
+              <View
+                style={{
+                  backgroundColor: BRAND.surface,
+                  borderRadius: 20,
+                  padding: 40,
+                  alignItems: 'center',
+                  borderWidth: 1,
+                  borderColor: BRAND.border,
+                }}
+              >
+                <View
+                  style={{
+                    width: 72,
+                    height: 72,
+                    borderRadius: 22,
+                    backgroundColor: BRAND.surfaceAlt,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    marginBottom: 14,
+                    borderWidth: 1,
+                    borderColor: BRAND.border,
+                  }}
+                >
+                  <Ionicons name="bag-outline" size={34} color={BRAND.textMuted} />
+                </View>
+                <Text style={{ fontSize: 16, fontWeight: '700', color: BRAND.textPrimary, marginBottom: 6 }}>
+                  No products yet
+                </Text>
+                <Text style={{ fontSize: 13, color: BRAND.textMuted, textAlign: 'center', lineHeight: 19 }}>
+                  This vendor hasn't added any products yet.
+                </Text>
+              </View>
+            )}
           </View>
         )}
 
@@ -971,6 +1118,7 @@ const VendorDetailScreen: React.FC = () => {
             )}
           </View>
         )}
+      </View>
       </ScrollView>
 
       {/* ── BOTTOM ACTION BAR ─────────────────────────────────────────────── */}

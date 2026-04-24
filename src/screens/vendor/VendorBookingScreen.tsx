@@ -44,6 +44,7 @@ interface VendorBooking {
   service?: { _id: string; name: string; images?: string[] };
   offer?: string;
   client: { _id: string; firstName: string; lastName: string; phone?: string };
+  vendor?: { _id: string; firstName: string; lastName: string; vendorProfile?: { businessName: string } };
   scheduledDate: string; scheduledTime?: string;
   totalAmount: number; servicePrice: number;
   status: string; paymentStatus: string; createdAt: string;
@@ -156,6 +157,7 @@ const VendorBookingsScreen: React.FC = () => {
   const navigation = useNavigation<Nav>();
   const insets = useSafeAreaInsets();
 
+  const [viewMode, setViewMode]          = useState<'received' | 'made'>('received');
   const [loading, setLoading]           = useState(true);
   const [refreshing, setRefreshing]     = useState(false);
   const [bookings, setBookings]         = useState<VendorBooking[]>([]);
@@ -188,7 +190,8 @@ const VendorBookingsScreen: React.FC = () => {
   const fetchBookings = async (pageNum = 1, append = false) => {
     try {
       if (pageNum === 1) setLoading(true);
-      const res = await bookingAPI.getMyBookings({ role: 'vendor', page: pageNum, limit: 20 });
+      const role = viewMode === 'received' ? 'vendor' : 'client';
+      const res = await bookingAPI.getMyBookings({ role, page: pageNum, limit: 20 });
       if (res.success) {
         const newB = Array.isArray(res.data) ? res.data : res.data.bookings || [];
         const updated = append ? [...bookings, ...newB] : newB;
@@ -202,8 +205,8 @@ const VendorBookingsScreen: React.FC = () => {
     } finally { setLoading(false); }
   };
 
-  useEffect(() => { fetchBookings(); }, []);
-  useFocusEffect(useCallback(() => { fetchBookings(1, false); }, []));
+  useEffect(() => { fetchBookings(); }, [viewMode]);
+  useFocusEffect(useCallback(() => { fetchBookings(1, false); }, [viewMode]));
 
   // ── Filter ────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -214,6 +217,8 @@ const VendorBookingsScreen: React.FC = () => {
       f = f.filter((b) =>
         b.service?.name?.toLowerCase().includes(q) ||
         `${b.client?.firstName || ''} ${b.client?.lastName || ''}`.toLowerCase().includes(q) ||
+        `${b.vendor?.firstName || ''} ${b.vendor?.lastName || ''}`.toLowerCase().includes(q) ||
+        b.vendor?.vendorProfile?.businessName?.toLowerCase().includes(q) ||
         b.bookingNumber?.toLowerCase().includes(q)
       );
     }
@@ -321,8 +326,11 @@ const VendorBookingsScreen: React.FC = () => {
     const cfg = getStatusCfg(booking.status);
     const payCfg = getPaymentCfg(booking.paymentStatus);
     const title = booking.bookingType === 'offer_based' ? 'Custom Offer Booking' : (booking.service?.name || 'Service Booking');
-    const clientName = `${booking.client.firstName} ${booking.client.lastName}`;
-    const hasActions = ['pending','accepted','in_progress'].includes(booking.status);
+    const otherPersonName = viewMode === 'received'
+      ? `${booking.client?.firstName || ''} ${booking.client?.lastName || ''}`.trim() || 'Client'
+      : booking.vendor?.vendorProfile?.businessName || `${booking.vendor?.firstName || ''} ${booking.vendor?.lastName || ''}`.trim() || 'Vendor';
+    const otherPersonLabel = viewMode === 'received' ? 'Client' : 'Vendor';
+    const hasActions = viewMode === 'received' && ['pending','accepted','in_progress'].includes(booking.status);
 
     return (
       <TouchableOpacity key={booking._id} onPress={() => navigation.navigate('BookingDetail', { bookingId: booking._id })} activeOpacity={0.93}>
@@ -345,7 +353,7 @@ const VendorBookingsScreen: React.FC = () => {
                 <View style={{ width: 26, height: 26, borderRadius: 13, backgroundColor: BRAND.primarySoft, alignItems: 'center', justifyContent: 'center' }}>
                   <Ionicons name="person" size={13} color={BRAND.primary} />
                 </View>
-                <Text style={{ fontSize: 13, fontWeight: '600', color: BRAND.textSecondary }}>{clientName}</Text>
+                <Text style={{ fontSize: 13, fontWeight: '600', color: BRAND.textSecondary }}>{otherPersonName}</Text>
               </View>
             </View>
 
@@ -427,23 +435,9 @@ const VendorBookingsScreen: React.FC = () => {
   };
 
   // ── Loading ───────────────────────────────────────────────────────────────
-  if (loading && page === 1) {
-    return (
-      <SafeAreaView style={{ flex: 1, backgroundColor: BRAND.surfaceAlt }}>
-        <StatusBar barStyle="dark-content" />
-        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-          <ActivityIndicator size="large" color={BRAND.primary} />
-          <Text style={{ color: BRAND.textMuted, fontSize: 14, marginTop: 12, fontWeight: '500' }}>Loading bookings…</Text>
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  // ─────────────────────────────────────────────────────────────────────────
-  return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: BRAND.surfaceAlt }} edges={['top']}>
-      <StatusBar barStyle="dark-content" backgroundColor={BRAND.surface} />
-
+  // ── Shared header + toggle (always visible, even during loading) ─────
+  const renderHeader = () => (
+    <>
       {/* ── HEADER ───────────────────────────────────────────────────────── */}
       <View style={[{
         backgroundColor: BRAND.surface,
@@ -451,15 +445,10 @@ const VendorBookingsScreen: React.FC = () => {
         flexDirection: 'row', alignItems: 'center',
         borderBottomWidth: 1, borderBottomColor: BRAND.border,
       }, shadow('#000', 0.05, 8, 2)]}>
-        <TouchableOpacity onPress={() => navigation.goBack()} activeOpacity={0.8}
-          style={{ width: 40, height: 40, borderRadius: 13, backgroundColor: BRAND.surfaceAlt, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: BRAND.border, marginRight: 12 }}>
-          <Ionicons name="arrow-back" size={20} color={BRAND.textPrimary} />
-        </TouchableOpacity>
-
         <View style={{ flex: 1 }}>
-          <Text style={{ fontSize: 20, fontWeight: '800', color: BRAND.textPrimary, letterSpacing: -0.4 }}>My Bookings</Text>
+          <Text style={{ fontSize: 20, fontWeight: '800', color: BRAND.textPrimary, letterSpacing: -0.4 }}>Bookings</Text>
           <Text style={{ fontSize: 12, color: BRAND.textMuted, fontWeight: '500', marginTop: 1 }}>
-            {filteredBookings.length} {filteredBookings.length === 1 ? 'booking' : 'bookings'}
+            {viewMode === 'received' ? 'Bookings from clients' : 'Bookings you made'}
           </Text>
         </View>
 
@@ -474,6 +463,58 @@ const VendorBookingsScreen: React.FC = () => {
           </TouchableOpacity>
         </View>
       </View>
+
+      {/* ── VIEW MODE TOGGLE ──────────────────────────────────────── */}
+      <View style={{ backgroundColor: BRAND.surface, paddingHorizontal: 16, paddingTop: 10, paddingBottom: 12 }}>
+        <View style={{ flexDirection: 'row', backgroundColor: BRAND.surfaceAlt, borderRadius: 14, padding: 4, borderWidth: 1.5, borderColor: BRAND.border }}>
+          <TouchableOpacity
+            onPress={() => { setViewMode('received'); setActiveFilter('all'); setSearchQuery(''); }}
+            activeOpacity={0.8}
+            style={{
+              flex: 1, paddingVertical: 11, borderRadius: 11, alignItems: 'center',
+              backgroundColor: viewMode === 'received' ? BRAND.primary : 'transparent',
+            }}
+          >
+            <Text style={{ fontSize: 14, fontWeight: '700', color: viewMode === 'received' ? '#fff' : BRAND.textSecondary }}>
+              Received
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => { setViewMode('made'); setActiveFilter('all'); setSearchQuery(''); }}
+            activeOpacity={0.8}
+            style={{
+              flex: 1, paddingVertical: 11, borderRadius: 11, alignItems: 'center',
+              backgroundColor: viewMode === 'made' ? BRAND.primary : 'transparent',
+            }}
+          >
+            <Text style={{ fontSize: 14, fontWeight: '700', color: viewMode === 'made' ? '#fff' : BRAND.textSecondary }}>
+              My Bookings
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </>
+  );
+
+  if (loading && page === 1) {
+    return (
+      <SafeAreaView style={{ flex: 1, backgroundColor: BRAND.surfaceAlt }} edges={['top']}>
+        <StatusBar barStyle="dark-content" />
+        {renderHeader()}
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+          <ActivityIndicator size="large" color={BRAND.primary} />
+          <Text style={{ color: BRAND.textMuted, fontSize: 14, marginTop: 12, fontWeight: '500' }}>Loading bookings…</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  return (
+    <SafeAreaView style={{ flex: 1, backgroundColor: BRAND.surfaceAlt }} edges={['top']}>
+      <StatusBar barStyle="dark-content" backgroundColor={BRAND.surface} />
+
+      {renderHeader()}
 
       <ScrollView
         style={{ flex: 1 }}

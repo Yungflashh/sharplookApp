@@ -35,12 +35,9 @@ class CallService {
       console.error('❌ Error caching user ID:', error);
     }
 
-    // Only re-register if socket changed (prevents duplicate listeners)
+    // Always re-register listeners — socket may have reconnected and lost them
     const currentSocketId = socketService.getSocket()?.id || null;
-    if (this.initialized && this.registeredSocketId === currentSocketId) {
-      console.log('📞 Call service already initialized on this socket, skipping');
-      return;
-    }
+    console.log('📞 Call service initializing. Socket ID:', currentSocketId, 'Previous:', this.registeredSocketId);
 
     this.registeredSocketId = currentSocketId;
     this.initialized = true;
@@ -84,6 +81,7 @@ class CallService {
       const callerId = data.caller?._id || data.caller?.id;
       console.log('📞 Incoming call received:', callerId, 'type:', data.type, 'myStatus:', this.callStatus, 'myId:', this.currentUserId);
 
+
       // Guard 1: If we're already calling or connected, ignore
       if (this.callStatus !== 'idle') {
         console.log('⏭️ Ignoring incoming call - not idle (status:', this.callStatus, ')');
@@ -114,6 +112,11 @@ class CallService {
       this.callStatus = 'incoming';
       this.emit('call:incoming', data);
     });
+    socketService.on('call:ringing', (data: any) => {
+      console.log('📞 Call ringing (receiver is online):', data);
+      this.emit('call:ringing', data);
+    });
+
     socketService.on('call:accepted', (data: any) => {
       console.log('📞 Call accepted:', data);
       this.callStatus = 'connected';
@@ -362,6 +365,28 @@ class CallService {
 
   public getCallStatus(): CallStatus {
     return this.callStatus;
+  }
+
+  public getDebugInfo(): {
+    initialized: boolean;
+    callStatus: CallStatus;
+    currentUserId: string | null;
+    socketId: string | null;
+    socketConnected: boolean;
+    registeredSocketId: string | null;
+    listenerCount: Record<string, number>;
+  } {
+    return {
+      initialized: this.initialized,
+      callStatus: this.callStatus,
+      currentUserId: this.currentUserId,
+      socketId: socketService.getSocket()?.id || null,
+      socketConnected: socketService.isSocketConnected(),
+      registeredSocketId: this.registeredSocketId,
+      listenerCount: Object.fromEntries(
+        Object.entries(this.listeners).map(([k, v]) => [k, v.length])
+      ),
+    };
   }
 }
 

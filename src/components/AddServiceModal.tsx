@@ -15,6 +15,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
 import { useNavigation } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { categoriesAPI, handleAPIError } from '@/api/api';
 import { toast } from '@/components/ui/Toast';
 import ConfirmationModal from '@/components/ConfirmationModal';
@@ -24,7 +25,7 @@ interface ServiceFormData {
   description: string;
   category: string;
   basePrice: number;
-  priceType: 'fixed' | 'variable';
+  priceType: 'fixed' | 'negotiable';
   currency: string;
   duration: number;
   serviceArea: {
@@ -48,7 +49,8 @@ const AddServiceModal: React.FC<AddServiceModalProps> = ({
   onSave,
 }) => {
   const navigation = useNavigation();
-  
+  const insets = useSafeAreaInsets();
+
   const [formData, setFormData] = useState<ServiceFormData>({
     name: '',
     description: '',
@@ -437,16 +439,16 @@ const AddServiceModal: React.FC<AddServiceModalProps> = ({
                   </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  className={`px-4 py-3 ${formData.priceType === 'variable' ? '' : 'bg-white'}`}
-                  style={formData.priceType === 'variable' ? { backgroundColor: '#eb278d' } : {}}
-                  onPress={() => setFormData({ ...formData, priceType: 'variable' })}
+                  className={`px-4 py-3 ${formData.priceType === 'negotiable' ? '' : 'bg-white'}`}
+                  style={formData.priceType === 'negotiable' ? { backgroundColor: '#eb278d' } : {}}
+                  onPress={() => setFormData({ ...formData, priceType: 'negotiable' })}
                 >
                   <Text
                     className={`text-sm font-medium ${
-                      formData.priceType === 'variable' ? 'text-white' : 'text-gray-700'
+                      formData.priceType === 'negotiable' ? 'text-white' : 'text-gray-700'
                     }`}
                   >
-                    Variable
+                    Negotiable
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -587,7 +589,10 @@ const AddServiceModal: React.FC<AddServiceModalProps> = ({
         </ScrollView>
 
         {/* Footer Buttons */}
-        <View className="flex-row p-5 gap-3 border-t border-gray-200">
+        <View
+          className="flex-row px-5 pt-5 gap-3 border-t border-gray-200"
+          style={{ paddingBottom: Math.max(insets.bottom, 16) + 4 }}
+        >
           <TouchableOpacity
             className="flex-1 bg-gray-100 py-3.5 rounded-xl items-center border border-gray-300"
             onPress={handleClose}

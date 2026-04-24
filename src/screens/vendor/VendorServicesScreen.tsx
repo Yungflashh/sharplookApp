@@ -34,7 +34,7 @@ const shadow = (color = '#000', opacity = 0.07, radius = 8, y = 2) =>
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface Service {
   _id: string; name: string; description: string;
-  basePrice: number; priceType: 'fixed' | 'variable';
+  basePrice: number; priceType: 'fixed' | 'negotiable';
   currency: string; duration: number;
   category: { _id: string; name: string };
   images: string[];
@@ -56,6 +56,7 @@ const hasActiveFilters = (f: FilterOptions) =>
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 const VendorServicesScreen: React.FC = () => {
   const insets = useSafeAreaInsets();
+  const navigation = useNavigation();
 
   const [services, setServices]               = useState<Service[]>([]);
   const [filteredServices, setFilteredServices] = useState<Service[]>([]);
@@ -144,7 +145,17 @@ const VendorServicesScreen: React.FC = () => {
         await loadServices();
         setShowAddModal(false);
       }
-    } catch (error) { toast.error('Error', handleAPIError(error).message); throw error; }
+    } catch (error) {
+      const apiError = handleAPIError(error);
+      if (apiError.status === 403 && apiError.message?.includes('Upgrade')) {
+        toast.info('Limit Reached', apiError.message);
+        setShowAddModal(false);
+        navigation.navigate('UpgradeTier' as never);
+      } else {
+        toast.error('Error', apiError.message);
+      }
+      throw error;
+    }
   };
 
   const handleUpdateService = async (id: string, serviceData: any, images: any[]) => {

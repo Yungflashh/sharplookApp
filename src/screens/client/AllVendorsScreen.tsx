@@ -92,10 +92,28 @@ const AllVendorsScreen: React.FC = () => {
       if (response.success) {
         const rawVendors = extractVendorsFromResponse(response);
         const formattedVendors = parseVendors(rawVendors);
+        // Dedupe by id within this page
+        const seenInPage = new Set<string>();
+        const uniqueInPage = formattedVendors.filter(v => {
+          if (!v.id || seenInPage.has(v.id)) return false;
+          seenInPage.add(v.id);
+          return true;
+        });
         if (append) {
-          setVendors(prev => [...prev, ...formattedVendors]);
+          // Dedupe against vendors already loaded
+          setVendors(prev => {
+            const existingIds = new Set(prev.map(v => v.id));
+            const merged = [...prev];
+            for (const v of uniqueInPage) {
+              if (!existingIds.has(v.id)) {
+                existingIds.add(v.id);
+                merged.push(v);
+              }
+            }
+            return merged;
+          });
         } else {
-          setVendors(formattedVendors);
+          setVendors(uniqueInPage);
         }
         if (response.meta?.pagination) {
           setHasMore(response.meta.pagination.hasNextPage || false);
@@ -194,9 +212,9 @@ const AllVendorsScreen: React.FC = () => {
     item: FormattedVendor;
     index: number;
   }) => {
-    const cardWidth = (SCREEN_WIDTH - 50) / 3;
+    const cardWidth = (SCREEN_WIDTH - 48) / 2;
     return <View className="px-1.5 mb-3" style={{
-      width: SCREEN_WIDTH / 3
+      width: (SCREEN_WIDTH - 16) / 2
     }}>
         <VendorCard vendor={{
         id: item.id,
@@ -207,7 +225,7 @@ const AllVendorsScreen: React.FC = () => {
         reviews: item.reviews,
         isVerified: item.isVerified,
         vendorType: item.vendorType
-      }} width={cardWidth} onPress={() => handleVendorPress(item.id)} onFavoritePress={() => handleFavoriteToggle(item.id)} isFavorite={favoriteVendors.has(item.id)} />
+      }} width={cardWidth} onPress={() => handleVendorPress(item.id)} onFavoritePress={() => handleFavoriteToggle(item.id)} isFavorite={favoriteVendors.has(item.id)} showFavorite />
       </View>;
   };
   const renderFooter = () => {
@@ -299,7 +317,7 @@ const AllVendorsScreen: React.FC = () => {
       {loading ? <View className="flex-1 items-center justify-center">
           <ActivityIndicator size="large" color="#eb278d" />
           <Text className="text-gray-400 text-sm mt-4">Loading vendors...</Text>
-        </View> : <FlatList data={filteredVendors} renderItem={renderVendorItem} keyExtractor={item => item.id} numColumns={3} contentContainerStyle={{
+        </View> : <FlatList data={filteredVendors} renderItem={renderVendorItem} keyExtractor={item => item.id} numColumns={2} contentContainerStyle={{
       paddingVertical: 16,
       paddingHorizontal: 8
     }} columnWrapperStyle={{

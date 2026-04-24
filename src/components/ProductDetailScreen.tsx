@@ -11,7 +11,7 @@ import {
   Share,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -80,6 +80,7 @@ interface Product {
 const ProductDetailScreen: React.FC = () => {
   const navigation = useNavigation<ProductDetailNavigationProp>();
   const route = useRoute<ProductDetailRouteProp>();
+  const insets = useSafeAreaInsets();
   const { productId } = route.params;
 
   const [loading, setLoading] = useState(true);
@@ -209,7 +210,7 @@ const ProductDetailScreen: React.FC = () => {
     : 0;
 
   return (
-    <SafeAreaView className="flex-1 bg-white" edges={['top']}>
+    <SafeAreaView className="flex-1 bg-white" edges={['top', 'left', 'right']}>
       {}
       <View className="flex-row items-center justify-between px-5 py-4 bg-white border-b border-gray-100">
         <TouchableOpacity
@@ -546,8 +547,10 @@ const ProductDetailScreen: React.FC = () => {
       {/* Bottom Actions */}
       {product.stock > 0 && (
         <View
-          className="bg-white px-5 py-4 border-t border-gray-100"
+          className="bg-white px-5 border-t border-gray-100"
           style={{
+            paddingTop: 12,
+            paddingBottom: Math.max(insets.bottom, 12),
             ...Platform.select({
               ios: {
                 shadowColor: '#000',
@@ -563,7 +566,8 @@ const ProductDetailScreen: React.FC = () => {
             <TouchableOpacity
               onPress={handleAddToCart}
               disabled={addingToCart}
-              className="flex-1 bg-white border-2 border-pink-500 py-4 rounded-2xl items-center"
+              className="flex-1 bg-white border-2 border-pink-500 rounded-2xl items-center justify-center"
+              style={{ paddingVertical: 14 }}
               activeOpacity={0.8}
             >
               {addingToCart ? (
@@ -586,7 +590,7 @@ const ProductDetailScreen: React.FC = () => {
                 colors={['#eb278d', '#f472b6']}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 0 }}
-                className="py-4 rounded-2xl items-center"
+                style={{ paddingVertical: 14, borderRadius: 16, alignItems: 'center' }}
               >
                 <Text className="text-white text-base font-bold">Buy Now</Text>
               </LinearGradient>

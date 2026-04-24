@@ -6,7 +6,7 @@ interface Service {
   name: string;
   description: string;
   basePrice: number;
-  priceType: 'fixed' | 'variable';
+  priceType: 'fixed' | 'negotiable';
   currency: string;
   duration: number;
   category: {
@@ -82,7 +82,7 @@ const ServiceCard: React.FC<ServiceCardProps> = ({
             <Ionicons name="cash-outline" size={14} color="#eb278d" />
             <Text className="text-xs text-gray-900 font-medium ml-1">
               {service.currency} {service.basePrice.toLocaleString()}
-              {service.priceType === 'variable' && '+'}
+              {service.priceType === 'negotiable' && '+'}
             </Text>
           </View>
           <View className="flex-row items-center">
