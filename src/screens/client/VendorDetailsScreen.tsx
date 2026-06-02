@@ -56,19 +56,17 @@ interface VendorData {
   _id: string;
   firstName: string;
   lastName: string;
-  fullName?: string;
+  fullName: string;
   email: string;
   phone: string;
   avatar?: string;
   isOnline: boolean;
-  createdAt?: string;
   vendorProfile: {
     businessName: string;
     businessDescription?: string;
     vendorType: string;
     rating: number;
     totalRatings: number;
-    totalReviews?: number;
     completedBookings: number;
     isVerified: boolean;
     categories: Array<{ _id: string; name: string; icon: string }>;

@@ -6,8 +6,8 @@ import {
   ScrollView,
   ActivityIndicator,
   Image,
-  Platform,
   StyleSheet,
+  Dimensions,
 } from 'react-native';
 import { toast } from '@/components/ui/Toast';
 import ConfirmationModal from '@/components/ConfirmationModal';
@@ -81,6 +81,7 @@ interface BookingDetail {
   scheduledDate: string;
   scheduledTime?: string;
   duration: number;
+  serviceType?: 'home' | 'shop';
   location?: { address: string; city: string; state: string };
   servicePrice: number;
   distanceCharge: number;
@@ -109,30 +110,89 @@ interface BookingDetail {
   sessionStartedAt?: string;
 }
 
+// ─── Constants ────────────────────────────────────────────────────────────────
+
+const { width: SCREEN_W } = Dimensions.get('window');
+const HERO_H = 270;
+const AVATAR_SIZE = 84;
+const BG = '#FCE4EC';
+const PRIMARY = '#E04079';
+const TEXT_DARK = '#1A1A2E';
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+const format12Hour = (time?: string): string => {
+  if (!time) return '';
+  if (/AM|PM/i.test(time)) return time;
+  const [hStr, mStr] = time.split(':');
+  const h = parseInt(hStr, 10);
+  const m = mStr || '00';
+  const suffix = h >= 12 ? 'PM' : 'AM';
+  return `${h % 12 || 12}:${m} ${suffix}`;
+};
+
+const formatLongDate = (dateStr: string) =>
+  new Date(dateStr).toLocaleDateString('en-US', {
+    month: 'long', day: 'numeric', year: 'numeric',
+  });
+
+const formatPrice = (price: number) => `₦${price.toLocaleString()}`;
+
+const formatStatus = (s: string) =>
+  s.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+
+const formatDateTime = (dateStr: string) => {
+  const d = new Date(dateStr);
+  const date = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  const time = format12Hour(`${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`);
+  return `${date} · ${time}`;
+};
+
+
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
-const Card: React.FC<{ children: React.ReactNode; style?: any }> = ({ children, style }) => (
-  <View style={[styles.card, style]}>{children}</View>
-);
-
-const CardTitle: React.FC<{ title: string; style?: any }> = ({ title, style }) => (
-  <Text style={[styles.cardTitle, style]}>{title}</Text>
-);
-
-const InfoRow: React.FC<{
-  iconName: string;
-  iconBg: string;
-  iconColor: string;
-  label: string;
-  alignStart?: boolean;
-}> = ({ iconName, iconBg, iconColor, label, alignStart }) => (
-  <View style={[styles.infoRow, alignStart && { alignItems: 'flex-start' }]}>
-    <View style={[styles.infoIconWrap, { backgroundColor: iconBg }]}>
-      <Ionicons name={iconName as any} size={18} color={iconColor} />
+const DetailRow: React.FC<{ icon: string; value: string; alignStart?: boolean }> = ({ icon, value, alignStart }) => (
+  <View style={[styles.detailRow, alignStart && { alignItems: 'flex-start' }]}>
+    <View style={styles.detailIconWrap}>
+      <Ionicons name={icon as any} size={17} color={PRIMARY} />
     </View>
-    <Text style={styles.infoLabel}>{label}</Text>
+    <Text style={[styles.detailValue, alignStart && { lineHeight: 20 }]}>{value}</Text>
   </View>
 );
+
+const SessionStep: React.FC<{ label: string; done: boolean; pulse?: boolean }> = ({ label, done, pulse }) => (
+  <View style={styles.sessionStep}>
+    <View style={[styles.sessionStepDot, done ? styles.sessionStepDone : pulse ? styles.sessionStepPulse : styles.sessionStepIdle]}>
+      {done
+        ? <Ionicons name="checkmark" size={11} color="#fff" />
+        : <View style={[styles.sessionStepInner, { backgroundColor: pulse ? '#E04079' : '#C7C7CC' }]} />
+      }
+    </View>
+    <Text style={[styles.sessionStepLabel, done && { color: '#16A34A', fontWeight: '700' }, pulse && !done && { color: PRIMARY, fontWeight: '700' }]}>
+      {label}
+    </Text>
+  </View>
+);
+
+const SessionTimer: React.FC<{ startedAt: string }> = ({ startedAt }) => {
+  const [elapsed, setElapsed] = useState(0);
+  useEffect(() => {
+    const start = new Date(startedAt).getTime();
+    const tick = () => setElapsed(Math.max(0, Math.floor((Date.now() - start) / 1000)));
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [startedAt]);
+  const h = Math.floor(elapsed / 3600);
+  const m = Math.floor((elapsed % 3600) / 60);
+  const s = elapsed % 60;
+  const pad = (n: number) => n.toString().padStart(2, '0');
+  return (
+    <Text style={styles.sessionElapsed}>
+      {h > 0 ? `${pad(h)}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`}
+    </Text>
+  );
+};
 
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 
@@ -205,36 +265,6 @@ const BookingDetailScreen: React.FC = () => {
     return { type: 'vendor', data: booking.vendor, label: 'Vendor' };
   };
 
-  const formatDate = (dateString: string) =>
-    new Date(dateString).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
-
-  const formatPrice = (price: number) => `₦${price.toLocaleString()}`;
-
-  const getStatusStyle = (status: string) => {
-    switch (status.toLowerCase()) {
-      case 'pending':      return { bg: '#FFF7ED', text: '#C2410C', border: '#FED7AA' };
-      case 'accepted':     return { bg: '#EFF6FF', text: '#1D4ED8', border: '#BFDBFE' };
-      case 'in_progress':  return { bg: '#FAF5FF', text: '#6D28D9', border: '#DDD6FE' };
-      case 'completed':    return { bg: '#F0FDF4', text: '#15803D', border: '#BBF7D0' };
-      case 'cancelled':    return { bg: '#FEF2F2', text: '#B91C1C', border: '#FECACA' };
-      default:             return { bg: '#F9FAFB', text: '#374151', border: '#E5E7EB' };
-    }
-  };
-
-  const getPaymentInfo = (ps: string) => {
-    switch (ps) {
-      case 'pending':            return { bg: '#FFF7ED', text: '#C2410C', label: 'Payment Pending',    icon: 'time-outline' };
-      case 'escrowed':           return { bg: '#EFF6FF', text: '#1D4ED8', label: 'Payment Secured',    icon: 'shield-checkmark-outline' };
-      case 'released':           return { bg: '#F0FDF4', text: '#15803D', label: 'Payment Released',   icon: 'checkmark-circle-outline' };
-      case 'refunded':           return { bg: '#EEF2FF', text: '#4338CA', label: 'Fully Refunded',     icon: 'refresh-circle-outline' };
-      case 'partially_refunded': return { bg: '#FFF7ED', text: '#C2410C', label: 'Partially Refunded', icon: 'alert-circle-outline' };
-      default:                   return { bg: '#F9FAFB', text: '#374151', label: ps,                   icon: 'help-circle-outline' };
-    }
-  };
-
-  const formatStatus = (s: string) =>
-    s.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
-
   const getTimeUntilExpiry = () => {
     if (!booking?.paymentExpiresAt) return null;
     const diff = new Date(booking.paymentExpiresAt).getTime() - Date.now();
@@ -263,7 +293,7 @@ const BookingDetailScreen: React.FC = () => {
       });
       return;
     }
-    navigation.navigate('CreateDispute', { bookingId: booking._id });
+    navigation.navigate('CreateDispute', { bookingId: booking._id, role: isVendor ? 'vendor' : 'client' });
   };
 
   const handleViewDispute = () => {
@@ -341,90 +371,9 @@ const BookingDetailScreen: React.FC = () => {
     });
   };
 
-  // ── Banners ──────────────────────────────────────────────────────────────────
+  // ── Status Banner ─────────────────────────────────────────────────────────────
 
-  const renderPaymentPendingBanner = () => {
-    if (!booking || booking.paymentStatus !== 'pending') return null;
-    const timeRemaining = getTimeUntilExpiry();
-    const expired = timeRemaining === 'Expired';
-
-    return (
-      <View style={[styles.banner, { borderColor: '#FED7AA', backgroundColor: '#FFF7ED' }]}>
-        <View style={styles.bannerRow}>
-          <View style={[styles.bannerIconWrap, { backgroundColor: '#FFEDD5' }]}>
-            <Ionicons name="time" size={20} color="#EA580C" />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.bannerTitle, { color: '#9A3412' }]}>Payment Pending</Text>
-            <Text style={[styles.bannerBody, { color: '#C2410C' }]}>
-              Complete your payment on Paystack to confirm this booking.
-            </Text>
-          </View>
-        </View>
-        {timeRemaining && (
-          <View style={[styles.timerRow, { backgroundColor: expired ? '#FEE2E2' : '#FFEDD5' }]}>
-            <Ionicons name={expired ? 'close-circle' : 'hourglass'} size={14} color={expired ? '#DC2626' : '#92400E'} />
-            <Text style={[styles.timerText, { color: expired ? '#DC2626' : '#92400E' }]}>
-              {expired ? 'Payment window expired. Booking will be cancelled.' : `Expires in: ${timeRemaining}`}
-            </Text>
-          </View>
-        )}
-      </View>
-    );
-  };
-
-  const renderRefundInfo = () => {
-    if (!booking) return null;
-    if (booking.paymentStatus === 'refunded') {
-      return (
-        <View style={[styles.banner, { borderColor: '#C7D2FE', backgroundColor: '#EEF2FF' }]}>
-          <View style={styles.bannerRow}>
-            <View style={[styles.bannerIconWrap, { backgroundColor: '#E0E7FF' }]}>
-              <Ionicons name="refresh-circle" size={20} color="#4338CA" />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.bannerTitle, { color: '#312E81' }]}>Full Refund Processed</Text>
-              <Text style={[styles.bannerBody, { color: '#4338CA' }]}>
-                {formatPrice(booking.totalAmount)} has been returned to your wallet.
-              </Text>
-            </View>
-          </View>
-        </View>
-      );
-    }
-    if (booking.paymentStatus === 'partially_refunded' && booking.cancellationPenalty) {
-      const refund = booking.totalAmount - booking.cancellationPenalty;
-      return (
-        <View style={[styles.banner, { borderColor: '#FED7AA', backgroundColor: '#FFF7ED' }]}>
-          <View style={styles.bannerRow}>
-            <View style={[styles.bannerIconWrap, { backgroundColor: '#FFEDD5' }]}>
-              <Ionicons name="alert-circle" size={20} color="#EA580C" />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.bannerTitle, { color: '#9A3412' }]}>Partial Refund</Text>
-            </View>
-          </View>
-          <View style={styles.refundRows}>
-            <View style={styles.refundRow}>
-              <Text style={styles.refundLabel}>Original amount</Text>
-              <Text style={styles.refundValue}>{formatPrice(booking.totalAmount)}</Text>
-            </View>
-            <View style={styles.refundRow}>
-              <Text style={[styles.refundLabel, { color: '#DC2626' }]}>Penalty (20%)</Text>
-              <Text style={[styles.refundValue, { color: '#DC2626' }]}>-{formatPrice(booking.cancellationPenalty)}</Text>
-            </View>
-            <View style={[styles.refundRow, styles.refundRowTotal]}>
-              <Text style={[styles.refundLabel, { color: '#15803D', fontWeight: '700' }]}>Refunded to wallet</Text>
-              <Text style={[styles.refundValue, { color: '#15803D', fontWeight: '700' }]}>{formatPrice(refund)}</Text>
-            </View>
-          </View>
-        </View>
-      );
-    }
-    return null;
-  };
-
-  const renderActionButtons = () => {
+  const renderStatusBanner = () => {
     if (!booking) return null;
     const status = booking.status.toLowerCase();
     const ps = booking.paymentStatus;
@@ -591,98 +540,417 @@ const BookingDetailScreen: React.FC = () => {
       else if (clientReady && !vendorReady) waitMsg = 'Waiting for vendor to confirm the session start…';
     }
 
-    if (booking.paymentStatus === 'pending') {
-      return (
-        <View style={styles.lockedActions}>
-          <Ionicons name="lock-closed-outline" size={16} color="#8E8E93" />
-          <Text style={styles.lockedActionsText}>Complete payment to unlock booking actions</Text>
-        </View>
-      );
-    }
-
     return (
-      <View style={{ gap: 10 }}>
-        {/* Mark Complete */}
-        {['accepted', 'in_progress'].includes(status) && !isVendor && (
-          <TouchableOpacity
-            onPress={handleMarkComplete}
-            disabled={actionLoading || booking.clientMarkedComplete}
-            style={[styles.actionBtn, booking.clientMarkedComplete ? styles.actionBtnDisabled : styles.actionBtnGreen]}
-            activeOpacity={0.8}
-          >
-            {actionLoading ? <ActivityIndicator size="small" color="#fff" /> : (
-              <View style={styles.actionBtnInner}>
-                <Ionicons name={booking.clientMarkedComplete ? 'checkmark-circle' : 'checkmark-circle-outline'} size={19} color="#fff" />
-                <Text style={styles.actionBtnText}>
-                  {booking.clientMarkedComplete ? 'Marked Complete' : 'Mark as Complete'}
-                </Text>
-              </View>
-            )}
-          </TouchableOpacity>
-        )}
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>Session Progress</Text>
 
-        {/* Leave Review */}
-        {status === 'completed' && !booking.hasReview && !isVendor && (
-          <TouchableOpacity
-            onPress={() => navigation.navigate('CreateReview', {
-              bookingId: booking._id,
-              vendorName: booking.vendor?.vendorProfile?.businessName || `${booking.vendor?.firstName} ${booking.vendor?.lastName}`,
-              serviceName: serviceInfo?.name || 'Service',
-            })}
-            style={[styles.actionBtn, styles.actionBtnYellow]}
-            activeOpacity={0.8}
-          >
-            <View style={styles.actionBtnInner}>
-              <Ionicons name="star-outline" size={19} color="#fff" />
-              <Text style={styles.actionBtnText}>Leave a Review</Text>
+        {/* Step tracker */}
+        <View style={styles.sessionStepsRow}>
+          <SessionStep label="Vendor Ready" done={vendorReady} pulse={!vendorReady && !isActive} />
+          <View style={[styles.sessionConnector, { backgroundColor: vendorReady ? '#16A34A' : '#E5E7EB' }]} />
+          <SessionStep label="Client Ready" done={clientReady} pulse={vendorReady && !clientReady && !isActive} />
+          <View style={[styles.sessionConnector, { backgroundColor: isActive ? '#16A34A' : '#E5E7EB' }]} />
+          <SessionStep label="Live" done={isActive} pulse={isActive} />
+        </View>
+
+        {/* Live timer */}
+        {isActive && booking.sessionStartedAt && (
+          <View style={styles.sessionTimerRow}>
+            <View style={styles.sessionTimerIcon}>
+              <Ionicons name="timer-outline" size={16} color="#7C3AED" />
             </View>
-          </TouchableOpacity>
-        )}
-
-        {/* Review Submitted */}
-        {status === 'completed' && booking.hasReview && !isVendor && (
-          <View style={[styles.actionBtn, styles.actionBtnGreen]}>
-            <View style={styles.actionBtnInner}>
-              <Ionicons name="checkmark-circle" size={19} color="#fff" />
-              <Text style={styles.actionBtnText}>Review Submitted</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.sessionTimerLabel}>Session running</Text>
+              <SessionTimer startedAt={booking.sessionStartedAt} />
+            </View>
+            <View style={styles.sessionLivePill}>
+              <View style={styles.sessionLiveDot} />
+              <Text style={styles.sessionLiveText}>LIVE</Text>
             </View>
           </View>
         )}
 
-        {/* Cancel */}
-        {['pending', 'accepted'].includes(status) && booking.paymentStatus === 'escrowed' && (
-          <TouchableOpacity
-            onPress={() => setShowCancelModal(true)}
-            disabled={actionLoading}
-            style={[styles.actionBtn, styles.actionBtnOutlineRed]}
-            activeOpacity={0.8}
-          >
-            {actionLoading ? <ActivityIndicator size="small" color="#E8166D" /> : (
-              <View style={styles.actionBtnInner}>
-                <Ionicons name="close-circle-outline" size={19} color="#DC2626" />
-                <Text style={[styles.actionBtnText, { color: '#DC2626' }]}>Cancel Booking</Text>
-              </View>
-            )}
-          </TouchableOpacity>
+        {/* Completion status */}
+        {isActive && (booking.clientMarkedComplete || booking.vendorMarkedComplete) && (
+          <View style={styles.sessionCompleteRow}>
+            <View style={[styles.sessionCompleteItem, booking.vendorMarkedComplete && styles.sessionCompleteItemDone]}>
+              <Ionicons name={booking.vendorMarkedComplete ? 'checkmark-circle' : 'ellipse-outline'} size={16} color={booking.vendorMarkedComplete ? '#16A34A' : '#C7C7CC'} />
+              <Text style={[styles.sessionCompleteLabel, booking.vendorMarkedComplete && { color: '#16A34A' }]}>Vendor done</Text>
+            </View>
+            <View style={[styles.sessionCompleteItem, booking.clientMarkedComplete && styles.sessionCompleteItemDone]}>
+              <Ionicons name={booking.clientMarkedComplete ? 'checkmark-circle' : 'ellipse-outline'} size={16} color={booking.clientMarkedComplete ? '#16A34A' : '#C7C7CC'} />
+              <Text style={[styles.sessionCompleteLabel, booking.clientMarkedComplete && { color: '#16A34A' }]}>Client done</Text>
+            </View>
+          </View>
         )}
 
-        {/* Dispute */}
-        {['accepted', 'in_progress', 'completed'].includes(status) && (
-          booking.hasDispute ? (
-            <TouchableOpacity onPress={handleViewDispute} style={[styles.actionBtn, styles.actionBtnOrange]} activeOpacity={0.8}>
-              <View style={styles.actionBtnInner}>
-                <Ionicons name="alert-circle-outline" size={19} color="#fff" />
-                <Text style={styles.actionBtnText}>View Active Dispute</Text>
+        {/* Waiting message */}
+        {!!waitMsg && (
+          <View style={styles.sessionWaitRow}>
+            <Ionicons name="hourglass-outline" size={14} color="#C2410C" />
+            <Text style={styles.sessionWaitText}>{waitMsg}</Text>
+          </View>
+        )}
+      </View>
+    );
+  };
+
+  // ── Service Timeline ──────────────────────────────────────────────────────────
+
+  const renderServiceTimeline = () => {
+    if (!booking) return null;
+    const status = booking.status.toLowerCase();
+    const serviceInfo = getServiceInfo();
+    const otherParty = getOtherParty();
+    const vendorName = otherParty?.type === 'vendor'
+      ? (otherParty.data.vendorProfile?.businessName || `${otherParty.data.firstName} ${otherParty.data.lastName}`)
+      : `${booking.vendor.firstName} ${booking.vendor.lastName}`;
+    const clientName = `${booking.client.firstName} ${booking.client.lastName}`;
+
+    type TStep = {
+      key: string; label: string; subs: string[];
+      ts?: string; done: boolean; active?: boolean;
+      icon: string; color: string;
+    };
+
+    const steps: TStep[] = [];
+
+    // 1. Booking Created
+    steps.push({
+      key: 'created',
+      label: 'Booking Requested',
+      subs: [
+        `${clientName} booked ${serviceInfo?.name || 'a service'} with ${vendorName}`,
+        `₦${booking.totalAmount.toLocaleString()} secured in escrow`,
+      ],
+      ts: booking.createdAt, done: true,
+      icon: 'document-text-outline', color: PRIMARY,
+    });
+
+    // 2. Acceptance / Cancellation
+    if (status === 'cancelled') {
+      steps.push({
+        key: 'cancelled',
+        label: 'Booking Cancelled',
+        subs: booking.cancellationReason
+          ? [`Reason: ${booking.cancellationReason}`]
+          : ['The booking was cancelled'],
+        ts: booking.cancelledAt, done: true,
+        icon: 'close-circle-outline', color: '#DC2626',
+      });
+    } else if (['accepted', 'in_progress', 'completed'].includes(status)) {
+      const apptDate = new Date(booking.scheduledDate).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+      const apptTime = booking.scheduledTime ? ` at ${format12Hour(booking.scheduledTime)}` : '';
+      steps.push({
+        key: 'accepted',
+        label: 'Vendor Accepted',
+        subs: [
+          `${vendorName} confirmed your appointment`,
+          `Scheduled for ${apptDate}${apptTime}`,
+        ],
+        ts: booking.acceptedAt, done: true,
+        icon: 'checkmark-circle-outline', color: '#16A34A',
+      });
+    } else {
+      steps.push({
+        key: 'pending',
+        label: 'Awaiting Vendor Response',
+        subs: [`${vendorName} hasn't responded yet`],
+        done: false, active: true,
+        icon: 'hourglass-outline', color: '#F59E0B',
+      });
+    }
+
+    // 3. Session Started
+    if (['in_progress', 'completed'].includes(status)) {
+      const startTime = booking.sessionStartedAt
+        ? format12Hour((() => { const d = new Date(booking.sessionStartedAt!); return `${d.getHours()}:${String(d.getMinutes()).padStart(2,'0')}`; })())
+        : null;
+      steps.push({
+        key: 'started',
+        label: 'Session Started',
+        subs: [
+          'Both vendor and client confirmed presence',
+          startTime ? `Started at ${startTime}` : 'Timer is running',
+        ],
+        ts: booking.sessionStartedAt, done: true,
+        active: status === 'in_progress',
+        icon: 'play-circle-outline', color: '#7C3AED',
+      });
+    }
+
+    // 4. Completion
+    if (status === 'completed' || status === 'in_progress') {
+      const completionSubs: string[] = [];
+      if (booking.completedAt && booking.sessionStartedAt) {
+        const mins = Math.round(
+          (new Date(booking.completedAt).getTime() - new Date(booking.sessionStartedAt).getTime()) / 60000
+        );
+        const duration = mins >= 60
+          ? `${Math.floor(mins / 60)}h${mins % 60 > 0 ? ` ${mins % 60}m` : ''}`
+          : `${mins} min`;
+        completionSubs.push(`Session lasted ${duration}`);
+      } else if (booking.duration > 0) {
+        const est = booking.duration >= 60
+          ? `${Math.floor(booking.duration / 60)}h${booking.duration % 60 > 0 ? ` ${booking.duration % 60}m` : ''}`
+          : `${booking.duration} min`;
+        completionSubs.push(`Estimated duration: ${est}`);
+      }
+      if (status === 'completed') {
+        completionSubs.push(`₦${booking.totalAmount.toLocaleString()} released to ${vendorName}`);
+      } else {
+        completionSubs.push('Waiting for both parties to mark as done');
+      }
+      steps.push({
+        key: 'completed',
+        label: status === 'completed' ? 'Service Completed' : 'Awaiting Completion',
+        subs: completionSubs,
+        ts: booking.completedAt,
+        done: status === 'completed',
+        active: status === 'in_progress',
+        icon: 'checkmark-done-circle-outline', color: '#16A34A',
+      });
+    }
+
+    return (
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>Service Timeline</Text>
+        {steps.map((step, i) => (
+          <View key={step.key} style={{ flexDirection: 'row' }}>
+            <View style={{ alignItems: 'center', width: 36 }}>
+              <View style={{
+                width: 30, height: 30, borderRadius: 15,
+                backgroundColor: step.done ? step.color : step.active ? `${step.color}18` : '#F2F2F7',
+                borderWidth: step.done ? 0 : 2,
+                borderColor: step.active ? step.color : '#E5E7EB',
+                alignItems: 'center', justifyContent: 'center',
+              }}>
+                <Ionicons name={step.icon as any} size={14}
+                  color={step.done ? '#fff' : step.active ? step.color : '#C7C7CC'} />
               </View>
-            </TouchableOpacity>
-          ) : (
-            <TouchableOpacity onPress={handleCreateDispute} style={[styles.actionBtn, styles.actionBtnOutlineOrange]} activeOpacity={0.8}>
-              <View style={styles.actionBtnInner}>
-                <Ionicons name="flag-outline" size={19} color="#EA580C" />
-                <Text style={[styles.actionBtnText, { color: '#EA580C' }]}>Report an Issue</Text>
-              </View>
-            </TouchableOpacity>
-          )
+              {i < steps.length - 1 && (
+                <View style={{
+                  width: 2, flex: 1, minHeight: 20,
+                  backgroundColor: step.done ? `${step.color}40` : '#E5E7EB',
+                  marginVertical: 3,
+                }} />
+              )}
+            </View>
+
+            <View style={{ flex: 1, paddingLeft: 14, paddingBottom: i < steps.length - 1 ? 22 : 0 }}>
+              <Text style={{ fontSize: 14, fontWeight: '700',
+                color: step.done ? TEXT_DARK : step.active ? step.color : '#A1A1AA' }}>
+                {step.label}
+              </Text>
+              {step.subs.map((s, si) => (
+                <Text key={si} style={{ fontSize: 12, color: '#8E8E93', marginTop: si === 0 ? 3 : 2, lineHeight: 17 }}>
+                  {s}
+                </Text>
+              ))}
+              {step.ts ? (
+                <Text style={{ fontSize: 11, color: step.color, fontWeight: '600', marginTop: 5 }}>
+                  {formatDateTime(step.ts)}
+                </Text>
+              ) : step.active && !step.ts ? (
+                <Text style={{ fontSize: 11, color: step.color, fontWeight: '500', marginTop: 5 }}>
+                  Ongoing…
+                </Text>
+              ) : null}
+            </View>
+          </View>
+        ))}
+      </View>
+    );
+  };
+
+  // ── Action Bar (sticky footer) ────────────────────────────────────────────────
+
+  const renderActionBar = () => {
+    if (!booking) return null;
+    const status = booking.status.toLowerCase();
+    const serviceInfo = getServiceInfo();
+
+    // ── Payment pending ──
+    if (booking.paymentStatus === 'pending') {
+      return (
+        <View style={[styles.actionBar, { paddingBottom: bottom + 16 }]}>
+          <View style={styles.abLocked}>
+            <View style={styles.abLockedIcon}>
+              <Ionicons name="lock-closed" size={20} color="#8E8E93" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.abLockedTitle}>Payment Pending</Text>
+              <Text style={styles.abLockedSub}>Complete payment to unlock all actions</Text>
+            </View>
+          </View>
+        </View>
+      );
+    }
+
+    // ── Disputed ──
+    if (booking.hasDispute) {
+      return (
+        <View style={[styles.actionBar, { paddingBottom: bottom + 16 }]}>
+          <TouchableOpacity onPress={handleViewDispute} style={styles.abPrimaryOrange} activeOpacity={0.85}>
+            <Ionicons name="alert-circle" size={22} color="#fff" />
+            <Text style={styles.abPrimaryText}>View Dispute</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+
+    // ── Build action slots ──
+    let primary: React.ReactNode = null;
+    let showReschedule = false;
+    let showCancel = false;
+    let showReport = false;
+
+    // Primary: Mark Complete (client, session started)
+    if (status === 'in_progress' && !isVendor) {
+      const done = booking.clientMarkedComplete;
+      primary = (
+        <TouchableOpacity
+          onPress={handleMarkComplete}
+          disabled={actionLoading || done}
+          style={[styles.abPrimary, done ? styles.abPrimaryDoneGreen : styles.abPrimaryGreen]}
+          activeOpacity={0.85}
+        >
+          {actionLoading
+            ? <ActivityIndicator size="small" color={done ? '#16A34A' : '#fff'} />
+            : <>
+                <Ionicons
+                  name={done ? 'checkmark-circle' : 'checkmark-circle-outline'}
+                  size={22}
+                  color={done ? '#16A34A' : '#fff'}
+                />
+                <Text style={[styles.abPrimaryText, done && { color: '#16A34A' }]}>
+                  {done ? 'Marked Complete' : 'Mark as Complete'}
+                </Text>
+              </>
+          }
+        </TouchableOpacity>
+      );
+    }
+
+    // Primary: Mark Done (vendor, in_progress)
+    if (status === 'in_progress' && isVendor) {
+      const done = booking.vendorMarkedComplete;
+      primary = (
+        <TouchableOpacity
+          onPress={handleMarkComplete}
+          disabled={actionLoading || done}
+          style={[styles.abPrimary, done ? styles.abPrimaryDoneGreen : styles.abPrimaryGreen]}
+          activeOpacity={0.85}
+        >
+          {actionLoading
+            ? <ActivityIndicator size="small" color={done ? '#16A34A' : '#fff'} />
+            : <>
+                <Ionicons
+                  name={done ? 'checkmark-circle' : 'checkmark-circle-outline'}
+                  size={22}
+                  color={done ? '#16A34A' : '#fff'}
+                />
+                <Text style={[styles.abPrimaryText, done && { color: '#16A34A' }]}>
+                  {done ? 'Marked as Done' : 'Mark as Done'}
+                </Text>
+              </>
+          }
+        </TouchableOpacity>
+      );
+    }
+
+    // Primary: Write Review (client, completed, no review yet)
+    if (status === 'completed' && !booking.hasReview && !isVendor) {
+      primary = (
+        <TouchableOpacity
+          onPress={() => navigation.navigate('CreateReview', {
+            bookingId: booking._id,
+            vendorName: booking.vendor?.vendorProfile?.businessName || `${booking.vendor?.firstName} ${booking.vendor?.lastName}`,
+            serviceName: serviceInfo?.name || 'Service',
+            vendorImage: serviceInfo?.images?.[0] || booking.vendor?.avatar,
+            vendorRole: booking.vendor?.vendorProfile?.serviceCategory,
+            completedAt: booking.completedAt,
+          })}
+          style={[styles.abPrimary, { backgroundColor: PRIMARY }]}
+          activeOpacity={0.85}
+        >
+          <Ionicons name="star-outline" size={22} color="#fff" />
+          <Text style={styles.abPrimaryText}>Write a Review</Text>
+        </TouchableOpacity>
+      );
+    }
+
+    // Review already submitted badge
+    if (status === 'completed' && booking.hasReview && !isVendor) {
+      primary = (
+        <View style={styles.abReviewDone}>
+          <Ionicons name="checkmark-circle" size={20} color="#16A34A" />
+          <Text style={styles.abReviewDoneText}>Review Submitted</Text>
+        </View>
+      );
+    }
+
+    // Reschedule + Cancel only when session has NOT started
+    showReschedule = ['pending', 'accepted'].includes(status) && booking.paymentStatus === 'escrowed' && !isVendor;
+    showCancel = ['pending', 'accepted'].includes(status) && booking.paymentStatus === 'escrowed';
+    showReport = ['accepted', 'in_progress', 'completed'].includes(status);
+
+    const hasSecondaryRow = showReschedule || showCancel;
+
+    if (!primary && !hasSecondaryRow && !showReport) return null;
+
+    return (
+      <View style={[styles.actionBar, { paddingBottom: bottom + 16 }]}>
+        {/* Primary */}
+        {primary}
+
+        {/* Secondary row: Reschedule + Cancel */}
+        {hasSecondaryRow && (
+          <View style={styles.abSecondaryRow}>
+            {showReschedule && (
+              <TouchableOpacity
+                onPress={() => navigation.navigate('Reschedule', {
+                  bookingId: booking._id,
+                  scheduledDate: booking.scheduledDate,
+                  scheduledTime: booking.scheduledTime,
+                  vendorName: booking.vendor?.vendorProfile?.businessName || `${booking.vendor?.firstName} ${booking.vendor?.lastName}`,
+                  serviceName: serviceInfo?.name || 'Service',
+                  serviceImage: serviceInfo?.images?.[0] || booking.vendor?.avatar,
+                  serviceType: booking.serviceType,
+                  location: booking.location,
+                })}
+                style={[styles.abSecondary, styles.abSecondaryBlue]}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="calendar-outline" size={18} color="#2563EB" />
+                <Text style={[styles.abSecondaryText, { color: '#2563EB' }]}>Reschedule</Text>
+              </TouchableOpacity>
+            )}
+            {showCancel && (
+              <TouchableOpacity
+                onPress={() => setShowCancelModal(true)}
+                disabled={actionLoading}
+                style={[styles.abSecondary, styles.abSecondaryRed]}
+                activeOpacity={0.8}
+              >
+                {actionLoading
+                  ? <ActivityIndicator size="small" color="#DC2626" />
+                  : <>
+                      <Ionicons name="close-circle-outline" size={18} color="#DC2626" />
+                      <Text style={[styles.abSecondaryText, { color: '#DC2626' }]}>Cancel</Text>
+                    </>
+                }
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
+
+        {/* Tertiary: Report issue — text link style */}
+        {showReport && (
+          <TouchableOpacity onPress={handleCreateDispute} style={styles.abTertiary} activeOpacity={0.7}>
+            <Ionicons name="flag-outline" size={15} color="#EA580C" />
+            <Text style={styles.abTertiaryText}>Report an Issue</Text>
+          </TouchableOpacity>
         )}
       </View>
     );
@@ -692,25 +960,22 @@ const BookingDetailScreen: React.FC = () => {
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.centeredScreen}>
-        <ActivityIndicator size="large" color="#E8166D" />
+      <View style={[styles.centeredScreen, { paddingTop: top }]}>
+        <ActivityIndicator size="large" color={PRIMARY} />
         <Text style={styles.loadingText}>Loading booking…</Text>
-      </SafeAreaView>
+      </View>
     );
   }
 
   if (!booking) {
     return (
-      <SafeAreaView style={styles.centeredScreen}>
+      <View style={[styles.centeredScreen, { paddingTop: top }]}>
         <Ionicons name="document-text-outline" size={56} color="#D1D5DB" />
         <Text style={styles.emptyTitle}>Booking not found</Text>
-      </SafeAreaView>
+      </View>
     );
   }
 
-  const statusStyle = getStatusStyle(booking.status);
-  const paymentInfo = getPaymentInfo(booking.paymentStatus);
-  const otherParty = getOtherParty();
   const serviceInfo = getServiceInfo();
   const otherParty = getOtherParty();
   const heroImage = serviceInfo?.images?.[0] || booking.vendor?.avatar;
@@ -730,220 +995,256 @@ const BookingDetailScreen: React.FC = () => {
   const isVerified = otherParty?.type === 'vendor';
 
   return (
-    <SafeAreaView style={styles.root} edges={['top']}>
+    <View style={styles.root}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: bottom + 180 }}>
 
-      {/* ── Header ──────────────────────────────────────────────────────── */}
-      <LinearGradient colors={['#E8166D', '#FF5FA0']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.header}>
-        <View style={styles.headerTop}>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn} activeOpacity={0.75}>
-            <Ionicons name="chevron-back" size={22} color="#fff" />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Booking Details</Text>
-          <View style={{ width: 36 }} />
-        </View>
-
-        <View style={styles.headerMeta}>
-          <View style={[styles.statusPill, { backgroundColor: statusStyle.bg, borderColor: statusStyle.border }]}>
-            <Text style={[styles.statusPillText, { color: statusStyle.text }]}>{formatStatus(booking.status)}</Text>
-          </View>
-          {booking.bookingNumber && (
-            <View style={styles.bookingNumberPill}>
-              <Text style={styles.bookingNumberText}>#{booking.bookingNumber}</Text>
-            </View>
+        {/* ── Hero ──────────────────────────────────────────────────────────── */}
+        <View style={styles.hero}>
+          {heroImage ? (
+            <>
+              {/* Blurred bg fill */}
+              <Image source={{ uri: heroImage }} style={StyleSheet.absoluteFill} resizeMode="cover"
+                blurRadius={18} />
+              <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.38)' }]} />
+              {/* Centered sharp image */}
+              <Image source={{ uri: heroImage }}
+                style={{ width: '100%', height: '100%' }}
+                resizeMode="contain" />
+            </>
+          ) : (
+            <LinearGradient colors={['#E04079', '#FF6BA8']} style={StyleSheet.absoluteFill} />
           )}
-        </View>
+          <LinearGradient
+            colors={['rgba(0,0,0,0.22)', 'rgba(0,0,0,0.5)']}
+            style={StyleSheet.absoluteFill}
+          />
 
-      {/* ── Content ─────────────────────────────────────────────────────── */}
-      <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-
-        {renderPaymentPendingBanner()}
-        {renderRefundInfo()}
-
-        {/* Dispute Alert */}
-        {booking.hasDispute && (
-          <TouchableOpacity onPress={handleViewDispute} style={styles.disputeAlert} activeOpacity={0.75}>
-            <View style={styles.disputeAlertIcon}>
-              <Ionicons name="alert-circle" size={20} color="#EA580C" />
-            </View>
-            <View style={{ flex: 1, marginLeft: 12 }}>
-              <Text style={styles.disputeAlertTitle}>Active Dispute</Text>
-              <Text style={styles.disputeAlertBody}>Tap to view dispute details</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={18} color="#EA580C" />
-          </TouchableOpacity>
-        )}
-
-        {/* Service Card */}
-        <Card>
-          {serviceInfo?.images && serviceInfo.images.length > 0 && (
-            <Image source={{ uri: serviceInfo.images[0] }} style={styles.serviceImage} resizeMode="cover" />
-          )}
-          <View style={styles.serviceBody}>
-            <Text style={styles.serviceName}>{serviceInfo?.name || 'Unknown Service'}</Text>
-            {serviceInfo?.description && (
-              <Text style={styles.serviceDesc}>{serviceInfo.description}</Text>
-            )}
-            <View style={styles.serviceMetaRow}>
-              <View style={styles.serviceMetaItem}>
-                <View style={[styles.metaIconWrap, { backgroundColor: '#EFF6FF' }]}>
-                  <Ionicons name="time-outline" size={15} color="#3B82F6" />
-                </View>
-                <Text style={styles.metaText}>{booking.duration} mins</Text>
-              </View>
-              <View style={styles.serviceMetaItem}>
-                <View style={[styles.metaIconWrap, { backgroundColor: '#F0FDF4' }]}>
-                  <Ionicons name="cash-outline" size={15} color="#22C55E" />
-                </View>
-                <Text style={styles.metaText}>{formatPrice(booking.servicePrice)}</Text>
-              </View>
-            </View>
+          {/* Status pill (top-right) */}
+          <View style={[styles.heroPill, { top: top + 16, right: 20 }]}>
+            <Text style={styles.heroPillText}>{formatStatus(booking.status)}</Text>
           </View>
-        </Card>
 
-        {/* Other Party Card */}
-        {otherParty && (
-          <Card>
-            <CardTitle title={`${otherParty.label} Information`} />
-            <View style={styles.partyRow}>
-              <View style={styles.avatarWrap}>
-                {otherParty.data?.avatar ? (
-                  <Image source={{ uri: otherParty.data.avatar }} style={styles.avatar} />
-                ) : (
-                  <LinearGradient colors={['#E8166D', '#FF5FA0']} style={styles.avatarFallback}>
-                    <Ionicons name="person" size={26} color="#fff" />
-                  </LinearGradient>
-                )}
-              </View>
-              <View style={{ flex: 1, marginLeft: 14 }}>
-                <Text style={styles.partyName}>
-                  {otherParty.type === 'vendor'
-                    ? otherParty.data?.vendorProfile?.businessName || `${otherParty.data?.firstName} ${otherParty.data?.lastName}`
-                    : `${otherParty.data?.firstName} ${otherParty.data?.lastName}`}
-                </Text>
-                {otherParty.type === 'vendor' && otherParty.data?.vendorProfile && (
-                  <View style={styles.ratingRow}>
-                    <Ionicons name="star" size={13} color="#FBBF24" />
-                    <Text style={styles.ratingText}>
-                      {otherParty.data.vendorProfile.rating?.toFixed(1) || 'New'} · {otherParty.data.vendorProfile.completedBookings || 0} jobs
-                    </Text>
-                  </View>
-                )}
-              </View>
-            </View>
-            <TouchableOpacity onPress={handleMessage} style={styles.messageBtn} activeOpacity={0.8}>
-              <Ionicons name="chatbubble-outline" size={17} color="#fff" />
-              <Text style={styles.messageBtnText}>Send Message</Text>
+          {/* Back + Share buttons */}
+          <View style={[styles.heroButtons, { top: top + 12 }]}>
+            <TouchableOpacity onPress={() => navigation.goBack()} style={styles.heroBtn} activeOpacity={0.75}>
+              <Ionicons name="arrow-back" size={20} color="#fff" />
             </TouchableOpacity>
-          </Card>
-        )}
+            <TouchableOpacity style={styles.heroBtn} activeOpacity={0.75}>
+              <Ionicons name="share-social-outline" size={20} color="#fff" />
+            </TouchableOpacity>
+          </View>
+        </View>
 
-        {/* Schedule Card */}
-        <Card>
-          <CardTitle title="Schedule" />
-          <View style={{ gap: 14 }}>
-            <InfoRow iconName="calendar-outline" iconBg="#FAF5FF" iconColor="#A855F7" label={formatDate(booking.scheduledDate)} />
-            {booking.scheduledTime && (
-              <InfoRow iconName="time-outline" iconBg="#EFF6FF" iconColor="#3B82F6" label={booking.scheduledTime} />
+        {/* ── Vendor Profile ────────────────────────────────────────────────── */}
+        <View style={styles.profileSection}>
+          {/* Avatar overlapping hero — tappable for vendors */}
+          <TouchableOpacity
+            activeOpacity={otherParty?.type === 'vendor' ? 0.8 : 1}
+            onPress={() => {
+              if (otherParty?.type === 'vendor') {
+                navigation.navigate('VendorDetail', { vendorId: otherParty.data._id });
+              }
+            }}
+            style={styles.avatarWrap}
+          >
+            {displayAvatar ? (
+              <Image source={{ uri: displayAvatar }} style={styles.avatar} />
+            ) : (
+              <LinearGradient colors={['#E04079', '#FF6BA8']} style={styles.avatar}>
+                <Ionicons name="person" size={32} color="#fff" />
+              </LinearGradient>
             )}
-            {booking.location && (
-              <InfoRow
-                iconName="location-outline"
-                iconBg="#F0FDF4"
-                iconColor="#22C55E"
-                label={`${booking.location.address}, ${booking.location.city}, ${booking.location.state}`}
-                alignStart
+            {otherParty?.type === 'vendor' && (
+              <View style={styles.avatarViewBadge}>
+                <Ionicons name="eye-outline" size={11} color="#fff" />
+              </View>
+            )}
+          </TouchableOpacity>
+
+          {/* Name + Verified (only for vendors) */}
+          <View style={styles.profileNameRow}>
+            <Text style={styles.profileName}>{displayName}</Text>
+            {isVerified && (
+              <Ionicons name="checkmark-circle" size={18} color={PRIMARY} style={{ marginLeft: 6, marginTop: 1 }} />
+            )}
+          </View>
+
+          {/* Role + City */}
+          <View style={styles.profileSubRow}>
+            <Ionicons name={isVerified ? 'cut-outline' : 'person-outline'} size={13} color="#8E8E93" />
+            <Text style={styles.profileSub}>
+              {displayRole}{displayCity ? ` · ${displayCity}` : ''}
+            </Text>
+          </View>
+
+          {/* Message Button */}
+          {otherParty && (
+            <TouchableOpacity onPress={handleMessage} style={styles.messageBtn} activeOpacity={0.8}>
+              <LinearGradient colors={['#E04079', '#FF6BA8']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.messageBtnGrad}>
+                <Ionicons name="chatbubble-outline" size={16} color="#fff" />
+                <Text style={styles.messageBtnText}>Send Message</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {/* ── Content ───────────────────────────────────────────────────────── */}
+        <View style={styles.content}>
+
+          {/* Status / Confirmation Banner */}
+          {renderStatusBanner()}
+
+          {/* Refund Info */}
+          {renderRefundInfo()}
+
+          {/* Session Progress Card */}
+          {renderSessionProgress()}
+
+          {/* Service Timeline */}
+          {renderServiceTimeline()}
+
+          {/* Dispute Alert */}
+          {booking.hasDispute && (
+            <TouchableOpacity onPress={handleViewDispute} style={styles.disputeAlert} activeOpacity={0.75}>
+              <View style={styles.disputeAlertIcon}>
+                <Ionicons name="alert-circle" size={20} color="#EA580C" />
+              </View>
+              <View style={{ flex: 1, marginLeft: 12 }}>
+                <Text style={styles.disputeAlertTitle}>Active Dispute</Text>
+                <Text style={styles.disputeAlertBody}>Tap to view dispute details</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color="#EA580C" />
+            </TouchableOpacity>
+          )}
+
+          {/* ── Appointment Details Card ─────────────────────────────────── */}
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Appointment Details</Text>
+            <View style={{ gap: 14 }}>
+              <DetailRow
+                icon="calendar-outline"
+                value={formatLongDate(booking.scheduledDate)}
               />
-            )}
-          </View>
-        </Card>
-
-        {/* Price Card */}
-        <Card>
-          <CardTitle title="Price Breakdown" />
-          <View style={{ gap: 10 }}>
-            <View style={styles.priceRow}>
-              <Text style={styles.priceLabel}>Service fee</Text>
-              <Text style={styles.priceValue}>{formatPrice(booking.servicePrice)}</Text>
-            </View>
-            {booking.distanceCharge > 0 && (
-              <View style={styles.priceRow}>
-                <Text style={styles.priceLabel}>Distance charge</Text>
-                <Text style={styles.priceValue}>{formatPrice(booking.distanceCharge)}</Text>
-              </View>
-            )}
-            {!!booking.cancellationPenalty && booking.cancellationPenalty > 0 && (
-              <View style={styles.priceRow}>
-                <Text style={[styles.priceLabel, { color: '#DC2626' }]}>Cancellation penalty</Text>
-                <Text style={[styles.priceValue, { color: '#DC2626' }]}>-{formatPrice(booking.cancellationPenalty)}</Text>
-              </View>
-            )}
-            <View style={styles.priceDivider} />
-            <View style={styles.priceRow}>
-              <Text style={styles.priceTotalLabel}>Total</Text>
-              <Text style={styles.priceTotalValue}>{formatPrice(booking.totalAmount)}</Text>
-            </View>
-
-            {/* Payment Status Pill */}
-            <View style={[styles.paymentStatusRow, { backgroundColor: paymentInfo.bg }]}>
-              <View style={styles.paymentStatusLeft}>
-                <Ionicons name={paymentInfo.icon as any} size={16} color={paymentInfo.text} />
-                <Text style={[styles.paymentStatusLabel, { color: paymentInfo.text }]}>{paymentInfo.label}</Text>
-              </View>
-              {booking.paymentReference && (
-                <Text style={[styles.paymentRef, { color: paymentInfo.text }]}>
-                  Ref: {booking.paymentReference.slice(-8)}
-                </Text>
+              {booking.location && booking.distanceKm !== undefined && (
+                <DetailRow
+                  icon="navigate-outline"
+                  value={booking.distanceKm < 1 ? 'Less than 1 km away' : `${booking.distanceKm.toFixed(1)} km away`}
+                />
+              )}
+              {booking.distanceCharge > 0 && (
+                <DetailRow
+                  icon="car-outline"
+                  value={`Distance charge: ${formatPrice(booking.distanceCharge)}`}
+                />
+              )}
+              {booking.scheduledTime && (
+                <DetailRow
+                  icon="time-outline"
+                  value={format12Hour(booking.scheduledTime)}
+                />
+              )}
+              {booking.duration > 0 && (
+                <DetailRow
+                  icon="hourglass-outline"
+                  value={`${booking.duration} minutes`}
+                />
               )}
             </View>
           </View>
-        </Card>
 
-        {/* Notes Card */}
-        {(booking.clientNotes || booking.vendorNotes || booking.cancellationReason) && (
-          <Card>
-            <CardTitle title="Notes" />
+          {/* ── Price Breakdown Card ──────────────────────────────────────── */}
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Price Breakdown</Text>
             <View style={{ gap: 10 }}>
-              {booking.clientNotes && (
-                <View style={[styles.noteBlock, { backgroundColor: '#EFF6FF' }]}>
-                  <View style={styles.noteHeader}>
-                    <Ionicons name="person-circle-outline" size={17} color="#3B82F6" />
-                    <Text style={[styles.noteHeaderText, { color: '#1D4ED8' }]}>Client Note</Text>
-                  </View>
-                  <Text style={styles.noteBody}>{booking.clientNotes}</Text>
+              <View style={styles.priceRow}>
+                <Text style={styles.priceLabel}>Service fee</Text>
+                <Text style={styles.priceValue}>{formatPrice(booking.servicePrice)}</Text>
+              </View>
+              {booking.distanceCharge > 0 && (
+                <View style={styles.priceRow}>
+                  <Text style={styles.priceLabel}>Distance charge</Text>
+                  <Text style={styles.priceValue}>{formatPrice(booking.distanceCharge)}</Text>
                 </View>
               )}
-              {booking.vendorNotes && (
-                <View style={[styles.noteBlock, { backgroundColor: '#FFF0F6' }]}>
-                  <View style={styles.noteHeader}>
-                    <Ionicons name="briefcase-outline" size={17} color="#E8166D" />
-                    <Text style={[styles.noteHeaderText, { color: '#BE185D' }]}>Vendor Note</Text>
-                  </View>
-                  <Text style={styles.noteBody}>{booking.vendorNotes}</Text>
+              {!!booking.cancellationPenalty && booking.cancellationPenalty > 0 && (
+                <View style={styles.priceRow}>
+                  <Text style={[styles.priceLabel, { color: '#DC2626' }]}>Cancellation penalty</Text>
+                  <Text style={[styles.priceValue, { color: '#DC2626' }]}>-{formatPrice(booking.cancellationPenalty)}</Text>
                 </View>
               )}
-              {booking.cancellationReason && (
-                <View style={[styles.noteBlock, { backgroundColor: '#FEF2F2' }]}>
-                  <View style={styles.noteHeader}>
-                    <Ionicons name="close-circle-outline" size={17} color="#DC2626" />
-                    <Text style={[styles.noteHeaderText, { color: '#B91C1C' }]}>Cancellation Reason</Text>
-                  </View>
-                  <Text style={styles.noteBody}>{booking.cancellationReason}</Text>
+              <View style={styles.priceDivider} />
+              <View style={styles.priceRow}>
+                <Text style={styles.priceTotalLabel}>Total</Text>
+                <Text style={styles.priceTotalValue}>{formatPrice(booking.totalAmount)}</Text>
+              </View>
+              {/* Payment ref pill */}
+              {booking.paymentReference && (
+                <View style={styles.paymentRefRow}>
+                  <Ionicons name="receipt-outline" size={14} color="#6C6C70" />
+                  <Text style={styles.paymentRefText}>Ref: {booking.paymentReference.slice(-10).toUpperCase()}</Text>
                 </View>
               )}
             </View>
-          </Card>
-        )}
+          </View>
 
-        {/* Action Buttons */}
-        {renderActionButtons()}
+          {/* ── Notes Card ───────────────────────────────────────────────── */}
+          {(booking.clientNotes || booking.vendorNotes || booking.cancellationReason) && (
+            <View style={styles.card}>
+              <Text style={styles.cardTitle}>Notes</Text>
+              <View style={{ gap: 10 }}>
+                {booking.clientNotes && (
+                  <View style={[styles.noteBlock, { backgroundColor: '#EFF6FF' }]}>
+                    <View style={styles.noteHeader}>
+                      <Ionicons name="person-circle-outline" size={17} color="#3B82F6" />
+                      <Text style={[styles.noteHeaderText, { color: '#1D4ED8' }]}>Client Note</Text>
+                    </View>
+                    <Text style={styles.noteBody}>{booking.clientNotes}</Text>
+                  </View>
+                )}
+                {booking.vendorNotes && (
+                  <View style={[styles.noteBlock, { backgroundColor: '#FFF0F6' }]}>
+                    <View style={styles.noteHeader}>
+                      <Ionicons name="briefcase-outline" size={17} color={PRIMARY} />
+                      <Text style={[styles.noteHeaderText, { color: '#BE185D' }]}>Vendor Note</Text>
+                    </View>
+                    <Text style={styles.noteBody}>{booking.vendorNotes}</Text>
+                  </View>
+                )}
+                {booking.cancellationReason && (
+                  <View style={[styles.noteBlock, { backgroundColor: '#FEF2F2' }]}>
+                    <View style={styles.noteHeader}>
+                      <Ionicons name="close-circle-outline" size={17} color="#DC2626" />
+                      <Text style={[styles.noteHeaderText, { color: '#B91C1C' }]}>Cancellation Reason</Text>
+                    </View>
+                    <Text style={styles.noteBody}>{booking.cancellationReason}</Text>
+                  </View>
+                )}
+              </View>
+            </View>
+          )}
 
+        </View>
       </ScrollView>
+
+      {/* ── Sticky Action Bar ─────────────────────────────────────────────── */}
+      {renderActionBar()}
 
       <CancelBookingModal
         visible={showCancelModal}
         onClose={() => setShowCancelModal(false)}
         onConfirm={handleCancelBooking}
         loading={actionLoading}
+        booking={booking ? {
+          vendorName: booking.vendor?.vendorProfile?.businessName || `${booking.vendor?.firstName} ${booking.vendor?.lastName}`,
+          serviceName: serviceInfo?.name || 'Service',
+          duration: booking.duration,
+          scheduledDate: booking.scheduledDate,
+          scheduledTime: booking.scheduledTime,
+          serviceType: booking.location ? 'home_service' : 'in_shop',
+          location: booking.location,
+          totalAmount: booking.totalAmount,
+          serviceImage: serviceInfo?.images?.[0],
+        } : undefined}
       />
       <ConfirmationModal
         visible={confirmModal.visible}
@@ -952,61 +1253,86 @@ const BookingDetailScreen: React.FC = () => {
         onConfirm={() => { confirmModal.onConfirm(); setConfirmModal(p => ({ ...p, visible: false })); }}
         onCancel={() => setConfirmModal(p => ({ ...p, visible: false }))}
       />
-    </SafeAreaView>
+    </View>
   );
 };
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#F2F2F7' },
+  root: { flex: 1, backgroundColor: BG },
 
   centeredScreen: { flex: 1, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center' },
   loadingText: { marginTop: 12, fontSize: 14, color: '#8E8E93', fontWeight: '500' },
-  emptyTitle: { marginTop: 14, fontSize: 18, fontWeight: '700', color: '#1C1C1E' },
+  emptyTitle: { marginTop: 14, fontSize: 18, fontWeight: '700', color: TEXT_DARK },
 
-  // Header
-  header: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 20 },
-  headerTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 },
-  backBtn: {
-    width: 36, height: 36, borderRadius: 18,
-    backgroundColor: 'rgba(255,255,255,0.22)', alignItems: 'center', justifyContent: 'center',
+  // Hero
+  hero: { height: HERO_H, width: SCREEN_W, backgroundColor: '#111', overflow: 'hidden' },
+  heroButtons: {
+    position: 'absolute', left: 20, right: 20,
+    flexDirection: 'row', justifyContent: 'space-between',
   },
-  headerTitle: { fontSize: 18, fontWeight: '700', color: '#fff', letterSpacing: -0.4 },
-  headerMeta: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  statusPill: {
-    paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20,
-    borderWidth: 1.5,
+  heroBtn: {
+    width: 40, height: 40, borderRadius: 20,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    alignItems: 'center', justifyContent: 'center',
   },
-  statusPillText: { fontSize: 13, fontWeight: '700', letterSpacing: 0.1 },
-  bookingNumberPill: {
-    backgroundColor: 'rgba(255,255,255,0.2)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16,
+  heroPill: {
+    position: 'absolute',
+    backgroundColor: 'rgba(255,255,255,0.22)',
+    borderRadius: 20, paddingHorizontal: 14, paddingVertical: 6,
   },
-  bookingNumberText: { fontSize: 12, fontWeight: '700', color: '#fff' },
+  heroPillText: { fontSize: 12, fontWeight: '700', color: '#fff', letterSpacing: 0.2 },
 
-  // Scroll
-  scroll: { padding: 16, gap: 12, paddingBottom: 40 },
-
-  // Card
-  card: {
-    backgroundColor: '#fff', borderRadius: 20, overflow: 'hidden',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 2,
+  // Profile
+  profileSection: {
+    backgroundColor: BG,
+    paddingHorizontal: 20,
+    paddingBottom: 20,
+    alignItems: 'center',
   },
-  cardTitle: { fontSize: 15, fontWeight: '700', color: '#1C1C1E', letterSpacing: -0.3, marginBottom: 16, paddingHorizontal: 18, paddingTop: 18 },
-
-  // Banner
-  banner: {
-    borderRadius: 16, borderWidth: 1.5, padding: 14, gap: 10,
+  avatarWrap: {
+    width: AVATAR_SIZE, height: AVATAR_SIZE, borderRadius: AVATAR_SIZE / 2,
+    borderWidth: 4, borderColor: '#fff',
+    overflow: 'hidden',
+    marginTop: -(AVATAR_SIZE / 2),
+    backgroundColor: '#fff',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 8, elevation: 6,
   },
-  bannerRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
-  bannerIconWrap: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-  bannerTitle: { fontSize: 14, fontWeight: '700', marginBottom: 2 },
-  bannerBody: { fontSize: 13, lineHeight: 18 },
-  timerRow: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10 },
-  timerText: { fontSize: 12, fontWeight: '700' },
-  refundRows: { gap: 6, marginTop: 4 },
+  avatar: { width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center' },
+  avatarViewBadge: {
+    position: 'absolute', bottom: 2, right: 2,
+    width: 20, height: 20, borderRadius: 10,
+    backgroundColor: PRIMARY, borderWidth: 1.5, borderColor: '#fff',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  profileNameRow: { flexDirection: 'row', alignItems: 'center', marginTop: 14 },
+  profileName: { fontSize: 20, fontWeight: '800', color: TEXT_DARK, letterSpacing: -0.5 },
+  profileSubRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 5 },
+  profileSub: { fontSize: 13, color: '#6C6C70', fontWeight: '500' },
+  messageBtn: { marginTop: 18, width: '100%', borderRadius: 14, overflow: 'hidden' },
+  messageBtnGrad: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 8, paddingVertical: 13,
+  },
+  messageBtnText: { fontSize: 15, fontWeight: '700', color: '#fff' },
+
+  // Content
+  content: { paddingHorizontal: 16, gap: 12 },
+
+  // Status Banner
+  statusBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    borderRadius: 16, borderWidth: 1.5, padding: 14,
+  },
+  statusBannerIcon: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  statusBannerTitle: { fontSize: 14, fontWeight: '700', marginBottom: 2 },
+  statusBannerSub: { fontSize: 12, lineHeight: 17 },
+  expiryPill: { flexDirection: 'row', alignItems: 'center', gap: 4, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 5 },
+  expiryText: { fontSize: 11, fontWeight: '700' },
+
+  // Refund
   refundRow: { flexDirection: 'row', justifyContent: 'space-between' },
-  refundRowTotal: { paddingTop: 8, borderTopWidth: 1, borderTopColor: '#FED7AA', marginTop: 4 },
   refundLabel: { fontSize: 13, color: '#6C6C70' },
   refundValue: { fontSize: 13, fontWeight: '600', color: '#1C1C1E' },
 
@@ -1021,72 +1347,135 @@ const styles = StyleSheet.create({
   disputeAlertTitle: { fontSize: 14, fontWeight: '700', color: '#9A3412' },
   disputeAlertBody: { fontSize: 12, color: '#C2410C', marginTop: 2 },
 
-  // Service
-  serviceImage: { width: '100%', height: 180 },
-  serviceBody: { padding: 18 },
-  serviceName: { fontSize: 18, fontWeight: '700', color: '#1C1C1E', letterSpacing: -0.4, marginBottom: 6 },
-  serviceDesc: { fontSize: 14, color: '#6C6C70', lineHeight: 20, marginBottom: 14 },
-  serviceMetaRow: { flexDirection: 'row', gap: 16 },
-  serviceMetaItem: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  metaIconWrap: { width: 30, height: 30, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
-  metaText: { fontSize: 14, fontWeight: '600', color: '#3A3A3C' },
-
-  // Party
-  partyRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 18, marginBottom: 14 },
-  avatarWrap: { width: 56, height: 56, borderRadius: 28, overflow: 'hidden' },
-  avatar: { width: 56, height: 56 },
-  avatarFallback: { width: 56, height: 56, alignItems: 'center', justifyContent: 'center' },
-  partyName: { fontSize: 15, fontWeight: '700', color: '#1C1C1E' },
-  ratingRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 },
-  ratingText: { fontSize: 13, color: '#6C6C70' },
-  messageBtn: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-    backgroundColor: '#3B82F6', marginHorizontal: 18, marginBottom: 18, paddingVertical: 13, borderRadius: 14,
+  // Card
+  card: {
+    backgroundColor: '#fff', borderRadius: 20, padding: 20,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 2,
   },
-  messageBtnText: { fontSize: 15, fontWeight: '700', color: '#fff' },
+  cardTitle: { fontSize: 15, fontWeight: '700', color: TEXT_DARK, letterSpacing: -0.3, marginBottom: 18 },
 
-  // Info Row
-  infoRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 18, gap: 12 },
-  infoIconWrap: { width: 38, height: 38, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-  infoLabel: { flex: 1, fontSize: 14, fontWeight: '500', color: '#3A3A3C', lineHeight: 20 },
+  // Detail Row
+  detailRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  detailIconWrap: {
+    width: 38, height: 38, borderRadius: 10,
+    backgroundColor: '#FCE4EC', alignItems: 'center', justifyContent: 'center',
+  },
+  detailValue: { flex: 1, fontSize: 14, fontWeight: '500', color: '#3A3A3C' },
 
   // Price
-  priceRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 18 },
+  priceRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   priceLabel: { fontSize: 14, color: '#6C6C70', fontWeight: '500' },
   priceValue: { fontSize: 14, color: '#1C1C1E', fontWeight: '600' },
-  priceDivider: { height: 1, backgroundColor: '#F2F2F7', marginHorizontal: 18 },
+  priceDivider: { height: 1, backgroundColor: '#F2F2F7' },
   priceTotalLabel: { fontSize: 16, fontWeight: '700', color: '#1C1C1E' },
-  priceTotalValue: { fontSize: 20, fontWeight: '800', color: '#E8166D', letterSpacing: -0.5 },
-  paymentStatusRow: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    marginHorizontal: 18, marginBottom: 4, paddingHorizontal: 14, paddingVertical: 11, borderRadius: 12,
-  },
-  paymentStatusLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  paymentStatusLabel: { fontSize: 13, fontWeight: '700' },
-  paymentRef: { fontSize: 11, fontWeight: '600', opacity: 0.7 },
+  priceTotalValue: { fontSize: 20, fontWeight: '800', color: PRIMARY, letterSpacing: -0.5 },
+  paymentRefRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 },
+  paymentRefText: { fontSize: 12, color: '#6C6C70', fontWeight: '500' },
 
   // Notes
-  noteBlock: { borderRadius: 12, padding: 14, marginHorizontal: 18 },
+  noteBlock: { borderRadius: 12, padding: 14 },
   noteHeader: { flexDirection: 'row', alignItems: 'center', gap: 7, marginBottom: 8 },
   noteHeaderText: { fontSize: 12, fontWeight: '700', letterSpacing: 0.2 },
   noteBody: { fontSize: 14, color: '#3A3A3C', lineHeight: 20 },
 
-  // Action buttons
-  lockedActions: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-    backgroundColor: '#fff', borderRadius: 16, paddingVertical: 16,
-    borderWidth: 1, borderColor: '#E5E5EA',
+  // ── Sticky Action Bar ──
+  actionBar: {
+    position: 'absolute', bottom: 0, left: 0, right: 0,
+    backgroundColor: '#fff',
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    borderTopWidth: 1,
+    borderTopColor: '#F0F0F5',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -6 },
+    shadowOpacity: 0.07,
+    shadowRadius: 14,
+    elevation: 14,
+    gap: 10,
   },
-  lockedActionsText: { fontSize: 14, color: '#8E8E93', fontWeight: '500' },
-  actionBtn: { paddingVertical: 15, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
-  actionBtnInner: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  actionBtnText: { fontSize: 15, fontWeight: '700', color: '#fff' },
-  actionBtnGreen: { backgroundColor: '#16A34A' },
-  actionBtnDisabled: { backgroundColor: '#D1D5DB' },
-  actionBtnYellow: { backgroundColor: '#D97706' },
-  actionBtnOrange: { backgroundColor: '#EA580C' },
-  actionBtnOutlineRed: { backgroundColor: '#fff', borderWidth: 1.5, borderColor: '#FCA5A5' },
-  actionBtnOutlineOrange: { backgroundColor: '#fff', borderWidth: 1.5, borderColor: '#FDBA74' },
+  // Primary buttons
+  abPrimary: {
+    height: 56, borderRadius: 18,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10,
+  },
+  abPrimaryGreen: { backgroundColor: '#16A34A' },
+  abPrimaryDoneGreen: { backgroundColor: '#F0FDF4', borderWidth: 1.5, borderColor: '#86EFAC' },
+  abPrimaryOrange: {
+    height: 56, borderRadius: 18, backgroundColor: '#EA580C',
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10,
+  },
+  abPrimaryText: { fontSize: 16, fontWeight: '700', color: '#fff', letterSpacing: 0.1 },
+  // Secondary row
+  abSecondaryRow: { flexDirection: 'row', gap: 10 },
+  abSecondary: {
+    flex: 1, height: 48, borderRadius: 14, borderWidth: 1.5,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7,
+  },
+  abSecondaryBlue: { backgroundColor: '#EFF6FF', borderColor: '#BFDBFE' },
+  abSecondaryRed: { backgroundColor: '#FEF2F2', borderColor: '#FECACA' },
+  abSecondaryText: { fontSize: 14, fontWeight: '600' },
+  // Tertiary (report issue)
+  abTertiary: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+    paddingVertical: 4,
+  },
+  abTertiaryText: { fontSize: 13, fontWeight: '600', color: '#EA580C' },
+  // Locked state
+  abLocked: {
+    flexDirection: 'row', alignItems: 'center', gap: 14,
+    backgroundColor: '#F9FAFB', borderRadius: 14, padding: 14,
+    borderWidth: 1, borderColor: '#E5E7EB',
+  },
+  abLockedIcon: {
+    width: 44, height: 44, borderRadius: 22,
+    backgroundColor: '#F3F4F6', alignItems: 'center', justifyContent: 'center',
+  },
+  abLockedTitle: { fontSize: 14, fontWeight: '700', color: TEXT_DARK },
+  abLockedSub: { fontSize: 12, color: '#8E8E93', marginTop: 2 },
+  // Review submitted badge
+  abReviewDone: {
+    height: 52, borderRadius: 16,
+    backgroundColor: '#F0FDF4', borderWidth: 1.5, borderColor: '#86EFAC',
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+  },
+  abReviewDoneText: { fontSize: 15, fontWeight: '700', color: '#16A34A' },
+
+  // Session Progress
+  sessionStepsRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 18 },
+  sessionStep: { alignItems: 'center', gap: 6, flex: 1 },
+  sessionStepDot: {
+    width: 28, height: 28, borderRadius: 14,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  sessionStepDone: { backgroundColor: '#16A34A' },
+  sessionStepPulse: { backgroundColor: '#FCE4EC', borderWidth: 2, borderColor: PRIMARY },
+  sessionStepIdle: { backgroundColor: '#F2F2F7', borderWidth: 2, borderColor: '#E5E7EB' },
+  sessionStepInner: { width: 8, height: 8, borderRadius: 4 },
+  sessionStepLabel: { fontSize: 11, fontWeight: '600', color: '#8E8E93', textAlign: 'center' },
+  sessionConnector: { height: 2, flex: 0.6, marginBottom: 18 },
+  sessionTimerRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    backgroundColor: '#FAF5FF', borderRadius: 14, padding: 14,
+    marginBottom: 12,
+  },
+  sessionTimerIcon: { width: 36, height: 36, borderRadius: 10, backgroundColor: '#EDE9FE', alignItems: 'center', justifyContent: 'center' },
+  sessionTimerLabel: { fontSize: 11, color: '#6D28D9', fontWeight: '600', marginBottom: 2 },
+  sessionElapsed: { fontSize: 22, fontWeight: '800', color: '#4C1D95', letterSpacing: -0.5 },
+  sessionLivePill: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    backgroundColor: '#EDE9FE', borderRadius: 20, paddingHorizontal: 10, paddingVertical: 5,
+  },
+  sessionLiveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#7C3AED' },
+  sessionLiveText: { fontSize: 10, fontWeight: '800', color: '#7C3AED', letterSpacing: 1 },
+  sessionCompleteRow: { flexDirection: 'row', gap: 10, marginBottom: 12 },
+  sessionCompleteItem: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6,
+    backgroundColor: '#F2F2F7', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10,
+  },
+  sessionCompleteItemDone: { backgroundColor: '#F0FDF4' },
+  sessionCompleteLabel: { fontSize: 13, fontWeight: '600', color: '#8E8E93' },
+  sessionWaitRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, backgroundColor: '#FFF7ED', borderRadius: 10, padding: 12 },
+  sessionWaitText: { flex: 1, fontSize: 12, color: '#C2410C', fontWeight: '500', lineHeight: 17 },
 });
 
 export default BookingDetailScreen;

@@ -1,7 +1,7 @@
 import React from 'react';
-import { Platform } from 'react-native';
+import { Platform, View } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { Ionicons } from '@expo/vector-icons';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { ClientTabParamList } from '@/types/navigation.types';
 
@@ -9,8 +9,34 @@ import ClientDashboardScreen from '@/screens/client/ClientDashboardScreen';
 import ClientProfileScreen from '@/screens/client/ClientProfileScreen';
 import BookingsScreen from '@/screens/client/BookingScreen';
 import MarketplaceScreen from '@/screens/client/MarketPlaceScreen';
+import MyOffersScreen from '@/components/clientComponent/MyOffersScreen';
 
 const Tab = createBottomTabNavigator<ClientTabParamList>();
+
+const P = '#E91E63';
+
+interface TabIconProps {
+  name: string;
+  focused: boolean;
+  color: string;
+}
+
+const TabIcon = ({ name, focused, color }: TabIconProps) => (
+  <View style={{ alignItems: 'center', justifyContent: 'center' }}>
+    <MaterialCommunityIcons name={name as any} size={25} color={color} />
+    {focused && (
+      <View
+        style={{
+          width: 18,
+          height: 3,
+          borderRadius: 2,
+          backgroundColor: P,
+          marginTop: 4,
+        }}
+      />
+    )}
+  </View>
+);
 
 const ClientTabNavigator = () => {
   const insets = useSafeAreaInsets();
@@ -18,28 +44,27 @@ const ClientTabNavigator = () => {
   return (
     <Tab.Navigator
       screenOptions={{
-        tabBarActiveTintColor: '#E91E63',
-        tabBarInactiveTintColor: '#999',
+        tabBarActiveTintColor: P,
+        tabBarInactiveTintColor: '#C0C0C0',
         tabBarStyle: {
           backgroundColor: '#fff',
-          borderTopColor: '#E0E0E0',
+          borderTopColor: '#F0F0F0',
           borderTopWidth: 1,
-          height: Platform.OS === 'ios' ? 88 : 64 + Math.max(insets.bottom, 0),
-          paddingBottom: Platform.OS === 'ios' ? 28 : Math.max(insets.bottom, 8),
+          height: Platform.OS === 'ios' ? 90 : 66 + Math.max(insets.bottom, 0),
+          paddingBottom: Platform.OS === 'ios' ? 30 : Math.max(insets.bottom, 10),
           paddingTop: 8,
-          elevation: 8,
           shadowColor: '#000',
-          shadowOffset: { width: 0, height: -2 },
-          shadowOpacity: 0.1,
-          shadowRadius: 4,
+          shadowOffset: { width: 0, height: -4 },
+          shadowOpacity: 0.07,
+          shadowRadius: 12,
+          elevation: 12,
         },
         tabBarLabelStyle: {
-          fontSize: 12,
+          fontSize: 11,
           fontWeight: '600',
+          marginTop: 0,
         },
-        tabBarItemStyle: {
-          paddingVertical: 4,
-        },
+        tabBarItemStyle: { paddingVertical: 0 },
         headerShown: false,
       }}
     >
@@ -47,8 +72,12 @@ const ClientTabNavigator = () => {
         name="Home"
         component={ClientDashboardScreen}
         options={{
-          tabBarIcon: ({ color, size, focused }) => (
-            <Ionicons name={focused ? 'home' : 'home-outline'} size={size} color={color} />
+          tabBarIcon: ({ color, focused }) => (
+            <TabIcon
+              name={focused ? 'home-variant' : 'home-variant-outline'}
+              focused={focused}
+              color={color}
+            />
           ),
         }}
       />
@@ -57,8 +86,12 @@ const ClientTabNavigator = () => {
         name="Bookings"
         component={BookingsScreen}
         options={{
-          tabBarIcon: ({ color, size, focused }) => (
-            <Ionicons name={focused ? 'calendar' : 'calendar-outline'} size={size} color={color} />
+          tabBarIcon: ({ color, focused }) => (
+            <TabIcon
+              name={focused ? 'calendar-month' : 'calendar-month-outline'}
+              focused={focused}
+              color={color}
+            />
           ),
         }}
       />
@@ -67,8 +100,27 @@ const ClientTabNavigator = () => {
         name="MarketPlace"
         component={MarketplaceScreen}
         options={{
-          tabBarIcon: ({ color, size, focused }) => (
-            <Ionicons name={focused ? 'storefront' : 'storefront-outline'} size={size} color={color} />
+          tabBarLabel: 'Market',
+          tabBarIcon: ({ color, focused }) => (
+            <TabIcon
+              name={focused ? 'shopping' : 'shopping-outline'}
+              focused={focused}
+              color={color}
+            />
+          ),
+        }}
+      />
+
+      <Tab.Screen
+        name="Offers"
+        component={MyOffersScreen}
+        options={{
+          tabBarIcon: ({ color, focused }) => (
+            <TabIcon
+              name={focused ? 'tag' : 'tag-outline'}
+              focused={focused}
+              color={color}
+            />
           ),
         }}
       />
@@ -77,8 +129,12 @@ const ClientTabNavigator = () => {
         name="Profile"
         component={ClientProfileScreen}
         options={{
-          tabBarIcon: ({ color, size, focused }) => (
-            <Ionicons name={focused ? 'person' : 'person-outline'} size={size} color={color} />
+          tabBarIcon: ({ color, focused }) => (
+            <TabIcon
+              name={focused ? 'account-circle' : 'account-circle-outline'}
+              focused={focused}
+              color={color}
+            />
           ),
         }}
       />

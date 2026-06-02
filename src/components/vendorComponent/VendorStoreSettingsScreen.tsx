@@ -9,18 +9,28 @@ import {
   ActivityIndicator,
   Switch,
   Image,
+  StyleSheet,
 } from 'react-native';
 import { toast } from '@/components/ui/Toast';
 import ConfirmationModal from '@/components/ConfirmationModal';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
-import { vendorAPI, categoriesAPI } from '@/api/api';
+import { vendorAPI, userAPI, categoriesAPI } from '@/api/api';
 import { getStoredUser } from '@/utils/authHelper';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import LocationPicker from '@/screens/auth/components/LocationPicker';
+
+const PRIMARY   = '#E04079';
+const BG        = '#FCE4EC';
+const WHITE     = '#FFFFFF';
+const TEXT_DARK = '#1A1A2E';
+const TEXT_GRAY = '#6B7280';
+const BORDER    = '#F3E6EC';
 
 interface Category {
   _id: string;
@@ -45,12 +55,17 @@ interface DocumentsData {
 
 const VendorStoreSettingsScreen: React.FC = () => {
   const navigation = useNavigation();
+  const { top } = useSafeAreaInsets();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [loadingCategories, setLoadingCategories] = useState(false);
   const [uploadingDocument, setUploadingDocument] = useState(false);
-  
-  const [isEditMode, setIsEditMode] = useState(false);
+  const [uploadingCover, setUploadingCover] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [showLocationPicker, setShowLocationPicker] = useState(false);
+  const [vendorAvatar, setVendorAvatar] = useState<string | undefined>();
+  const [coverImage, setCoverImage]     = useState<string | undefined>();
+
   const [vendorTypeSet, setVendorTypeSet] = useState(false);
   const [confirmModal, setConfirmModal] = useState({ visible: false, title: '', message: '', onConfirm: () => {} });
 
@@ -74,6 +89,8 @@ const VendorStoreSettingsScreen: React.FC = () => {
     businessLicense: undefined,
     certification: [],
   });
+  const [kycStatus, setKycStatus]         = useState<string>('not_submitted');
+  const [kycEditAllowed, setKycEditAllowed] = useState<boolean>(false);
   
   
   const [availability, setAvailability] = useState({
@@ -205,6 +222,8 @@ const VendorStoreSettingsScreen: React.FC = () => {
         console.log('🏪 Vendor profile:', vendor.vendorProfile);
         
         
+        setVendorAvatar(vendor.avatar || undefined);
+        setCoverImage(vendor.vendorProfile?.coverImage || undefined);
         setBusinessName(vendor.vendorProfile?.businessName || '');
         setBusinessDescription(vendor.vendorProfile?.businessDescription || '');
         
@@ -248,6 +267,8 @@ const VendorStoreSettingsScreen: React.FC = () => {
             certification: vendor.vendorProfile.documents.certification || [],
           });
         }
+        setKycStatus(vendor.vendorProfile?.kycStatus || 'not_submitted');
+        setKycEditAllowed(!!vendor.vendorProfile?.kycEditAllowed);
         
         
         if (vendor.vendorProfile?.availabilitySchedule) {
@@ -278,6 +299,60 @@ const VendorStoreSettingsScreen: React.FC = () => {
       console.error('❌ Error details:', error.response?.data);
     } finally {
       setLoadingCategories(false);
+    }
+  };
+
+  const pickCoverImage = async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [16, 9],
+        quality: 0.85,
+      });
+      if (!result.canceled && result.assets[0]) {
+        const uri = result.assets[0].uri;
+        setUploadingCover(true);
+        try {
+          const res = await vendorAPI.uploadCoverImage(uri);
+          if (res.success) {
+            setCoverImage(uri);
+            toast.success('Success', 'Cover photo updated');
+          }
+        } catch (err: any) {
+          toast.error('Error', err?.response?.data?.message || 'Failed to upload cover photo');
+        } finally {
+          setUploadingCover(false);
+        }
+      }
+    } catch {
+      toast.error('Error', 'Failed to open gallery');
+    }
+  };
+
+  const pickAvatarImage = async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.85,
+      });
+      if (!result.canceled && result.assets[0]) {
+        const uri = result.assets[0].uri;
+        setUploadingAvatar(true);
+        try {
+          await userAPI.uploadAvatarOnly(uri);
+          setVendorAvatar(uri);
+          toast.success('Success', 'Profile photo updated');
+        } catch (err: any) {
+          toast.error('Error', err?.response?.data?.message || 'Failed to upload photo');
+        } finally {
+          setUploadingAvatar(false);
+        }
+      }
+    } catch {
+      toast.error('Error', 'Failed to open gallery');
     }
   };
 
@@ -350,22 +425,33 @@ const VendorStoreSettingsScreen: React.FC = () => {
     }
   };
 
-  const removeDocument = (documentType: 'idCard' | 'businessLicense', index?: number) => {
+  const removeDocument = (documentType: 'idCard' | 'businessLicense' | 'certification', index?: number) => {
     setConfirmModal({
       visible: true,
       title: 'Remove Document',
       message: 'Are you sure you want to remove this document?',
-      onConfirm: () => {
-        if (documentType === 'certification' && index !== undefined) {
-          setDocuments((prev) => ({
-            ...prev,
-            certification: prev.certification?.filter((_, i) => i !== index) || [],
-          }));
-        } else {
-          setDocuments((prev) => ({
-            ...prev,
-            [documentType]: undefined,
-          }));
+      onConfirm: async () => {
+        try {
+          setUploadingDocument(true);
+          await vendorAPI.deleteDocument(documentType, index);
+
+          if (documentType === 'certification' && index !== undefined) {
+            setDocuments((prev) => ({
+              ...prev,
+              certification: prev.certification?.filter((_, i) => i !== index) || [],
+            }));
+          } else {
+            setDocuments((prev) => ({
+              ...prev,
+              [documentType]: undefined,
+            }));
+          }
+          setKycStatus('not_submitted');
+          toast.success('Removed', 'Document removed successfully');
+        } catch (error: any) {
+          toast.error('Error', error.response?.data?.message || 'Failed to remove document');
+        } finally {
+          setUploadingDocument(false);
         }
       },
     });
@@ -373,7 +459,7 @@ const VendorStoreSettingsScreen: React.FC = () => {
 
   const handleSave = async () => {
     try {
-      
+
       if (!businessName.trim()) {
         toast.warning('Error', 'Business name is required');
         return;
@@ -433,9 +519,6 @@ const VendorStoreSettingsScreen: React.FC = () => {
           setVendorTypeSet(true);
         }
 
-        
-        setIsEditMode(false);
-
         toast.success('Success', 'Store settings updated successfully');
       }
     } catch (error: any) {
@@ -451,7 +534,6 @@ const VendorStoreSettingsScreen: React.FC = () => {
   };
 
   const toggleCategory = (categoryId: string) => {
-    if (!isEditMode) return;
     setSelectedCategories((prev) => {
       if (prev.includes(categoryId)) {
         return prev.filter((id) => id !== categoryId);
@@ -462,7 +544,6 @@ const VendorStoreSettingsScreen: React.FC = () => {
   };
 
   const toggleDay = (day: string) => {
-    if (!isEditMode) return;
     setAvailability((prev) => ({
       ...prev,
       [day]: {
@@ -476,688 +557,810 @@ const VendorStoreSettingsScreen: React.FC = () => {
     setExpandedSection(expandedSection === section ? null : section);
   };
 
-  const toggleEditMode = () => {
-    if (isEditMode) {
-      
-      setConfirmModal({
-        visible: true,
-        title: 'Discard Changes?',
-        message: 'You have unsaved changes. Do you want to discard them?',
-        onConfirm: () => {
-          setIsEditMode(false);
-          loadData();
-        },
-      });
-    } else {
-      
-      setIsEditMode(true);
-    }
+  const kycLocked = kycStatus === 'approved' && !kycEditAllowed;
+
+  // ── Document upload card sub-component ──────────────────────────────────
+  const DocUploadCard = ({
+    label, hint, icon, uri, locked, uploading, onPick, onRemove,
+  }: {
+    label: string; hint: string; icon: any;
+    uri?: string; locked: boolean; uploading: boolean;
+    onPick: () => void; onRemove: () => void;
+  }) => (
+    <View style={ss.docCard}>
+      <View style={ss.docCardHeader}>
+        <View style={ss.docCardIcon}>
+          <Ionicons name={icon} size={16} color={PRIMARY} />
+        </View>
+        <View style={{ flex: 1, marginLeft: 10 }}>
+          <Text style={ss.docCardLabel}>{label}</Text>
+          <Text style={ss.docCardHint}>{hint}</Text>
+        </View>
+        {uri && !locked && (
+          <TouchableOpacity onPress={onRemove} activeOpacity={0.75} style={ss.docRemoveChip}>
+            <Ionicons name="trash-outline" size={13} color="#DC2626" />
+          </TouchableOpacity>
+        )}
+      </View>
+      {uri ? (
+        <Image source={{ uri }} style={ss.docImg} resizeMode="cover" />
+      ) : (
+        <TouchableOpacity
+          onPress={onPick}
+          disabled={uploading || locked}
+          activeOpacity={0.75}
+          style={[ss.uploadBox, locked && { opacity: 0.45 }]}
+        >
+          <View style={ss.uploadBoxInner}>
+            <Ionicons name="cloud-upload-outline" size={26} color={PRIMARY} />
+            <Text style={ss.uploadBoxTitle}>Tap to upload</Text>
+            <Text style={ss.uploadBoxSub}>JPG, PNG up to 10 MB</Text>
+          </View>
+        </TouchableOpacity>
+      )}
+    </View>
+  );
+
+  // ── Section header component ─────────────────────────────────────────────
+  const SectionHeader = ({
+    id, icon, title, subtitle, badge,
+  }: { id: string; icon: any; title: string; subtitle: string; badge?: string }) => {
+    const isOpen = expandedSection === id;
+    return (
+      <TouchableOpacity onPress={() => toggleSection(id)} activeOpacity={0.8} style={ss.sectionHeader}>
+        <View style={[ss.sectionIconWrap, isOpen && ss.sectionIconWrapActive]}>
+          <Ionicons name={icon} size={19} color={isOpen ? WHITE : PRIMARY} />
+        </View>
+        <View style={{ flex: 1, marginLeft: 12 }}>
+          <Text style={[ss.sectionTitle, isOpen && { color: PRIMARY }]}>{title}</Text>
+          {badge ? (
+            <View style={ss.sectionBadge}>
+              <Text style={ss.sectionBadgeText}>{badge}</Text>
+            </View>
+          ) : (
+            <Text style={ss.sectionSub}>{subtitle}</Text>
+          )}
+        </View>
+        <View style={[ss.chevronWrap, isOpen && ss.chevronWrapActive]}>
+          <Ionicons name={isOpen ? 'chevron-up' : 'chevron-down'} size={15} color={isOpen ? PRIMARY : '#C4A0B0'} />
+        </View>
+      </TouchableOpacity>
+    );
   };
 
   if (loading) {
     return (
-      <SafeAreaView className="flex-1 bg-gray-50">
-        <View className="flex-1 items-center justify-center">
-          <ActivityIndicator size="large" color="#ec4899" />
-          <Text className="text-gray-600 mt-4">Loading store settings...</Text>
-        </View>
-      </SafeAreaView>
+      <View style={{ flex: 1, backgroundColor: WHITE, alignItems: 'center', justifyContent: 'center' }}>
+        <ActivityIndicator size="large" color={PRIMARY} />
+      </View>
     );
   }
 
+  const offDays = Object.keys(availability).filter(d => !availability[d as keyof typeof availability].isAvailable);
+
   return (
-    <SafeAreaView className="flex-1 bg-gray-50" edges={['top']}>
-      {}
-      <View className="bg-white border-b border-gray-200">
-        <View className="flex-row items-center justify-between px-5 py-4">
-          <TouchableOpacity
-            onPress={() => navigation.goBack()}
-            className="w-10 h-10 items-center justify-center"
-          >
-            <Ionicons name="chevron-back" size={28} color="#1f2937" />
-          </TouchableOpacity>
-          <Text className="text-lg font-semibold text-gray-900">Store Settings</Text>
-          
-          {}
-          <TouchableOpacity
-            onPress={toggleEditMode}
-            className={`w-10 h-10 rounded-full items-center justify-center ${
-              isEditMode ? 'bg-pink-100' : 'bg-gray-100'
-            }`}
-            activeOpacity={0.7}
-          >
-            <Ionicons 
-              name={isEditMode ? "close" : "pencil"} 
-              size={20} 
-              color={isEditMode ? "#ec4899" : "#6b7280"} 
-            />
-          </TouchableOpacity>
-        </View>
-        
-        {}
-        {isEditMode && (
-          <View className="bg-pink-50 px-5 py-2 border-t border-pink-100">
-            <View className="flex-row items-center">
-              <Ionicons name="pencil" size={14} color="#ec4899" />
-              <Text className="text-pink-600 text-xs font-semibold ml-2">
-                Edit Mode Active - Make your changes and save
-              </Text>
-            </View>
-          </View>
-        )}
+    <View style={{ flex: 1, backgroundColor: BG }}>
+      {/* ── Header ─────────────────────────────────────────────────────────── */}
+      <View style={[ss.header, { paddingTop: top + 8 }]}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={ss.backBtn} activeOpacity={0.8}>
+          <Ionicons name="arrow-back" size={18} color={PRIMARY} />
+        </TouchableOpacity>
+        <Text style={ss.headerTitle}>Store Setting</Text>
+        <View style={{ width: 36 }} />
       </View>
 
-      <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
-        <View className="p-5">
-          {}
-          <View className="bg-white rounded-2xl p-4 mb-4">
-            <TouchableOpacity
-              onPress={() => toggleSection('business')}
-              className="flex-row items-center justify-between mb-3"
-            >
-              <View className="flex-row items-center">
-                <View className="w-10 h-10 rounded-xl bg-pink-50 items-center justify-center mr-3">
-                  <MaterialCommunityIcons name="store" size={22} color="#ec4899" />
-                </View>
-                <Text className="text-base font-semibold text-gray-900">
-                  Business Information
-                </Text>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 32 }}>
+
+        {/* ── Cover + Avatar ─────────────────────────────────────────────── */}
+        <View style={ss.coverWrap}>
+          {coverImage ? (
+            <Image source={{ uri: coverImage }} style={ss.coverImg} resizeMode="cover" />
+          ) : (
+            <LinearGradient colors={['#F9A8C9', '#E04079']} style={ss.coverImg} />
+          )}
+
+          {/* Bottom dark gradient so name text is readable */}
+          <LinearGradient
+            colors={['transparent', 'rgba(0,0,0,0.58)']}
+            style={ss.coverGradientOverlay}
+          />
+
+          {/* Camera badge on cover (top-right) */}
+          <TouchableOpacity onPress={pickCoverImage} disabled={uploadingCover} style={ss.coverCameraBtn} activeOpacity={0.8}>
+            {uploadingCover
+              ? <ActivityIndicator size="small" color={PRIMARY} />
+              : <Ionicons name="camera" size={16} color={PRIMARY} />}
+          </TouchableOpacity>
+
+          {/* Business name + category — inside the image, to the right of avatar column */}
+          <View style={ss.coverNameWrap}>
+            <Text style={ss.coverName} numberOfLines={1}>{businessName || 'Your Business'}</Text>
+            <Text style={ss.coverCategory} numberOfLines={1}>
+              {availableCategories.find(c => selectedCategories.includes(c._id))?.name || 'Beauty & Wellness'}
+            </Text>
+          </View>
+
+          {/* Avatar — overlaps the bottom edge of the cover */}
+          <TouchableOpacity onPress={pickAvatarImage} disabled={uploadingAvatar} activeOpacity={0.8} style={ss.avatarWrap}>
+            {vendorAvatar ? (
+              <Image source={{ uri: vendorAvatar }} style={ss.avatar} resizeMode="cover" />
+            ) : (
+              <View style={[ss.avatar, { backgroundColor: '#FEE2F0', alignItems: 'center', justifyContent: 'center' }]}>
+                <Ionicons name="person" size={28} color={PRIMARY} />
               </View>
-              <Ionicons
-                name={expandedSection === 'business' ? 'chevron-up' : 'chevron-down'}
-                size={24}
-                color="#9ca3af"
-              />
-            </TouchableOpacity>
+            )}
+            {uploadingAvatar && (
+              <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(255,255,255,0.6)', alignItems: 'center', justifyContent: 'center', borderRadius: 34 }]}>
+                <ActivityIndicator size="small" color={PRIMARY} />
+              </View>
+            )}
+            <View style={ss.avatarCameraBadge}>
+              <Ionicons name="camera" size={10} color={WHITE} />
+            </View>
+          </TouchableOpacity>
+        </View>
 
+        {/* ── Accordion sections ─────────────────────────────────────────── */}
+        <View style={ss.sections}>
+
+          {/* Business Information */}
+          <View style={[ss.card, expandedSection === 'business' && ss.cardActive]}>
+            <SectionHeader
+              id="business"
+              icon="briefcase-outline"
+              title="Business Information"
+              subtitle="Name, bio & service type"
+              badge={businessName ? businessName.slice(0, 18) + (businessName.length > 18 ? '…' : '') : undefined}
+            />
             {expandedSection === 'business' && (
-              <View className="pt-3 border-t border-gray-100">
-                {}
-                <View className="mb-4">
-                  <Text className="text-sm font-medium text-gray-700 mb-2">
-                    Business Name *
-                  </Text>
-                  <View className="relative">
-                    <TextInput
-                      value={businessName}
-                      onChangeText={setBusinessName}
-                      placeholder="Enter your business name"
-                      editable={isEditMode}
-                      className={`border rounded-xl px-4 py-3 text-gray-900 ${
-                        isEditMode 
-                          ? 'bg-white border-pink-200' 
-                          : 'bg-gray-50 border-gray-200'
-                      }`}
-                      placeholderTextColor="#9ca3af"
-                    />
-                    {!isEditMode && (
-                      <View className="absolute right-3 top-3">
-                        <Ionicons name="lock-closed" size={16} color="#9ca3af" />
-                      </View>
-                    )}
-                  </View>
+              <View style={ss.expanded}>
+                <View style={ss.inputGroup}>
+                  <Text style={ss.inputLabel}>Business Name <Text style={{ color: PRIMARY }}>*</Text></Text>
+                  <TextInput
+                    value={businessName}
+                    onChangeText={setBusinessName}
+                    placeholder="e.g. Glam Studio by Tolu"
+                    placeholderTextColor="#C4A0B0"
+                    style={ss.input}
+                  />
                 </View>
-
-                {}
-                <View className="mb-4">
-                  <Text className="text-sm font-medium text-gray-700 mb-2">
-                    Business Description *
-                  </Text>
-                  <View className="relative">
-                    <TextInput
-                      value={businessDescription}
-                      onChangeText={setBusinessDescription}
-                      placeholder="Describe your business..."
-                      multiline
-                      numberOfLines={4}
-                      textAlignVertical="top"
-                      editable={isEditMode}
-                      className={`border rounded-xl px-4 py-3 text-gray-900 min-h-[100px] ${
-                        isEditMode 
-                          ? 'bg-white border-pink-200' 
-                          : 'bg-gray-50 border-gray-200'
-                      }`}
-                      placeholderTextColor="#9ca3af"
-                    />
-                    {!isEditMode && (
-                      <View className="absolute right-3 top-3">
-                        <Ionicons name="lock-closed" size={16} color="#9ca3af" />
-                      </View>
-                    )}
-                  </View>
+                <View style={ss.inputGroup}>
+                  <Text style={ss.inputLabel}>Business Description <Text style={{ color: PRIMARY }}>*</Text></Text>
+                  <TextInput
+                    value={businessDescription}
+                    onChangeText={setBusinessDescription}
+                    placeholder="Tell clients what makes you special..."
+                    placeholderTextColor="#C4A0B0"
+                    multiline
+                    numberOfLines={4}
+                    textAlignVertical="top"
+                    style={[ss.input, { minHeight: 96, paddingTop: 12 }]}
+                  />
                 </View>
-
-                {}
-                <View className="mb-2">
-                  <Text className="text-sm font-medium text-gray-700 mb-2">
-                    Service Type * {vendorTypeSet && '(Cannot be changed)'}
+                <View style={ss.inputGroup}>
+                  <Text style={ss.inputLabel}>
+                    Service Type{' '}
+                    {vendorTypeSet
+                      ? <Text style={{ color: '#D97706', fontWeight: '600' }}>(locked)</Text>
+                      : <Text style={{ color: PRIMARY }}>*</Text>}
                   </Text>
-                  <View className="flex-row gap-2">
-                    <TouchableOpacity
-                      onPress={() => {
-                        if (isEditMode && !vendorTypeSet) {
-                          setVendorType('home_service');
-                        }
-                      }}
-                      disabled={!isEditMode || vendorTypeSet}
-                      className={`flex-1 p-3 rounded-xl border-2 ${
-                        vendorType === 'home_service'
-                          ? 'border-pink-500 bg-pink-50'
-                          : isEditMode && !vendorTypeSet
-                          ? 'border-gray-200 bg-white'
-                          : 'border-gray-200 bg-gray-50'
-                      }`}
-                      activeOpacity={0.7}
-                    >
-                      <Text
-                        className={`text-center text-sm font-medium ${
-                          vendorType === 'home_service' ? 'text-pink-500' : 'text-gray-600'
-                        }`}
-                      >
-                        Home Service
-                      </Text>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                      onPress={() => {
-                        if (isEditMode && !vendorTypeSet) {
-                          setVendorType('in_shop');
-                        }
-                      }}
-                      disabled={!isEditMode || vendorTypeSet}
-                      className={`flex-1 p-3 rounded-xl border-2 ${
-                        vendorType === 'in_shop'
-                          ? 'border-pink-500 bg-pink-50'
-                          : isEditMode && !vendorTypeSet
-                          ? 'border-gray-200 bg-white'
-                          : 'border-gray-200 bg-gray-50'
-                      }`}
-                      activeOpacity={0.7}
-                    >
-                      <Text
-                        className={`text-center text-sm font-medium ${
-                          vendorType === 'in_shop' ? 'text-pink-500' : 'text-gray-600'
-                        }`}
-                      >
-                        In-Shop
-                      </Text>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                      onPress={() => {
-                        if (isEditMode && !vendorTypeSet) {
-                          setVendorType('both');
-                        }
-                      }}
-                      disabled={!isEditMode || vendorTypeSet}
-                      className={`flex-1 p-3 rounded-xl border-2 ${
-                        vendorType === 'both'
-                          ? 'border-pink-500 bg-pink-50'
-                          : isEditMode && !vendorTypeSet
-                          ? 'border-gray-200 bg-white'
-                          : 'border-gray-200 bg-gray-50'
-                      }`}
-                      activeOpacity={0.7}
-                    >
-                      <Text
-                        className={`text-center text-sm font-medium ${
-                          vendorType === 'both' ? 'text-pink-500' : 'text-gray-600'
-                        }`}
-                      >
-                        Both
-                      </Text>
-                    </TouchableOpacity>
+                  <View style={ss.segControl}>
+                    {([
+                      { key: 'home_service', label: 'Home Visit', icon: 'home-outline' },
+                      { key: 'in_shop',      label: 'In-Shop',   icon: 'storefront-outline' },
+                      { key: 'both',         label: 'Both',      icon: 'swap-horizontal-outline' },
+                    ] as const).map((t, idx) => {
+                      const active = vendorType === t.key;
+                      return (
+                        <TouchableOpacity
+                          key={t.key}
+                          onPress={() => { if (!vendorTypeSet) setVendorType(t.key); }}
+                          disabled={vendorTypeSet}
+                          activeOpacity={0.75}
+                          style={[
+                            ss.segBtn,
+                            idx === 0 && ss.segBtnFirst,
+                            idx === 2 && ss.segBtnLast,
+                            active && ss.segBtnActive,
+                          ]}
+                        >
+                          <Ionicons name={t.icon} size={15} color={active ? WHITE : TEXT_GRAY} />
+                          <Text style={[ss.segBtnText, active && ss.segBtnTextActive]}>{t.label}</Text>
+                        </TouchableOpacity>
+                      );
+                    })}
                   </View>
                   {vendorTypeSet && (
-                    <Text className="text-orange-600 text-xs mt-2">
-                      ⚠️ Service type has been set and cannot be changed
-                    </Text>
+                    <View style={ss.lockedNote}>
+                      <Ionicons name="lock-closed-outline" size={12} color="#92400E" />
+                      <Text style={ss.lockedNoteText}>Cannot be changed once set</Text>
+                    </View>
                   )}
                 </View>
               </View>
             )}
           </View>
 
-          {}
-          <View className="bg-white rounded-2xl p-4 mb-4">
-            <TouchableOpacity
-              onPress={() => toggleSection('categories')}
-              className="flex-row items-center justify-between mb-3"
-            >
-              <View className="flex-row items-center flex-1">
-                <View className="w-10 h-10 rounded-xl bg-pink-50 items-center justify-center mr-3">
-                  <Ionicons name="grid-outline" size={22} color="#ec4899" />
-                </View>
-                <View className="flex-1">
-                  <Text className="text-base font-semibold text-gray-900">Categories *</Text>
-                  <Text className="text-xs text-gray-500 mt-0.5">
-                    {selectedCategories.length} selected
-                  </Text>
-                </View>
-              </View>
-              <Ionicons
-                name={expandedSection === 'categories' ? 'chevron-up' : 'chevron-down'}
-                size={24}
-                color="#9ca3af"
-              />
-            </TouchableOpacity>
-
+          {/* Categories */}
+          <View style={[ss.card, expandedSection === 'categories' && ss.cardActive]}>
+            <SectionHeader
+              id="categories"
+              icon="grid-outline"
+              title="Categories"
+              subtitle="What services do you offer?"
+              badge={selectedCategories.length > 0 ? `${selectedCategories.length} selected` : undefined}
+            />
             {expandedSection === 'categories' && (
-              <View className="pt-3 border-t border-gray-100">
+              <View style={ss.expanded}>
                 {loadingCategories ? (
-                  <View className="py-4">
-                    <ActivityIndicator size="small" color="#ec4899" />
+                  <View style={{ alignItems: 'center', paddingVertical: 20 }}>
+                    <ActivityIndicator size="small" color={PRIMARY} />
+                    <Text style={{ color: TEXT_GRAY, marginTop: 8, fontSize: 13 }}>Loading categories...</Text>
                   </View>
                 ) : availableCategories.length > 0 ? (
-                  <View>
-                    <Text className="text-xs text-gray-400 mb-2">
-                      {selectedCategories.length} selected
-                    </Text>
-                    <ScrollView
-                      style={{ maxHeight: 220 }}
-                      showsVerticalScrollIndicator={false}
-                      nestedScrollEnabled
-                    >
-                      {availableCategories.map((category) => {
-                        const isSelected = selectedCategories.includes(category._id);
-                        return (
-                          <TouchableOpacity
-                            key={category._id}
-                            onPress={() => toggleCategory(category._id)}
-                            disabled={!isEditMode}
-                            className={`flex-row items-center px-4 py-3 mb-1.5 rounded-xl border ${
-                              isSelected
-                                ? 'border-pink-400 bg-pink-50'
-                                : isEditMode
-                                ? 'border-gray-200 bg-gray-50'
-                                : 'border-gray-100 bg-gray-50'
-                            }`}
-                            activeOpacity={0.7}
-                          >
-                            <View
-                              className={`w-5 h-5 rounded-md items-center justify-center mr-3 ${
-                                isSelected ? 'bg-pink-500' : 'border border-gray-300 bg-white'
-                              }`}
-                            >
-                              {isSelected && (
-                                <Ionicons name="checkmark" size={14} color="#fff" />
-                              )}
-                            </View>
-                            <Text
-                              className={`text-sm font-medium flex-1 ${
-                                isSelected ? 'text-pink-600' : 'text-gray-700'
-                              }`}
-                            >
-                              {category.name}
-                            </Text>
-                          </TouchableOpacity>
-                        );
-                      })}
-                    </ScrollView>
+                  <View style={ss.chipGrid}>
+                    {availableCategories.map(cat => {
+                      const sel = selectedCategories.includes(cat._id);
+                      return (
+                        <TouchableOpacity
+                          key={cat._id}
+                          onPress={() => toggleCategory(cat._id)}
+                          activeOpacity={0.7}
+                          style={[ss.chip, sel && ss.chipActive]}
+                        >
+                          {sel && <Ionicons name="checkmark-circle" size={14} color={WHITE} style={{ marginRight: 4 }} />}
+                          <Text style={[ss.chipText, sel && ss.chipTextActive]}>{cat.name}</Text>
+                        </TouchableOpacity>
+                      );
+                    })}
                   </View>
                 ) : (
-                  <Text className="text-gray-500 text-center py-4">No categories available</Text>
+                  <View style={{ alignItems: 'center', paddingVertical: 20 }}>
+                    <Ionicons name="grid-outline" size={32} color="#C4A0B0" />
+                    <Text style={{ color: TEXT_GRAY, marginTop: 8, fontSize: 13 }}>No categories available</Text>
+                  </View>
                 )}
               </View>
             )}
           </View>
 
-          {}
-          <View className="bg-white rounded-2xl p-4 mb-4">
-            <TouchableOpacity
-              onPress={() => toggleSection('location')}
-              className="flex-row items-center justify-between mb-3"
-            >
-              <View className="flex-row items-center">
-                <View className="w-10 h-10 rounded-xl bg-pink-50 items-center justify-center mr-3">
-                  <Ionicons name="location-outline" size={22} color="#ec4899" />
-                </View>
-                <Text className="text-base font-semibold text-gray-900">Business Location *</Text>
-              </View>
-              <Ionicons
-                name={expandedSection === 'location' ? 'chevron-up' : 'chevron-down'}
-                size={24}
-                color="#9ca3af"
-              />
-            </TouchableOpacity>
-
+          {/* Business Location */}
+          <View style={[ss.card, expandedSection === 'location' && ss.cardActive]}>
+            <SectionHeader
+              id="location"
+              icon="location-outline"
+              title="Business Location"
+              subtitle="Where can clients find you?"
+              badge={location ? location.city || 'Set' : undefined}
+            />
             {expandedSection === 'location' && (
-              <View className="pt-3 border-t border-gray-100">
+              <View style={ss.expanded}>
                 {location ? (
-                  <View className="bg-green-50 border border-green-200 rounded-xl p-4 mb-4">
-                    <View className="flex-row items-center mb-3">
-                      <Ionicons name="location" size={20} color="#059669" />
-                      <Text className="text-green-700 font-semibold ml-2">Location Added</Text>
-                    </View>
-                    <Text className="text-gray-500 text-xs mb-1">Address</Text>
-                    <TextInput
-                      className="bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 mb-2"
-                      value={location.address}
-                      onChangeText={(text) => setLocation({ ...location, address: text })}
-                      placeholder="Enter your address"
-                      editable={isEditMode}
-                    />
-                    <View className="flex-row gap-2">
-                      <View className="flex-1">
-                        <Text className="text-gray-500 text-xs mb-1">City</Text>
-                        <TextInput
-                          className="bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800"
-                          value={location.city}
-                          onChangeText={(text) => setLocation({ ...location, city: text })}
-                          placeholder="City"
-                          editable={isEditMode}
-                        />
+                  <View>
+                    <View style={ss.locationConfirmed}>
+                      <View style={ss.locationConfirmedIcon}>
+                        <Ionicons name="checkmark-circle" size={20} color="#059669" />
                       </View>
-                      <View className="flex-1">
-                        <Text className="text-gray-500 text-xs mb-1">State</Text>
-                        <TextInput
-                          className="bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800"
-                          value={location.state}
-                          onChangeText={(text) => setLocation({ ...location, state: text })}
-                          placeholder="State"
-                          editable={isEditMode}
-                        />
+                      <View style={{ flex: 1, marginLeft: 10 }}>
+                        <Text style={ss.locationConfirmedTitle}>Location confirmed</Text>
+                        <Text style={ss.locationConfirmedSub} numberOfLines={1}>{location.address || `${location.city}, ${location.state}`}</Text>
                       </View>
-                    </View>
-                    {isEditMode && (
-                      <TouchableOpacity
-                        onPress={() => setLocation(null)}
-                        className="mt-3"
-                        activeOpacity={0.7}
-                      >
-                        <Text className="text-red-600 text-sm font-semibold">Change Location</Text>
+                      <TouchableOpacity onPress={() => setLocation(null)} activeOpacity={0.7} style={ss.changeLocBtn}>
+                        <Text style={ss.changeLocText}>Change</Text>
                       </TouchableOpacity>
-                    )}
+                    </View>
+                    <View style={ss.inputGroup}>
+                      <Text style={ss.inputLabel}>Street Address</Text>
+                      <TextInput style={ss.input} value={location.address} onChangeText={t => setLocation({ ...location, address: t })} placeholder="Street address" placeholderTextColor="#C4A0B0" />
+                    </View>
+                    <View style={{ flexDirection: 'row', gap: 10 }}>
+                      <View style={[ss.inputGroup, { flex: 1 }]}>
+                        <Text style={ss.inputLabel}>City</Text>
+                        <TextInput style={ss.input} value={location.city} onChangeText={t => setLocation({ ...location, city: t })} placeholder="City" placeholderTextColor="#C4A0B0" />
+                      </View>
+                      <View style={[ss.inputGroup, { flex: 1 }]}>
+                        <Text style={ss.inputLabel}>State</Text>
+                        <TextInput style={ss.input} value={location.state} onChangeText={t => setLocation({ ...location, state: t })} placeholder="State" placeholderTextColor="#C4A0B0" />
+                      </View>
+                    </View>
                   </View>
                 ) : (
-                  <TouchableOpacity
-                    onPress={getCurrentLocation}
-                    disabled={locationLoading || saving || !isEditMode}
-                    className={`bg-pink-50 border border-pink-200 rounded-xl p-4 flex-row items-center justify-center mb-4 ${
-                      locationLoading || saving || !isEditMode ? 'opacity-50' : ''
-                    }`}
-                    activeOpacity={0.7}
-                  >
-                    {locationLoading ? (
-                      <>
-                        <ActivityIndicator size="small" color="#EC4899" />
-                        <Text className="text-pink-600 font-semibold ml-3">Getting Location...</Text>
-                      </>
-                    ) : (
-                      <>
-                        <Ionicons name="location-outline" size={20} color="#EC4899" />
-                        <Text className="text-pink-600 font-semibold ml-2">Add Current Location</Text>
-                      </>
-                    )}
-                  </TouchableOpacity>
+                  <View style={{ gap: 10 }}>
+                    <TouchableOpacity
+                      onPress={() => setShowLocationPicker(true)}
+                      activeOpacity={0.75}
+                      style={ss.locationBtn}
+                    >
+                      <View style={ss.locationBtnIcon}>
+                        <Ionicons name="map-outline" size={18} color={PRIMARY} />
+                      </View>
+                      <View style={{ flex: 1, marginLeft: 12 }}>
+                        <Text style={ss.locationBtnTitle}>Pick Location on Map</Text>
+                        <Text style={ss.locationBtnSub}>Tap and drag the pin to your location</Text>
+                      </View>
+                      <Ionicons name="chevron-forward" size={16} color={PRIMARY} />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={getCurrentLocation}
+                      disabled={locationLoading}
+                      activeOpacity={0.75}
+                      style={ss.locationBtnSecondary}
+                    >
+                      <View style={ss.locationBtnSecondaryIcon}>
+                        {locationLoading
+                          ? <ActivityIndicator size="small" color={TEXT_GRAY} />
+                          : <Ionicons name="navigate-outline" size={16} color={TEXT_GRAY} />}
+                      </View>
+                      <Text style={ss.locationBtnSecondaryText}>
+                        {locationLoading ? 'Detecting...' : 'Use GPS Auto-Detect'}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
                 )}
-
                 {locationError ? (
-                  <Text className="text-red-600 text-xs mb-3">{locationError}</Text>
+                  <View style={ss.errorNote}>
+                    <Ionicons name="alert-circle-outline" size={14} color="#DC2626" />
+                    <Text style={ss.errorNoteText}>{locationError}</Text>
+                  </View>
                 ) : null}
-
-                {}
-                <View className="mb-2">
-                  <Text className="text-sm font-medium text-gray-700 mb-2">
-                    Service Radius (km)
-                  </Text>
-                  <View className="relative">
+                <View style={ss.inputGroup}>
+                  <Text style={ss.inputLabel}>Service Radius (km)</Text>
+                  <View style={ss.radiusRow}>
                     <TextInput
+                      style={[ss.input, { flex: 1 }]}
                       value={serviceRadius}
                       onChangeText={setServiceRadius}
-                      placeholder="10"
                       keyboardType="numeric"
-                      editable={isEditMode}
-                      className={`border rounded-xl px-4 py-3 text-gray-900 ${
-                        isEditMode 
-                          ? 'bg-white border-pink-200' 
-                          : 'bg-gray-50 border-gray-200'
-                      }`}
-                      placeholderTextColor="#9ca3af"
+                      placeholder="10"
+                      placeholderTextColor="#C4A0B0"
                     />
-                    {!isEditMode && (
-                      <View className="absolute right-3 top-3">
-                        <Ionicons name="lock-closed" size={16} color="#9ca3af" />
-                      </View>
-                    )}
+                    <View style={ss.radiusBadge}>
+                      <Text style={ss.radiusBadgeText}>km</Text>
+                    </View>
                   </View>
-                  <Text className="text-gray-500 text-xs mt-2">
-                    Maximum distance you're willing to travel for home services
-                  </Text>
                 </View>
               </View>
             )}
           </View>
 
-          {/* Documents Section */}
-          <View className="bg-white rounded-2xl p-4 mb-4">
-            <TouchableOpacity
-              onPress={() => toggleSection('documents')}
-              className="flex-row items-center justify-between mb-3"
-            >
-              <View className="flex-row items-center">
-                <View className="w-10 h-10 rounded-xl bg-pink-50 items-center justify-center mr-3">
-                  <MaterialCommunityIcons name="file-document" size={22} color="#ec4899" />
-                </View>
-                <Text className="text-base font-semibold text-gray-900">
-                  Verification Documents
-                </Text>
-              </View>
-              <Ionicons
-                name={expandedSection === 'documents' ? 'chevron-up' : 'chevron-down'}
-                size={24}
-                color="#9ca3af"
-              />
-            </TouchableOpacity>
-
+          {/* Verification Documents */}
+          <View style={[ss.card, expandedSection === 'documents' && ss.cardActive]}>
+            <SectionHeader
+              id="documents"
+              icon="document-text-outline"
+              title="Verification Documents"
+              subtitle="ID & business verification"
+              badge={
+                kycLocked ? 'Verified ✓' :
+                kycStatus === 'pending' ? 'Under review' :
+                (documents.idCard || documents.businessLicense) ? 'Uploaded' : undefined
+              }
+            />
             {expandedSection === 'documents' && (
-              <View className="pt-3 border-t border-gray-100">
-                {/* ID Card */}
-                <View className="mb-4">
-                  <Text className="text-sm font-medium text-gray-700 mb-2">ID Card</Text>
-                  {documents.idCard ? (
-                    <View className="relative">
-                      <Image
-                        source={{ uri: documents.idCard }}
-                        className="w-full h-40 rounded-xl"
-                        resizeMode="cover"
-                      />
-                      {isEditMode && (
-                        <TouchableOpacity
-                          onPress={() => removeDocument('idCard')}
-                          className="absolute top-2 right-2 bg-red-500 rounded-full p-2"
-                          activeOpacity={0.7}
-                        >
-                          <Ionicons name="trash" size={16} color="#fff" />
-                        </TouchableOpacity>
-                      )}
+              <View style={ss.expanded}>
+                {kycLocked && (
+                  <View style={ss.kycApprovedBanner}>
+                    <View style={ss.kycApprovedIcon}>
+                      <Ionicons name="shield-checkmark" size={18} color="#059669" />
                     </View>
-                  ) : (
-                    <TouchableOpacity
-                      onPress={() => pickDocument('idCard')}
-                      disabled={uploadingDocument || !isEditMode}
-                      className={`border-2 border-dashed border-gray-300 rounded-xl p-6 items-center ${
-                        !isEditMode ? 'opacity-50' : ''
-                      }`}
-                      activeOpacity={0.7}
-                    >
-                      <Ionicons name="cloud-upload-outline" size={32} color="#9ca3af" />
-                      <Text className="text-gray-600 text-sm mt-2">Upload ID Card</Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
+                    <View style={{ flex: 1, marginLeft: 10 }}>
+                      <Text style={ss.kycApprovedTitle}>Identity Verified</Text>
+                      <Text style={ss.kycApprovedText}>Contact support if you need to update documents.</Text>
+                    </View>
+                  </View>
+                )}
+
+                {/* ID Card */}
+                <DocUploadCard
+                  label="Government ID"
+                  hint="National ID, passport or driver's licence"
+                  icon="card-outline"
+                  uri={documents.idCard}
+                  locked={kycLocked}
+                  uploading={uploadingDocument}
+                  onPick={() => pickDocument('idCard')}
+                  onRemove={() => removeDocument('idCard')}
+                />
 
                 {/* Business License */}
-                <View className="mb-4">
-                  <Text className="text-sm font-medium text-gray-700 mb-2">Business License</Text>
-                  {documents.businessLicense ? (
-                    <View className="relative">
-                      <Image
-                        source={{ uri: documents.businessLicense }}
-                        className="w-full h-40 rounded-xl"
-                        resizeMode="cover"
-                      />
-                      {isEditMode && (
-                        <TouchableOpacity
-                          onPress={() => removeDocument('businessLicense')}
-                          className="absolute top-2 right-2 bg-red-500 rounded-full p-2"
-                          activeOpacity={0.7}
-                        >
-                          <Ionicons name="trash" size={16} color="#fff" />
+                <DocUploadCard
+                  label="Business License"
+                  hint="CAC certificate or business permit"
+                  icon="business-outline"
+                  uri={documents.businessLicense}
+                  locked={kycLocked}
+                  uploading={uploadingDocument}
+                  onPick={() => pickDocument('businessLicense')}
+                  onRemove={() => removeDocument('businessLicense')}
+                />
+
+                {/* Certifications */}
+                <Text style={[ss.inputLabel, { marginBottom: 10 }]}>Certifications <Text style={{ color: TEXT_GRAY, fontWeight: '400' }}>(Optional)</Text></Text>
+                <View style={ss.certGrid}>
+                  {documents.certification?.map((cert, i) => (
+                    <View key={i} style={ss.certThumb}>
+                      <Image source={{ uri: cert }} style={ss.certImg} resizeMode="cover" />
+                      {!kycLocked && (
+                        <TouchableOpacity onPress={() => removeDocument('certification', i)} style={ss.certRemove} activeOpacity={0.75}>
+                          <Ionicons name="close" size={11} color={WHITE} />
                         </TouchableOpacity>
                       )}
                     </View>
-                  ) : (
-                    <TouchableOpacity
-                      onPress={() => pickDocument('businessLicense')}
-                      disabled={uploadingDocument || !isEditMode}
-                      className={`border-2 border-dashed border-gray-300 rounded-xl p-6 items-center ${
-                        !isEditMode ? 'opacity-50' : ''
-                      }`}
-                      activeOpacity={0.7}
-                    >
-                      <Ionicons name="cloud-upload-outline" size={32} color="#9ca3af" />
-                      <Text className="text-gray-600 text-sm mt-2">Upload Business License</Text>
+                  ))}
+                  {!kycLocked && (
+                    <TouchableOpacity onPress={() => pickDocument('certification')} disabled={uploadingDocument} activeOpacity={0.75} style={ss.certAddBtn}>
+                      <Ionicons name="add" size={24} color={PRIMARY} />
+                      <Text style={{ fontSize: 10, color: PRIMARY, fontWeight: '700', marginTop: 2 }}>Add</Text>
                     </TouchableOpacity>
                   )}
                 </View>
-
-                {/* Certifications */}
-                <View className="mb-2">
-                  <Text className="text-sm font-medium text-gray-700 mb-2">
-                    Certifications (Optional)
-                  </Text>
-                  {documents.certification && documents.certification.length > 0 && (
-                    <View className="flex-row flex-wrap gap-2 mb-3">
-                      {documents.certification.map((cert, index) => (
-                        <View key={index} className="relative">
-                          <Image
-                            source={{ uri: cert }}
-                            className="w-24 h-24 rounded-xl"
-                            resizeMode="cover"
-                          />
-                          {isEditMode && (
-                            <TouchableOpacity
-                              onPress={() => removeDocument('certification', index)}
-                              className="absolute top-1 right-1 bg-red-500 rounded-full p-1"
-                              activeOpacity={0.7}
-                            >
-                              <Ionicons name="close" size={12} color="#fff" />
-                            </TouchableOpacity>
-                          )}
-                        </View>
-                      ))}
-                    </View>
-                  )}
-                  {isEditMode && (
-                    <TouchableOpacity
-                      onPress={() => pickDocument('certification')}
-                      disabled={uploadingDocument}
-                      className="border-2 border-dashed border-gray-300 rounded-xl p-6 items-center"
-                      activeOpacity={0.7}
-                    >
-                      <Ionicons name="add-circle-outline" size={32} color="#9ca3af" />
-                      <Text className="text-gray-600 text-sm mt-2">Add Certification</Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
-              </View>
-            )}
-          </View>
-
-          {/* Availability Section */}
-          <View className="bg-white rounded-2xl p-4 mb-4">
-            <TouchableOpacity
-              onPress={() => toggleSection('availability')}
-              className="flex-row items-center justify-between mb-3"
-            >
-              <View className="flex-row items-center">
-                <View className="w-10 h-10 rounded-xl bg-pink-50 items-center justify-center mr-3">
-                  <Ionicons name="time-outline" size={22} color="#ec4899" />
-                </View>
-                <Text className="text-base font-semibold text-gray-900">
-                  Availability Schedule
-                </Text>
-              </View>
-              <Ionicons
-                name={expandedSection === 'availability' ? 'chevron-up' : 'chevron-down'}
-                size={24}
-                color="#9ca3af"
-              />
-            </TouchableOpacity>
-
-            {expandedSection === 'availability' && (
-              <View className="pt-3 border-t border-gray-100">
-                {Object.keys(availability).map((day, index) => (
-                  <View
-                    key={day}
-                    className={`flex-row items-center justify-between py-3 ${
-                      index !== Object.keys(availability).length - 1
-                        ? 'border-b border-gray-100'
-                        : ''
-                    }`}
-                  >
-                    <View className="flex-row items-center flex-1">
-                      <Switch
-                        value={availability[day as keyof typeof availability].isAvailable}
-                        onValueChange={() => toggleDay(day)}
-                        disabled={!isEditMode}
-                        trackColor={{ false: '#e5e7eb', true: '#fce7f3' }}
-                        thumbColor={
-                          availability[day as keyof typeof availability].isAvailable
-                            ? '#ec4899'
-                            : '#9ca3af'
-                        }
-                        ios_backgroundColor="#e5e7eb"
-                      />
-                      <Text className="text-sm font-medium text-gray-900 ml-3 capitalize">
-                        {day}
-                      </Text>
-                    </View>
-                    {availability[day as keyof typeof availability].isAvailable && (
-                      <View className="flex-row items-center">
-                        <Text className="text-xs text-gray-600">
-                          {availability[day as keyof typeof availability].from} -{' '}
-                          {availability[day as keyof typeof availability].to}
-                        </Text>
-                      </View>
-                    )}
+                {uploadingDocument && (
+                  <View style={ss.uploadingRow}>
+                    <ActivityIndicator size="small" color={PRIMARY} />
+                    <Text style={{ color: TEXT_GRAY, fontSize: 13, marginLeft: 8 }}>Uploading...</Text>
                   </View>
-                ))}
+                )}
               </View>
             )}
           </View>
+
+          {/* Availability Schedule */}
+          <View style={[ss.card, expandedSection === 'availability' && ss.cardActive]}>
+            <SectionHeader
+              id="availability"
+              icon="time-outline"
+              title="Availability Schedule"
+              subtitle="When are you open for bookings?"
+              badge={offDays.length > 0 ? `${7 - offDays.length} days/wk` : 'All 7 days'}
+            />
+            {expandedSection === 'availability' && (
+              <View style={[ss.expanded, { gap: 8 }]}>
+                {Object.keys(availability).map((day) => {
+                  const slot = availability[day as keyof typeof availability];
+                  return (
+                    <View key={day} style={[ss.dayCard, !slot.isAvailable && ss.dayCardOff]}>
+                      <Switch
+                        value={slot.isAvailable}
+                        onValueChange={() => toggleDay(day)}
+                        trackColor={{ false: '#E5E7EB', true: '#FEE2F0' }}
+                        thumbColor={slot.isAvailable ? PRIMARY : '#D1D5DB'}
+                        ios_backgroundColor="#E5E7EB"
+                        style={{ transform: [{ scaleX: 0.88 }, { scaleY: 0.88 }] }}
+                      />
+                      <Text style={[ss.dayName, !slot.isAvailable && ss.dayNameOff]}>
+                        {day.charAt(0).toUpperCase() + day.slice(1)}
+                      </Text>
+                      {slot.isAvailable ? (
+                        <View style={ss.timePill}>
+                          <Ionicons name="time-outline" size={11} color={PRIMARY} />
+                          <Text style={ss.timePillText}>{slot.from} – {slot.to}</Text>
+                        </View>
+                      ) : (
+                        <View style={ss.offPill}>
+                          <Text style={ss.offPillText}>Closed</Text>
+                        </View>
+                      )}
+                    </View>
+                  );
+                })}
+              </View>
+            )}
+          </View>
+
         </View>
       </ScrollView>
 
-      {/* Save Button - Only show when in edit mode */}
-      {isEditMode && (
-        <View className="bg-white border-t border-gray-200 p-5">
-          <TouchableOpacity
-            onPress={handleSave}
-            disabled={saving}
-            className={`bg-pink-500 rounded-xl py-4 items-center ${
-              saving ? 'opacity-50' : ''
-            }`}
-            activeOpacity={0.8}
-          >
-            {saving ? (
-              <ActivityIndicator color="#ffffff" />
-            ) : (
-              <Text className="text-white font-semibold text-base">Save Changes</Text>
-            )}
-          </TouchableOpacity>
-        </View>
-      )}
+      {/* ── Save button ─────────────────────────────────────────────────────── */}
+      <View style={ss.footer}>
+        <TouchableOpacity onPress={handleSave} disabled={saving} activeOpacity={0.88} style={ss.saveBtn}>
+          <LinearGradient colors={['#F06292', '#E04079']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={ss.saveGradient}>
+            {saving ? <ActivityIndicator color={WHITE} /> : <Text style={ss.saveBtnText}>Save</Text>}
+          </LinearGradient>
+        </TouchableOpacity>
+      </View>
+
+      <LocationPicker
+        visible={showLocationPicker}
+        onClose={() => setShowLocationPicker(false)}
+        onSelectLocation={(picked) => {
+          setLocation({
+            type: 'Point',
+            coordinates: picked.coordinates as [number, number],
+            address: picked.address,
+            city: picked.city || '',
+            state: picked.state || '',
+            country: picked.country || 'Nigeria',
+          });
+        }}
+        currentLocation={location ? { coordinates: location.coordinates, address: location.address } : null}
+      />
+
       <ConfirmationModal
         visible={confirmModal.visible}
         title={confirmModal.title}
         message={confirmModal.message}
-        onConfirm={() => { confirmModal.onConfirm(); setConfirmModal(prev => ({...prev, visible: false})); }}
-        onCancel={() => setConfirmModal(prev => ({...prev, visible: false}))}
+        onConfirm={() => { confirmModal.onConfirm(); setConfirmModal(prev => ({ ...prev, visible: false })); }}
+        onCancel={() => setConfirmModal(prev => ({ ...prev, visible: false }))}
       />
-    </SafeAreaView>
+    </View>
   );
 };
 
 export default VendorStoreSettingsScreen;
+
+const SHADOW = Platform.select({
+  ios: { shadowColor: '#E04079', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.07, shadowRadius: 10 },
+  android: { elevation: 2 },
+});
+
+const ss = StyleSheet.create({
+  // ── Header ────────────────────────────────────────────────────────────────
+  header: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 16, paddingBottom: 12, backgroundColor: WHITE,
+    borderBottomWidth: 1, borderBottomColor: '#FAE8F0',
+  },
+  backBtn: {
+    width: 38, height: 38, borderRadius: 19,
+    backgroundColor: '#FEE2F0', alignItems: 'center', justifyContent: 'center',
+  },
+  headerTitle: { fontSize: 17, fontWeight: '800', color: TEXT_DARK, letterSpacing: -0.3 },
+
+  // ── Cover ─────────────────────────────────────────────────────────────────
+  coverWrap: { position: 'relative', marginBottom: 22 },
+  coverImg: { width: '100%', height: 190 },
+  coverGradientOverlay: {
+    position: 'absolute', bottom: 0, left: 0, right: 0, height: 90,
+  },
+  coverCameraBtn: {
+    position: 'absolute', top: 12, right: 12,
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: WHITE, alignItems: 'center', justifyContent: 'center',
+    ...Platform.select({ ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 4 }, android: { elevation: 4 } }),
+  },
+  coverNameWrap: {
+    position: 'absolute', bottom: 14, left: 100, right: 16,
+  },
+  coverName: {
+    fontSize: 16, fontWeight: '800', color: WHITE,
+    textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 5,
+  },
+  coverCategory: {
+    fontSize: 12, color: 'rgba(255,255,255,0.92)', fontWeight: '600', marginTop: 2,
+    textShadowColor: 'rgba(0,0,0,0.4)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 3,
+  },
+  avatarWrap: {
+    position: 'absolute', bottom: -36, left: 16,
+    width: 68, height: 68, borderRadius: 34, overflow: 'hidden',
+    borderWidth: 3, borderColor: WHITE,
+    ...Platform.select({ ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.18, shadowRadius: 6 }, android: { elevation: 6 } }),
+  },
+  avatar: { width: '100%', height: '100%' },
+  avatarCameraBadge: {
+    position: 'absolute', bottom: 2, right: 2,
+    width: 20, height: 20, borderRadius: 10,
+    backgroundColor: PRIMARY, alignItems: 'center', justifyContent: 'center',
+  },
+
+  // ── Sections container ────────────────────────────────────────────────────
+  sections: { paddingHorizontal: 14, paddingTop: 50, gap: 10 },
+
+  // ── Card ──────────────────────────────────────────────────────────────────
+  card: { backgroundColor: WHITE, borderRadius: 20, ...SHADOW },
+  cardActive: {
+    borderWidth: 1.5, borderColor: '#F9C8DB',
+    ...Platform.select({ ios: { shadowOpacity: 0.12, shadowRadius: 14 }, android: { elevation: 4 } }),
+  },
+
+  // ── Section header ────────────────────────────────────────────────────────
+  sectionHeader: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 16, paddingVertical: 15,
+  },
+  sectionIconWrap: {
+    width: 40, height: 40, borderRadius: 13,
+    backgroundColor: '#FEE2F0', alignItems: 'center', justifyContent: 'center',
+  },
+  sectionIconWrapActive: { backgroundColor: PRIMARY },
+  sectionTitle: { fontSize: 14, fontWeight: '800', color: TEXT_DARK, letterSpacing: -0.2 },
+  sectionSub:   { fontSize: 12, color: TEXT_GRAY, marginTop: 2 },
+  sectionBadge: {
+    alignSelf: 'flex-start', marginTop: 3,
+    backgroundColor: '#FEE2F0', borderRadius: 20,
+    paddingHorizontal: 8, paddingVertical: 2,
+  },
+  sectionBadgeText: { fontSize: 11, color: PRIMARY, fontWeight: '700' },
+  chevronWrap: {
+    width: 28, height: 28, borderRadius: 14,
+    backgroundColor: '#F5F5F8', alignItems: 'center', justifyContent: 'center',
+  },
+  chevronWrapActive: { backgroundColor: '#FEE2F0' },
+
+  // ── Expanded content ──────────────────────────────────────────────────────
+  expanded: { paddingHorizontal: 16, paddingBottom: 18, paddingTop: 4 },
+
+  // ── Inputs ────────────────────────────────────────────────────────────────
+  inputGroup: { marginBottom: 14 },
+  inputLabel: { fontSize: 12, fontWeight: '700', color: TEXT_DARK, marginBottom: 7, letterSpacing: 0.1 },
+  input: {
+    backgroundColor: '#FAF5F8',
+    borderRadius: 14, paddingHorizontal: 14, paddingVertical: 13,
+    fontSize: 14, color: TEXT_DARK,
+    borderWidth: 1.2, borderColor: '#EDE0E8',
+  },
+
+  // ── Segmented control (service type) ─────────────────────────────────────
+  segControl: { flexDirection: 'row', backgroundColor: '#F5EEF3', borderRadius: 14, padding: 4 },
+  segBtn: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 5, paddingVertical: 10, borderRadius: 10,
+  },
+  segBtnFirst: { borderTopLeftRadius: 10, borderBottomLeftRadius: 10 },
+  segBtnLast:  { borderTopRightRadius: 10, borderBottomRightRadius: 10 },
+  segBtnActive: {
+    backgroundColor: PRIMARY,
+    ...Platform.select({ ios: { shadowColor: PRIMARY, shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.3, shadowRadius: 6 }, android: { elevation: 3 } }),
+  },
+  segBtnText: { fontSize: 12, fontWeight: '700', color: TEXT_GRAY },
+  segBtnTextActive: { color: WHITE },
+  lockedNote: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    marginTop: 8, backgroundColor: '#FFFBEB',
+    borderRadius: 8, paddingHorizontal: 10, paddingVertical: 7,
+    borderWidth: 1, borderColor: '#FDE68A',
+  },
+  lockedNoteText: { fontSize: 11, color: '#92400E', fontWeight: '600' },
+
+  // ── Category chips ────────────────────────────────────────────────────────
+  chipGrid: { flexDirection: 'row', flexWrap: 'wrap', paddingTop: 4 },
+  chip: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 14, paddingVertical: 9,
+    borderRadius: 50, borderWidth: 1.5, borderColor: '#EDE0E8',
+    backgroundColor: '#FAF5F8',
+    marginRight: 8, marginBottom: 8,
+  },
+  chipActive: { backgroundColor: PRIMARY, borderColor: PRIMARY },
+  chipText: { fontSize: 13, fontWeight: '600', color: TEXT_DARK },
+  chipTextActive: { color: WHITE },
+
+  // ── Location ──────────────────────────────────────────────────────────────
+  locationConfirmed: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: '#F0FDF4', borderRadius: 14, padding: 12, marginBottom: 14,
+    borderWidth: 1, borderColor: '#BBF7D0',
+  },
+  locationConfirmedIcon: {
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: '#DCFCE7', alignItems: 'center', justifyContent: 'center',
+  },
+  locationConfirmedTitle: { fontSize: 13, fontWeight: '800', color: '#065F46' },
+  locationConfirmedSub:   { fontSize: 11, color: '#059669', marginTop: 1 },
+  changeLocBtn: {
+    paddingHorizontal: 12, paddingVertical: 6,
+    backgroundColor: WHITE, borderRadius: 20,
+    borderWidth: 1, borderColor: '#059669',
+  },
+  changeLocText: { fontSize: 12, color: '#059669', fontWeight: '700' },
+  locationBtn: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: '#FEF6FA', borderRadius: 16,
+    padding: 14, marginBottom: 14,
+    borderWidth: 1.5, borderColor: '#F9C8DB',
+  },
+  locationBtnIcon: {
+    width: 40, height: 40, borderRadius: 20,
+    backgroundColor: '#FEE2F0', alignItems: 'center', justifyContent: 'center',
+  },
+  locationBtnTitle: { fontSize: 14, fontWeight: '700', color: PRIMARY },
+  locationBtnSub:   { fontSize: 11, color: TEXT_GRAY, marginTop: 2 },
+  locationBtnSecondary: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: '#F5F5F8', borderRadius: 14,
+    paddingVertical: 12, paddingHorizontal: 14,
+    borderWidth: 1, borderColor: '#EBEBF0',
+  },
+  locationBtnSecondaryIcon: {
+    width: 32, height: 32, borderRadius: 16,
+    backgroundColor: '#EBEBF0', alignItems: 'center', justifyContent: 'center',
+  },
+  locationBtnSecondaryText: { fontSize: 13, fontWeight: '600', color: TEXT_GRAY },
+  radiusRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  radiusBadge: {
+    paddingHorizontal: 14, paddingVertical: 13,
+    backgroundColor: '#FEE2F0', borderRadius: 14,
+    borderWidth: 1.2, borderColor: '#F9C8DB',
+  },
+  radiusBadgeText: { fontSize: 13, fontWeight: '800', color: PRIMARY },
+  errorNote: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    backgroundColor: '#FEF2F2', borderRadius: 8, padding: 8, marginBottom: 10,
+  },
+  errorNoteText: { fontSize: 12, color: '#DC2626', fontWeight: '600' },
+
+  // ── Documents ─────────────────────────────────────────────────────────────
+  kycApprovedBanner: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: '#F0FDF4', borderRadius: 14, padding: 12, marginBottom: 16,
+    borderWidth: 1, borderColor: '#BBF7D0',
+  },
+  kycApprovedIcon: {
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: '#DCFCE7', alignItems: 'center', justifyContent: 'center',
+  },
+  kycApprovedTitle: { fontSize: 13, fontWeight: '800', color: '#065F46' },
+  kycApprovedText: { fontSize: 11, color: '#059669', marginTop: 2, lineHeight: 16 },
+
+  docCard: {
+    backgroundColor: '#FAF5F8', borderRadius: 16,
+    padding: 12, marginBottom: 12,
+    borderWidth: 1.2, borderColor: '#EDE0E8',
+  },
+  docCardHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
+  docCardIcon: {
+    width: 34, height: 34, borderRadius: 11,
+    backgroundColor: '#FEE2F0', alignItems: 'center', justifyContent: 'center',
+  },
+  docCardLabel: { fontSize: 13, fontWeight: '800', color: TEXT_DARK },
+  docCardHint:  { fontSize: 11, color: TEXT_GRAY, marginTop: 1 },
+  docRemoveChip: {
+    width: 30, height: 30, borderRadius: 15,
+    backgroundColor: '#FEF2F2', borderWidth: 1, borderColor: '#FECACA',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  docImg: { width: '100%', height: 140, borderRadius: 12 },
+  uploadBox: {
+    borderWidth: 1.5, borderStyle: 'dashed', borderColor: '#F9C8DB',
+    borderRadius: 14, backgroundColor: '#FEF6FA',
+    overflow: 'hidden',
+  },
+  uploadBoxInner: { paddingVertical: 22, alignItems: 'center', gap: 4 },
+  uploadBoxTitle: { fontSize: 13, fontWeight: '700', color: PRIMARY },
+  uploadBoxSub:   { fontSize: 11, color: TEXT_GRAY },
+  uploadingRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10 },
+
+  certGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  certThumb: { position: 'relative' },
+  certImg: { width: 78, height: 78, borderRadius: 12 },
+  certRemove: {
+    position: 'absolute', top: 4, right: 4,
+    width: 20, height: 20, borderRadius: 10,
+    backgroundColor: 'rgba(239,68,68,0.9)', alignItems: 'center', justifyContent: 'center',
+  },
+  certAddBtn: {
+    width: 78, height: 78, borderRadius: 12,
+    borderWidth: 1.5, borderStyle: 'dashed', borderColor: PRIMARY,
+    alignItems: 'center', justifyContent: 'center', backgroundColor: '#FEF6FA',
+  },
+
+  // ── Availability ──────────────────────────────────────────────────────────
+  dayCard: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    backgroundColor: '#FAF5F8', borderRadius: 14,
+    paddingHorizontal: 12, paddingVertical: 10,
+    borderWidth: 1.2, borderColor: '#EDE0E8',
+  },
+  dayCardOff: { backgroundColor: '#F9F9FB', borderColor: '#EBEBF0' },
+  dayName:    { flex: 1, fontSize: 14, fontWeight: '700', color: TEXT_DARK, textTransform: 'capitalize' },
+  dayNameOff: { color: '#B0B0C0' },
+  timePill: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    backgroundColor: '#FEE2F0', borderRadius: 20,
+    paddingHorizontal: 10, paddingVertical: 5,
+  },
+  timePillText: { fontSize: 11, fontWeight: '700', color: PRIMARY },
+  offPill: {
+    backgroundColor: '#F3F4F6', borderRadius: 20,
+    paddingHorizontal: 10, paddingVertical: 5,
+  },
+  offPillText: { fontSize: 11, fontWeight: '700', color: '#9CA3AF' },
+
+  // ── Footer ────────────────────────────────────────────────────────────────
+  footer: {
+    backgroundColor: WHITE, paddingHorizontal: 16, paddingTop: 12, paddingBottom: 16,
+    borderTopWidth: 1, borderTopColor: '#FAE8F0',
+  },
+  saveBtn: { borderRadius: 18, overflow: 'hidden' },
+  saveGradient: { paddingVertical: 16, alignItems: 'center' },
+  saveBtnText: { fontSize: 15, fontWeight: '800', color: WHITE, letterSpacing: 0.3 },
+});

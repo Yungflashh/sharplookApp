@@ -2,28 +2,34 @@ import React, { useState } from 'react';
 import {
   View,
   Text,
-  Image,
+  StyleSheet,
   ScrollView,
-  KeyboardAvoidingView,
-  Platform,
   TouchableOpacity,
+  TextInput,
+  Image,
+  ActivityIndicator,
   Dimensions,
+  Platform,
+  StatusBar,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { AuthStackParamList } from '@/types/navigation.types';
 import { loginUser } from '@/utils/authHelper';
-import { Input, PasswordInput, Button, SocialLoginButton } from '@/components/ui/forms';
 
 type LoginScreenNavigationProp = NativeStackNavigationProp<AuthStackParamList, 'Login'>;
 
+const { width: SW } = Dimensions.get('window');
+const P = '#E91E63';
+const TEXT = '#1A1A1A';
+const HINT = '#9CA3AF';
+const BG = '#FFF5F9';
+const CARD = '#FFFFFF';
+
 const LoginScreen = () => {
-  const navigation = useNavigation<NavProp>();
-  const route = useRoute();
-  const params = route.params as { message?: string } | undefined;
+  const navigation = useNavigation<LoginScreenNavigationProp>();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -31,21 +37,11 @@ const LoginScreen = () => {
   const [rememberMe, setRememberMe] = useState(false);
   const [loading, setLoading] = useState(false);
   const [generalError, setGeneralError] = useState('');
-  const [errors, setErrors] = useState({
-    email: '',
-    password: '',
-  });
-
-  // Check if device is a tablet (iPad)
-  const { width } = Dimensions.get('window');
-  const isTablet = width >= 768;
+  const [errors, setErrors] = useState({ email: '', password: '' });
 
   const validateForm = () => {
     let valid = true;
-    const newErrors = {
-      email: '',
-      password: '',
-    };
+    const newErrors = { email: '', password: '' };
 
     if (!email) {
       newErrors.email = 'Email is required';
@@ -69,187 +65,245 @@ const LoginScreen = () => {
 
   const handleLogin = async () => {
     setGeneralError('');
-
-    if (!validateForm()) {
-      return;
-    }
+    if (!validateForm()) return;
 
     setLoading(true);
     let shouldResetLoading = true;
 
     try {
       const result = await loginUser(email, password);
-      console.log('Login result:', result);
-
       if (result.success) {
-        console.log('✅ Login successful! Auth state updated.');
-        shouldResetLoading = false; // Don't reset if navigating away
+        shouldResetLoading = false;
       } else {
         const errorMessage = result.error || 'Invalid credentials. Please try again.';
-
-        // Check for verification required first (more specific)
         if (errorMessage.toLowerCase().includes('verify')) {
-          shouldResetLoading = false; // Don't reset if navigating away
-          setLoading(false); // Reset before navigation
-          // Navigate to OTP verification screen
+          shouldResetLoading = false;
+          setLoading(false);
           navigation.navigate('VerifyOtp', { email });
-          return; // Exit early, don't show error
+          return;
         }
-        
         setGeneralError(errorMessage);
-        
         if (errorMessage.toLowerCase().includes('email') && !errorMessage.toLowerCase().includes('verify')) {
-          setErrors((prev) => ({
-            ...prev,
-            email: 'Please check your email address',
-          }));
+          setErrors(prev => ({ ...prev, email: 'Please check your email address' }));
         }
-        setErrors({ general: msg });
       }
     } catch {
-      setErrors({ general: 'An unexpected error occurred. Please try again.' });
+      setGeneralError('An unexpected error occurred. Please try again.');
     } finally {
-      if (shouldResetLoading) {
-        setLoading(false);
-      }
+      if (shouldResetLoading) setLoading(false);
     }
   };
 
-  const handleForgotPassword = () => {
-    navigation.navigate('ForgotPassword');
-  };
-
-  const handleRegister = () => {
-    navigation.navigate('Register');
-  };
-
   return (
-    <View className="flex-1 bg-white">
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        className="flex-1"
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+    <SafeAreaView style={s.safe} edges={['top', 'bottom']}>
+      <StatusBar barStyle="dark-content" backgroundColor={BG} />
+
+      <ScrollView
+        contentContainerStyle={s.scrollContent}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+        bounces={false}
       >
-        <ScrollView
-          contentContainerStyle={{
-            flexGrow: 1,
-            paddingHorizontal: isTablet ? 80 : 24,
-            paddingTop: isTablet ? 80 : 60,
-            paddingBottom: 40,
-            justifyContent: 'center',
-          }}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-          bounces={false}
-        >
-          {/* Content Container - Centered on iPad */}
-          <View style={{ maxWidth: isTablet ? 500 : undefined, alignSelf: 'center', width: '100%' }}>
-            {/* Logo */}
-            <View className="items-center mb-10">
-              <Image
-                source={require('@/assets/app-icon.jpg')}
-                className="w-32 h-20"
-                resizeMode="contain"
-              />
-            </View>
+        {/* Logo */}
+        <View style={s.logoWrap}>
+          <Image
+            source={require('../../../assets/lookrealMainLogo.png')}
+            style={s.logo}
+            resizeMode="contain"
+          />
+        </View>
 
-            {/* Header */}
-            <View className="mb-8">
-              <Text className="text-3xl font-bold text-center text-black mb-2">
-                Welcome Back
-              </Text>
-              <Text className="text-base text-center text-gray-700">
-                Sign in to continue your journey
-              </Text>
-            </View>
+        {/* Heading */}
+        <Text style={s.title}>Welcome back</Text>
+        <Text style={s.subtitle}>Sign-in to continue</Text>
 
-            {/* General Error */}
-            {generalError ? (
-              <View className="bg-red-50 border border-red-200 rounded-xl p-4 mb-6 flex-row items-start">
-                <Ionicons
-                  name="alert-circle"
-                  size={20}
-                  color="#DC2626"
-                  style={{ marginRight: 8, marginTop: 2 }}
-                />
-                <Text className="text-red-600 text-sm flex-1">{generalError}</Text>
-              </View>
-            ) : null}
-
-            {/* Email Input */}
-            <Input
-              label="Enter E-mail Address"
-              placeholder=""
-              value={email}
-              onChangeText={(text) => {
-                setEmail(text);
-                setErrors({ ...errors, email: '' });
-                setGeneralError('');
-              }}
-              error={errors.email}
-              autoCapitalize="none"
-              keyboardType="email-address"
-              editable={!loading}
-              textContentType="emailAddress"
-              autoComplete="email"
-            />
-
-            {/* Password Input */}
-            <PasswordInput
-              label="Password"
-              placeholder=""
-              value={password}
-              onChangeText={(text) => {
-                setPassword(text);
-                setErrors({ ...errors, password: '' });
-                setGeneralError('');
-              }}
-              error={errors.password}
-              editable={!loading}
-              containerClassName="mb-2"
-              textContentType="password"
-              autoComplete="password"
-            />
-
-            {/* Forgot Password */}
-            <View className="flex-row justify-end mb-6">
-              <TouchableOpacity
-                onPress={handleForgotPassword}
-                disabled={loading}
-                activeOpacity={0.7}
-              >
-                <Text className="text-sm text-pink-600 font-semibold">
-                  Forgot Password?
-                </Text>
-              </TouchableOpacity>
-            </View>
-
-            {/* Login Button */}
-            <Button
-              onPress={handleLogin}
-              loading={loading}
-              disabled={loading}
-              containerClassName="mb-6"
-            >
-              Login
-            </Button>
-
-            {/* Register Link */}
-            <View className="flex-row justify-center items-center">
-              <Text className="text-base text-gray-700">Don`t have an account? </Text>
-              <TouchableOpacity
-                onPress={handleRegister}
-                disabled={loading}
-                activeOpacity={0.7}
-              >
-                <Text className="text-base text-pink-600 font-bold">Register Now</Text>
-              </TouchableOpacity>
-            </View>
+        {/* General error banner */}
+        {generalError ? (
+          <View style={s.errorBanner}>
+            <Ionicons name="alert-circle" size={16} color="#DC2626" />
+            <Text style={s.errorBannerTxt}>{generalError}</Text>
           </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </View>
+        ) : null}
+
+        {/* Email */}
+        <Text style={s.label}>Email</Text>
+        <View style={[s.inputWrap, !!errors.email && s.inputWrapError]}>
+          <TextInput
+            style={s.input}
+            value={email}
+            onChangeText={t => {
+              setEmail(t);
+              setErrors(p => ({ ...p, email: '' }));
+              setGeneralError('');
+            }}
+            placeholder="example@gmail.com"
+            placeholderTextColor={HINT}
+            autoCapitalize="none"
+            keyboardType="email-address"
+            editable={!loading}
+            textContentType="emailAddress"
+            autoComplete="email"
+          />
+        </View>
+        {errors.email ? <Text style={s.fieldError}>{errors.email}</Text> : null}
+
+        {/* Password */}
+        <Text style={[s.label, s.labelSpaced]}>Password</Text>
+        <View style={[s.inputWrap, !!errors.password && s.inputWrapError]}>
+          <TextInput
+            style={s.input}
+            value={password}
+            onChangeText={t => {
+              setPassword(t);
+              setErrors(p => ({ ...p, password: '' }));
+              setGeneralError('');
+            }}
+            placeholder="••••••••"
+            placeholderTextColor={HINT}
+            secureTextEntry={!showPassword}
+            editable={!loading}
+            textContentType="password"
+            autoComplete="password"
+          />
+          <TouchableOpacity
+            onPress={() => setShowPassword(v => !v)}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Ionicons
+              name={showPassword ? 'eye-off-outline' : 'eye-outline'}
+              size={20}
+              color={P}
+            />
+          </TouchableOpacity>
+        </View>
+        {errors.password ? <Text style={s.fieldError}>{errors.password}</Text> : null}
+
+        {/* Remember me + Forgot password */}
+        <View style={s.rememberRow}>
+          <TouchableOpacity
+            style={s.checkRow}
+            onPress={() => setRememberMe(v => !v)}
+            activeOpacity={0.7}
+          >
+            <View style={[s.checkbox, rememberMe && s.checkboxChecked]}>
+              {rememberMe && <Ionicons name="checkmark" size={11} color="#fff" />}
+            </View>
+            <Text style={s.rememberTxt}>Remember me</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() => navigation.navigate('ForgotPassword')}
+            disabled={loading}
+            activeOpacity={0.7}
+          >
+            <Text style={s.forgotTxt}>Forgot Password?</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Log In button */}
+        <TouchableOpacity
+          style={[s.loginBtn, loading && s.loginBtnDim]}
+          onPress={handleLogin}
+          disabled={loading}
+          activeOpacity={0.85}
+        >
+          {loading
+            ? <ActivityIndicator size="small" color="#fff" />
+            : <Text style={s.loginBtnTxt}>Log In</Text>
+          }
+        </TouchableOpacity>
+
+        {/* Sign up link */}
+        <View style={s.signupRow}>
+          <Text style={s.signupTxt}>Don't have any account? </Text>
+          <TouchableOpacity
+            onPress={() => navigation.navigate('Register')}
+            disabled={loading}
+            activeOpacity={0.7}
+          >
+            <Text style={s.signupLink}>Sign Up</Text>
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
+    </SafeAreaView>
   );
 };
+
+const s = StyleSheet.create({
+  safe: { flex: 1, backgroundColor: BG },
+  scrollContent: {
+    flexGrow: 1,
+    paddingHorizontal: SW * 0.07,
+    paddingVertical: 40,
+    justifyContent: 'center',
+  },
+
+  logoWrap: { alignItems: 'center', marginBottom: 24 },
+  logo: { width: SW * 0.32, height: 68 },
+
+  title: {
+    fontSize: 26, fontWeight: '800', color: TEXT,
+    textAlign: 'center', marginBottom: 6,
+  },
+  subtitle: {
+    fontSize: 14, color: HINT,
+    textAlign: 'center', marginBottom: 28,
+  },
+
+  errorBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: '#FEF2F2', borderRadius: 10,
+    paddingHorizontal: 14, paddingVertical: 12,
+    marginBottom: 16,
+  },
+  errorBannerTxt: { flex: 1, fontSize: 13, color: '#DC2626' },
+
+  label: { fontSize: 14, fontWeight: '600', color: TEXT, marginBottom: 8 },
+  labelSpaced: { marginTop: 18 },
+
+  inputWrap: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: CARD, borderRadius: 14,
+    paddingHorizontal: 16,
+    paddingVertical: Platform.OS === 'ios' ? 16 : 4,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06, shadowRadius: 4, elevation: 2,
+  },
+  inputWrapError: { borderWidth: 1.5, borderColor: '#DC2626' },
+  input: { flex: 1, fontSize: 15, color: TEXT },
+  fieldError: { fontSize: 12, color: '#DC2626', marginTop: 4 },
+
+  rememberRow: {
+    flexDirection: 'row', alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 18, marginBottom: 28,
+  },
+  checkRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  checkbox: {
+    width: 18, height: 18, borderRadius: 4,
+    borderWidth: 1.5, borderColor: HINT,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  checkboxChecked: { backgroundColor: P, borderColor: P },
+  rememberTxt: { fontSize: 13, color: TEXT },
+  forgotTxt: { fontSize: 13, color: P, fontWeight: '600' },
+
+  loginBtn: {
+    backgroundColor: P, borderRadius: 50,
+    paddingVertical: 16,
+    alignItems: 'center', justifyContent: 'center',
+    shadowColor: P, shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3, shadowRadius: 10, elevation: 6,
+    marginBottom: 28,
+  },
+  loginBtnDim: { opacity: 0.7 },
+  loginBtnTxt: { fontSize: 16, fontWeight: '700', color: '#fff', letterSpacing: 0.3 },
+
+  signupRow: {
+    flexDirection: 'row', justifyContent: 'center', alignItems: 'center',
+  },
+  signupTxt: { fontSize: 14, color: HINT },
+  signupLink: { fontSize: 14, color: P, fontWeight: '700' },
+});
 
 export default LoginScreen;

@@ -1,10 +1,9 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
   TouchableOpacity,
   ScrollView,
-  FlatList,
   TextInput,
   Image,
   ActivityIndicator,
@@ -339,7 +338,6 @@ const AddEditProductScreen: React.FC = () => {
   };
 
   const handleSave = async () => {
-    if (submittingRef.current) return;
     if (!validateForm()) return;
     try {
       setLoading(true);
@@ -399,7 +397,6 @@ const AddEditProductScreen: React.FC = () => {
       toast.error('Error', msg);
     } finally {
       setLoading(false);
-      submittingRef.current = false;
     }
   };
 
@@ -569,16 +566,6 @@ const AddEditProductScreen: React.FC = () => {
                 );
               })}
             </ScrollView>
-          )}
-        </View>
-
-        {/* ── Basic Info ──────────────────────────────────────────────── */}
-        <View style={styles.card}>
-          <View style={styles.sectionHeaderRow}>
-            <View style={[styles.sectionIconWrap, { backgroundColor: '#F0F9FF' }]}>
-              <Ionicons name="create-outline" size={15} color="#3B82F6" />
-            </View>
-            <Text style={styles.sectionTitle}>Basic Information</Text>
           </View>
 
           {/* Brand */}

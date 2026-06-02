@@ -1,7 +1,7 @@
 import React from 'react';
-import { Platform } from 'react-native';
+import { Platform, View } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { Ionicons } from '@expo/vector-icons';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { VendorTabParamList } from '@/types/navigation.types';
 
@@ -13,35 +13,58 @@ import VendorProductManagementScreen from '@/screens/vendor/Vendorproductmanagem
 
 const Tab = createBottomTabNavigator<VendorTabParamList>();
 
+const P = '#E91E63';
+
+interface TabIconProps {
+  name: string;
+  focused: boolean;
+  color: string;
+}
+
+const TabIcon = ({ name, focused, color }: TabIconProps) => (
+  <View style={{ alignItems: 'center', justifyContent: 'center' }}>
+    <MaterialCommunityIcons name={name as any} size={25} color={color} />
+    {focused && (
+      <View
+        style={{
+          width: 18,
+          height: 3,
+          borderRadius: 2,
+          backgroundColor: P,
+          marginTop: 4,
+        }}
+      />
+    )}
+  </View>
+);
+
 const VendorTabNavigator = () => {
   const insets = useSafeAreaInsets();
 
   return (
     <Tab.Navigator
       screenOptions={{
-        tabBarActiveTintColor: '#ec4899',
-        tabBarInactiveTintColor: '#9ca3af',
+        tabBarActiveTintColor: P,
+        tabBarInactiveTintColor: '#C0C0C0',
         tabBarStyle: {
-          backgroundColor: '#ffffff',
-          borderTopColor: '#f3f4f6',
+          backgroundColor: '#fff',
+          borderTopColor: '#F0F0F0',
           borderTopWidth: 1,
-          height: Platform.OS === 'ios' ? 88 : 64 + Math.max(insets.bottom, 0),
-          paddingBottom: Platform.OS === 'ios' ? 28 : Math.max(insets.bottom, 8),
-          paddingTop: 10,
-          elevation: 0,
-          shadowColor: '#000000',
+          height: Platform.OS === 'ios' ? 90 : 66 + Math.max(insets.bottom, 0),
+          paddingBottom: Platform.OS === 'ios' ? 30 : Math.max(insets.bottom, 10),
+          paddingTop: 8,
+          shadowColor: '#000',
           shadowOffset: { width: 0, height: -4 },
-          shadowOpacity: 0.05,
-          shadowRadius: 8,
+          shadowOpacity: 0.07,
+          shadowRadius: 12,
+          elevation: 12,
         },
         tabBarLabelStyle: {
-          fontSize: 11,
+          fontSize: 10,
           fontWeight: '600',
-          marginTop: 2,
+          marginTop: 0,
         },
-        tabBarItemStyle: {
-          paddingVertical: 4,
-        },
+        tabBarItemStyle: { paddingVertical: 0 },
         headerShown: false,
       }}
     >
@@ -49,8 +72,12 @@ const VendorTabNavigator = () => {
         name="Dashboard"
         component={VendorDashboardScreen}
         options={{
-          tabBarIcon: ({ color, size, focused }) => (
-            <Ionicons name={focused ? 'home' : 'home-outline'} size={size} color={color} />
+          tabBarIcon: ({ color, focused }) => (
+            <TabIcon
+              name={focused ? 'view-dashboard' : 'view-dashboard-outline'}
+              focused={focused}
+              color={color}
+            />
           ),
         }}
       />
@@ -59,8 +86,12 @@ const VendorTabNavigator = () => {
         name="Bookings"
         component={VendorBooking}
         options={{
-          tabBarIcon: ({ color, size, focused }) => (
-            <Ionicons name={focused ? 'calendar' : 'calendar-outline'} size={size} color={color} />
+          tabBarIcon: ({ color, focused }) => (
+            <TabIcon
+              name={focused ? 'calendar-check' : 'calendar-check-outline'}
+              focused={focused}
+              color={color}
+            />
           ),
         }}
       />
@@ -69,8 +100,13 @@ const VendorTabNavigator = () => {
         name="My Products"
         component={VendorProductManagementScreen}
         options={{
-          tabBarIcon: ({ color, size, focused }) => (
-            <Ionicons name={focused ? 'briefcase' : 'briefcase-outline'} size={size} color={color} />
+          tabBarLabel: 'Products',
+          tabBarIcon: ({ color, focused }) => (
+            <TabIcon
+              name={focused ? 'package-variant' : 'package-variant-closed'}
+              focused={focused}
+              color={color}
+            />
           ),
         }}
       />
@@ -79,8 +115,12 @@ const VendorTabNavigator = () => {
         name="Services"
         component={VendorServicesScreen}
         options={{
-          tabBarIcon: ({ color, size, focused }) => (
-            <Ionicons name={focused ? 'flower' : 'flower-outline'} size={size} color={color} />
+          tabBarIcon: ({ color, focused }) => (
+            <TabIcon
+              name={focused ? 'scissors-cutting' : 'scissors-cutting'}
+              focused={focused}
+              color={color}
+            />
           ),
         }}
       />
@@ -89,8 +129,12 @@ const VendorTabNavigator = () => {
         name="Profile"
         component={VendorProfileScreen}
         options={{
-          tabBarIcon: ({ color, size, focused }) => (
-            <Ionicons name={focused ? 'person' : 'person-outline'} size={size} color={color} />
+          tabBarIcon: ({ color, focused }) => (
+            <TabIcon
+              name={focused ? 'account-circle' : 'account-circle-outline'}
+              focused={focused}
+              color={color}
+            />
           ),
         }}
       />

@@ -95,7 +95,9 @@ const ProductDetailScreen: React.FC = () => {
   const [selectedVariants, setSelectedVariants] = useState<Record<string, string>>({});
   const [quantity, setQuantity] = useState(1);
   const [addingToCart, setAddingToCart] = useState(false);
+  const addingRef = useRef(false);
   const [confirmModal, setConfirmModal] = useState({ visible: false, title: '', message: '', onConfirm: () => {} });
+  const navTop = insets.top + 8;
 
   useEffect(() => { fetchProduct(); }, [productId]);
 
@@ -105,8 +107,7 @@ const ProductDetailScreen: React.FC = () => {
       const response = await productAPI.getProductById(productId);
       if (response.success) setProduct(response.data.product);
     } catch (error) {
-      const apiError = handleAPIError(error);
-      toast.error('Error', apiError.message);
+      toast.error('Error', handleAPIError(error).message);
       navigation.goBack();
     } finally {
       setLoading(false);
@@ -116,9 +117,7 @@ const ProductDetailScreen: React.FC = () => {
   const handleAddToCart = async () => {
     if (!product || addingRef.current) return;
     if (product.variants && product.variants.length > 0) {
-      const allSelected = product.variants.every((variant) => selectedVariants[variant.name]);
-
-      if (!allSelected) {
+      if (!product.variants.every((v) => selectedVariants[v.name])) {
         toast.error('Select Options', 'Please select all product options');
         return;
       }
@@ -140,15 +139,7 @@ const ProductDetailScreen: React.FC = () => {
         message: `${product.name} has been added to your cart.`,
         onConfirm: () => navigation.navigate('Cart'),
       });
-
-      setConfirmModal({
-        visible: true,
-        title: 'Success',
-        message: 'Product added to cart',
-        onConfirm: () => navigation.navigate('Cart'),
-      });
     } catch (error) {
-      console.error('Add to cart error:', error);
       toast.error('Error', 'Failed to add product to cart');
     } finally {
       setAddingToCart(false);
@@ -166,7 +157,6 @@ const ProductDetailScreen: React.FC = () => {
     try {
       await Share.share({
         message: `Check out ${product.name} on LookReal!\nhttps://lookreal.beauty/share/product/${product._id}`,
-        url: `https://lookreal.beauty/share/product/${product._id}`,
         title: product.name,
       });
     } catch {}
@@ -191,14 +181,12 @@ const ProductDetailScreen: React.FC = () => {
   const totalImages = product.images?.length || 0;
 
   return (
-    <SafeAreaView className="flex-1 bg-white" edges={['top', 'left', 'right']}>
-      {}
-      <View className="flex-row items-center justify-between px-5 py-4 bg-white border-b border-gray-100">
-        <TouchableOpacity
-          onPress={() => navigation.goBack()}
-          className="w-10 h-10 rounded-full bg-gray-100 items-center justify-center"
-        >
-          <Ionicons name="arrow-back" size={22} color="#000" />
+    <SafeAreaView style={styles.root} edges={['top', 'left', 'right']}>
+
+      {/* ── Nav Bar (floating over image) ─────────────────────────────── */}
+      <View style={[styles.navBar, { top: navTop }]} pointerEvents="box-none">
+        <TouchableOpacity onPress={() => navigation.goBack()} activeOpacity={0.85} style={styles.navBtn}>
+          <Ionicons name="arrow-back" size={20} color="#1C1C1E" />
         </TouchableOpacity>
         <View style={styles.navRight}>
           <TouchableOpacity onPress={handleShare} activeOpacity={0.85} style={styles.navBtn}>
@@ -293,22 +281,48 @@ const ProductDetailScreen: React.FC = () => {
             )}
           </View>
 
-          {/* Seller Info */}
-          <TouchableOpacity
-            onPress={() => navigation.navigate('VendorDetail', { vendorId: product.seller._id })}
-            className="bg-gray-50 p-4 rounded-2xl mb-6"
-          >
-            <Text className="text-gray-900 text-base font-bold mb-3">Sold by:</Text>
-            <View className="flex-row items-center">
-              {product.seller.avatar ? (
-                <Image
-                  source={{ uri: product.seller.avatar }}
-                  className="w-12 h-12 rounded-full"
-                />
-              ) : (
-                <View className="w-12 h-12 rounded-full bg-pink-100 items-center justify-center">
-                  <Ionicons name="person" size={24} color="#eb278d" />
-                </View>
+          {/* Stock badge */}
+          <View style={[
+            styles.stockBadge,
+            product.stock === 0 ? styles.stockBadgeRed
+            : product.stock < 10 ? styles.stockBadgeOrange
+            : styles.stockBadgeGreen,
+          ]}>
+            <Ionicons
+              name={product.stock === 0 ? 'close-circle-outline' : 'checkmark-circle-outline'}
+              size={13}
+              color={product.stock === 0 ? '#EF4444' : product.stock < 10 ? '#F97316' : '#10B981'}
+            />
+            <Text style={[
+              styles.stockBadgeText,
+              product.stock === 0 ? { color: '#EF4444' }
+              : product.stock < 10 ? { color: '#F97316' }
+              : { color: '#10B981' },
+            ]}>
+              {product.stock === 0 ? 'Out of Stock' : product.stock < 10 ? `Only ${product.stock} left` : `${product.stock} in Stock`}
+            </Text>
+          </View>
+
+          {/* Stats row */}
+          {(product.totalOrders !== undefined || product.totalViews !== undefined) && (
+            <View style={styles.statsRow}>
+              <View style={styles.statCell}>
+                <Text style={styles.statValue}>{product.totalOrders ?? 0}</Text>
+                <Text style={styles.statLabel}>Sold</Text>
+              </View>
+              <View style={styles.statDivider} />
+              <View style={styles.statCell}>
+                <Text style={styles.statValue}>{product.stock}</Text>
+                <Text style={styles.statLabel}>Stock</Text>
+              </View>
+              {product.totalViews !== undefined && (
+                <>
+                  <View style={styles.statDivider} />
+                  <View style={styles.statCell}>
+                    <Text style={styles.statValue}>{product.totalViews}</Text>
+                    <Text style={styles.statLabel}>Views</Text>
+                  </View>
+                </>
               )}
             </View>
           )}
@@ -478,64 +492,31 @@ const ProductDetailScreen: React.FC = () => {
 
       {/* ── Bottom Actions ───────────────────────────────────────────────── */}
       {product.stock > 0 && (
-        <View
-          className="bg-white px-5 border-t border-gray-100"
-          style={{
-            paddingTop: 12,
-            paddingBottom: Math.max(insets.bottom, 12),
-            ...Platform.select({
-              ios: {
-                shadowColor: '#000',
-                shadowOffset: { width: 0, height: -4 },
-                shadowOpacity: 0.1,
-                shadowRadius: 8,
-              },
-              android: { elevation: 8 },
-            }),
-          }}
-        >
-          <View className="flex-row" style={{ gap: 12 }}>
-            <TouchableOpacity
-              onPress={handleAddToCart}
-              disabled={addingToCart}
-              className="flex-1 bg-white border-2 border-pink-500 rounded-2xl items-center justify-center"
-              style={{ paddingVertical: 14 }}
-              activeOpacity={0.8}
-            >
-              {addingToCart ? (
-                <ActivityIndicator size="small" color="#eb278d" />
-              ) : (
-                <View className="flex-row items-center">
-                  <Ionicons name="cart-outline" size={20} color="#eb278d" />
-                  <Text className="text-pink-600 text-base font-bold ml-2">Add to Cart</Text>
-                </View>
-              )}
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              onPress={handleBuyNow}
-              disabled={addingToCart}
-              className="flex-1"
-              activeOpacity={0.8}
-            >
-              <LinearGradient
-                colors={['#eb278d', '#f472b6']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={{ paddingVertical: 14, borderRadius: 16, alignItems: 'center' }}
-              >
-                <Text className="text-white text-base font-bold">Buy Now</Text>
-              </LinearGradient>
-            </TouchableOpacity>
-          </View>
+        <View style={[styles.bottomBar, { paddingBottom: Math.max(insets.bottom, 12) }]}>
+          <TouchableOpacity onPress={handleAddToCart} disabled={addingToCart} activeOpacity={0.8} style={styles.cartBtn}>
+            {addingToCart ? (
+              <ActivityIndicator size="small" color="#E8166D" />
+            ) : (
+              <>
+                <Ionicons name="cart-outline" size={20} color="#E8166D" />
+                <Text style={styles.cartBtnText}>Add to Cart</Text>
+              </>
+            )}
+          </TouchableOpacity>
+          <TouchableOpacity onPress={handleBuyNow} disabled={addingToCart} activeOpacity={0.85} style={{ flex: 1, borderRadius: 16, overflow: 'hidden' }}>
+            <LinearGradient colors={['#E8166D', '#FF5FA0']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.buyNowBtn}>
+              <Text style={styles.buyNowText}>Buy Now</Text>
+            </LinearGradient>
+          </TouchableOpacity>
         </View>
       )}
+
       <ConfirmationModal
         visible={confirmModal.visible}
         title={confirmModal.title}
         message={confirmModal.message}
-        onConfirm={() => { confirmModal.onConfirm(); setConfirmModal(prev => ({...prev, visible: false})); }}
-        onCancel={() => setConfirmModal(prev => ({...prev, visible: false}))}
+        onConfirm={() => { confirmModal.onConfirm(); setConfirmModal(p => ({ ...p, visible: false })); }}
+        onCancel={() => setConfirmModal(p => ({ ...p, visible: false }))}
       />
     </SafeAreaView>
   );

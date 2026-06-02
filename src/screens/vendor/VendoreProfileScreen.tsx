@@ -5,9 +5,6 @@ import { useNavigation } from '@react-navigation/native';
 import { getStoredUser, logoutUser } from '@/utils/authHelper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { getStoredUser, logoutUser } from '@/utils/authHelper';
-import { productAPI, servicesAPI, handleAPIError } from '@/api/api';
-import api from '@/api/api';
 import ConfirmationModal from '@/components/ConfirmationModal';
 import { toast } from '@/components/ui/Toast';
 
@@ -143,19 +140,23 @@ const VendorProfileScreen: React.FC = () => {
     try {
       await logoutUser();
       setShowLogoutModal(false);
-    } catch {
-      toast.error('Error', 'Logout failed, try again');
+      console.log('✅ Logged out successfully');
+    } catch (error) {
+      console.error('❌ Logout error:', error);
     } finally {
-      setLoggingOut(false);
+      setLoading(false);
     }
   };
 
   const handleDeleteAccount = async (): Promise<void> => {
     setLoading(true);
     try {
-      await Share.share({ message: `Check out ${businessName} on LookReal!\n${url}`, url, title: `${businessName} on LookReal` });
-    } catch {
-      toast.error('Error', 'Failed to share profile');
+      console.log('Delete account requested');
+      setShowDeleteModal(false);
+    } catch (error) {
+      console.error('❌ Delete account error:', error);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -357,8 +358,7 @@ const VendorProfileScreen: React.FC = () => {
                 {statusConfig.label}
               </Text>
             </View>
-          </LinearGradient>
-        </View>
+          </View>
 
           {/* Stats Section */}
           <View className="flex-row px-5 pt-5 pb-2.5 justify-between">
@@ -502,48 +502,6 @@ const VendorProfileScreen: React.FC = () => {
             <Text className="text-[11px] text-gray-400">© 2024 VendorHub</Text>
           </View>
         </View>
-
-        {/* ── Account Section ───────────────────────────────────────────────── */}
-        <View style={styles.section}>
-          <Text style={styles.sectionHeader}>Account</Text>
-          <View style={[styles.menuCard, shadow(0.06, 8, 2)]}>
-            {ACCOUNT_ITEMS.map((item, i) => (
-              <MenuRow key={item.title} {...item} isLast={i === ACCOUNT_ITEMS.length - 1} />
-            ))}
-          </View>
-        </View>
-
-        {/* ── Support Section ───────────────────────────────────────────────── */}
-        <View style={styles.section}>
-          <Text style={styles.sectionHeader}>Support</Text>
-          <View style={[styles.menuCard, shadow(0.06, 8, 2)]}>
-            {SUPPORT_ITEMS.map((item, i) => (
-              <MenuRow key={item.title} {...item} isLast={i === SUPPORT_ITEMS.length - 1} />
-            ))}
-          </View>
-        </View>
-
-        {/* ── Danger Zone ───────────────────────────────────────────────────── */}
-        <View style={styles.section}>
-          <View style={[styles.menuCard, shadow(0.06, 8, 2)]}>
-            <MenuRow
-              icon="log-out-outline"
-              title="Logout"
-              subtitle="Sign out of your account"
-              onPress={() => setShowLogoutModal(true)}
-            />
-            <View style={styles.menuDivider} />
-            <MenuRow
-              icon="trash-outline"
-              title="Delete Account"
-              subtitle="Permanently remove account"
-              onPress={() => setShowDeleteModal(true)}
-              isLast
-            />
-          </View>
-        </View>
-
-        <Text style={styles.version}>Version 1.0.0</Text>
       </ScrollView>
 
       {/* Logout Modal */}

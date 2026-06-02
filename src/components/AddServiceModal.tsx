@@ -28,7 +28,11 @@ interface ServiceFormData {
   priceType: 'fixed' | 'negotiable';
   currency: string;
   duration: number;
-  serviceArea: { type: string; coordinates: number[]; radius: number };
+  serviceArea: {
+    type: string;
+    coordinates: number[];
+    radius: number;
+  };
 }
 
 interface AddServiceModalProps {
@@ -94,8 +98,6 @@ const AddServiceModal: React.FC<AddServiceModalProps> = ({
       } else {
         resetForm();
       }
-    } else {
-      reset();
     }
   }, [service, visible]);
 
@@ -167,7 +169,7 @@ const AddServiceModal: React.FC<AddServiceModalProps> = ({
           type: type,
         };
       });
-      setImages(prev => [...prev, ...next]);
+      setSelectedImages([...selectedImages, ...newImages]);
     }
   };
 
@@ -269,7 +271,6 @@ const AddServiceModal: React.FC<AddServiceModalProps> = ({
         toast.error('Error', apiError.message || 'Failed to save service');
       }
     } finally {
-      submitting.current = false;
       setLoading(false);
     }
   };
@@ -295,8 +296,10 @@ const AddServiceModal: React.FC<AddServiceModalProps> = ({
           <TouchableOpacity onPress={handleClose} className="p-1">
             <Ionicons name="close" size={28} color="#333" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>{service ? 'Edit Service' : 'Add Services'}</Text>
-          <View style={{ width: 36 }} />
+          <Text className="text-lg font-semibold text-gray-900">
+            {service ? 'Edit Service' : 'Add New Service'}
+          </Text>
+          <View className="w-9" />
         </View>
 
         <ScrollView

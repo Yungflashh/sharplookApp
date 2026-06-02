@@ -1,6 +1,10 @@
-import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, TextInput, ActivityIndicator } from 'react-native';
-import { toast } from '@/components/ui/Toast';
+import React, { useState, useCallback } from 'react';
+import {
+  View, Text, TouchableOpacity, ScrollView, TextInput,
+  ActivityIndicator, Modal, StatusBar, StyleSheet, Dimensions,
+  Platform,
+} from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -77,44 +81,90 @@ const ActionRow: React.FC<{
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 const CreateDisputeScreen: React.FC = () => {
-  const navigation = useNavigation<CreateDisputeNavigationProp>();
-  const route = useRoute<CreateDisputeRouteProp>();
-  const {
-    bookingId
-  } = route.params;
-  const [loading, setLoading] = useState(false);
-  const [selectedCategory, setSelectedCategory] = useState<string>('');
-  const [selectedReason, setSelectedReason] = useState<string>('');
-  const [description, setDescription] = useState('');
-  const handleSubmitDispute = async () => {
-    if (!selectedCategory) {
-      toast.error('Error', 'Please select a dispute category');
-      return;
+  const navigation = useNavigation<Nav>();
+  const route      = useRoute<RouteP>();
+  const { bookingId, role } = route.params;
+  const REASONS = role === 'vendor' ? VENDOR_REASONS : CLIENT_REASONS;
+  const insets     = useSafeAreaInsets();
+
+  const [step, setStep]                   = useState<Step>(1);
+  const [reason, setReason]               = useState('');
+  const [description, setDescription]     = useState('');
+  const [evidenceType, setEvidenceType]   = useState('');
+  const [evidenceFile, setEvidenceFile]   = useState<ImagePicker.ImagePickerAsset | null>(null);
+  const [loading, setLoading]             = useState(false);
+  const [dispute, setDispute]             = useState<{ _id: string; disputeNumber?: string } | null>(null);
+  const [errorMsg, setErrorMsg]           = useState('');
+  const errorTimer                        = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const showError = useCallback((msg: string) => {
+    setErrorMsg(msg);
+    if (errorTimer.current) clearTimeout(errorTimer.current);
+    errorTimer.current = setTimeout(() => setErrorMsg(''), 4500);
+  }, []);
+
+  // ── Navigation helpers ────────────────────────────────────────────────────
+  const goBack = useCallback(() => {
+    if (step === 1) navigation.goBack();
+    else if (step === 2) setStep(1);
+    else if (step === 4) setStep(2);
+  }, [step, navigation]);
+
+  const dismiss = useCallback(() => navigation.goBack(), [navigation]);
+
+  // ── Evidence file picker ──────────────────────────────────────────────────
+  const requestPermission = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      toast.warning('Permission needed', 'Please allow access to your photo library.');
+      return false;
     }
-    if (!selectedReason) {
-      toast.error('Error', 'Please select a reason');
-      return;
+    return true;
+  };
+
+  const pickEvidenceFile = async (type: string) => {
+    if (!(await requestPermission())) return;
+    const mediaType = type === 'video_recording'
+      ? ImagePicker.MediaTypeOptions.Videos
+      : ImagePicker.MediaTypeOptions.Images;
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: mediaType,
+      quality: 0.8,
+      allowsEditing: false,
+    });
+    if (!result.canceled && result.assets.length > 0) {
+      setEvidenceFile(result.assets[0]);
     }
-    if (!description || description.trim().length < 20) {
-      toast.error('Error', 'Please provide a detailed description (minimum 20 characters)');
+  };
+
+  // ── Submit ────────────────────────────────────────────────────────────────
+  const handleSubmit = async () => {
+    if (!description.trim() || description.trim().length < 20) {
+      showError('Please describe the issue in at least 20 characters.');
       return;
     }
     try {
       setLoading(true);
       const res = await disputeAPI.createDispute({
         bookingId,
-        category: selectedCategory,
-        reason: selectedReason,
-        description: description.trim()
-      };
-      const response = await disputeAPI.createDispute(disputeData);
-      if (response.success) {
-        toast.success('Dispute Created', 'Your dispute has been submitted. Our team will review it shortly.');
-        navigation.goBack();
+        reason,
+        description: description.trim(),
+        evidenceType: evidenceType || undefined,
+        photos: evidenceFile ? [{
+          uri: evidenceFile.uri,
+          mimeType: evidenceFile.mimeType || undefined,
+          fileName: evidenceFile.fileName || undefined,
+        }] : [],
+      });
+      if (res.success) {
+        setDispute(res.data?.dispute ?? null);
+        setStep(5);
+      } else {
+        showError(res.message || 'Could not submit dispute. Please try again.');
       }
-    } catch (error) {
-      const apiError = handleAPIError(error);
-      toast.error('Error', apiError.message || 'Failed to create dispute');
+    } catch (err) {
+      const apiErr = handleAPIError(err);
+      showError(apiErr.message || 'Something went wrong. Please try again.');
     } finally {
       setLoading(false);
     }

@@ -1,6 +1,9 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, ActivityIndicator, TextInput, KeyboardAvoidingView, Platform, RefreshControl } from 'react-native';
-import { toast } from '@/components/ui/Toast';
+import React, { useState, useCallback, useRef } from 'react';
+import {
+  View, Text, TouchableOpacity, ScrollView, ActivityIndicator,
+  TextInput, KeyboardAvoidingView, Platform, RefreshControl,
+  StyleSheet, StatusBar, Dimensions, Image, Linking,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp, useFocusEffect } from '@react-navigation/native';
@@ -151,18 +154,11 @@ const DisputeDetailScreen: React.FC = () => {
   const fetchDispute = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     try {
-      setLoading(true);
-      const response = await disputeAPI.getDisputeById(disputeId);
-      console.log('Dispute detail:', response);
-      if (response.success) {
-        const disputeData = response.data.dispute || response.data;
-        setDispute(disputeData);
-      }
-    } catch (error) {
-      const apiError = handleAPIError(error);
-      console.error('Dispute detail error:', apiError);
-      toast.error('Error', apiError.message || 'Failed to load dispute details');
-      navigation.goBack();
+      const res = await disputeAPI.getDisputeById(disputeId);
+      if (res.success) setDispute(res.data?.dispute ?? res.data);
+    } catch (err) {
+      toast.error('Error', handleAPIError(err).message || 'Failed to load dispute');
+      if (!silent) navigation.goBack();
     } finally {
       setLoading(false);
     }
@@ -172,13 +168,13 @@ const DisputeDetailScreen: React.FC = () => {
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    fetchDisputeDetails().finally(() => setRefreshing(false));
-  }, []);
-  const handleSendMessage = async () => {
-    if (!newMessage.trim()) {
-      toast.error('Error', 'Please enter a message');
-      return;
-    }
+    await fetchDispute(true);
+    setRefreshing(false);
+  }, [fetchDispute]);
+
+  // ── Send message ───────────────────────────────────────────────────────────
+  const handleSend = async () => {
+    if (!newMessage.trim()) return;
     try {
       setSendingMsg(true);
       const res = await disputeAPI.addMessage(disputeId, newMessage.trim());
@@ -187,9 +183,8 @@ const DisputeDetailScreen: React.FC = () => {
         await fetchDispute(true);
         setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 200);
       }
-    } catch (error) {
-      const apiError = handleAPIError(error);
-      toast.error('Error', apiError.message || 'Failed to send message');
+    } catch (err) {
+      toast.error('Error', handleAPIError(err).message || 'Failed to send message');
     } finally {
       setSendingMsg(false);
     }

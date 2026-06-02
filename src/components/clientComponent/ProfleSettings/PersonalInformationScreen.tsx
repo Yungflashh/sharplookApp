@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, TextInput, ActivityIndicator, Image } from 'react-native';
-import { toast } from '@/components/ui/Toast';
+import {
+  View, Text, TouchableOpacity, ScrollView, TextInput,
+  ActivityIndicator, Image, StyleSheet, Platform, Modal,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
@@ -110,26 +112,17 @@ const PersonalInformationScreen: React.FC = () => {
   };
 
   const pickImage = async () => {
-    try {
-      const {
-        status
-      } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== 'granted') {
-        toast.warning('Permission Denied', 'We need camera roll permissions to change your profile picture');
-        return;
-      }
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        aspect: [1, 1],
-        quality: 0.8
-      });
-      if (!result.canceled && result.assets[0]) {
-        await uploadProfileImage(result.assets[0].uri);
-      }
-    } catch (error) {
-      console.error('Error picking image:', error);
-      toast.error('Error', 'Failed to pick image');
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      toast.warning('Permission needed', 'Allow access to your photo library');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true, aspect: [1, 1], quality: 0.8,
+    });
+    if (!result.canceled && result.assets[0]) {
+      await uploadProfileImage(result.assets[0].uri);
     }
   };
 
@@ -150,22 +143,16 @@ const PersonalInformationScreen: React.FC = () => {
       } else {
         throw new Error(response.message || 'Upload failed');
       }
-
-      toast.success('Success', 'Profile picture updated successfully');
-    } else {
-      throw new Error(response.message || 'Failed to upload image');
+    } catch (error) {
+      toast.error('Error', handleAPIError(error).message);
+    } finally {
+      setUploadingImage(false);
     }
-  } catch (error) {
-    console.error('❌ Upload error:', error);
-    const apiError = handleAPIError(error);
-    toast.error('Error', apiError.message);
-  } finally {
-    setUploadingImage(false);
-  }
-};
+  };
+
   const handleUpdate = async () => {
     if (!formData.firstName.trim() || !formData.lastName.trim()) {
-      toast.error('Error', 'Please fill in all required fields');
+      toast.error('Required', 'First and last name are required');
       return;
     }
     setLoading(true);
@@ -184,13 +171,11 @@ const PersonalInformationScreen: React.FC = () => {
           userData.phone     = formData.phone.trim();
           await updateStoredUser(userData);
         }
-        toast.success('Success', 'Profile updated successfully');
+        toast.success('Saved!', 'Profile updated successfully');
         navigation.goBack();
       }
     } catch (error) {
-      console.error('❌ Update error:', error);
-      const apiError = handleAPIError(error);
-      toast.error('Error', apiError.message);
+      toast.error('Error', handleAPIError(error).message);
     } finally {
       setLoading(false);
     }

@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { View, ActivityIndicator, StyleSheet, AppState } from 'react-native';
+import { AppState } from 'react-native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { checkAuthStatus, checkOnboardingStatus, checkInactivityAndLogout, updateLastActive } from '@/utils/authHelper';
 import AuthNavigator from '@/navigation/AuthNavigator';
@@ -12,6 +12,7 @@ import ChatScreen from '../components/clientComponent/ChatScreen';
 import CartScreen from '../components/clientComponent/CartScreen';
 
 import AllVendorsScreen from '@/screens/client/AllVendorsScreen';
+import AllServicesScreen from '@/screens/client/AllServicesScreen';
 import VendorDetailScreen from '@/screens/client/VendorDetailsScreen';
 import type { RootStackParamList } from '@/types/navigation.types';
 import CreateBookingScreen from '@/components/clientComponent/CreateBooking';
@@ -65,11 +66,16 @@ import ApplyReferralCode from '@/components/ApplyReferralCode';
 import ReferralDetailScreen from '@/components/ReferralDetailScreen';
 import WalletPaymentScreen from '@/components/WalletPaymentScreen';
 import ChangeWithdrawalPinScreen from '@/components/clientComponent/ProfleSettings/ChangeWithdrawalPinScreen';
+import ChangePasswordScreen from '@/screens/settings/ChangePasswordScreen';
 import SubscriptionScreen from '@/components/vendorComponent/SubscriptionScreen';
 import UpgradeTierScreen from '@/components/vendorComponent/UpgradeTierScreen';
 import DisputeOrderDetailScreen from '@/components/DisputeOrderDetailScreen';
 import TermsPrivacyScreen from '@/components/TermsPrivacyScreen';
 import SharedContentScreen from '@/screens/shared/SharedContentScreen';
+import RescheduleScreen from '@/screens/client/RescheduleScreen';
+import VendorServiceDetailScreen from '@/screens/vendor/VendorServiceDetailScreen';
+import CategoryProductsScreen from '@/screens/client/CategoryProductsScreen';
+import VendorProductDetailScreen from '@/screens/vendor/VendorProductDetailScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -89,8 +95,10 @@ const isVersionBelow = (current: string, minimum: string): boolean => {
 
 const RootNavigator = () => {
   const [isLoading, setIsLoading] = useState(true);
+  const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isVendor, setIsVendor] = useState(false);
+  const [authInitialRoute, setAuthInitialRoute] = useState<'Login' | 'VendorRegister' | 'Register'>('Login');
   const [updateInfo, setUpdateInfo] = useState<{
     visible: boolean;
     latestVersion: string;
@@ -165,12 +173,6 @@ const RootNavigator = () => {
         console.log('🔄 Auth state changed:', authStatus.isAuthenticated);
         setIsAuthenticated(authStatus.isAuthenticated);
         setIsVendor(authStatus.isVendor);
-        if (authStatus.isAuthenticated && authStatus.isVendor) {
-          const user = (authStatus as any).user;
-          if (!user?.vendorProfile?.businessName) {
-            setNeedsVendorSetup(true);
-          }
-        }
       }
     }, 1000);
     return () => clearInterval(interval);
@@ -197,12 +199,8 @@ const RootNavigator = () => {
       setIsAuthenticated(authStatus.isAuthenticated);
       setIsVendor(authStatus.isVendor);
 
-      if (authStatus.isAuthenticated && authStatus.isVendor) {
-        const user = (authStatus as any).user;
-        if (!user?.vendorProfile?.businessName) {
-          setNeedsVendorSetup(true);
-        }
-      }
+      const onboardingDone = await checkOnboardingStatus();
+      setHasCompletedOnboarding(onboardingDone);
 
       console.log('🔐 Auth status:', {
         isAuthenticated: authStatus.isAuthenticated,
@@ -276,10 +274,17 @@ const RootNavigator = () => {
   };
 
   if (isLoading) {
+    return <SplashScreen />;
+  }
+
+  if (!hasCompletedOnboarding) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#E91E63" />
-      </View>
+      <OnboardingScreen
+        onComplete={(isVendorUser) => {
+          setAuthInitialRoute(isVendorUser ? 'VendorRegister' : 'Register');
+          setHasCompletedOnboarding(true);
+        }}
+      />
     );
   }
 
@@ -294,10 +299,11 @@ const RootNavigator = () => {
     />
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       {!isAuthenticated ? (
-        <Stack.Screen 
-          name="Auth" 
-          component={AuthNavigator} 
-          options={{ animationTypeForReplace: 'pop' }} 
+        <Stack.Screen
+          name="Auth"
+          component={AuthNavigator}
+          options={{ animationTypeForReplace: 'pop' }}
+          initialParams={{ initialRoute: authInitialRoute }}
         />
       ) : (
         <>
@@ -312,6 +318,7 @@ const RootNavigator = () => {
           <Stack.Screen name="Cart" component={CartScreen} />
           
           <Stack.Screen name="AllVendors" component={AllVendorsScreen} options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="AllServices" component={AllServicesScreen} options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="VendorDetail" component={VendorDetailScreen} options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="CreateBooking" component={CreateBookingScreen} options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="BookingDetail" component={BookingDetailScreen} options={{ animation: 'slide_from_right' }} />
@@ -335,6 +342,7 @@ const RootNavigator = () => {
           <Stack.Screen name="AvailableOffers" component={AvailableOffersScreen} options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="SetWithdrawalPin" component={SetWithdrawalPinScreen} options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="ChangeWithdrawalPin" component={ChangeWithdrawalPinScreen} options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="ChatDetail" component={ChatDetailScreen} options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="ChatList" component={ChatListScreen} options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="Subsriptions" component={SubscriptionScreen} options={{ animation: 'slide_from_right' }} />
@@ -430,27 +438,22 @@ const RootNavigator = () => {
               animation: 'slide_from_right',
             }} 
           />
-           <Stack.Screen 
-            name="SharedContent" 
-            component={SharedContentScreen}  
+           <Stack.Screen
+            name="SharedContent"
+            component={SharedContentScreen}
             options={{
               animation: 'slide_from_right',
-            }} 
+            }}
           />
+          <Stack.Screen name="Reschedule" component={RescheduleScreen} options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="VendorServiceDetail" component={VendorServiceDetailScreen} options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="CategoryProducts" component={CategoryProductsScreen} options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="VendorProductDetail" component={VendorProductDetailScreen} options={{ animation: 'slide_from_right' }} />
         </>
       )}
     </Stack.Navigator>
     </>
   );
 };
-
-const styles = StyleSheet.create({
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF'
-  }
-});
 
 export default RootNavigator;

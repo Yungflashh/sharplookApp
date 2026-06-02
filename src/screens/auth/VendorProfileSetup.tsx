@@ -2,662 +2,818 @@ import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
+  Image,
   ScrollView,
-  KeyboardAvoidingView,
-  Platform,
-  SafeAreaView,
   TouchableOpacity,
   ActivityIndicator,
   TextInput,
+  StyleSheet,
+  StatusBar,
+  Modal,
+  FlatList,
+  Dimensions,
+  Platform,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import * as Location from 'expo-location';
-import { vendorAPI, categoriesAPI, handleAPIError } from '@/api/api';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
+import { vendorAPI, userAPI, categoriesAPI, handleAPIError } from '@/api/api';
+import LocationPickerModal, { LocationResult } from '@/components/LocationPickerModal';
+import { confirmEmailVerification } from '@/utils/authHelper';
 import { toast } from '@/components/ui/Toast';
+import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { AuthStackParamList } from '@/types/navigation.types';
 
+type Props = NativeStackScreenProps<AuthStackParamList, 'VendorProfileSetup'> & {
+  onSetupComplete?: () => void;
+};
+
+const { width: SW } = Dimensions.get('window');
+const P = '#E91E63';
+const P_LIGHT = '#FEE2F0';
+const BORDER = '#F0F0F0';
+const TEXT = '#1A1A1A';
+const HINT = '#9CA3AF';
+const BG = '#fff';
+
+type BusinessType = 'solo_practitioner' | 'small_business' | 'salon_spa' | 'studio';
 type VendorType = 'home_service' | 'in_shop' | 'both';
 
-interface Category {
-  _id: string;
-  name: string;
-  slug: string;
-  description: string;
-  icon?: string;
-}
+const BUSINESS_TYPES: { value: BusinessType; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
+  { value: 'solo_practitioner', label: 'Solo Practitioner', icon: 'person-outline' },
+  { value: 'small_business', label: 'Small Business', icon: 'people-outline' },
+  { value: 'salon_spa', label: 'Salon / Spa', icon: 'storefront-outline' },
+  { value: 'studio', label: 'Studio / Boutique', icon: 'home-outline' },
+];
 
-const VendorProfileSetup = () => {
-  const navigation = useNavigation();
-  
+const VENDOR_TYPES: { value: VendorType; label: string }[] = [
+  { value: 'home_service', label: 'Home Service (I travel to clients)' },
+  { value: 'in_shop', label: 'In-Shop (Clients come to me)' },
+  { value: 'both', label: 'Both (Home & In-Shop)' },
+];
+
+const EXPERIENCE_OPTIONS = [
+  { label: 'Less than 1 Year', value: 0 },
+  { label: '1 – 2 Years', value: 1 },
+  { label: '3 – 4 Years', value: 3 },
+  { label: '5 – 6 Years', value: 5 },
+  { label: '7 – 10 Years', value: 7 },
+  { label: '10+ Years', value: 10 },
+];
+
+interface Category { _id: string; name: string }
+
+const VendorProfileSetup = ({ route, navigation, onSetupComplete }: Props) => {
+  const fromRegistration = route?.params?.fromRegistration ?? false;
+
   const [businessName, setBusinessName] = useState('');
   const [businessDescription, setBusinessDescription] = useState('');
+  const [businessType, setBusinessType] = useState<BusinessType | ''>('');
   const [vendorType, setVendorType] = useState<VendorType>('home_service');
-  const [location, setLocation] = useState<{
-    coordinates: number[];
-    address: string;
-    city: string;
-    state: string;
-    country: string;
-  } | null>(null);
-  
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+  const [selectedCategoryNames, setSelectedCategoryNames] = useState<string[]>([]);
+  const [yearsOfExperience, setYearsOfExperience] = useState<number | null>(null);
+  const [yearsLabel, setYearsLabel] = useState('');
+  const [serviceRadius, setServiceRadius] = useState('10');
+  const [location, setLocation] = useState<LocationResult | null>(null);
+  const [showLocationPicker, setShowLocationPicker] = useState(false);
+
+  const [avatarUri, setAvatarUri] = useState<string | null>(null);
+  const [coverUri, setCoverUri] = useState<string | null>(null);
+
   const [loading, setLoading] = useState(false);
   const [loadingCategories, setLoadingCategories] = useState(false);
   const [categories, setCategories] = useState<Category[]>([]);
-  const [locationLoading, setLocationLoading] = useState(false);
-  const [locationPermissionGranted, setLocationPermissionGranted] = useState(false);
-  
-  const [generalError, setGeneralError] = useState('');
-  const [errors, setErrors] = useState({
-    businessName: '',
-    businessDescription: '',
-    categories: '',
-    location: '',
-  });
 
-  const [expandedSection, setExpandedSection] = useState<string | null>('business');
+  const [showCategorySheet, setShowCategorySheet] = useState(false);
+  const [showBizTypeSheet, setShowBizTypeSheet] = useState(false);
+  const [showVendorTypeSheet, setShowVendorTypeSheet] = useState(false);
+  const [showExpSheet, setShowExpSheet] = useState(false);
+  const [showSuccess, setShowSuccess] = useState(false);
 
-  useEffect(() => {
-    fetchCategories();
-    checkLocationPermission();
-  }, []);
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
-  const checkLocationPermission = async () => {
-    try {
-      const { status } = await Location.getForegroundPermissionsAsync();
-      setLocationPermissionGranted(status === 'granted');
-    } catch (error) {
-      console.error('Error checking location permission:', error);
-    }
-  };
-
-  const requestLocationPermission = async () => {
-    try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      setLocationPermissionGranted(status === 'granted');
-      return status === 'granted';
-    } catch (error) {
-      console.error('Error requesting location permission:', error);
-      return false;
-    }
-  };
-
-  const getCurrentLocation = async () => {
-    setLocationLoading(true);
-    setErrors({ ...errors, location: '' });
-
-    try {
-      if (!locationPermissionGranted) {
-        const granted = await requestLocationPermission();
-        if (!granted) {
-          toast.info('Location Permission Required', 'Please enable location permissions in your device settings to use this feature.');
-          setLocationLoading(false);
-          return;
-        }
-      }
-
-      const position = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.High,
-      });
-
-      const { latitude, longitude } = position.coords;
-
-      const geocode = await Location.reverseGeocodeAsync({
-        latitude,
-        longitude,
-      });
-
-      if (geocode && geocode.length > 0) {
-        const addressData = geocode[0];
-
-        const locationData = {
-          coordinates: [longitude, latitude],
-          address:
-            `${addressData.street || ''} ${addressData.streetNumber || ''}`.trim() ||
-            'Address not available',
-          city: addressData.city || addressData.subregion || 'Unknown City',
-          state: addressData.region || 'Unknown State',
-          country: addressData.country || 'Nigeria',
-        };
-
-        setLocation(locationData);
-        toast.success('Success', 'Location captured successfully!');
-      } else {
-        throw new Error('Unable to get address details');
-      }
-    } catch (error: any) {
-      console.error('Location error:', error);
-      setErrors({ ...errors, location: 'Failed to get location. Please try again.' });
-      toast.error('Location Error', 'Unable to get your location. Please ensure location services are enabled and try again.');
-    } finally {
-      setLocationLoading(false);
-    }
-  };
+  useEffect(() => { fetchCategories(); }, []);
 
   const fetchCategories = async () => {
     setLoadingCategories(true);
     try {
-      const response = await categoriesAPI.getAll();
-      if (response.success && response.data) setCategories(response.data);
+      const res = await categoriesAPI.getAll();
+      if (res.success && res.data) setCategories(res.data);
     } catch { /* silent */ } finally { setLoadingCategories(false); }
   };
 
-  const getCurrentLocation = async () => {
-    setLocationLoading(true);
-    clearErr('location');
-    try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        toast.info('Permission Required', 'Please enable location permissions in settings.');
-        return;
-      }
-    } catch (error) {
-      console.error('Error fetching categories:', error);
-      const apiError = handleAPIError(error);
-      toast.error('Error', apiError.message || 'Failed to load categories');
-    } finally {
-      setLoadingCategories(false);
+  const clearErr = (f: string) => setErrors(prev => ({ ...prev, [f]: '' }));
+
+  const pickAvatar = async () => {
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) { toast.error('Gallery permission denied'); return; }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 0.85, allowsEditing: true, aspect: [1, 1],
+    });
+    if (!result.canceled && result.assets[0]) {
+      setAvatarUri(result.assets[0].uri);
+      clearErr('images');
     }
   };
 
-  const validateForm = () => {
-    let valid = true;
-    const newErrors = {
-      businessName: '',
-      businessDescription: '',
-      categories: '',
-      location: '',
-    };
-
-    if (!businessName.trim()) {
-      newErrors.businessName = 'Business name is required';
-      valid = false;
-    } else if (businessName.trim().length < 3) {
-      newErrors.businessName = 'Business name must be at least 3 characters';
-      valid = false;
+  const pickCover = async () => {
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) { toast.error('Gallery permission denied'); return; }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 0.85, allowsEditing: true, aspect: [16, 9],
+    });
+    if (!result.canceled && result.assets[0]) {
+      setCoverUri(result.assets[0].uri);
+      clearErr('images');
     }
+  };
 
-    if (!businessDescription.trim()) {
-      newErrors.businessDescription = 'Business description is required';
-      valid = false;
-    } else if (businessDescription.trim().length < 20) {
-      newErrors.businessDescription = 'Description must be at least 20 characters';
-      valid = false;
-    }
+  const handleLocationConfirm = (result: LocationResult) => {
+    setLocation(result);
+    setShowLocationPicker(false);
+    clearErr('location');
+  };
 
-    if (selectedCategories.length === 0) {
-      newErrors.categories = 'Please select at least one service category';
-      valid = false;
-    }
+  const toggleCategory = (id: string, name: string) => {
+    setSelectedCategories(prev => {
+      if (prev.includes(id)) {
+        setSelectedCategoryNames(ns => ns.filter(n => n !== name));
+        return prev.filter(c => c !== id);
+      } else {
+        setSelectedCategoryNames(ns => [...ns, name]);
+        return [...prev, id];
+      }
+    });
+    clearErr('category');
+  };
 
-    if (!location) {
-      newErrors.location = 'Please set your business location';
-      valid = false;
-    }
-
-    setErrors(newErrors);
-    return valid;
+  const validate = () => {
+    const e: Record<string, string> = {};
+    if (!avatarUri) e.images = 'Please add your profile photo';
+    else if (!coverUri) e.images = 'Please add a cover photo for your business';
+    if (!businessType) e.businessType = 'Please select a business type';
+    if (selectedCategories.length === 0) e.category = 'Please select at least one service category';
+    if (!location) e.location = 'Please set your business location';
+    if (!businessDescription.trim() || businessDescription.trim().length < 20)
+      e.businessDescription = 'Business description must be at least 20 characters';
+    return e;
   };
 
   const handleSubmit = async () => {
-    setGeneralError('');
-    if (!validateForm()) {
-      return;
-    }
+    const e = validate();
+    if (Object.keys(e).length) { setErrors(e); return; }
 
     setLoading(true);
     try {
-      const setupData: any = {
-        businessName: businessName.trim(),
+      const payload: any = {
         businessDescription: businessDescription.trim(),
-        categories: [selectedCategory],
-        primaryCategory: selectedCategory,
+        businessType,
         vendorType,
-        location: location!,
+        categories: selectedCategories,
+        primaryCategory: selectedCategories[0],
+        location: {
+          type: 'Point',
+          coordinates: location!.coordinates,
+          address: location!.address,
+          city: location!.city,
+          state: location!.state,
+          country: location!.country,
+        },
       };
+      if (businessName.trim()) payload.businessName = businessName.trim();
+      if (yearsOfExperience !== null) payload.yearsOfExperience = yearsOfExperience;
+      if (serviceRadius) payload.serviceRadius = parseInt(serviceRadius, 10);
 
-      const response = await vendorAPI.setupProfile(setupData);
+      // Run profile setup + image uploads in parallel
+      const tasks: Promise<any>[] = [vendorAPI.setupProfile(payload)];
+      if (avatarUri) tasks.push(userAPI.uploadAvatarOnly(avatarUri));
+      if (coverUri) tasks.push(vendorAPI.uploadCoverImage(coverUri));
+
+      const [response] = await Promise.all(tasks);
 
       if (response.success) {
-        toast.success('Success', 'Vendor profile created successfully!');
-        console.log('Vendor profile setup complete');
-        // Navigate to appropriate screen
+        setShowSuccess(true);
+        if (fromRegistration) {
+          // Lift auth gate — RootNavigator will switch to Main
+          await confirmEmailVerification();
+        }
+        setTimeout(() => onSetupComplete?.(), 5000);
       } else {
         toast.error('Setup Failed', response.message || 'Failed to create vendor profile');
       }
     } catch (error: any) {
       const apiError = handleAPIError(error);
-
       if (apiError.fieldErrors) {
-        const newErrors = { ...errors };
-        Object.keys(apiError.fieldErrors).forEach((field) => {
-          if (field in newErrors) {
-            (newErrors as any)[field] = apiError.fieldErrors![field];
-          }
-        });
-        setErrors(newErrors);
-      }
-
-      if (apiError.isNetworkError) {
-        setGeneralError('Network error. Please check your internet connection.');
+        const mapped: Record<string, string> = {};
+        const fe = apiError.fieldErrors;
+        if (fe.businessName) mapped.businessName = fe.businessName;
+        if (fe.businessDescription) mapped.businessDescription = fe.businessDescription;
+        if (fe.categories || fe.primaryCategory) mapped.category = fe.categories || fe.primaryCategory;
+        if (fe.location) mapped.location = fe.location;
+        if (Object.keys(mapped).length > 0) setErrors(prev => ({ ...prev, ...mapped }));
+        else toast.error('Error', apiError.message || 'Failed to setup vendor profile');
       } else {
         toast.error('Error', apiError.message || 'Failed to setup vendor profile');
       }
     } finally { setLoading(false); }
   };
 
-  const toggleCategory = (categoryId: string) => {
-    setSelectedCategories((prev) => {
-      if (prev.includes(categoryId)) {
-        return prev.filter((id) => id !== categoryId);
-      } else {
-        return [...prev, categoryId];
-      }
-    });
-    setErrors({ ...errors, categories: '' });
-  };
+  if (showSuccess) {
+    return (
+      <View style={ss.successScreen}>
+        <StatusBar barStyle="dark-content" backgroundColor="#fff" />
 
-  const toggleSection = (section: string) => {
-    setExpandedSection(expandedSection === section ? null : section);
-  };
+        {/* Decorative top blob */}
+        <View style={ss.successBlob} />
+
+        {/* Logo */}
+        <Image
+          source={require('../../../assets/lookrealMainLogo.png')}
+          style={ss.successLogo}
+          resizeMode="contain"
+        />
+
+        {/* Check ring + circle */}
+        <View style={ss.successRing}>
+          <View style={ss.successCircle}>
+            <Ionicons name="checkmark-sharp" size={52} color="#fff" />
+          </View>
+        </View>
+
+        <Text style={ss.successTitle}>Profile Complete!</Text>
+        <Text style={ss.successSub}>
+          {'Your vendor profile is live.\nClients can now discover and book your services.'}
+        </Text>
+
+        <TouchableOpacity
+          style={ss.successBtn}
+          onPress={() => onSetupComplete?.()}
+          activeOpacity={0.85}
+        >
+          <Text style={ss.successBtnTxt}>Get Started</Text>
+          <Ionicons name="arrow-forward-circle" size={20} color="#fff" />
+        </TouchableOpacity>
+
+        <Text style={ss.successHint}>Navigating automatically in a moment...</Text>
+      </View>
+    );
+  }
+
+  const bizTypeLabel = BUSINESS_TYPES.find(b => b.value === businessType)?.label || '';
+  const vendorTypeLabel = VENDOR_TYPES.find(v => v.value === vendorType)?.label || '';
 
   return (
-    <SafeAreaView className="flex-1 bg-gray-50" edges={['top']}>
-      {/* Header */}
-      <View className="bg-white border-b border-gray-200">
-        <View className="flex-row items-center justify-between px-5 py-4">
-          <TouchableOpacity
-            onPress={() => navigation.goBack()}
-            className="w-10 h-10 items-center justify-center"
-          >
-            <Ionicons name="chevron-back" size={28} color="#1f2937" />
-          </TouchableOpacity>
-          <Text className="text-lg font-semibold text-gray-900">Vendor Profile Setup</Text>
-          <View className="w-10" />
-        </View>
-      </View>
+    <SafeAreaView style={ss.safe} edges={['top', 'bottom']}>
+      <StatusBar barStyle="dark-content" backgroundColor={BG} />
 
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        className="flex-1"
+      <ScrollView
+        contentContainerStyle={ss.scroll}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
       >
-        <ScrollView
-          className="flex-1"
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-        >
-          {/* Welcome Section */}
-          <View className="items-center px-5 py-6">
-            <View className="bg-pink-50 p-6 rounded-full mb-4">
-              <MaterialCommunityIcons name="store" size={48} color="#ec4899" />
+        {/* Back (only if not fromRegistration going to main) */}
+        {!fromRegistration && (
+          <TouchableOpacity style={ss.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.7}>
+            <View style={ss.backCircle}>
+              <Ionicons name="chevron-back" size={20} color={P} />
             </View>
-            <Text className="text-2xl font-bold text-gray-900 mb-2 text-center">
-              Complete Your Profile
-            </Text>
-            <Text className="text-base text-gray-600 text-center">
-              Tell us about your business to get started
-            </Text>
-          </View>
+          </TouchableOpacity>
+        )}
 
-          <View className="px-5 pb-5">
-            {/* General Error */}
-            {generalError ? (
-              <View className="bg-red-50 border border-red-200 rounded-xl p-4 mb-4 flex-row items-start">
-                <Ionicons name="alert-circle" size={20} color="#DC2626" />
-                <Text className="text-red-600 text-sm flex-1 ml-2">{generalError}</Text>
+        {/* Logo */}
+        <View style={ss.logoWrap}>
+          <Image source={require('../../../assets/lookrealMainLogo.png')} style={ss.logo} resizeMode="contain" />
+        </View>
+
+        <Text style={ss.title}>Tell us about your{'\n'}beauty business</Text>
+        <Text style={ss.subtitle}>This helps clients find and trust you</Text>
+
+        {/* Cover + Avatar Images — both required */}
+        <View style={ss.imageSection}>
+          {/* Cover */}
+          <TouchableOpacity style={ss.coverPicker} onPress={pickCover} activeOpacity={0.8}>
+            {coverUri ? (
+              <Image source={{ uri: coverUri }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
+            ) : (
+              <View style={ss.coverPlaceholder}>
+                <Ionicons name="image-outline" size={30} color={P} />
+                <Text style={ss.coverPlaceholderTxt}>Add Cover Photo</Text>
+                <Text style={ss.coverPlaceholderHint}>Required · 16:9 recommended</Text>
               </View>
-            ) : null}
-
-            {/* Business Information Section */}
-            <View className="bg-white rounded-2xl p-4 mb-4">
-              <TouchableOpacity
-                onPress={() => toggleSection('business')}
-                className="flex-row items-center justify-between mb-3"
-              >
-                <View className="flex-row items-center">
-                  <View className="w-10 h-10 rounded-xl bg-pink-50 items-center justify-center mr-3">
-                    <MaterialCommunityIcons name="store" size={22} color="#ec4899" />
-                  </View>
-                  <Text className="text-base font-semibold text-gray-900">
-                    Business Information *
-                  </Text>
-                </View>
-                <Ionicons
-                  name={expandedSection === 'business' ? 'chevron-up' : 'chevron-down'}
-                  size={24}
-                  color="#9ca3af"
-                />
-              </TouchableOpacity>
-
-              {expandedSection === 'business' && (
-                <View className="pt-3 border-t border-gray-100">
-                  {/* Business Name */}
-                  <View className="mb-4">
-                    <Text className="text-sm font-medium text-gray-700 mb-2">Business Name *</Text>
-                    <TextInput
-                      value={businessName}
-                      onChangeText={(text) => {
-                        setBusinessName(text);
-                        setErrors({ ...errors, businessName: '' });
-                        setGeneralError('');
-                      }}
-                      placeholder="Enter your business name"
-                      editable={!loading}
-                      className="border border-pink-200 rounded-xl px-4 py-3 text-gray-900 bg-white"
-                      placeholderTextColor="#9ca3af"
-                    />
-                    {errors.businessName ? (
-                      <Text className="text-red-600 text-xs mt-1.5">{errors.businessName}</Text>
-                    ) : null}
-                  </View>
-
-                  {/* Business Description */}
-                  <View className="mb-4">
-                    <Text className="text-sm font-medium text-gray-700 mb-2">
-                      Business Description *
-                    </Text>
-                    <TextInput
-                      value={businessDescription}
-                      onChangeText={(text) => {
-                        setBusinessDescription(text);
-                        setErrors({ ...errors, businessDescription: '' });
-                        setGeneralError('');
-                      }}
-                      placeholder="Describe your business and services"
-                      multiline
-                      numberOfLines={4}
-                      textAlignVertical="top"
-                      editable={!loading}
-                      className="border border-pink-200 rounded-xl px-4 py-3 text-gray-900 bg-white min-h-[100px]"
-                      placeholderTextColor="#9ca3af"
-                    />
-                    {errors.businessDescription ? (
-                      <Text className="text-red-600 text-xs mt-1.5">
-                        {errors.businessDescription}
-                      </Text>
-                    ) : null}
-                  </View>
-
-                  {/* Service Type */}
-                  <View className="mb-2">
-                    <Text className="text-sm font-medium text-gray-700 mb-2">Service Type *</Text>
-                    <View className="flex-row gap-2">
-                      <TouchableOpacity
-                        onPress={() => setVendorType('home_service')}
-                        disabled={loading}
-                        className={`flex-1 p-3 rounded-xl border-2 ${
-                          vendorType === 'home_service'
-                            ? 'border-pink-500 bg-pink-50'
-                            : 'border-gray-200 bg-white'
-                        }`}
-                        activeOpacity={0.7}
-                      >
-                        <View className="items-center">
-                          <Ionicons
-                            name="home-outline"
-                            size={24}
-                            color={vendorType === 'home_service' ? '#ec4899' : '#6b7280'}
-                          />
-                          <Text
-                            className={`text-xs font-medium mt-1 ${
-                              vendorType === 'home_service' ? 'text-pink-500' : 'text-gray-600'
-                            }`}
-                          >
-                            Home Service
-                          </Text>
-                        </View>
-                      </TouchableOpacity>
-
-                      <TouchableOpacity
-                        onPress={() => setVendorType('in_shop')}
-                        disabled={loading}
-                        className={`flex-1 p-3 rounded-xl border-2 ${
-                          vendorType === 'in_shop'
-                            ? 'border-pink-500 bg-pink-50'
-                            : 'border-gray-200 bg-white'
-                        }`}
-                        activeOpacity={0.7}
-                      >
-                        <View className="items-center">
-                          <Ionicons
-                            name="storefront-outline"
-                            size={24}
-                            color={vendorType === 'in_shop' ? '#ec4899' : '#6b7280'}
-                          />
-                          <Text
-                            className={`text-xs font-medium mt-1 ${
-                              vendorType === 'in_shop' ? 'text-pink-500' : 'text-gray-600'
-                            }`}
-                          >
-                            In-Shop
-                          </Text>
-                        </View>
-                      </TouchableOpacity>
-
-                      <TouchableOpacity
-                        onPress={() => setVendorType('both')}
-                        disabled={loading}
-                        className={`flex-1 p-3 rounded-xl border-2 ${
-                          vendorType === 'both'
-                            ? 'border-pink-500 bg-pink-50'
-                            : 'border-gray-200 bg-white'
-                        }`}
-                        activeOpacity={0.7}
-                      >
-                        <View className="items-center">
-                          <Ionicons
-                            name="duplicate-outline"
-                            size={24}
-                            color={vendorType === 'both' ? '#ec4899' : '#6b7280'}
-                          />
-                          <Text
-                            className={`text-xs font-medium mt-1 ${
-                              vendorType === 'both' ? 'text-pink-500' : 'text-gray-600'
-                            }`}
-                          >
-                            Both
-                          </Text>
-                        </View>
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                </View>
-              )}
+            )}
+            <View style={ss.coverCamBadge}>
+              <Ionicons name="camera" size={13} color="#fff" />
             </View>
+          </TouchableOpacity>
 
-            {/* Service Categories Section */}
-            <View className="bg-white rounded-2xl p-4 mb-4">
-              <TouchableOpacity
-                onPress={() => toggleSection('categories')}
-                className="flex-row items-center justify-between mb-3"
-              >
-                <View className="flex-row items-center flex-1">
-                  <View className="w-10 h-10 rounded-xl bg-pink-50 items-center justify-center mr-3">
-                    <Ionicons name="grid-outline" size={22} color="#ec4899" />
-                  </View>
-                  <View className="flex-1">
-                    <Text className="text-base font-semibold text-gray-900">
-                      Service Categories *
-                    </Text>
-                    <Text className="text-xs text-gray-500 mt-0.5">
-                      {selectedCategories.length} selected
-                    </Text>
-                  </View>
-                </View>
-                <Ionicons
-                  name={expandedSection === 'categories' ? 'chevron-up' : 'chevron-down'}
-                  size={24}
-                  color="#9ca3af"
-                />
-              </TouchableOpacity>
-
-              {expandedSection === 'categories' && (
-                <View className="pt-3 border-t border-gray-100">
-                  {loadingCategories ? (
-                    <View className="py-4">
-                      <ActivityIndicator size="small" color="#ec4899" />
-                    </View>
-                  ) : categories.length > 0 ? (
-                    <View className="flex-row flex-wrap gap-2">
-                      {categories.map((category) => (
-                        <TouchableOpacity
-                          key={category._id}
-                          onPress={() => toggleCategory(category._id)}
-                          disabled={loading}
-                          className={`px-4 py-2.5 rounded-full border-2 ${
-                            selectedCategories.includes(category._id)
-                              ? 'border-pink-500 bg-pink-50'
-                              : 'border-gray-200 bg-white'
-                          }`}
-                          activeOpacity={0.7}
-                        >
-                          <Text
-                            className={`text-sm font-medium ${
-                              selectedCategories.includes(category._id)
-                                ? 'text-pink-500'
-                                : 'text-gray-600'
-                            }`}
-                          >
-                            {category.name}
-                          </Text>
-                        </TouchableOpacity>
-                      ))}
-                    </View>
-                  ) : (
-                    <Text className="text-gray-500 text-center py-4">
-                      No categories available
-                    </Text>
-                  )}
-                  {errors.categories ? (
-                    <Text className="text-red-600 text-xs mt-2">{errors.categories}</Text>
-                  ) : null}
-                </View>
-              )}
+          {/* Avatar overlapping cover bottom-left */}
+          <TouchableOpacity style={ss.avatarPicker} onPress={pickAvatar} activeOpacity={0.8}>
+            {avatarUri ? (
+              <Image source={{ uri: avatarUri }} style={ss.avatarPickerImg} resizeMode="cover" />
+            ) : (
+              <View style={ss.avatarPlaceholder}>
+                <Ionicons name="person" size={26} color={P} />
+              </View>
+            )}
+            <View style={ss.avatarCamBadge}>
+              <Ionicons name="camera" size={11} color="#fff" />
             </View>
+          </TouchableOpacity>
+        </View>
 
-            {/* Business Location Section */}
-            <View className="bg-white rounded-2xl p-4 mb-4">
-              <TouchableOpacity
-                onPress={() => toggleSection('location')}
-                className="flex-row items-center justify-between mb-3"
-              >
-                <View className="flex-row items-center">
-                  <View className="w-10 h-10 rounded-xl bg-pink-50 items-center justify-center mr-3">
-                    <Ionicons name="location-outline" size={22} color="#ec4899" />
-                  </View>
-                  <Text className="text-base font-semibold text-gray-900">
-                    Business Location *
-                  </Text>
-                </View>
-                <Ionicons
-                  name={expandedSection === 'location' ? 'chevron-up' : 'chevron-down'}
-                  size={24}
-                  color="#9ca3af"
-                />
-              </TouchableOpacity>
+        {/* Image labels row */}
+        <View style={ss.imageLabels}>
+          <TouchableOpacity onPress={pickAvatar} activeOpacity={0.7}>
+            <Text style={ss.imageLabelLink}>{avatarUri ? 'Change profile photo' : 'Add profile photo *'}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={pickCover} activeOpacity={0.7}>
+            <Text style={ss.imageLabelLink}>{coverUri ? 'Change cover' : 'Add cover *'}</Text>
+          </TouchableOpacity>
+        </View>
+        {errors.images ? <Text style={[ss.err, { marginBottom: 8 }]}>{errors.images}</Text> : null}
 
-              {expandedSection === 'location' && (
-                <View className="pt-3 border-t border-gray-100">
-                  {location ? (
-                    <View className="bg-green-50 border border-green-200 rounded-xl p-4 mb-2">
-                      <View className="flex-row items-center mb-3">
-                        <Ionicons name="location" size={20} color="#059669" />
-                        <Text className="text-green-700 font-semibold ml-2">Location Added</Text>
-                      </View>
-                      <Text className="text-gray-500 text-xs mb-1">Address</Text>
-                      <TextInput
-                        className="bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 mb-2"
-                        value={location.address}
-                        onChangeText={(text) => setLocation({ ...location, address: text })}
-                        placeholder="Enter your address"
-                        editable={!loading}
-                      />
-                      <View className="flex-row gap-2">
-                        <View className="flex-1">
-                          <Text className="text-gray-500 text-xs mb-1">City</Text>
-                          <TextInput
-                            className="bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800"
-                            value={location.city}
-                            onChangeText={(text) => setLocation({ ...location, city: text })}
-                            placeholder="City"
-                            editable={!loading}
-                          />
-                        </View>
-                        <View className="flex-1">
-                          <Text className="text-gray-500 text-xs mb-1">State</Text>
-                          <TextInput
-                            className="bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800"
-                            value={location.state}
-                            onChangeText={(text) => setLocation({ ...location, state: text })}
-                            placeholder="State"
-                            editable={!loading}
-                          />
-                        </View>
-                      </View>
-                      <TouchableOpacity
-                        onPress={() => setLocation(null)}
-                        className="mt-3"
-                        activeOpacity={0.7}
-                      >
-                        <Text className="text-red-600 text-sm font-semibold">
-                          Change Location
-                        </Text>
-                      </TouchableOpacity>
-                    </View>
-                  ) : (
-                    <TouchableOpacity
-                      onPress={getCurrentLocation}
-                      disabled={locationLoading || loading}
-                      className={`bg-pink-50 border border-pink-200 rounded-xl p-4 flex-row items-center justify-center ${
-                        locationLoading || loading ? 'opacity-50' : ''
-                      }`}
-                      activeOpacity={0.7}
-                    >
-                      {locationLoading ? (
-                        <>
-                          <ActivityIndicator size="small" color="#EC4899" />
-                          <Text className="text-pink-600 font-semibold ml-3">
-                            Getting Location...
-                          </Text>
-                        </>
-                      ) : (
-                        <>
-                          <Ionicons name="location-outline" size={20} color="#EC4899" />
-                          <Text className="text-pink-600 font-semibold ml-2">
-                            Add Current Location
-                          </Text>
-                        </>
-                      )}
-                    </TouchableOpacity>
-                  )}
-                  {errors.location ? (
-                    <Text className="text-red-600 text-xs mt-2">{errors.location}</Text>
-                  ) : null}
-                </View>
-              )}
-            </View>
+        {/* Business Name (optional) */}
+        <View style={ss.field}>
+          <Text style={ss.label}>Business Name <Text style={ss.optional}>(optional)</Text></Text>
+          <View style={[ss.inputRow, errors.businessName ? ss.rowErr : null]}>
+            <Ionicons name="business-outline" size={16} color={P} style={ss.icon} />
+            <TextInput
+              style={ss.textInput}
+              placeholder="e.g. Glow Studio, Clara's Nails"
+              placeholderTextColor={HINT}
+              value={businessName}
+              onChangeText={v => { setBusinessName(v); clearErr('businessName'); }}
+              maxLength={100}
+              editable={!loading}
+            />
           </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
+          {errors.businessName ? <Text style={ss.err}>{errors.businessName}</Text> : null}
+        </View>
 
-      {/* Submit Button */}
-      <View className="bg-white border-t border-gray-200 p-5">
-        <TouchableOpacity
-          onPress={handleSubmit}
-          disabled={loading || loadingCategories}
-          className={`bg-pink-500 rounded-xl py-4 items-center ${
-            loading || loadingCategories ? 'opacity-50' : ''
-          }`}
-          activeOpacity={0.8}
-        >
-          {loading ? (
-            <ActivityIndicator color="#ffffff" />
-          ) : (
-            <Text className="text-white font-semibold text-base">Complete Setup</Text>
+        {/* Business Type */}
+        <View style={ss.field}>
+          <Text style={ss.label}>Business Type <Text style={ss.required}>*</Text></Text>
+          <TouchableOpacity
+            style={[ss.inputRow, errors.businessType ? ss.rowErr : null]}
+            onPress={() => setShowBizTypeSheet(true)}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="briefcase-outline" size={16} color={P} style={ss.icon} />
+            <Text style={[ss.inputText, !businessType && { color: HINT }]}>
+              {bizTypeLabel || 'Select business type'}
+            </Text>
+            <Ionicons name="chevron-down" size={16} color={HINT} />
+          </TouchableOpacity>
+          {errors.businessType ? <Text style={ss.err}>{errors.businessType}</Text> : null}
+        </View>
+
+        {/* Service Category */}
+        <View style={ss.field}>
+          <Text style={ss.label}>Service Category <Text style={ss.required}>*</Text></Text>
+          <TouchableOpacity
+            style={[ss.inputRow, errors.category ? ss.rowErr : null]}
+            onPress={() => setShowCategorySheet(true)}
+            activeOpacity={0.7}
+            disabled={loadingCategories}
+          >
+            <Ionicons name="grid-outline" size={16} color={P} style={ss.icon} />
+            {loadingCategories
+              ? <ActivityIndicator size="small" color={P} style={{ flex: 1 }} />
+              : <Text style={[ss.inputText, selectedCategoryNames.length === 0 && { color: HINT }]} numberOfLines={1}>
+                  {selectedCategoryNames.length > 0
+                    ? selectedCategoryNames.join(', ')
+                    : 'Select service categories'}
+                </Text>
+            }
+            <Ionicons name="chevron-down" size={16} color={HINT} />
+          </TouchableOpacity>
+          {selectedCategories.length > 0 && (
+            <View style={ss.tagRow}>
+              {selectedCategoryNames.map((name, i) => (
+                <TouchableOpacity
+                  key={selectedCategories[i]}
+                  style={ss.tag}
+                  onPress={() => toggleCategory(selectedCategories[i], name)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={ss.tagText}>{name}</Text>
+                  <Ionicons name="close" size={12} color={P} />
+                </TouchableOpacity>
+              ))}
+            </View>
           )}
+          {errors.category ? <Text style={ss.err}>{errors.category}</Text> : null}
+        </View>
+
+        {/* Location */}
+        <View style={ss.field}>
+          <Text style={ss.label}>Location <Text style={ss.required}>*</Text></Text>
+          <TouchableOpacity
+            style={[ss.locationPickerBtn, errors.location && ss.rowErr]}
+            onPress={() => setShowLocationPicker(true)}
+            activeOpacity={0.75}
+          >
+            {location ? (
+              <>
+                <View style={ss.locationPinDot} />
+                <View style={ss.locationTextCol}>
+                  <Text style={ss.locationAddress} numberOfLines={1}>{location.address || [location.city, location.state].filter(Boolean).join(', ')}</Text>
+                  <Text style={ss.locationMeta}>
+                    {[location.city, location.state, location.country].filter(Boolean).join(' · ')}
+                    {'  '}
+                    <Text style={ss.coordsTxt}>
+                      {location.coordinates[1].toFixed(4)}, {location.coordinates[0].toFixed(4)}
+                    </Text>
+                  </Text>
+                </View>
+                <Ionicons name="pencil" size={15} color={P} />
+              </>
+            ) : (
+              <>
+                <Ionicons name="map" size={18} color={P} />
+                <Text style={ss.locationBtnTxt}>Pick on Map</Text>
+                <Ionicons name="chevron-forward" size={15} color={HINT} />
+              </>
+            )}
+          </TouchableOpacity>
+          {errors.location ? <Text style={ss.err}>{errors.location}</Text> : null}
+        </View>
+
+        {/* Years of Experience */}
+        <View style={ss.field}>
+          <Text style={ss.label}>Years of Experience <Text style={ss.optional}>(optional)</Text></Text>
+          <TouchableOpacity
+            style={ss.inputRow}
+            onPress={() => setShowExpSheet(true)}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="time-outline" size={16} color={P} style={ss.icon} />
+            <Text style={[ss.inputText, !yearsLabel && { color: HINT }]}>
+              {yearsLabel || 'Select experience range'}
+            </Text>
+            <Ionicons name="chevron-down" size={16} color={HINT} />
+          </TouchableOpacity>
+        </View>
+
+        {/* Service Type */}
+        <View style={ss.field}>
+          <Text style={ss.label}>Service Type <Text style={ss.required}>*</Text></Text>
+          <TouchableOpacity
+            style={ss.inputRow}
+            onPress={() => setShowVendorTypeSheet(true)}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="car-outline" size={16} color={P} style={ss.icon} />
+            <Text style={ss.inputText} numberOfLines={1}>{vendorTypeLabel}</Text>
+            <Ionicons name="chevron-down" size={16} color={HINT} />
+          </TouchableOpacity>
+        </View>
+
+        {/* Business Description */}
+        <View style={ss.field}>
+          <Text style={ss.label}>Business Description <Text style={ss.required}>*</Text></Text>
+          <Text style={ss.hint}>Tell clients what makes your services special (min 20 characters)</Text>
+          <View style={[ss.textAreaRow, errors.businessDescription ? ss.rowErr : null]}>
+            <TextInput
+              style={ss.textArea}
+              placeholder="Describe your services, specialties, and what makes you unique..."
+              placeholderTextColor={HINT}
+              multiline
+              numberOfLines={4}
+              textAlignVertical="top"
+              maxLength={1000}
+              value={businessDescription}
+              onChangeText={v => { setBusinessDescription(v); clearErr('businessDescription'); }}
+              editable={!loading}
+            />
+          </View>
+          <View style={ss.descFooter}>
+            {errors.businessDescription
+              ? <Text style={ss.err}>{errors.businessDescription}</Text>
+              : <Text style={ss.charHint}>
+                  {businessDescription.length < 20
+                    ? `${20 - businessDescription.length} more characters needed`
+                    : ''}
+                </Text>
+            }
+            <Text style={[ss.charCount, businessDescription.length > 950 && { color: '#E53E3E' }]}>
+              {businessDescription.length}/1000
+            </Text>
+          </View>
+        </View>
+
+        {/* Submit */}
+        <TouchableOpacity
+          style={[ss.submitBtn, loading && { opacity: 0.7 }]}
+          onPress={handleSubmit}
+          disabled={loading}
+          activeOpacity={0.85}
+        >
+          {loading
+            ? <ActivityIndicator color="#fff" />
+            : <><Text style={ss.submitTxt}>Complete Setup</Text><Ionicons name="chevron-forward" size={18} color="#fff" /></>
+          }
         </TouchableOpacity>
-      </View>
+
+        <Text style={ss.footerNote}>You can update these details anytime from your profile settings.</Text>
+      </ScrollView>
+
+      {/* Business Type Sheet */}
+      <Modal visible={showBizTypeSheet} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setShowBizTypeSheet(false)}>
+        <SafeAreaView style={ss.sheetSafe} edges={['top', 'bottom']}>
+          <View style={ss.sheetHeader}>
+            <Text style={ss.sheetTitle}>Business Type</Text>
+            <TouchableOpacity onPress={() => setShowBizTypeSheet(false)} activeOpacity={0.7}>
+              <Ionicons name="close" size={24} color={TEXT} />
+            </TouchableOpacity>
+          </View>
+          {BUSINESS_TYPES.map(item => {
+            const sel = businessType === item.value;
+            return (
+              <TouchableOpacity
+                key={item.value}
+                style={[ss.sheetItem, sel && ss.sheetItemSel]}
+                onPress={() => { setBusinessType(item.value); clearErr('businessType'); setShowBizTypeSheet(false); }}
+                activeOpacity={0.7}
+              >
+                <View style={[ss.sheetIconCircle, sel && ss.sheetIconCircleSel]}>
+                  <Ionicons name={item.icon} size={18} color={sel ? '#fff' : P} />
+                </View>
+                <Text style={[ss.sheetItemTxt, sel && { color: P, fontWeight: '600' }]}>{item.label}</Text>
+                {sel ? <Ionicons name="checkmark-circle" size={22} color={P} /> : <View style={ss.unchecked} />}
+              </TouchableOpacity>
+            );
+          })}
+        </SafeAreaView>
+      </Modal>
+
+      {/* Service Type Sheet */}
+      <Modal visible={showVendorTypeSheet} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setShowVendorTypeSheet(false)}>
+        <SafeAreaView style={ss.sheetSafe} edges={['top', 'bottom']}>
+          <View style={ss.sheetHeader}>
+            <Text style={ss.sheetTitle}>Service Type</Text>
+            <TouchableOpacity onPress={() => setShowVendorTypeSheet(false)} activeOpacity={0.7}>
+              <Ionicons name="close" size={24} color={TEXT} />
+            </TouchableOpacity>
+          </View>
+          {VENDOR_TYPES.map(item => {
+            const sel = vendorType === item.value;
+            return (
+              <TouchableOpacity
+                key={item.value}
+                style={[ss.sheetItem, sel && ss.sheetItemSel]}
+                onPress={() => { setVendorType(item.value); setShowVendorTypeSheet(false); }}
+                activeOpacity={0.7}
+              >
+                <Text style={[ss.sheetItemTxt, sel && { color: P, fontWeight: '600' }]}>{item.label}</Text>
+                {sel ? <Ionicons name="checkmark-circle" size={22} color={P} /> : <View style={ss.unchecked} />}
+              </TouchableOpacity>
+            );
+          })}
+        </SafeAreaView>
+      </Modal>
+
+      {/* Category Sheet */}
+      <Modal visible={showCategorySheet} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setShowCategorySheet(false)}>
+        <SafeAreaView style={ss.sheetSafe} edges={['top', 'bottom']}>
+          <View style={ss.sheetHeader}>
+            <Text style={ss.sheetTitle}>Service Categories</Text>
+            <TouchableOpacity onPress={() => setShowCategorySheet(false)} activeOpacity={0.7}>
+              <Text style={ss.doneTxt}>Done</Text>
+            </TouchableOpacity>
+          </View>
+          <Text style={ss.sheetHint}>Select all categories that apply to your business</Text>
+          <FlatList
+            data={categories}
+            keyExtractor={item => item._id}
+            renderItem={({ item }) => {
+              const sel = selectedCategories.includes(item._id);
+              return (
+                <TouchableOpacity
+                  style={[ss.sheetItem, sel && ss.sheetItemSel]}
+                  onPress={() => toggleCategory(item._id, item.name)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[ss.sheetItemTxt, sel && { color: P, fontWeight: '600' }]}>{item.name}</Text>
+                  {sel ? <Ionicons name="checkmark-circle" size={22} color={P} /> : <View style={ss.unchecked} />}
+                </TouchableOpacity>
+              );
+            }}
+            ListEmptyComponent={() => (
+              <View style={{ padding: 32, alignItems: 'center' }}>
+                <Text style={{ color: HINT }}>No categories available</Text>
+              </View>
+            )}
+          />
+        </SafeAreaView>
+      </Modal>
+
+      {/* Years of Experience Sheet */}
+      <Modal visible={showExpSheet} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setShowExpSheet(false)}>
+        <SafeAreaView style={ss.sheetSafe} edges={['top', 'bottom']}>
+          <View style={ss.sheetHeader}>
+            <Text style={ss.sheetTitle}>Years of Experience</Text>
+            <TouchableOpacity onPress={() => setShowExpSheet(false)} activeOpacity={0.7}>
+              <Ionicons name="close" size={24} color={TEXT} />
+            </TouchableOpacity>
+          </View>
+          {EXPERIENCE_OPTIONS.map(opt => {
+            const sel = yearsOfExperience === opt.value;
+            return (
+              <TouchableOpacity
+                key={opt.value}
+                style={[ss.sheetItem, sel && ss.sheetItemSel]}
+                onPress={() => { setYearsOfExperience(opt.value); setYearsLabel(opt.label); setShowExpSheet(false); }}
+                activeOpacity={0.7}
+              >
+                <Text style={[ss.sheetItemTxt, sel && { color: P, fontWeight: '600' }]}>{opt.label}</Text>
+                {sel ? <Ionicons name="checkmark-circle" size={22} color={P} /> : <View style={ss.unchecked} />}
+              </TouchableOpacity>
+            );
+          })}
+        </SafeAreaView>
+      </Modal>
+
+      <LocationPickerModal
+        visible={showLocationPicker}
+        onClose={() => setShowLocationPicker(false)}
+        onConfirm={handleLocationConfirm}
+        initialLocation={location}
+      />
     </SafeAreaView>
   );
 };
+
+const ss = StyleSheet.create({
+  safe: { flex: 1, backgroundColor: BG },
+  scroll: { paddingHorizontal: SW * 0.06, paddingBottom: 60, paddingTop: 8 },
+
+  // Image pickers
+  imageSection: { marginBottom: 8, position: 'relative' },
+  coverPicker: {
+    width: '100%', height: 148,
+    backgroundColor: P_LIGHT, borderRadius: 14,
+    overflow: 'hidden', alignItems: 'center', justifyContent: 'center',
+    marginBottom: 0,
+  },
+  coverPlaceholder: { alignItems: 'center', gap: 6 },
+  coverPlaceholderTxt: { fontSize: 14, color: P, fontWeight: '600' },
+  coverPlaceholderHint: { fontSize: 11, color: HINT },
+  coverCamBadge: {
+    position: 'absolute', bottom: 10, right: 10,
+    width: 30, height: 30, borderRadius: 15,
+    backgroundColor: P, alignItems: 'center', justifyContent: 'center',
+  },
+  avatarPicker: {
+    position: 'absolute', bottom: -34, left: 14,
+    width: 68, height: 68, borderRadius: 34,
+    borderWidth: 3, borderColor: BG,
+    overflow: 'hidden', backgroundColor: P_LIGHT,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  avatarPickerImg: { width: '100%', height: '100%' },
+  avatarPlaceholder: { alignItems: 'center', justifyContent: 'center', flex: 1 },
+  avatarCamBadge: {
+    position: 'absolute', bottom: 2, right: 2,
+    width: 22, height: 22, borderRadius: 11,
+    backgroundColor: P, alignItems: 'center', justifyContent: 'center',
+  },
+  imageLabels: {
+    flexDirection: 'row', justifyContent: 'space-between',
+    marginTop: 40, marginBottom: 6,
+  },
+  imageLabelLink: { fontSize: 12, color: P, fontWeight: '600' },
+  backBtn: { marginBottom: 12 },
+  backCircle: {
+    width: 38, height: 38, borderRadius: 19,
+    backgroundColor: P_LIGHT, alignItems: 'center', justifyContent: 'center',
+  },
+  logoWrap: { alignItems: 'center', marginBottom: 20 },
+  logo: { width: SW * 0.42, height: 56 },
+  title: { fontSize: 22, fontWeight: '700', color: TEXT, textAlign: 'center', marginBottom: 6, lineHeight: 30 },
+  subtitle: { fontSize: 13, color: HINT, textAlign: 'center', marginBottom: 28 },
+  field: { marginBottom: 18 },
+  label: { fontSize: 14, fontWeight: '600', color: TEXT, marginBottom: 8 },
+  required: { color: P },
+  optional: { fontWeight: '400', color: HINT, fontSize: 12 },
+  hint: { fontSize: 12, color: HINT, marginBottom: 8, lineHeight: 17 },
+  inputRow: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: '#FAFAFA', borderRadius: 14,
+    borderWidth: 1.5, borderColor: BORDER,
+    paddingHorizontal: 14, height: 52,
+  },
+  rowErr: { borderColor: '#E53E3E' },
+  icon: { marginRight: 10 },
+  textInput: { flex: 1, fontSize: 15, color: TEXT },
+  inputText: { flex: 1, fontSize: 15, color: TEXT },
+  textAreaRow: {
+    backgroundColor: '#FAFAFA', borderRadius: 14,
+    borderWidth: 1.5, borderColor: BORDER,
+    paddingHorizontal: 14, paddingVertical: 12,
+  },
+  textArea: {
+    minHeight: 96, fontSize: 15, color: TEXT,
+    ...Platform.select({ android: { textAlignVertical: 'top' as const }, ios: { paddingTop: 4 } }),
+  },
+  descFooter: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 },
+  charHint: { fontSize: 12, color: HINT, flex: 1 },
+  charCount: { fontSize: 12, color: HINT },
+  err: { fontSize: 12, color: '#E53E3E', marginTop: 4 },
+  tagRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 },
+  tag: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    backgroundColor: P_LIGHT, borderRadius: 20,
+    borderWidth: 1, borderColor: '#F8BBD0',
+    paddingHorizontal: 10, paddingVertical: 5,
+  },
+  tagText: { fontSize: 12, color: P, fontWeight: '500' },
+  locationPickerBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    backgroundColor: '#F7F8FA', borderRadius: 14,
+    paddingHorizontal: 14, paddingVertical: 13,
+  },
+  locationPinDot: {
+    width: 10, height: 10, borderRadius: 5,
+    backgroundColor: P, flexShrink: 0,
+  },
+  locationTextCol: { flex: 1 },
+  locationAddress: { fontSize: 14, color: TEXT, fontWeight: '600' },
+  locationMeta: { fontSize: 11, color: HINT, marginTop: 2 },
+  coordsTxt: { fontSize: 10, color: HINT, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' },
+  locationBtnTxt: { flex: 1, fontSize: 15, color: P, fontWeight: '600' },
+  submitBtn: {
+    backgroundColor: P, borderRadius: 30, height: 52,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    shadowColor: P, shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3, shadowRadius: 8, elevation: 5,
+    marginTop: 8,
+  },
+  submitTxt: { color: '#fff', fontSize: 16, fontWeight: '700' },
+  footerNote: { textAlign: 'center', fontSize: 12, color: HINT, marginTop: 16 },
+  // Success screen
+  successScreen: {
+    flex: 1, backgroundColor: '#fff',
+    alignItems: 'center', justifyContent: 'center',
+    paddingHorizontal: SW * 0.1,
+  },
+  successBlob: {
+    position: 'absolute', top: -SW * 0.55,
+    width: SW * 2, height: SW * 1.4,
+    borderRadius: SW, backgroundColor: P_LIGHT,
+  },
+  successLogo: { width: SW * 0.38, height: 56, marginBottom: 36 },
+  successRing: {
+    width: 116, height: 116, borderRadius: 58,
+    borderWidth: 3, borderColor: P_LIGHT,
+    alignItems: 'center', justifyContent: 'center',
+    marginBottom: 28,
+  },
+  successCircle: {
+    width: 94, height: 94, borderRadius: 47,
+    backgroundColor: P,
+    alignItems: 'center', justifyContent: 'center',
+    shadowColor: P, shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.35, shadowRadius: 16, elevation: 10,
+  },
+  successTitle: { fontSize: 28, fontWeight: '800', color: TEXT, textAlign: 'center', marginBottom: 12 },
+  successSub: { fontSize: 14, color: HINT, textAlign: 'center', lineHeight: 22, marginBottom: 40 },
+  successBtn: {
+    backgroundColor: P, borderRadius: 50,
+    paddingVertical: 15, width: '100%',
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    shadowColor: P, shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3, shadowRadius: 10, elevation: 6,
+    marginBottom: 16,
+  },
+  successBtnTxt: { fontSize: 16, fontWeight: '700', color: '#fff' },
+  successHint: { fontSize: 12, color: HINT },
+  // Bottom sheets
+  sheetSafe: { flex: 1, backgroundColor: '#fff' },
+  sheetHeader: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 20, paddingTop: 20, paddingBottom: 14,
+    borderBottomWidth: 1, borderBottomColor: BORDER,
+  },
+  sheetTitle: { fontSize: 18, fontWeight: '700', color: TEXT },
+  sheetHint: { fontSize: 13, color: HINT, paddingHorizontal: 20, paddingVertical: 10 },
+  doneTxt: { fontSize: 15, color: P, fontWeight: '700' },
+  sheetItem: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    paddingHorizontal: 20, paddingVertical: 16,
+    borderBottomWidth: 1, borderBottomColor: '#F9F9F9',
+  },
+  sheetItemSel: { backgroundColor: P_LIGHT },
+  sheetIconCircle: {
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: P_LIGHT, alignItems: 'center', justifyContent: 'center',
+  },
+  sheetIconCircleSel: { backgroundColor: P },
+  sheetItemTxt: { flex: 1, fontSize: 15, color: TEXT },
+  unchecked: { width: 22, height: 22, borderRadius: 11, borderWidth: 1.5, borderColor: '#D1D5DB' },
+});
 
 export default VendorProfileSetup;
