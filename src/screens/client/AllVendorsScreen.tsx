@@ -5,18 +5,35 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '@/types/navigation.types';
-import { vendorAPI, handleAPIError } from '@/api/api';
+import { vendorAPI, userAPI, savedAPI, handleAPIError } from '@/api/api';
+import { toast } from '@/components/ui/Toast';
 import {
   parseVendors, extractVendorsFromResponse, FormattedVendor,
   filterVendorsByQuery, sortVendors,
 } from '@/utils/vendorUtils';
+import FilterModal, { FilterOptions } from '@/components/FilterModal';
+import * as Location from 'expo-location';
 
 const BG = '#FFF0F5';
 const PINK = '#E91E8C';
 const CARD_R = 16;
+
+function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) ** 2
+    + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function formatDistance(km: number): string {
+  if (km < 1) return `${Math.round(km * 1000)}m away`;
+  return `${km.toFixed(1)}km away`;
+}
 
 type Nav = NativeStackNavigationProp<RootStackParamList, 'AllVendors'>;
 type ServiceFilter = 'all' | 'home_service' | 'in_shop';
@@ -68,9 +85,17 @@ interface VendorBigCardProps {
   isFavorite: boolean;
   onFavorite: () => void;
   onBook: () => void;
+  userCoords?: { latitude: number; longitude: number };
 }
 
-const VendorBigCard: React.FC<VendorBigCardProps> = ({ vendor, isFavorite, onFavorite, onBook }) => {
+const VendorBigCard: React.FC<VendorBigCardProps> = ({ vendor, isFavorite, onFavorite, onBook, userCoords }) => {
+  // [lng, lat] is MongoDB GeoJSON order
+  const distanceLabel = (() => {
+    if (!userCoords || !vendor.coordinates) return null;
+    const [vLng, vLat] = vendor.coordinates;
+    if (!vLat || !vLng) return null;
+    return formatDistance(haversineKm(userCoords.latitude, userCoords.longitude, vLat, vLng));
+  })();
   const serviceColor =
     vendor.vendorType === 'home_service' ? '#2563eb' :
     vendor.vendorType === 'in_shop' ? '#059669' : '#7c3aed';
@@ -127,11 +152,18 @@ const VendorBigCard: React.FC<VendorBigCardProps> = ({ vendor, isFavorite, onFav
           )}
         </View>
 
-        {/* Rating */}
+        {/* Rating + distance */}
         <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 9 }}>
           <Ionicons name="star" size={14} color="#f59e0b" />
           <Text style={styles.ratingVal}>{vendor.rating.toFixed(1)}</Text>
           <Text style={styles.ratingCount}> ({vendor.reviews} review{vendor.reviews !== 1 ? 's' : ''})</Text>
+          {distanceLabel && (
+            <>
+              <Text style={styles.ratingCount}> · </Text>
+              <Ionicons name="location-outline" size={13} color="#9ca3af" />
+              <Text style={styles.ratingCount}>{distanceLabel}</Text>
+            </>
+          )}
         </View>
 
         {/* Service type pill */}
@@ -160,9 +192,7 @@ const VendorBigCard: React.FC<VendorBigCardProps> = ({ vendor, isFavorite, onFav
 
           {vendor.startingPrice ? (
             <Text style={styles.price}>From ₦{vendor.startingPrice.toLocaleString()}</Text>
-          ) : (
-            <Text style={styles.priceRequest}>Price on request</Text>
-          )}
+          ) : null}
         </View>
 
         {/* Book button */}
@@ -206,31 +236,119 @@ const SortSheet: React.FC<{
   </Modal>
 );
 
+const PRESET_PRICE: Record<string, { min?: number; max?: number }> = {
+  budget:  { min: 0,     max: 30000 },
+  mid:     { min: 30000, max: 50000 },
+  premium: { min: 50000, max: 70000 },
+  luxury:  { min: 80000            },
+};
+
+const DEFAULT_FILTERS: FilterOptions = {
+  searchName: '', category: '', minPrice: '', maxPrice: '',
+  minDuration: '', maxDuration: '', status: 'all', sortBy: 'name', sortOrder: 'asc',
+  distance: 'any', pricePreset: '', minRating: 0, availability: 'any', vendorType: 'all',
+};
+
+const DISTANCE_METERS: Record<string, number> = {
+  '5km': 5000, '10km': 10000, '20km': 20000,
+};
+
 const AllVendorsScreen: React.FC = () => {
   const navigation = useNavigation<Nav>();
+  const route = useRoute<RouteProp<RootStackParamList, 'AllVendors'>>();
+  const routeCategoryId = route.params?.categoryId;
+  const routeCategoryName = route.params?.categoryName;
+
   const [vendors, setVendors] = useState<FormattedVendor[]>([]);
   const [filteredVendors, setFilteredVendors] = useState<FormattedVendor[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [serviceFilter, setServiceFilter] = useState<ServiceFilter>('all');
   const [sortBy, setSortBy] = useState<SortOption>('rating');
   const [sortSheetVisible, setSortSheetVisible] = useState(false);
+  const [filterVisible, setFilterVisible] = useState(false);
+  const [filters, setFilters] = useState<FilterOptions>(() => {
+    // Initialise from route params if passed from AllServices
+    const preset = route.params?.pricePreset || '';
+    const presetPrices = preset ? PRESET_PRICE[preset] : undefined;
+    return {
+      ...DEFAULT_FILTERS,
+      minRating: route.params?.minRating || 0,
+      pricePreset: preset as any,
+      minPrice: presetPrices?.min != null ? String(presetPrices.min) : '',
+      maxPrice: presetPrices?.max != null ? String(presetPrices.max) : '',
+    };
+  });
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [favoriteVendors, setFavoriteVendors] = useState<Set<string>>(new Set());
   const [currentPage, setCurrentPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
+  const [userCoords, setUserCoords] = useState<{ latitude: number; longitude: number } | undefined>();
 
-  const fetchVendors = async (page: number = 1, append: boolean = false) => {
+  // Silently fetch user location if already granted — no popup
+  useEffect(() => {
+    (async () => {
+      const { status } = await Location.getForegroundPermissionsAsync();
+      if (status === 'granted') {
+        const loc = await Location.getLastKnownPositionAsync() ??
+                    await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+        if (loc) setUserCoords({ latitude: loc.coords.latitude, longitude: loc.coords.longitude });
+      }
+    })();
+  }, []);
+
+  const hasActiveFilters = !!(filters.minRating || filters.pricePreset || (filters.distance && filters.distance !== 'any'));
+
+  const fetchVendors = async (
+    page: number = 1,
+    append: boolean = false,
+    categoryId?: string,
+    activeFilters?: FilterOptions,
+  ) => {
     try {
       if (!append) setLoading(true);
       else setLoadingMore(true);
 
-      const response = await vendorAPI.getAllVendors({ page, limit: 20 });
-      if (response.success) {
+      const f = activeFilters || filters;
+      const useNearby = f.distance && f.distance !== 'any';
+      let response: any;
+
+      if (useNearby) {
+        // Real GPS distance filtering
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== 'granted') {
+          // Fall back to regular list if permission denied
+          const params: any = { page, limit: 20 };
+          if (categoryId) params.category = categoryId;
+          if (f.minRating) params.rating = f.minRating;
+          if (f.vendorType && f.vendorType !== 'all') params.vendorType = f.vendorType;
+          response = await vendorAPI.getAllVendors(params);
+        } else {
+          const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+          const coords = { latitude: loc.coords.latitude, longitude: loc.coords.longitude };
+          setUserCoords(coords);
+          const nearbyParams: any = {
+            ...coords,
+            maxDistance: DISTANCE_METERS[f.distance!] ?? 10000,
+          };
+          if (categoryId) nearbyParams.category = categoryId;
+          if (f.minRating) nearbyParams.minRating = f.minRating;
+          if (f.vendorType && f.vendorType !== 'all') nearbyParams.vendorType = f.vendorType;
+          response = await userAPI.getNearbyVendors(nearbyParams);
+        }
+      } else {
+        const params: any = { page, limit: 20 };
+        if (categoryId) params.category = categoryId;
+        // 'rating' is what the backend controller reads (req.query.rating)
+        if (f.minRating) params.rating = f.minRating;
+        if (f.vendorType && f.vendorType !== 'all') params.vendorType = f.vendorType;
+        response = await vendorAPI.getAllVendors(params);
+      }
+
+      if (response?.success) {
         const rawVendors = extractVendorsFromResponse(response);
         const formattedVendors = parseVendors(rawVendors);
-        // Dedupe by id within this page
         const seenInPage = new Set<string>();
         const uniqueInPage = formattedVendors.filter(v => {
           if (!v.id || seenInPage.has(v.id)) return false;
@@ -238,26 +356,24 @@ const AllVendorsScreen: React.FC = () => {
           return true;
         });
         if (append) {
-          // Dedupe against vendors already loaded
           setVendors(prev => {
             const existingIds = new Set(prev.map(v => v.id));
             const merged = [...prev];
             for (const v of uniqueInPage) {
-              if (!existingIds.has(v.id)) {
-                existingIds.add(v.id);
-                merged.push(v);
-              }
+              if (!existingIds.has(v.id)) { existingIds.add(v.id); merged.push(v); }
             }
             return merged;
           });
         } else {
           setVendors(uniqueInPage);
         }
-
+        // Nearby endpoint returns all results at once — no pagination
         setHasMore(
-          response.meta?.pagination
-            ? response.meta.pagination.hasNextPage || false
-            : formatted.length >= 20
+          useNearby
+            ? false
+            : (response.meta?.pagination
+                ? response.meta.pagination.hasNextPage || false
+                : uniqueInPage.length >= 20)
         );
       }
     } catch (error) {
@@ -269,122 +385,100 @@ const AllVendorsScreen: React.FC = () => {
   };
 
   useEffect(() => {
-    fetchVendors(1, false);
-  }, []);
+    fetchVendors(1, false, routeCategoryId, filters);
+    savedAPI.getSavedIds().then(res => {
+      if (res?.data?.savedVendorIds) {
+        setFavoriteVendors(new Set(res.data.savedVendorIds));
+      }
+    }).catch(() => {});
+  }, [routeCategoryId]);
 
+  // Sync segment tabs when filter modal sets vendorType
+  useEffect(() => {
+    if (filters.vendorType && filters.vendorType !== 'all') {
+      setServiceFilter(filters.vendorType as ServiceFilter);
+    } else if (filters.vendorType === 'all') {
+      setServiceFilter('all');
+    }
+  }, [filters.vendorType]);
+
+  // Client-side filtering: service type + price (no DB field) + search + sort
   useEffect(() => {
     let result = [...vendors];
     if (serviceFilter !== 'all') {
       result = result.filter(v =>
         serviceFilter === 'home_service'
           ? v.vendorType === 'home_service' || v.vendorType === 'both'
-          : v.vendorType === 'in_shop' || v.vendorType === 'both'
+          : serviceFilter === 'in_shop'
+            ? v.vendorType === 'in_shop' || v.vendorType === 'both'
+            : v.vendorType === 'both'
       );
+    }
+    // Client-side price filtering (startingPrice has no dedicated DB field)
+    if (filters.pricePreset && PRESET_PRICE[filters.pricePreset]) {
+      const { min, max } = PRESET_PRICE[filters.pricePreset];
+      result = result.filter(v => {
+        const p = v.startingPrice;
+        if (p == null) return true;
+        if (min != null && p < min) return false;
+        if (max != null && p > max) return false;
+        return true;
+      });
     }
     if (searchQuery.trim()) result = filterVendorsByQuery(result, searchQuery);
     result = sortVendors(result, sortBy, 'desc');
     setFilteredVendors(result);
-  }, [vendors, searchQuery, serviceFilter, sortBy]);
+  }, [vendors, searchQuery, serviceFilter, sortBy, filters]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
     setCurrentPage(1);
-    fetchVendors(1, false).finally(() => setRefreshing(false));
-  }, []);
+    fetchVendors(1, false, routeCategoryId, filters).finally(() => setRefreshing(false));
+  }, [routeCategoryId, filters]);
 
   const loadMore = () => {
     if (!loadingMore && hasMore) {
       const next = currentPage + 1;
       setCurrentPage(next);
-      fetchVendors(next, true);
+      fetchVendors(next, true, routeCategoryId, filters);
     }
   };
 
-  const toggleFavorite = (id: string) => {
+  const handleApplyFilters = (newFilters: FilterOptions) => {
+    setFilters(newFilters);
+    setServiceFilter((newFilters.vendorType as ServiceFilter) || 'all');
+    setFilterVisible(false);
+    setCurrentPage(1);
+    fetchVendors(1, false, routeCategoryId, newFilters);
+  };
+
+  const handleResetFilters = () => {
+    setFilters(DEFAULT_FILTERS);
+    setServiceFilter('all');
+    setFilterVisible(false);
+    setCurrentPage(1);
+    fetchVendors(1, false, routeCategoryId, DEFAULT_FILTERS);
+  };
+
+  const toggleFavorite = async (id: string) => {
+    const wasSaved = favoriteVendors.has(id);
     setFavoriteVendors(prev => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id); else next.add(id);
       return next;
     });
+    try {
+      const res = await savedAPI.toggleVendor(id);
+      toast.success(res.data?.saved ? 'Saved' : 'Removed', res.message || 'Wishlist updated');
+    } catch (err) {
+      setFavoriteVendors(prev => {
+        const next = new Set(prev);
+        wasSaved ? next.add(id) : next.delete(id);
+        return next;
+      });
+      toast.error('Error', handleAPIError(err).message);
+    }
   };
-  const handleApplyFilters = (newFilters: any) => {
-    setFilters(newFilters);
-    setSortBy(newFilters.sortBy || 'rating');
-    setSortOrder(newFilters.sortOrder || 'desc');
-    setSelectedCategory(newFilters.category || '');
-    setCurrentPage(1);
-  };
-  const handleResetFilters = () => {
-    setFilters({
-      searchName: '',
-      category: '',
-      minPrice: '',
-      maxPrice: '',
-      minDuration: '',
-      maxDuration: '',
-      status: 'all',
-      sortBy: 'rating',
-      sortOrder: 'desc'
-    });
-    setSearchQuery('');
-    setSelectedCategory('');
-    setSortBy('rating');
-    setSortOrder('desc');
-    setCurrentPage(1);
-  };
-  const renderVendorItem = ({
-    item,
-    index
-  }: {
-    item: FormattedVendor;
-    index: number;
-  }) => {
-    const cardWidth = (SCREEN_WIDTH - 48) / 2;
-    return <View className="px-1.5 mb-3" style={{
-      width: (SCREEN_WIDTH - 16) / 2
-    }}>
-        <VendorCard vendor={{
-        id: item.id,
-        businessName: item.businessName,
-        image: item.image,
-        service: item.service,
-        rating: item.rating,
-        reviews: item.reviews,
-        isVerified: item.isVerified,
-        vendorType: item.vendorType
-      }} width={cardWidth} onPress={() => handleVendorPress(item.id)} onFavoritePress={() => handleFavoriteToggle(item.id)} isFavorite={favoriteVendors.has(item.id)} showFavorite />
-      </View>;
-  };
-  const renderFooter = () => {
-    if (!loadingMore) return null;
-    return <View className="py-4">
-        <ActivityIndicator size="small" color="#eb278d" />
-      </View>;
-  };
-  const renderEmptyState = () => <View className="flex-1 items-center justify-center py-20">
-      <Ionicons name="people-outline" size={64} color="#d1d5db" />
-      <Text className="text-gray-400 text-lg font-semibold mt-4">No vendors found</Text>
-      <Text className="text-gray-300 text-sm mt-2">Try adjusting your filters</Text>
-      <TouchableOpacity className="mt-6 bg-pink-500 px-6 py-3 rounded-xl" onPress={handleResetFilters}>
-        <Text className="text-white font-semibold">Clear Filters</Text>
-      </TouchableOpacity>
-    </View>;
-  return <SafeAreaView className="flex-1 bg-gray-50" edges={['top']}>
-      {}
-      <View className="bg-white px-5 py-4 border-b border-gray-100">
-        <View className="flex-row items-center justify-between mb-4">
-          <View className="flex-row items-center flex-1">
-            <TouchableOpacity className="mr-3" onPress={() => navigation.goBack()} activeOpacity={0.7}>
-              <Ionicons name="arrow-back" size={24} color="#1f2937" />
-            </TouchableOpacity>
-            <View className="flex-1">
-              <Text className="text-xl font-bold text-gray-900">All Vendors</Text>
-              <Text className="text-xs text-gray-500 mt-0.5">
-                {filteredVendors.length} vendor{filteredVendors.length !== 1 ? 's' : ''} available
-              </Text>
-            </View>
-          </View>
-
   const currentSortLabel = SORT_OPTIONS.find(o => o.key === sortBy)?.label ?? 'Top Rated';
 
   const renderItem = ({ item }: { item: FormattedVendor }) => (
@@ -393,6 +487,7 @@ const AllVendorsScreen: React.FC = () => {
       isFavorite={favoriteVendors.has(item.id)}
       onFavorite={() => toggleFavorite(item.id)}
       onBook={() => navigation.navigate('VendorDetail', { vendorId: item.id })}
+      userCoords={userCoords}
     />
   );
 
@@ -403,8 +498,15 @@ const AllVendorsScreen: React.FC = () => {
         <TouchableOpacity onPress={() => navigation.goBack()} activeOpacity={0.7} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={20} color="#111827" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>All Vendors</Text>
-        <View style={{ width: 40 }} />
+        <Text style={styles.headerTitle}>{routeCategoryName ?? 'All Vendors'}</Text>
+        <TouchableOpacity
+          onPress={() => setFilterVisible(true)}
+          activeOpacity={0.8}
+          style={styles.filterBtn}
+        >
+          <Ionicons name="options-outline" size={20} color={PINK} />
+          {hasActiveFilters && <View style={styles.filterDot} />}
+        </TouchableOpacity>
       </View>
 
       {/* Search */}
@@ -445,16 +547,14 @@ const AllVendorsScreen: React.FC = () => {
         </View>
       </View>
 
-      {}
-      {loading ? <View className="flex-1 items-center justify-center">
-          <ActivityIndicator size="large" color="#eb278d" />
-          <Text className="text-gray-400 text-sm mt-4">Loading vendors...</Text>
-        </View> : <FlatList data={filteredVendors} renderItem={renderVendorItem} keyExtractor={item => item.id} numColumns={2} contentContainerStyle={{
-      paddingVertical: 16,
-      paddingHorizontal: 8
-    }} columnWrapperStyle={{
-      justifyContent: 'space-between'
-    }} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#eb278d" colors={['#eb278d']} />} onEndReached={loadMore} onEndReachedThreshold={0.5} ListFooterComponent={renderFooter} ListEmptyComponent={renderEmptyState} showsVerticalScrollIndicator={false} />}
+      {/* Sort row */}
+      <View style={styles.sectionHeader}>
+        <Text style={styles.sectionTitle}>{filteredVendors.length} vendor{filteredVendors.length !== 1 ? 's' : ''}</Text>
+        <TouchableOpacity style={styles.sortBtn} onPress={() => setSortSheetVisible(true)} activeOpacity={0.8}>
+          <Ionicons name="swap-vertical-outline" size={14} color="#6b7280" style={{ marginRight: 4 }} />
+          <Text style={styles.sortBtnText}>{currentSortLabel}</Text>
+        </TouchableOpacity>
+      </View>
 
       {/* List */}
       {loading ? (
@@ -499,6 +599,15 @@ const AllVendorsScreen: React.FC = () => {
         onSelect={setSortBy}
         onClose={() => setSortSheetVisible(false)}
       />
+
+      <FilterModal
+        visible={filterVisible}
+        filters={filters}
+        categories={[]}
+        onClose={() => setFilterVisible(false)}
+        onApply={handleApplyFilters}
+        onReset={handleResetFilters}
+      />
     </SafeAreaView>
   );
 };
@@ -516,6 +625,16 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.07, shadowRadius: 4, elevation: 2,
   },
   headerTitle: { fontSize: 18, fontWeight: '700', color: '#111827' },
+  filterBtn: {
+    width: 40, height: 40, borderRadius: 20, backgroundColor: '#fff',
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1.5, borderColor: PINK,
+  },
+  filterDot: {
+    position: 'absolute', top: 6, right: 6,
+    width: 8, height: 8, borderRadius: 4,
+    backgroundColor: PINK, borderWidth: 1.5, borderColor: '#fff',
+  },
   searchWrap: {
     flexDirection: 'row', alignItems: 'center',
     marginHorizontal: 16, marginBottom: 12,
@@ -594,7 +713,6 @@ const styles = StyleSheet.create({
   },
   metaLabel: { fontSize: 12, color: '#6b7280' },
   price: { fontSize: 14, fontWeight: '700', color: PINK },
-  priceRequest: { fontSize: 12, color: '#9ca3af' },
   bookBtn: {
     backgroundColor: PINK, borderRadius: 11, paddingVertical: 13,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',

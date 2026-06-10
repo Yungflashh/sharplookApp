@@ -1,132 +1,550 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, ActivityIndicator, RefreshControl, Image } from 'react-native';
+import React, { useEffect, useState, useCallback } from 'react';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  ScrollView,
+  ActivityIndicator,
+  RefreshControl,
+  Image,
+  Dimensions,
+  Platform,
+  StatusBar,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
-interface FavoriteVendor {
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { savedAPI, cartAPI, handleAPIError } from '@/api/api';
+import { toast } from '@/components/ui/Toast';
+
+const { width } = Dimensions.get('window');
+const PRODUCT_W = (width - 48) / 2;
+
+const PINK = '#E04079';
+const PINK_SOFT = '#FFF0F7';
+const GOLD = '#F59E0B';
+const GREEN = '#10B981';
+const TEXT1 = '#111827';
+const TEXT2 = '#6B7280';
+const TEXT3 = '#9CA3AF';
+const BORDER = '#F3F4F6';
+const BG = '#FFF5F9';
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+interface SavedVendor {
   _id: string;
   firstName: string;
   lastName: string;
   avatar?: string;
   vendorProfile: {
     businessName: string;
-    rating: number;
-    totalRatings: number;
-    categories: Array<{
-      name: string;
-      icon: string;
-    }>;
+    rating?: number;
+    totalRatings?: number;
+    totalReviews?: number;
+    vendorType?: string;
+    profileImage?: string;
+    portfolioImages?: string[];
+    isVerified?: boolean;
+    categories?: Array<{ name: string }>;
   };
 }
+
+interface SavedProduct {
+  _id: string;
+  name: string;
+  images: string[];
+  price: number;
+  finalPrice: number;
+  compareAtPrice?: number;
+  stock: number;
+  rating: number;
+  totalRatings: number;
+  status?: string;
+  isNew?: boolean;
+  seller: { _id: string; firstName: string; lastName: string };
+  category: { _id: string; name: string };
+  brand?: string;
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+const vendorTypeLabel = (type?: string) => {
+  if (type === 'home_service') return 'Home Service';
+  if (type === 'in_shop') return 'In-Shop';
+  if (type === 'both') return 'Home Service & In-shop';
+  return 'Service';
+};
+
+const Stars: React.FC<{ rating: number; size?: number }> = ({ rating, size = 13 }) => (
+  <View style={{ flexDirection: 'row', gap: 2 }}>
+    {[1, 2, 3, 4, 5].map(s => (
+      <Ionicons key={s} name={s <= Math.round(rating) ? 'star' : 'star-outline'} size={size} color={GOLD} />
+    ))}
+  </View>
+);
+
+// ─── Vendor Card (Services tab) ───────────────────────────────────────────────
+const VendorSavedCard: React.FC<{
+  vendor: SavedVendor;
+  onUnsave: () => void;
+  onBook: () => void;
+}> = ({ vendor, onUnsave, onBook }) => {
+  const vp = vendor.vendorProfile;
+  const image = vp.profileImage || vendor.avatar;
+  const rating = vp.rating ?? 0;
+  const reviews = vp.totalRatings ?? vp.totalReviews ?? 0;
+  const initials = (vp.businessName || 'V').slice(0, 2).toUpperCase();
+  const portfolio = vp.portfolioImages?.slice(0, 3) ?? [];
+
+  return (
+    <View
+      style={{
+        backgroundColor: '#fff',
+        borderRadius: 20,
+        overflow: 'hidden',
+        marginBottom: 16,
+        borderWidth: 1,
+        borderColor: BORDER,
+        ...Platform.select({
+          android: { elevation: 3 },
+          ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.08, shadowRadius: 10 },
+        }),
+      }}
+    >
+      {/* Image */}
+      <View style={{ height: 210, position: 'relative', backgroundColor: '#f3e6f0' }}>
+        {image ? (
+          <Image source={{ uri: image }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
+        ) : (
+          <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#f9c8e0' }}>
+            <Text style={{ fontSize: 48, fontWeight: '900', color: '#fff' }}>{initials}</Text>
+          </View>
+        )}
+        {/* Heart unsave */}
+        <TouchableOpacity
+          onPress={onUnsave}
+          activeOpacity={0.8}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          style={{
+            position: 'absolute',
+            top: 12,
+            right: 12,
+            width: 36,
+            height: 36,
+            borderRadius: 18,
+            backgroundColor: 'rgba(255,255,255,0.95)',
+            alignItems: 'center',
+            justifyContent: 'center',
+            ...Platform.select({ android: { elevation: 4 } }),
+          }}
+        >
+          <Ionicons name="heart" size={18} color={PINK} />
+        </TouchableOpacity>
+      </View>
+
+      {/* Info */}
+      <View style={{ padding: 14 }}>
+        {/* Name + verified */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
+          <Text style={{ fontSize: 16, fontWeight: '800', color: TEXT1, flex: 1 }} numberOfLines={1}>
+            {vp.businessName}
+          </Text>
+          {vp.isVerified && (
+            <Ionicons name="checkmark-circle" size={18} color={GREEN} style={{ marginLeft: 6 }} />
+          )}
+        </View>
+
+        {/* Rating */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
+          <Stars rating={rating} />
+          <Text style={{ fontSize: 12, color: TEXT2, marginLeft: 6 }}>
+            {rating.toFixed(1)} ({reviews} review{reviews !== 1 ? 's' : ''})
+          </Text>
+        </View>
+
+        {/* Service type */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10 }}>
+          <Ionicons name="home-outline" size={13} color={TEXT3} />
+          <Text style={{ fontSize: 12, color: TEXT2, marginLeft: 5 }}>{vendorTypeLabel(vp.vendorType)}</Text>
+        </View>
+
+        {/* Portfolio avatars */}
+        {portfolio.length > 0 && (
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
+            {portfolio.map((img, i) => (
+              <Image
+                key={i}
+                source={{ uri: img }}
+                style={{
+                  width: 30,
+                  height: 30,
+                  borderRadius: 15,
+                  borderWidth: 2,
+                  borderColor: '#fff',
+                  marginLeft: i === 0 ? 0 : -8,
+                }}
+              />
+            ))}
+            {(vp.portfolioImages?.length ?? 0) > 3 && (
+              <View
+                style={{
+                  width: 30,
+                  height: 30,
+                  borderRadius: 15,
+                  backgroundColor: PINK_SOFT,
+                  borderWidth: 2,
+                  borderColor: '#fff',
+                  marginLeft: -8,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Text style={{ fontSize: 10, fontWeight: '700', color: PINK }}>
+                  +{(vp.portfolioImages?.length ?? 0) - 3}
+                </Text>
+              </View>
+            )}
+          </View>
+        )}
+
+        {/* Book button */}
+        <TouchableOpacity
+          onPress={onBook}
+          activeOpacity={0.85}
+          style={{
+            backgroundColor: PINK,
+            borderRadius: 14,
+            paddingVertical: 13,
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 8,
+          }}
+        >
+          <Text style={{ color: '#fff', fontSize: 14, fontWeight: '700' }}>Book Appointment</Text>
+          <Ionicons name="chevron-forward" size={16} color="#fff" />
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+};
+
+// ─── Product Card (Products tab) ──────────────────────────────────────────────
+const ProductSavedCard: React.FC<{
+  product: SavedProduct;
+  onUnsave: () => void;
+  onPress: () => void;
+  onAddToCart: () => void;
+}> = ({ product, onUnsave, onPress, onAddToCart }) => {
+  const stockLabel = product.stock === 0 ? 'Out of Stock' : product.stock > 10 ? 'In Stock' : `${product.stock} left`;
+  const stockColor = product.stock === 0 ? '#EF4444' : GREEN;
+  const isNew = product.isNew;
+
+  return (
+    <TouchableOpacity
+      onPress={onPress}
+      activeOpacity={0.88}
+      style={{
+        width: PRODUCT_W,
+        backgroundColor: '#fff',
+        borderRadius: 18,
+        overflow: 'hidden',
+        marginBottom: 14,
+        borderWidth: 1,
+        borderColor: BORDER,
+        ...Platform.select({
+          android: { elevation: 3 },
+          ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.08, shadowRadius: 10 },
+        }),
+      }}
+    >
+      {/* Image */}
+      <View style={{ position: 'relative' }}>
+        <Image
+          source={{ uri: product.images?.[0] }}
+          style={{ width: '100%', height: 155 }}
+          resizeMode="cover"
+        />
+        {/* Stock badge */}
+        <View
+          style={{
+            position: 'absolute',
+            top: 8,
+            left: 8,
+            backgroundColor: stockColor,
+            paddingHorizontal: 8,
+            paddingVertical: 4,
+            borderRadius: 8,
+          }}
+        >
+          <Text style={{ color: '#fff', fontSize: 9, fontWeight: '800' }}>
+            {isNew ? 'New' : stockLabel}
+          </Text>
+        </View>
+        {/* Heart unsave */}
+        <TouchableOpacity
+          onPress={onUnsave}
+          activeOpacity={0.8}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          style={{
+            position: 'absolute',
+            top: 8,
+            right: 8,
+            width: 30,
+            height: 30,
+            borderRadius: 10,
+            backgroundColor: 'rgba(255,255,255,0.92)',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <Ionicons name="heart" size={15} color={PINK} />
+        </TouchableOpacity>
+      </View>
+
+      <View style={{ padding: 10 }}>
+        <Text style={{ fontSize: 10, color: TEXT3, fontWeight: '600', letterSpacing: 0.4, textTransform: 'uppercase', marginBottom: 2 }} numberOfLines={1}>
+          {product.brand || product.category?.name}
+        </Text>
+        {product.totalRatings > 0 && (
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
+            <Ionicons name="star" size={11} color={GOLD} />
+            <Text style={{ fontSize: 11, color: TEXT2, marginLeft: 3, fontWeight: '600' }}>
+              {product.rating.toFixed(1)}
+            </Text>
+            <Text style={{ fontSize: 10, color: TEXT3, marginLeft: 2 }}>({product.totalRatings})</Text>
+          </View>
+        )}
+        <Text style={{ fontSize: 13, fontWeight: '700', color: TEXT1, lineHeight: 18, marginBottom: 3 }} numberOfLines={2}>
+          {product.name}
+        </Text>
+        <Text style={{ fontSize: 11, color: TEXT3, marginBottom: 6 }} numberOfLines={1}>
+          {product.seller?.firstName} {product.seller?.lastName}
+        </Text>
+        <Text style={{ fontSize: 15, fontWeight: '800', color: PINK, letterSpacing: -0.3, marginBottom: 8 }}>
+          ₦{(product.finalPrice ?? product.price).toLocaleString()}
+        </Text>
+        <TouchableOpacity
+          onPress={onAddToCart}
+          activeOpacity={0.85}
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'center',
+            borderWidth: 1.5,
+            borderColor: PINK,
+            borderRadius: 10,
+            paddingVertical: 7,
+            gap: 6,
+          }}
+        >
+          <Text style={{ color: PINK, fontSize: 12, fontWeight: '700' }}>Add to cart</Text>
+          <Ionicons name="chevron-forward" size={13} color={PINK} />
+        </TouchableOpacity>
+      </View>
+    </TouchableOpacity>
+  );
+};
+
+// ─── Main Screen ──────────────────────────────────────────────────────────────
 const FavoritesScreen: React.FC = () => {
-  const navigation = useNavigation();
-  const [loading, setLoading] = useState(false);
+  const navigation = useNavigation<any>();
+  const insets = useSafeAreaInsets();
+
+  const [activeTab, setActiveTab] = useState<'services' | 'products'>('services');
+  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [favorites, setFavorites] = useState<FavoriteVendor[]>([]);
-  const [selectedTab, setSelectedTab] = useState<'vendors' | 'services'>('vendors');
-  useEffect(() => {
-    loadFavorites();
-  }, [selectedTab]);
-  const loadFavorites = async () => {
+  const [vendors, setVendors] = useState<SavedVendor[]>([]);
+  const [products, setProducts] = useState<SavedProduct[]>([]);
+
+  const fetchAll = useCallback(async () => {
     try {
-      setLoading(true);
-      setFavorites([]);
-    } catch (error) {
-      console.error('Error loading favorites:', error);
+      const [vendorRes, productRes] = await Promise.allSettled([
+        savedAPI.getVendors({ limit: 50 }),
+        savedAPI.getProducts({ limit: 50 }),
+      ]);
+      if (vendorRes.status === 'fulfilled' && vendorRes.value?.success) {
+        setVendors(vendorRes.value.data?.vendors ?? []);
+      }
+      if (productRes.status === 'fulfilled' && productRes.value?.success) {
+        setProducts(productRes.value.data?.products ?? []);
+      }
+    } catch (err) {
+      toast.error('Error', handleAPIError(err).message);
     } finally {
       setLoading(false);
     }
-  };
-  const onRefresh = async () => {
+  }, []);
+
+  useFocusEffect(useCallback(() => { setLoading(true); fetchAll(); }, [fetchAll]));
+
+  const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await loadFavorites();
+    await fetchAll();
     setRefreshing(false);
-  };
-  const handleRemoveFavorite = async (id: string) => {
+  }, [fetchAll]);
+
+  const handleUnsaveVendor = async (vendorId: string) => {
     try {
-      setFavorites(favorites.filter(item => item._id !== id));
-    } catch (error) {
-      console.error('Error removing favorite:', error);
+      await savedAPI.toggleVendor(vendorId);
+      setVendors(prev => prev.filter(v => v._id !== vendorId));
+      toast.success('Removed', 'Vendor removed from wishlist');
+    } catch (err) {
+      toast.error('Error', handleAPIError(err).message);
     }
   };
-  const renderVendorCard = (vendor: FavoriteVendor) => <TouchableOpacity key={vendor._id} className="bg-white rounded-2xl p-4 mb-3 shadow-sm border border-gray-100" activeOpacity={0.7} onPress={() => navigation.navigate('VendorDetail' as never, {
-    vendorId: vendor._id
-  } as never)}>
-      <View className="flex-row">
-        <View className="w-16 h-16 rounded-xl bg-pink-100 items-center justify-center mr-3">
-          {vendor.avatar ? <Image source={{
-          uri: vendor.avatar
-        }} className="w-full h-full rounded-xl" /> : <Ionicons name="business" size={28} color="#eb278d" />}
+
+  const handleUnsaveProduct = async (productId: string) => {
+    try {
+      await savedAPI.toggleProduct(productId);
+      setProducts(prev => prev.filter(p => p._id !== productId));
+      toast.success('Removed', 'Product removed from wishlist');
+    } catch (err) {
+      toast.error('Error', handleAPIError(err).message);
+    }
+  };
+
+  const handleAddToCart = async (product: SavedProduct) => {
+    try {
+      await cartAPI.addToCart({ productId: product._id, quantity: 1 });
+      toast.success('Added', `${product.name} added to cart`);
+    } catch (err) {
+      toast.error('Error', handleAPIError(err).message);
+    }
+  };
+
+  if (loading) {
+    return (
+      <SafeAreaView style={{ flex: 1, backgroundColor: BG }} edges={['top']}>
+        <StatusBar barStyle="dark-content" backgroundColor={BG} />
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+          <ActivityIndicator size="large" color={PINK} />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  const currentList = activeTab === 'services' ? vendors : products;
+
+  return (
+    <View style={{ flex: 1, backgroundColor: BG }}>
+      <StatusBar barStyle="dark-content" backgroundColor="#fff" />
+      <SafeAreaView style={{ backgroundColor: '#fff' }} edges={['top']}>
+        {/* Header */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 10, paddingBottom: 4 }}>
+          <TouchableOpacity
+            onPress={() => navigation.goBack()}
+            style={{
+              width: 38,
+              height: 38,
+              borderRadius: 19,
+              backgroundColor: PINK_SOFT,
+              alignItems: 'center',
+              justifyContent: 'center',
+              marginRight: 12,
+            }}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="chevron-back" size={22} color={PINK} />
+          </TouchableOpacity>
+          <Text style={{ fontSize: 20, fontWeight: '800', color: TEXT1 }}>Saved / Wishlist</Text>
         </View>
 
-        <View className="flex-1">
-          <Text className="text-base font-semibold text-gray-900 mb-1">
-            {vendor.vendorProfile.businessName}
-          </Text>
-          <View className="flex-row items-center mb-2">
-            <Ionicons name="star" size={14} color="#fbbf24" />
-            <Text className="text-sm text-gray-600 ml-1">
-              {vendor.vendorProfile.rating.toFixed(1)} ({vendor.vendorProfile.totalRatings})
+        {/* Tabs */}
+        <View style={{ flexDirection: 'row', paddingHorizontal: 16, paddingTop: 12, borderBottomWidth: 1, borderBottomColor: BORDER }}>
+          {(['services', 'products'] as const).map(tab => (
+            <TouchableOpacity
+              key={tab}
+              onPress={() => setActiveTab(tab)}
+              activeOpacity={0.8}
+              style={{ marginRight: 24, paddingBottom: 10 }}
+            >
+              <Text
+                style={{
+                  fontSize: 15,
+                  fontWeight: activeTab === tab ? '700' : '500',
+                  color: activeTab === tab ? PINK : TEXT3,
+                  textTransform: 'capitalize',
+                }}
+              >
+                {tab === 'services' ? 'Services' : 'Products'}
+              </Text>
+              {activeTab === tab && (
+                <View
+                  style={{
+                    position: 'absolute',
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                    height: 2.5,
+                    backgroundColor: PINK,
+                    borderRadius: 2,
+                  }}
+                />
+              )}
+            </TouchableOpacity>
+          ))}
+        </View>
+      </SafeAreaView>
+
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={{
+          padding: 16,
+          paddingBottom: 32 + insets.bottom,
+          ...(activeTab === 'products' && currentList.length > 0
+            ? { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' }
+            : {}),
+        }}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={PINK} colors={[PINK]} />
+        }
+      >
+        {currentList.length === 0 ? (
+          <View style={{ alignItems: 'center', justifyContent: 'center', paddingTop: 80 }}>
+            <View
+              style={{
+                width: 80,
+                height: 80,
+                borderRadius: 40,
+                backgroundColor: PINK_SOFT,
+                alignItems: 'center',
+                justifyContent: 'center',
+                marginBottom: 16,
+              }}
+            >
+              <Ionicons name="heart-outline" size={40} color={PINK} />
+            </View>
+            <Text style={{ fontSize: 18, fontWeight: '800', color: TEXT1, marginBottom: 8 }}>Nothing saved yet</Text>
+            <Text style={{ fontSize: 14, color: TEXT2, textAlign: 'center', paddingHorizontal: 32 }}>
+              {activeTab === 'services'
+                ? 'Tap the heart on any vendor to save them here.'
+                : 'Tap the heart on any product to save it here.'}
             </Text>
           </View>
-          {vendor.vendorProfile.categories.length > 0 && <Text className="text-xs text-gray-500">
-              {vendor.vendorProfile.categories[0].name}
-            </Text>}
-        </View>
-
-        <TouchableOpacity className="w-10 h-10 items-center justify-center" onPress={() => handleRemoveFavorite(vendor._id)}>
-          <Ionicons name="heart" size={24} color="#eb278d" />
-        </TouchableOpacity>
-      </View>
-    </TouchableOpacity>;
-  return <SafeAreaView className="flex-1 bg-gray-50" edges={['top']}>
-      {}
-      <View className="bg-white px-5 py-4 border-b border-gray-100">
-        <View className="flex-row items-center justify-between">
-          <TouchableOpacity onPress={() => navigation.goBack()} className="w-10 h-10 items-center justify-center">
-            <Ionicons name="arrow-back" size={24} color="#1f2937" />
-          </TouchableOpacity>
-          <Text className="text-lg font-semibold text-gray-900">
-            My Favorites
-          </Text>
-          <View className="w-10" />
-        </View>
-      </View>
-
-      {}
-      <View className="bg-white px-5 py-3 border-b border-gray-100">
-        <View className="flex-row bg-gray-100 rounded-xl p-1">
-          <TouchableOpacity className={`flex-1 py-2 rounded-lg ${selectedTab === 'vendors' ? 'bg-white' : ''}`} onPress={() => setSelectedTab('vendors')}>
-            <Text className={`text-center text-sm font-medium ${selectedTab === 'vendors' ? 'text-pink-600' : 'text-gray-600'}`}>
-              Vendors
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity className={`flex-1 py-2 rounded-lg ${selectedTab === 'services' ? 'bg-white' : ''}`} onPress={() => setSelectedTab('services')}>
-            <Text className={`text-center text-sm font-medium ${selectedTab === 'services' ? 'text-pink-600' : 'text-gray-600'}`}>
-              Services
-            </Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      {}
-      {loading ? <View className="flex-1 items-center justify-center">
-          <ActivityIndicator size="large" color="#eb278d" />
-        </View> : favorites.length === 0 ? <View className="flex-1 items-center justify-center px-5">
-          <Ionicons name="heart-outline" size={64} color="#d1d5db" />
-          <Text className="text-lg font-semibold text-gray-900 mt-4">
-            No Favorites Yet
-          </Text>
-          <Text className="text-sm text-gray-600 text-center mt-2">
-            Start adding your favorite vendors and services to see them here
-          </Text>
-          <TouchableOpacity className="bg-pink-500 px-6 py-3 rounded-xl mt-6" onPress={() => navigation.goBack()}>
-            <Text className="text-white font-semibold">Explore Vendors</Text>
-          </TouchableOpacity>
-        </View> : <ScrollView className="flex-1 px-5 pt-4" showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#eb278d" />}>
-          {favorites.map(renderVendorCard)}
-          <View className="h-5" />
-        </ScrollView>}
-    </SafeAreaView>;
+        ) : activeTab === 'services' ? (
+          vendors.map(vendor => (
+            <VendorSavedCard
+              key={vendor._id}
+              vendor={vendor}
+              onUnsave={() => handleUnsaveVendor(vendor._id)}
+              onBook={() => navigation.navigate('VendorDetail', { vendorId: vendor._id })}
+            />
+          ))
+        ) : (
+          products.map(product => (
+            <ProductSavedCard
+              key={product._id}
+              product={product}
+              onUnsave={() => handleUnsaveProduct(product._id)}
+              onPress={() => navigation.navigate('ProductDetail', { productId: product._id })}
+              onAddToCart={() => handleAddToCart(product)}
+            />
+          ))
+        )}
+      </ScrollView>
+    </View>
+  );
 };
+
 export default FavoritesScreen;

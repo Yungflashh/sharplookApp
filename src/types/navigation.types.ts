@@ -19,7 +19,8 @@ export type RootStackParamList = {
     conversationId?: string;
   };
   ChatList: undefined;
-  AllVendors: undefined;
+  AllVendors: { categoryId?: string; categoryName?: string; minRating?: number; pricePreset?: string } | undefined;
+  AllServices: undefined;
   VendorDetail: {
     vendorId: string;
   };
@@ -32,6 +33,7 @@ export type RootStackParamList = {
       duration?: number;
       category?: any;
       isActive?: boolean;
+      image?: string;
     };
     vendor: {
       _id:string;
@@ -65,7 +67,7 @@ export type RootStackParamList = {
     vendorRole?: string;
     completedAt?: string;
   };
-  Reviews: undefined;
+  Reviews: { userId?: string; serviceId?: string; type?: 'vendor' | 'service' } | undefined;
   VendorMyResponses: undefined;
   PersonalInformation: undefined;
   Favourites: undefined;
@@ -81,12 +83,13 @@ export type RootStackParamList = {
   AddProduct: undefined;
   EditProduct: undefined;
   ProductDetail: { productId: string };
+  VendorProductDetail: { productId: string };
   Checkout: undefined;
   Analytics: undefined;
   MyProducts: undefined;
   CustomerOrders: undefined;
   MyOrders: undefined;
-  OrderDetail: undefined;
+  OrderDetail: { orderId: string; userType?: 'customer' | 'vendor' };
   VendorStoreSettings: undefined;
   OrderPayment: undefined;
   DisputeDetail: {
@@ -136,16 +139,21 @@ export type RootStackParamList = {
     amount: number;
     reference: string;
     authorizationUrl: string;
-    paymentType?: 'wallet_funding' | 'tier_upgrade';
+    paymentType?: 'wallet_funding' | 'tier_upgrade' | 'order_payment';
   };
   ChangeWithdrawalPin: undefined;
   Subsriptions: undefined;
   UpgradeTier: undefined;
-  DisputeOrderDetail: undefined;
+  DisputeOrderDetail: { disputeorderId: string; userType?: 'customer' | 'vendor' };
   TermsPrivacy: undefined;
   Transactions: undefined;
+  ChangePassword: undefined;
   VendorServiceDetail: {
     serviceId: string;
+  };
+  CategoryProducts: {
+    categoryId: string;
+    categoryName: string;
   };
   Reschedule: {
     bookingId: string;
@@ -157,68 +165,25 @@ export type RootStackParamList = {
     serviceType?: string;
     location?: { address: string; city: string; state: string };
   };
-  OngoingCall: {
-    callId?: string;
-    callType: 'voice' | 'video';
-    isOutgoing: boolean;
-    offer?: any; 
-    otherUser: {
-      _id: string;
-      firstName: string;
-      lastName: string;
-      avatar?: string;
-    };
-  };
-  IncomingCall: {
-    call: {
-      _id: string;
-      receiver: string;
-      status: string;
-    };
-    caller: {
-      _id: string;
-      firstName: string;
-      lastName: string;
-      avatar?: string;
-    };
-    callType: 'voice' | 'video';
-    offer?: any; 
-  };
-  SharedContent: {
-    type: 'vendor' | 'product';
-    id: string;
-  };
-  Referrals: undefined;
-  ReferralLeaderboard: undefined;
-  ApplyReferralCode: undefined;
-  ReferralDetail: undefined;
-  WalletPayment: {
-    amount: number;
-    reference: string;
-    authorizationUrl: string;
-    paymentType?: 'wallet_funding' | 'tier_upgrade';
-  };
-  ChangeWithdrawalPin: undefined;
-  Subsriptions: undefined;
-  UpgradeTier: undefined;
-  DisputeOrderDetail: undefined;
-  TermsPrivacy: undefined;
 };
 export type AuthStackParamList = {
   Login: { message?: string } | undefined;
-  Register: undefined;
+  Register: { isVendor?: boolean } | undefined;
+  VendorRegister: undefined;
   ForgotPassword: undefined;
   VendorLogin: undefined;
-    VerifyOtp: { email: string };  // Make sure this exists
-
-  VendorProfileSetup: undefined;
+  VerifyOtp: { email: string; isVendor?: boolean };
+  ChooseRole: undefined;
+  VendorProfileSetup: { fromRegistration?: boolean } | undefined;
+  ClientProfileSetup: { fromRegistration?: boolean } | undefined;
+  ResetPassword: { email: string };
   TermsPrivacyAuthScreen: { type: 'terms' | 'privacy' };
 };
 export type ClientTabParamList = {
   Home: undefined;
   Bookings: undefined;
   MarketPlace: undefined;
-  Explore: undefined;
+  Offers: undefined;
   Profile: undefined;
 };
 export type VendorTabParamList = {

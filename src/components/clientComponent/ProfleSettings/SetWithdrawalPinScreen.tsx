@@ -3,60 +3,83 @@ import {
   View,
   Text,
   TouchableOpacity,
-  TextInput,
   ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
   ScrollView,
+  StyleSheet,
+  Platform,
 } from 'react-native';
 import { toast } from '@/components/ui/Toast';
 import { Ionicons } from '@expo/vector-icons';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { userAPI, handleAPIError, walletAPI } from '@/api/api';
+import { walletAPI, handleAPIError } from '@/api/api';
+
+const PINK    = '#E04079';
+const PINK_S  = '#FFF0F7';
+const PINK_M  = '#FCDCE9';
+const TEXT1   = '#111827';
+const TEXT2   = '#6B7280';
+const TEXT3   = '#9CA3AF';
+const BORDER  = '#F3F4F6';
+const WHITE   = '#FFFFFF';
+
+const NUMPAD = [
+  ['1','2','3'],
+  ['4','5','6'],
+  ['7','8','9'],
+  ['','0','⌫'],
+];
+
+const WEAK_PINS = ['0000','1111','2222','3333','4444','5555','6666','7777','8888','9999','1234','4321'];
 
 const SetWithdrawalPinScreen: React.FC = () => {
   const navigation = useNavigation();
+  const insets = useSafeAreaInsets();
+
   const [pin, setPin] = useState('');
   const [confirmPin, setConfirmPin] = useState('');
+  const [activeField, setActiveField] = useState<'pin' | 'confirm'>('pin');
   const [loading, setLoading] = useState(false);
-  const [showPin, setShowPin] = useState(false);
+  const [revealed, setRevealed] = useState(false);
+
+  const handleKey = (key: string) => {
+    if (key === '') return;
+    if (key === '⌫') {
+      if (activeField === 'pin') setPin(p => p.slice(0, -1));
+      else setConfirmPin(p => p.slice(0, -1));
+      return;
+    }
+    if (activeField === 'pin') {
+      if (pin.length < 4) {
+        const next = pin + key;
+        setPin(next);
+        if (next.length === 4) setActiveField('confirm');
+      }
+    } else {
+      if (confirmPin.length < 4) setConfirmPin(p => p + key);
+    }
+  };
 
   const handleSetPin = async () => {
-    
-    if (!pin || !confirmPin) {
-      toast.error('Error', 'Please enter and confirm your PIN');
+    if (pin.length !== 4 || confirmPin.length !== 4) {
+      toast.error('Incomplete', 'Please fill in both PIN fields');
       return;
     }
-
-    if (pin.length !== 4) {
-      toast.error('Error', 'PIN must be exactly 4 digits');
-      return;
-    }
-
-    if (!/^\d+$/.test(pin)) {
-      toast.error('Error', 'PIN must contain only numbers');
-      return;
-    }
-
     if (pin !== confirmPin) {
-      toast.error('Error', 'PINs do not match. Please try again.');
+      toast.error('Mismatch', 'PINs do not match. Please try again.');
+      setConfirmPin('');
+      setActiveField('confirm');
       return;
     }
-
-    
-    const weakPins = ['0000', '1111', '2222', '3333', '4444', '5555', '6666', '7777', '8888', '9999', '1234', '4321'];
-    if (weakPins.includes(pin)) {
-      toast.warning('Weak PIN', 'This PIN is too common. Please choose a more secure PIN.');
+    if (WEAK_PINS.includes(pin)) {
+      toast.warning('Weak PIN', 'This PIN is too common. Choose something more secure.');
       return;
     }
-
     setLoading(true);
     try {
       await walletAPI.setWithdrawalPin(pin, confirmPin);
-      
-      toast.success('Success', 'Your withdrawal PIN has been set successfully');
+      toast.success('PIN Set', 'Your withdrawal PIN has been set successfully');
       navigation.goBack();
     } catch (error) {
       const apiError = handleAPIError(error);
@@ -66,262 +89,325 @@ const SetWithdrawalPinScreen: React.FC = () => {
     }
   };
 
-  const renderPinDots = (value: string, maxLength: number = 4) => {
-    return (
-      <View className="flex-row justify-center space-x-4">
-        {[...Array(maxLength)].map((_, index) => (
+  const canSubmit = pin.length === 4 && confirmPin.length === 4 && !loading;
+
+  const PinBoxes = ({ value, active }: { value: string; active: boolean }) => (
+    <TouchableOpacity
+      activeOpacity={0.8}
+      onPress={() => setActiveField(active ? (activeField === 'pin' ? 'confirm' : 'pin') : (active ? 'pin' : 'confirm'))}
+      style={[s.pinRow, active && s.pinRowActive]}
+    >
+      {[0, 1, 2, 3].map(i => {
+        const filled = i < value.length;
+        const isCursor = active && i === value.length;
+        return (
           <View
-            key={index}
-            className={`w-14 h-14 rounded-2xl border-2 items-center justify-center ${
-              index < value.length 
-                ? 'bg-pink-50 border-pink-500' 
-                : 'bg-gray-50 border-gray-300'
-            }`}
+            key={i}
+            style={[
+              s.pinBox,
+              filled && s.pinBoxFilled,
+              isCursor && s.pinBoxCursor,
+            ]}
           >
-            {index < value.length && (
-              <View className="w-3 h-3 rounded-full bg-pink-500" />
+            {filled && (
+              revealed
+                ? <Text style={s.pinDigit}>{value[i]}</Text>
+                : <View style={s.pinDot} />
             )}
+            {isCursor && <View style={s.cursor} />}
           </View>
-        ))}
-      </View>
-    );
-  };
+        );
+      })}
+    </TouchableOpacity>
+  );
 
   return (
-    <SafeAreaView className="flex-1 bg-white" edges={['top']}>
-      {}
-      <LinearGradient
-        colors={['#eb278d', '#f472b6']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={{
-          shadowColor: '#eb278d',
-          shadowOffset: { width: 0, height: 4 },
-          shadowOpacity: 0.2,
-          shadowRadius: 8,
-          elevation: 8,
-        }}
-      >
-        <View className="px-5 py-4">
-          <View className="flex-row items-center justify-between">
-            <TouchableOpacity
-              onPress={() => navigation.goBack()}
-              className="w-10 h-10 rounded-full bg-white/20 items-center justify-center"
-              activeOpacity={0.7}
-            >
-              <Ionicons name="arrow-back" size={24} color="#fff" />
-            </TouchableOpacity>
-            <Text className="text-lg font-bold text-white">
-              Set Withdrawal PIN
-            </Text>
-            <View className="w-10" />
-          </View>
-        </View>
-      </LinearGradient>
+    <View style={[s.root, { paddingTop: insets.top }]}>
 
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        className="flex-1"
+      {/* ── Header ── */}
+      <View style={s.header}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn} activeOpacity={0.7}>
+          <Ionicons name="chevron-back" size={22} color={PINK} />
+        </TouchableOpacity>
+        <Text style={s.headerTitle}>Set Withdrawal PIN</Text>
+        <View style={s.headerSpacer} />
+      </View>
+
+      <ScrollView
+        contentContainerStyle={[s.scroll, { paddingBottom: insets.bottom + 24 }]}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
       >
-        <ScrollView 
-          className="flex-1"
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingBottom: 20 }}
+
+        {/* ── Hero ── */}
+        <LinearGradient
+          colors={['#E04079', '#C0315E']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={s.hero}
         >
-          <View className="flex-1 px-6 pt-8">
-            {}
-            <View className="items-center mb-10">
-              <LinearGradient
-                colors={['#eb278d', '#f472b6']}
-                className="w-24 h-24 rounded-3xl items-center justify-center mb-5"
-                style={{
-                  shadowColor: '#eb278d',
-                  shadowOffset: { width: 0, height: 4 },
-                  shadowOpacity: 0.3,
-                  shadowRadius: 8,
-                  elevation: 8,
-                }}
-              >
-                <Ionicons name="lock-closed" size={44} color="#fff" />
-              </LinearGradient>
-              <Text className="text-2xl font-bold text-gray-900 mb-2">
-                Create Your PIN
-              </Text>
-              <Text className="text-sm text-gray-500 text-center px-4 leading-6">
-                Set up a secure 4-digit PIN to protect your wallet transactions
-              </Text>
-            </View>
+          <View style={s.heroIconWrap}>
+            <Ionicons name="shield-checkmark" size={36} color={WHITE} />
+          </View>
+          <Text style={s.heroTitle}>Create Your PIN</Text>
+          <Text style={s.heroSub}>Set a secure 4-digit PIN to authorise wallet withdrawals</Text>
+          <View style={s.heroDecor1} />
+          <View style={s.heroDecor2} />
+        </LinearGradient>
 
-            {}
-            <View className="mb-8">
-              <Text className="text-base font-bold text-gray-900 mb-4">
-                Enter PIN
-              </Text>
-              <View 
-                className="bg-gray-50 rounded-3xl p-6 border border-gray-100"
-                style={{
-                  shadowColor: '#000',
-                  shadowOffset: { width: 0, height: 2 },
-                  shadowOpacity: 0.05,
-                  shadowRadius: 4,
-                  elevation: 2,
-                }}
-              >
-                {showPin ? (
-                  <TextInput
-                    className="text-center text-3xl tracking-[20px] text-gray-900 font-bold"
-                    placeholder="0000"
-                    placeholderTextColor="#d1d5db"
-                    keyboardType="numeric"
-                    maxLength={4}
-                    value={pin}
-                    onChangeText={setPin}
-                    secureTextEntry={false}
-                  />
-                ) : (
-                  <View className="relative">
-                    {renderPinDots(pin)}
-                    <TextInput
-                      className="opacity-0 absolute inset-0"
-                      keyboardType="numeric"
-                      maxLength={4}
-                      value={pin}
-                      onChangeText={setPin}
-                      secureTextEntry={false}
-                      autoFocus
-                    />
-                  </View>
-                )}
+        {/* ── PIN entry ── */}
+        <View style={s.card}>
+
+          {/* Enter PIN */}
+          <View style={s.fieldBlock}>
+            <View style={s.fieldHeader}>
+              <View style={[s.fieldIconWrap, activeField === 'pin' && s.fieldIconWrapActive]}>
+                <Ionicons name="lock-closed-outline" size={14} color={activeField === 'pin' ? PINK : TEXT3} />
               </View>
-            </View>
-
-            {}
-            <View className="mb-6">
-              <Text className="text-base font-bold text-gray-900 mb-4">
-                Confirm PIN
-              </Text>
-              <View 
-                className="bg-gray-50 rounded-3xl p-6 border border-gray-100"
-                style={{
-                  shadowColor: '#000',
-                  shadowOffset: { width: 0, height: 2 },
-                  shadowOpacity: 0.05,
-                  shadowRadius: 4,
-                  elevation: 2,
-                }}
-              >
-                {showPin ? (
-                  <TextInput
-                    className="text-center text-3xl tracking-[20px] text-gray-900 font-bold"
-                    placeholder="0000"
-                    placeholderTextColor="#d1d5db"
-                    keyboardType="numeric"
-                    maxLength={4}
-                    value={confirmPin}
-                    onChangeText={setConfirmPin}
-                    secureTextEntry={false}
-                  />
-                ) : (
-                  <View className="relative">
-                    {renderPinDots(confirmPin)}
-                    <TextInput
-                      className="opacity-0 absolute inset-0"
-                      keyboardType="numeric"
-                      maxLength={4}
-                      value={confirmPin}
-                      onChangeText={setConfirmPin}
-                      secureTextEntry={false}
-                    />
-                  </View>
-                )}
-              </View>
-            </View>
-
-            {}
-            <TouchableOpacity
-              onPress={() => setShowPin(!showPin)}
-              className="flex-row items-center justify-center py-3 mb-6"
-              activeOpacity={0.7}
-            >
-              <View className="w-8 h-8 rounded-full bg-gray-100 items-center justify-center mr-2">
-                <Ionicons
-                  name={showPin ? 'eye-off' : 'eye'}
-                  size={18}
-                  color="#6b7280"
-                />
-              </View>
-              <Text className="text-sm font-semibold text-gray-700">
-                {showPin ? 'Hide PIN' : 'Show PIN'}
-              </Text>
-            </TouchableOpacity>
-
-            {}
-            <View className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-2xl p-5 mb-8 border border-blue-100">
-              <View className="flex-row items-start mb-3">
-                <View className="w-8 h-8 rounded-full bg-blue-100 items-center justify-center mr-3">
-                  <Ionicons name="shield-checkmark" size={18} color="#3b82f6" />
+              <Text style={[s.fieldLabel, activeField === 'pin' && s.fieldLabelActive]}>Enter PIN</Text>
+              {pin.length === 4 && (
+                <View style={s.checkBadge}>
+                  <Ionicons name="checkmark" size={12} color={WHITE} />
                 </View>
-                <Text className="flex-1 text-sm font-bold text-blue-900">
-                  Security Tips
-                </Text>
-              </View>
-              <View className="ml-11">
-                <View className="flex-row items-start mb-2">
-                  <View className="w-1.5 h-1.5 rounded-full bg-blue-400 mt-1.5 mr-2" />
-                  <Text className="flex-1 text-xs text-blue-700 leading-5">
-                    Use a unique 4-digit PIN
-                  </Text>
-                </View>
-                <View className="flex-row items-start mb-2">
-                  <View className="w-1.5 h-1.5 rounded-full bg-blue-400 mt-1.5 mr-2" />
-                  <Text className="flex-1 text-xs text-blue-700 leading-5">
-                    Avoid common patterns like 1234 or 0000
-                  </Text>
-                </View>
-                <View className="flex-row items-start">
-                  <View className="w-1.5 h-1.5 rounded-full bg-blue-400 mt-1.5 mr-2" />
-                  <Text className="flex-1 text-xs text-blue-700 leading-5">
-                    Never share your PIN with anyone
-                  </Text>
-                </View>
-              </View>
+              )}
             </View>
-
-            {}
-            <TouchableOpacity
-              onPress={handleSetPin}
-              disabled={loading || !pin || !confirmPin}
-              activeOpacity={0.8}
-            >
-              <LinearGradient
-                colors={
-                  loading || !pin || !confirmPin
-                    ? ['#d1d5db', '#9ca3af']
-                    : ['#eb278d', '#f472b6']
-                }
-                className="rounded-2xl py-5 items-center justify-center"
-                style={{
-                  shadowColor: loading || !pin || !confirmPin ? '#000' : '#eb278d',
-                  shadowOffset: { width: 0, height: 4 },
-                  shadowOpacity: loading || !pin || !confirmPin ? 0.1 : 0.3,
-                  shadowRadius: 8,
-                  elevation: loading || !pin || !confirmPin ? 2 : 6,
-                }}
-              >
-                {loading ? (
-                  <ActivityIndicator color="#fff" size="small" />
-                ) : (
-                  <Text className="text-white text-base font-bold">
-                    Set PIN
-                  </Text>
-                )}
-              </LinearGradient>
+            <TouchableOpacity activeOpacity={1} onPress={() => setActiveField('pin')}>
+              <PinBoxes value={pin} active={activeField === 'pin'} />
             </TouchableOpacity>
           </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+
+          <View style={s.divider} />
+
+          {/* Confirm PIN */}
+          <View style={s.fieldBlock}>
+            <View style={s.fieldHeader}>
+              <View style={[s.fieldIconWrap, activeField === 'confirm' && s.fieldIconWrapActive]}>
+                <Ionicons name="shield-outline" size={14} color={activeField === 'confirm' ? PINK : TEXT3} />
+              </View>
+              <Text style={[s.fieldLabel, activeField === 'confirm' && s.fieldLabelActive]}>Confirm PIN</Text>
+              {confirmPin.length === 4 && (
+                <View style={s.checkBadge}>
+                  <Ionicons name="checkmark" size={12} color={WHITE} />
+                </View>
+              )}
+            </View>
+            <TouchableOpacity activeOpacity={1} onPress={() => setActiveField('confirm')}>
+              <PinBoxes value={confirmPin} active={activeField === 'confirm'} />
+            </TouchableOpacity>
+          </View>
+
+          {/* Reveal toggle */}
+          <TouchableOpacity style={s.revealRow} onPress={() => setRevealed(r => !r)} activeOpacity={0.7}>
+            <Ionicons name={revealed ? 'eye-off-outline' : 'eye-outline'} size={16} color={TEXT2} />
+            <Text style={s.revealText}>{revealed ? 'Hide digits' : 'Show digits'}</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* ── Security tips ── */}
+        <View style={s.tipsCard}>
+          <View style={s.tipsHeader}>
+            <View style={s.tipsIconWrap}>
+              <Ionicons name="information-circle" size={16} color="#3B82F6" />
+            </View>
+            <Text style={s.tipsTitle}>Security Tips</Text>
+          </View>
+          {[
+            'Use a unique combination not tied to your birth year or phone number',
+            'Avoid common patterns like 1234, 0000, or repeated digits',
+            'Never share your withdrawal PIN with anyone',
+          ].map((tip, i) => (
+            <View key={i} style={s.tipRow}>
+              <View style={s.tipDot} />
+              <Text style={s.tipText}>{tip}</Text>
+            </View>
+          ))}
+        </View>
+
+        {/* ── Numpad ── */}
+        <View style={s.numpad}>
+          {NUMPAD.map((row, ri) => (
+            <View key={ri} style={s.numpadRow}>
+              {row.map((key, ki) => (
+                key === '' ? (
+                  <View key={ki} style={s.numpadEmpty} />
+                ) : (
+                  <TouchableOpacity
+                    key={ki}
+                    onPress={() => handleKey(key)}
+                    style={[s.numpadKey, key === '⌫' && s.numpadBackKey]}
+                    activeOpacity={0.6}
+                  >
+                    {key === '⌫' ? (
+                      <Ionicons name="backspace-outline" size={22} color={TEXT1} />
+                    ) : (
+                      <Text style={s.numpadKeyText}>{key}</Text>
+                    )}
+                  </TouchableOpacity>
+                )
+              ))}
+            </View>
+          ))}
+        </View>
+
+        {/* ── CTA ── */}
+        <TouchableOpacity
+          onPress={handleSetPin}
+          disabled={!canSubmit}
+          activeOpacity={0.85}
+          style={{ borderRadius: 16, overflow: 'hidden', marginTop: 8 }}
+        >
+          <LinearGradient
+            colors={canSubmit ? ['#E04079', '#C0315E'] : ['#D1D5DB', '#D1D5DB']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={s.cta}
+          >
+            {loading ? (
+              <ActivityIndicator color={WHITE} size="small" />
+            ) : (
+              <View style={s.ctaInner}>
+                <Ionicons name="lock-closed" size={18} color={WHITE} />
+                <Text style={s.ctaText}>Set PIN</Text>
+              </View>
+            )}
+          </LinearGradient>
+        </TouchableOpacity>
+
+      </ScrollView>
+    </View>
   );
 };
+
+const s = StyleSheet.create({
+  root: { flex: 1, backgroundColor: WHITE },
+
+  // Header
+  header: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 20, paddingVertical: 14,
+    borderBottomWidth: 1, borderBottomColor: BORDER, backgroundColor: WHITE,
+  },
+  backBtn: {
+    width: 38, height: 38, borderRadius: 19,
+    backgroundColor: PINK_S, alignItems: 'center', justifyContent: 'center',
+  },
+  headerTitle: { fontSize: 17, fontWeight: '700', color: TEXT1 },
+  headerSpacer: { width: 38 },
+
+  scroll: { paddingHorizontal: 20, paddingTop: 20 },
+
+  // Hero
+  hero: {
+    borderRadius: 24, padding: 24, marginBottom: 20,
+    overflow: 'hidden', alignItems: 'center',
+    ...Platform.select({
+      android: { elevation: 6 },
+      ios: { shadowColor: PINK, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.3, shadowRadius: 12 },
+    }),
+  },
+  heroIconWrap: {
+    width: 72, height: 72, borderRadius: 36,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    alignItems: 'center', justifyContent: 'center',
+    marginBottom: 14,
+  },
+  heroTitle: { fontSize: 22, fontWeight: '800', color: WHITE, letterSpacing: -0.5, marginBottom: 6 },
+  heroSub: { fontSize: 13, color: 'rgba(255,255,255,0.8)', textAlign: 'center', lineHeight: 20 },
+  heroDecor1: {
+    position: 'absolute', right: -30, top: -30,
+    width: 100, height: 100, borderRadius: 50,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+  },
+  heroDecor2: {
+    position: 'absolute', left: -20, bottom: -20,
+    width: 80, height: 80, borderRadius: 40,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+  },
+
+  // Card
+  card: {
+    backgroundColor: WHITE, borderRadius: 20, padding: 20, marginBottom: 16,
+    borderWidth: 1, borderColor: BORDER,
+    ...Platform.select({
+      android: { elevation: 2 },
+      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8 },
+    }),
+  },
+  fieldBlock: { marginBottom: 4 },
+  fieldHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 14 },
+  fieldIconWrap: {
+    width: 26, height: 26, borderRadius: 8,
+    backgroundColor: BORDER, alignItems: 'center', justifyContent: 'center',
+  },
+  fieldIconWrapActive: { backgroundColor: PINK_M },
+  fieldLabel: { fontSize: 13, fontWeight: '700', color: TEXT2, letterSpacing: 0.3, textTransform: 'uppercase', flex: 1 },
+  fieldLabelActive: { color: PINK },
+  checkBadge: {
+    width: 20, height: 20, borderRadius: 10,
+    backgroundColor: '#10B981', alignItems: 'center', justifyContent: 'center',
+  },
+
+  // PIN row
+  pinRow: {
+    flexDirection: 'row', justifyContent: 'space-between',
+    padding: 12, borderRadius: 14,
+    backgroundColor: '#F9FAFB', borderWidth: 1.5, borderColor: BORDER,
+  },
+  pinRowActive: { borderColor: PINK, backgroundColor: PINK_S },
+  pinBox: {
+    width: 54, height: 54, borderRadius: 14,
+    backgroundColor: WHITE, borderWidth: 1.5, borderColor: '#E5E7EB',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  pinBoxFilled: { backgroundColor: PINK_S, borderColor: PINK },
+  pinBoxCursor: { borderColor: PINK, borderWidth: 2 },
+  pinDot: { width: 12, height: 12, borderRadius: 6, backgroundColor: PINK },
+  pinDigit: { fontSize: 22, fontWeight: '800', color: PINK },
+  cursor: { width: 2, height: 26, backgroundColor: PINK, borderRadius: 1 },
+
+  divider: { height: 1, backgroundColor: BORDER, marginVertical: 18 },
+
+  revealRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 6, paddingTop: 14,
+  },
+  revealText: { fontSize: 13, fontWeight: '600', color: TEXT2 },
+
+  // Tips
+  tipsCard: {
+    backgroundColor: '#EFF6FF', borderRadius: 16, padding: 16,
+    marginBottom: 20, borderWidth: 1, borderColor: '#DBEAFE',
+  },
+  tipsHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
+  tipsIconWrap: {
+    width: 28, height: 28, borderRadius: 8,
+    backgroundColor: '#DBEAFE', alignItems: 'center', justifyContent: 'center',
+  },
+  tipsTitle: { fontSize: 13, fontWeight: '700', color: '#1D4ED8' },
+  tipRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginBottom: 6 },
+  tipDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: '#93C5FD', marginTop: 5 },
+  tipText: { flex: 1, fontSize: 12, color: '#1E40AF', lineHeight: 18 },
+
+  // Numpad
+  numpad: { marginBottom: 20 },
+  numpadRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 },
+  numpadKey: {
+    flex: 1, marginHorizontal: 6, height: 60, borderRadius: 16,
+    backgroundColor: '#F9FAFB', borderWidth: 1, borderColor: BORDER,
+    alignItems: 'center', justifyContent: 'center',
+    ...Platform.select({
+      android: { elevation: 1 },
+      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 3 },
+    }),
+  },
+  numpadBackKey: { backgroundColor: PINK_S, borderColor: PINK_M },
+  numpadEmpty: { flex: 1, marginHorizontal: 6 },
+  numpadKeyText: { fontSize: 22, fontWeight: '600', color: TEXT1 },
+
+  // CTA
+  cta: { paddingVertical: 17, alignItems: 'center', justifyContent: 'center', borderRadius: 16 },
+  ctaInner: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  ctaText: { fontSize: 16, fontWeight: '700', color: WHITE, letterSpacing: -0.2 },
+});
 
 export default SetWithdrawalPinScreen;

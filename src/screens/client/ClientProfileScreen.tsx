@@ -1,310 +1,562 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, Platform, Image } from 'react-native';
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  ScrollView,
+  Platform,
+  Image,
+  StatusBar,
+} from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { getStoredUser, logoutUser } from '@/utils/authHelper';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { LinearGradient } from 'expo-linear-gradient';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import ConfirmationModal from '@/components/ConfirmationModal';
+import { bookingAPI, orderAPI, reviewAPI, savedAPI } from '@/api/api';
 
-interface MenuItem {
-  icon: string;
+const BRAND = {
+  primary: '#eb278d',
+  primaryDark: '#C01F73',
+  primarySoft: '#FFF0F7',
+  surface: '#FFFFFF',
+  bg: '#F8F9FA',
+  border: '#F0F0F0',
+  textPrimary: '#111827',
+  textSecondary: '#6B7280',
+  textMuted: '#9CA3AF',
+};
+
+interface StatTileProps {
+  value: string | number;
+  label: string;
+}
+
+const StatTile: React.FC<StatTileProps> = ({ value, label }) => (
+  <View style={{ flex: 1, alignItems: 'center' }}>
+    <Text style={{ fontSize: 20, fontWeight: '800', color: '#fff', letterSpacing: -0.5 }}>{value}</Text>
+    <Text style={{ fontSize: 11, color: 'rgba(255,255,255,0.85)', fontWeight: '500', marginTop: 2 }}>{label}</Text>
+  </View>
+);
+
+const Divider: React.FC = () => (
+  <View style={{ width: 1, height: 32, backgroundColor: 'rgba(255,255,255,0.3)' }} />
+);
+
+interface MenuItemProps {
+  icon: keyof typeof Ionicons.glyphMap;
+  iconBg: string;
+  iconColor: string;
   title: string;
-  subtitle: string;
-  iconFamily?: 'ionicons' | 'material';
+  subtitle?: string;
   onPress: () => void;
+  isLast?: boolean;
+  danger?: boolean;
 }
 
-interface MenuSection {
-  title: string;
-  items: MenuItem[];
-}
+const MenuItem: React.FC<MenuItemProps> = ({
+  icon,
+  iconBg,
+  iconColor,
+  title,
+  subtitle,
+  onPress,
+  isLast,
+  danger,
+}) => (
+  <TouchableOpacity
+    onPress={onPress}
+    activeOpacity={0.7}
+    style={{
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 16,
+      paddingVertical: 14,
+      borderBottomWidth: isLast ? 0 : 1,
+      borderBottomColor: BRAND.border,
+    }}
+  >
+    <View
+      style={{
+        width: 42,
+        height: 42,
+        borderRadius: 12,
+        backgroundColor: iconBg,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginRight: 14,
+      }}
+    >
+      <Ionicons name={icon} size={20} color={iconColor} />
+    </View>
+    <View style={{ flex: 1 }}>
+      <Text
+        style={{
+          fontSize: 15,
+          fontWeight: '600',
+          color: danger ? '#EF4444' : BRAND.textPrimary,
+        }}
+      >
+        {title}
+      </Text>
+      {subtitle ? (
+        <Text style={{ fontSize: 12, color: BRAND.textMuted, marginTop: 1 }}>{subtitle}</Text>
+      ) : null}
+    </View>
+    <Ionicons name="chevron-forward" size={18} color={danger ? '#EF4444' : '#D1D5DB'} />
+  </TouchableOpacity>
+);
 
 const ClientProfileScreen: React.FC = () => {
   const [user, setUser] = useState<any>(null);
-  const [showLogoutModal, setShowLogoutModal] = useState<boolean>(false);
-  const [showDeleteModal, setShowDeleteModal] = useState<boolean>(false);
-  const [loading, setLoading] = useState<boolean>(false);
-  const navigation = useNavigation();
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [stats, setStats] = useState({ bookings: '—', orders: '—', reviews: '—', saved: '—' });
+  const navigation = useNavigation<any>();
+  const insets = useSafeAreaInsets();
 
   useEffect(() => {
     loadUserData();
-    
-    
+    fetchStats();
     const unsubscribe = navigation.addListener('focus', () => {
       loadUserData();
+      fetchStats();
     });
-
     return unsubscribe;
   }, [navigation]);
 
-  const loadUserData = async (): Promise<void> => {
+  const fetchStats = async () => {
+    const [bookingsRes, ordersRes, reviewsRes, savedRes] = await Promise.allSettled([
+      bookingAPI.getMyBookings({ role: 'client', page: 1, limit: 1 }),
+      orderAPI.getMyOrders({ page: 1, limit: 1 }),
+      reviewAPI.getMyReviews({ page: 1, limit: 1 }),
+      savedAPI.getSavedIds(),
+    ]);
+
+    const getTotal = (res: PromiseSettledResult<any>): string => {
+      if (res.status === 'rejected') return '—';
+      const d = res.value;
+      const total =
+        d?.meta?.pagination?.total ??
+        d?.data?.pagination?.total ??
+        d?.meta?.total ??
+        d?.data?.total ??
+        d?.total ??
+        null;
+      return total != null ? String(total) : '—';
+    };
+
+    const savedCount =
+      savedRes.status === 'fulfilled'
+        ? (savedRes.value?.data?.savedVendorIds?.length ?? 0) +
+          (savedRes.value?.data?.savedProductIds?.length ?? 0)
+        : null;
+
+    setStats({
+      bookings: getTotal(bookingsRes),
+      orders: getTotal(ordersRes),
+      reviews: getTotal(reviewsRes),
+      saved: savedCount != null ? String(savedCount) : '—',
+    });
+  };
+
+  const loadUserData = async () => {
     const userData = await getStoredUser();
-    console.log('👤 Loaded user data:', userData);
     setUser(userData);
   };
 
-  const handleLogout = async (): Promise<void> => {
+  const handleLogout = async () => {
     setLoading(true);
     try {
       await logoutUser();
       setShowLogoutModal(false);
-      console.log('✅ Logged out successfully');
     } catch (error) {
-      console.error('❌ Logout error:', error);
+      console.error('Logout error:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleDeleteAccount = async (): Promise<void> => {
+  const handleDeleteAccount = async () => {
     setLoading(true);
     try {
-      console.log('Delete account requested');
       setShowDeleteModal(false);
     } catch (error) {
-      console.error('❌ Delete account error:', error);
+      console.error('Delete account error:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  const menuSections: MenuSection[] = [
-    {
-      title: 'Account',
-      items: [
-        {
-          icon: 'person-circle-outline',
-          title: 'Personal Information',
-          subtitle: 'Update your profile details',
-          onPress: () => navigation.navigate("PersonalInformation"),
-        },
-      ],
-    },
-    
-    {
-      title: 'Preferences',
-      items: [
-        {
-          icon: 'notifications-outline',
-          title: 'Notifications',
-          subtitle: 'Manage notification settings',
-          onPress: () => navigation.navigate("NotificationsSetting"),
-        },
-        {
-          icon: 'shield-checkmark-outline',
-          title: 'Privacy & Security',
-          subtitle: 'Password and security settings',
-          onPress: () => navigation.navigate("PrivacySetting"),
-        },
-      
-      ],
-    },
-    {
-      title: 'Support',
-      items: [
-        {
-          icon: 'help-circle-outline',
-          title: 'Help Center',
-          subtitle: 'FAQs and support',
-          onPress: () => navigation.navigate("HelpCenter"),
-        },
-       
-        {
-          icon: 'document-text-outline',
-          title: 'Terms & Privacy',
-          subtitle: 'Legal information',
-          onPress: () => navigation.navigate('TermsPrivacy'),
-        },
-      ],
-    },
-  ];
-
-  const renderIcon = (
-    iconFamily: string = 'ionicons',
-    iconName: string,
-    size: number = 22,
-    color: string = '#eb278d'
-  ) => {
-    if (iconFamily === 'material') {
-      return <MaterialCommunityIcons name={iconName as any} size={size} color={color} />;
-    }
-    return <Ionicons name={iconName as any} size={size} color={color} />;
-  };
+  const fullName = user?.firstName
+    ? `${user.firstName} ${user.lastName || ''}`.trim()
+    : 'User';
 
   return (
-    <SafeAreaView className="flex-1 bg-gray-50" edges={['top']}>
-      <ScrollView showsVerticalScrollIndicator={false} bounces={false}>
-        {}
-        <View className="pb-6 rounded-b-[50px] bg-[#eb278d]">
-          {}
-       {/* Header */}
-          <View className="flex-row items-center justify-between px-5 py-4">
-            <View className="w-10 h-10" />
-            <Text className="text-lg font-semibold text-white">Profile</Text>
-            <TouchableOpacity 
-              className="w-10 h-10 items-center justify-center"
-              onPress={() => navigation.navigate("PersonalInformation")}
+    <View style={{ flex: 1, backgroundColor: BRAND.bg }}>
+      <StatusBar barStyle="light-content" backgroundColor={BRAND.primary} />
+
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        bounces={false}
+        contentContainerStyle={{ paddingBottom: 32 + insets.bottom }}
+      >
+        {/* ── PINK HEADER ──────────────────────────────────────────────────── */}
+        <View
+          style={{
+            backgroundColor: BRAND.primary,
+            paddingTop: insets.top + 10,
+            paddingBottom: 28,
+            borderBottomLeftRadius: 32,
+            borderBottomRightRadius: 32,
+          }}
+        >
+          {/* Top bar: title + edit */}
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              paddingHorizontal: 20,
+              marginBottom: 20,
+            }}
+          >
+            <View style={{ width: 40 }} />
+            <Text style={{ fontSize: 18, fontWeight: '700', color: '#fff' }}>Profile</Text>
+            <TouchableOpacity
+              onPress={() => navigation.navigate('PersonalInformation')}
+              style={{
+                width: 40,
+                height: 40,
+                borderRadius: 20,
+                backgroundColor: 'rgba(255,255,255,0.2)',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
             >
-              <Ionicons name="create-outline" size={24} color="#FFFFFF" />
+              <Ionicons name="create-outline" size={20} color="#fff" />
             </TouchableOpacity>
           </View>
 
-          {}
-          <View className="items-center pb-5 px-5">
-            {}
-            <View className="relative mb-4">
-              <View className="w-[104px] h-[104px] rounded-full p-0.5">
-                <View className="w-[100px] h-[100px] rounded-full bg-white items-center justify-center overflow-hidden">
-                  {user?.avatar ? (
-                    <Image 
-                      source={{ uri: user.avatar }} 
-                      className="w-full h-full"
-                      resizeMode="cover"
-                    />
-                  ) : (
-                    <Ionicons name="person" size={50} color="#eb278d" />
-                  )}
-                </View>
-              </View>
-              
-              {}
-            </View>
-
-            <Text className="text-2xl font-bold text-white mb-1">
-              {user?.firstName ? `${user.firstName} ${user.lastName}` : 'Adenusi Kayode'}
-            </Text>
-            <Text className="text-sm text-white/90 mb-3">
-              {user?.email || 'kayskidadenusi@gmail.com'}
-            </Text>
-
-            {}
-            <View className="flex-row items-center bg-white/20 px-3 py-1.5 rounded-full">
-              <Ionicons name="checkmark-circle" size={16} color="#10b981" />
-              <Text className="text-xs text-white ml-1 font-semibold">Verified Account</Text>
-            </View>
-          </View>
-        </View>
-
-        {}
-        <View className="pt-5 pb-20">
-          {menuSections.map((section, sectionIndex) => (
-            <View key={sectionIndex} className="mb-5 px-5">
-              <Text className="text-[13px] font-semibold text-gray-500 uppercase tracking-wider mb-2 ml-1">
-                {section.title}
-              </Text>
+          {/* Avatar + name */}
+          <View style={{ alignItems: 'center', marginBottom: 20 }}>
+            <View style={{ position: 'relative', marginBottom: 12 }}>
               <View
-                className="bg-white rounded-2xl overflow-hidden"
                 style={{
+                  width: 96,
+                  height: 96,
+                  borderRadius: 48,
+                  backgroundColor: '#fff',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  borderWidth: 3,
+                  borderColor: 'rgba(255,255,255,0.5)',
+                  overflow: 'hidden',
+                }}
+              >
+                {user?.avatar ? (
+                  <Image source={{ uri: user.avatar }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
+                ) : (
+                  <Ionicons name="person" size={48} color={BRAND.primary} />
+                )}
+              </View>
+              <TouchableOpacity
+                onPress={() => navigation.navigate('PersonalInformation')}
+                style={{
+                  position: 'absolute',
+                  bottom: 0,
+                  right: 0,
+                  width: 28,
+                  height: 28,
+                  borderRadius: 14,
+                  backgroundColor: '#fff',
+                  alignItems: 'center',
+                  justifyContent: 'center',
                   ...Platform.select({
-                    ios: {
-                      shadowColor: '#000',
-                      shadowOffset: { width: 0, height: 2 },
-                      shadowOpacity: 0.05,
-                      shadowRadius: 8,
-                    },
-                    android: {
-                      elevation: 3,
-                    },
+                    android: { elevation: 3 },
+                    ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 4 },
                   }),
                 }}
               >
-                {section.items.map((item, itemIndex) => (
-                  <TouchableOpacity
-                    key={itemIndex}
-                    className={`flex-row items-center p-4 ${
-                      itemIndex !== section.items.length - 1 ? 'border-b border-gray-100' : ''
-                    }`}
-                    onPress={item.onPress}
-                    activeOpacity={0.7}
-                  >
-                    <View className="w-11 h-11 rounded-xl bg-pink-50 items-center justify-center mr-3">
-                      {renderIcon(item.iconFamily, item.icon)}
-                    </View>
-                    <View className="flex-1">
-                      <Text className="text-[15px] font-semibold text-gray-800 mb-0.5">
-                        {item.title}
-                      </Text>
-                      <Text className="text-xs text-gray-500">{item.subtitle}</Text>
-                    </View>
-                    <Ionicons name="chevron-forward" size={20} color="#d1d5db" />
-                  </TouchableOpacity>
-                ))}
-              </View>
+                <Ionicons name="camera-outline" size={14} color={BRAND.primary} />
+              </TouchableOpacity>
             </View>
-          ))}
 
-          {}
-          <View className="mb-5 px-5">
-            <Text className="text-[13px] font-semibold text-gray-500 uppercase tracking-wider mb-2 ml-1">
-              Account Actions
+            <Text style={{ fontSize: 20, fontWeight: '800', color: '#fff', letterSpacing: -0.3 }}>{fullName}</Text>
+            <Text style={{ fontSize: 13, color: 'rgba(255,255,255,0.85)', marginTop: 2 }}>
+              {user?.email || ''}
             </Text>
+
+            {/* Verified badge */}
             <View
-              className="bg-white rounded-2xl overflow-hidden"
               style={{
-                ...Platform.select({
-                  ios: {
-                    shadowColor: '#000',
-                    shadowOffset: { width: 0, height: 2 },
-                    shadowOpacity: 0.05,
-                    shadowRadius: 8,
-                  },
-                  android: {
-                    elevation: 3,
-                  },
-                }),
+                flexDirection: 'row',
+                alignItems: 'center',
+                backgroundColor: 'rgba(255,255,255,0.2)',
+                paddingHorizontal: 12,
+                paddingVertical: 5,
+                borderRadius: 20,
+                marginTop: 8,
               }}
             >
-              <TouchableOpacity
-                className="flex-row items-center p-4 bg-red-50 border-b border-gray-100"
-                onPress={() => setShowLogoutModal(true)}
-                activeOpacity={0.7}
-              >
-                <View className="w-11 h-11 rounded-xl bg-red-100 items-center justify-center mr-3">
-                  <Ionicons name="log-out-outline" size={24} color="#ef4444" />
-                </View>
-                <View className="flex-1">
-                  <Text className="text-[15px] font-semibold text-red-500">Logout</Text>
-                  <Text className="text-xs text-red-400">Sign out of your account</Text>
-                </View>
-                <Ionicons name="chevron-forward" size={20} color="#ef4444" />
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                className="flex-row items-center p-4 bg-red-50"
-                onPress={() => setShowDeleteModal(true)}
-                activeOpacity={0.7}
-              >
-                <View className="w-11 h-11 rounded-xl bg-red-100 items-center justify-center mr-3">
-                  <Ionicons name="trash-outline" size={24} color="#ef4444" />
-                </View>
-                <View className="flex-1">
-                  <Text className="text-[15px] font-semibold text-red-500">Delete Account</Text>
-                  <Text className="text-xs text-red-400">Permanently remove account</Text>
-                </View>
-                <Ionicons name="chevron-forward" size={20} color="#ef4444" />
-              </TouchableOpacity>
+              <Ionicons name="checkmark-circle" size={14} color="#10B981" />
+              <Text style={{ fontSize: 12, color: '#fff', fontWeight: '600', marginLeft: 5 }}>
+                Verified Member
+              </Text>
             </View>
           </View>
 
-          {}
-          <View className="items-center py-5 mt-2">
-            <Text className="text-xs text-gray-400 mb-1">Version 1.0.0</Text>
-            <Text className="text-[11px] text-gray-400">© 2024 LookReal</Text>
+          {/* Stats row */}
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              marginHorizontal: 20,
+              backgroundColor: 'rgba(255,255,255,0.15)',
+              borderRadius: 16,
+              paddingVertical: 16,
+              paddingHorizontal: 10,
+            }}
+          >
+            <StatTile value={stats.bookings} label="Bookings" />
+            <Divider />
+            <StatTile value={stats.orders} label="Orders" />
+            <Divider />
+            <StatTile value={stats.saved} label="Saved" />
+            <Divider />
+            <StatTile value={stats.reviews} label="Reviews" />
           </View>
+        </View>
+
+        {/* ── ACCOUNT SECTION ──────────────────────────────────────────────── */}
+        <View style={{ paddingHorizontal: 16, marginTop: 24 }}>
+          <Text
+            style={{
+              fontSize: 12,
+              fontWeight: '700',
+              color: BRAND.textMuted,
+              letterSpacing: 0.8,
+              textTransform: 'uppercase',
+              marginBottom: 10,
+              marginLeft: 4,
+            }}
+          >
+            Account
+          </Text>
+          <View
+            style={{
+              backgroundColor: BRAND.surface,
+              borderRadius: 18,
+              overflow: 'hidden',
+              ...Platform.select({
+                android: { elevation: 2 },
+                ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8 },
+              }),
+            }}
+          >
+            <MenuItem
+              icon="bag-handle-outline"
+              iconBg="#FFF0F7"
+              iconColor={BRAND.primary}
+              title="My Orders"
+              subtitle="Track and manage your orders"
+              onPress={() => navigation.navigate('CustomerOrders')}
+            />
+            <MenuItem
+              icon="heart-outline"
+              iconBg="#FFF0F0"
+              iconColor="#EF4444"
+              title="Saved / Wishlist"
+              subtitle="Your saved vendors and services"
+              onPress={() => navigation.navigate('Favourites')}
+            />
+            <MenuItem
+              icon="wallet-outline"
+              iconBg="#F0FFF4"
+              iconColor="#10B981"
+              title="Payment & Wallet"
+              subtitle="LookReal Pay"
+              onPress={() => navigation.navigate('Transactions')}
+              isLast
+            />
+          </View>
+        </View>
+
+        {/* ── ACTIVITY SECTION ─────────────────────────────────────────────── */}
+        <View style={{ paddingHorizontal: 16, marginTop: 20 }}>
+          <Text
+            style={{
+              fontSize: 12,
+              fontWeight: '700',
+              color: BRAND.textMuted,
+              letterSpacing: 0.8,
+              textTransform: 'uppercase',
+              marginBottom: 10,
+              marginLeft: 4,
+            }}
+          >
+            Activity
+          </Text>
+          <View
+            style={{
+              backgroundColor: BRAND.surface,
+              borderRadius: 18,
+              overflow: 'hidden',
+              ...Platform.select({
+                android: { elevation: 2 },
+                ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8 },
+              }),
+            }}
+          >
+            <MenuItem
+              icon="star-outline"
+              iconBg="#FFFBEB"
+              iconColor="#F59E0B"
+              title="My Reviews"
+              subtitle="Reviews you've left"
+              onPress={() => navigation.navigate('Reviews')}
+            />
+            <MenuItem
+              icon="alert-circle-outline"
+              iconBg="#FFF0F0"
+              iconColor="#EF4444"
+              title="Disputes"
+              subtitle="View and manage disputes"
+              onPress={() => navigation.navigate('Disputes')}
+            />
+            <MenuItem
+              icon="share-social-outline"
+              iconBg="#EFF6FF"
+              iconColor="#3B82F6"
+              title="Referral Program"
+              subtitle="Earn rewards by referring friends"
+              onPress={() => navigation.navigate('Referrals')}
+              isLast
+            />
+          </View>
+        </View>
+
+        {/* ── PREFERENCES SECTION ──────────────────────────────────────────── */}
+        <View style={{ paddingHorizontal: 16, marginTop: 20 }}>
+          <Text
+            style={{
+              fontSize: 12,
+              fontWeight: '700',
+              color: BRAND.textMuted,
+              letterSpacing: 0.8,
+              textTransform: 'uppercase',
+              marginBottom: 10,
+              marginLeft: 4,
+            }}
+          >
+            Preferences
+          </Text>
+          <View
+            style={{
+              backgroundColor: BRAND.surface,
+              borderRadius: 18,
+              overflow: 'hidden',
+              ...Platform.select({
+                android: { elevation: 2 },
+                ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8 },
+              }),
+            }}
+          >
+            <MenuItem
+              icon="notifications-outline"
+              iconBg="#F5F3FF"
+              iconColor="#8B5CF6"
+              title="Notifications"
+              subtitle="Manage notification settings"
+              onPress={() => navigation.navigate('NotificationsSetting')}
+            />
+            <MenuItem
+              icon="shield-checkmark-outline"
+              iconBg="#F0FFF4"
+              iconColor="#10B981"
+              title="Privacy & Security"
+              subtitle="Password and security settings"
+              onPress={() => navigation.navigate('PrivacySetting')}
+            />
+            <MenuItem
+              icon="key-outline"
+              iconBg="#FFF0F7"
+              iconColor={BRAND.primary}
+              title="Change Password"
+              subtitle="Update your account password"
+              onPress={() => navigation.navigate('ChangePassword')}
+            />
+            <MenuItem
+              icon="help-circle-outline"
+              iconBg="#FFFBEB"
+              iconColor="#F59E0B"
+              title="Help Center"
+              subtitle="FAQs and support"
+              onPress={() => navigation.navigate('HelpCenter')}
+            />
+            <MenuItem
+              icon="document-text-outline"
+              iconBg="#EFF6FF"
+              iconColor="#3B82F6"
+              title="Terms & Privacy"
+              subtitle="Legal information"
+              onPress={() => navigation.navigate('TermsPrivacy')}
+              isLast
+            />
+          </View>
+        </View>
+
+        {/* ── DANGER ZONE ──────────────────────────────────────────────────── */}
+        <View style={{ paddingHorizontal: 16, marginTop: 20 }}>
+          <View
+            style={{
+              backgroundColor: BRAND.surface,
+              borderRadius: 18,
+              overflow: 'hidden',
+              ...Platform.select({
+                android: { elevation: 2 },
+                ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8 },
+              }),
+            }}
+          >
+            <MenuItem
+              icon="log-out-outline"
+              iconBg="#FFF5F5"
+              iconColor="#EF4444"
+              title="Logout"
+              subtitle="Sign out of your account"
+              onPress={() => setShowLogoutModal(true)}
+              danger
+            />
+            <MenuItem
+              icon="trash-outline"
+              iconBg="#FFF5F5"
+              iconColor="#EF4444"
+              title="Delete Account"
+              subtitle="Permanently remove your account"
+              onPress={() => setShowDeleteModal(true)}
+              isLast
+              danger
+            />
+          </View>
+        </View>
+
+        {/* Version */}
+        <View style={{ alignItems: 'center', paddingVertical: 24 }}>
+          <Text style={{ fontSize: 11, color: BRAND.textMuted }}>Version 1.0.0  ·  © 2024 LookReal</Text>
         </View>
       </ScrollView>
 
-      {}
       <ConfirmationModal
         visible={showLogoutModal}
         title="Logout"
         message="Are you sure you want to logout?"
         icon="log-out-outline"
-        iconColor="#eb278d"
+        iconColor={BRAND.primary}
         confirmText="Yes, Logout"
         cancelText="Cancel"
-        confirmColor="#eb278d"
+        confirmColor={BRAND.primary}
         loading={loading}
         onConfirm={handleLogout}
         onCancel={() => setShowLogoutModal(false)}
@@ -323,7 +575,7 @@ const ClientProfileScreen: React.FC = () => {
         onConfirm={handleDeleteAccount}
         onCancel={() => setShowDeleteModal(false)}
       />
-    </SafeAreaView>
+    </View>
   );
 };
 

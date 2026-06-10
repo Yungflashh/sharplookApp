@@ -1,8 +1,30 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, Image } from 'react-native';
+import { View, Text, TouchableOpacity, Image, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-interface VendorCardProps {
+
+const P = '#E91E63';
+const P_LIGHT = '#FEE2F0';
+
+const TYPE_META: Record<string, { bg: string; color: string; label: string }> = {
+  home_service: { bg: '#EFF6FF', color: '#2563EB', label: 'Home Service' },
+  in_shop:      { bg: '#F0FDF4', color: '#16A34A', label: 'In-Shop' },
+  both:         { bg: '#F5F3FF', color: '#7C3AED', label: 'Home & Shop' },
+};
+
+// Gradient pairs for placeholder — based on first letter of business name
+const GRAD_PAIRS: [string, string][] = [
+  ['#F9A8D4', '#E91E63'],
+  ['#A5B4FC', '#6366F1'],
+  ['#6EE7B7', '#059669'],
+  ['#FCD34D', '#D97706'],
+  ['#7DD3FC', '#0284C7'],
+];
+
+const pickGradient = (name: string): [string, string] =>
+  GRAD_PAIRS[(name.charCodeAt(0) || 0) % GRAD_PAIRS.length];
+
+export interface VendorCardProps {
   vendor: {
     id: string;
     businessName: string;
@@ -19,102 +41,162 @@ interface VendorCardProps {
   width?: number;
   showFavorite?: boolean;
 }
+
 const VendorCard: React.FC<VendorCardProps> = ({
   vendor,
   onPress,
   onFavoritePress,
   isFavorite = false,
   width = 180,
-  showFavorite = false
 }) => {
-  const renderStars = (rating: number) => {
-    return <View className="flex-row items-center" style={{ gap: 1 }}>
-        {[1, 2, 3, 4, 5].map(star => <Ionicons key={star} name={star <= rating ? 'star' : 'star-outline'} size={14} color={star <= rating ? '#fbbf24' : '#d1d5db'} />)}
-        <Text className="text-xs text-gray-600 font-semibold ml-1.5">{rating.toFixed(1)}</Text>
-      </View>;
+  const typeMeta = TYPE_META[vendor.vendorType || ''] ?? {
+    bg: P_LIGHT, color: P, label: vendor.service || 'Beauty',
   };
-  return <TouchableOpacity className="bg-white rounded-2xl overflow-hidden border border-gray-100" style={{
-    width,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 3,
-  }} activeOpacity={0.9} onPress={onPress}>
-      {/* Image */}
-      <View className="relative">
-        {vendor.image ? <Image source={{
-        uri: vendor.image
-      }} className="w-full" style={{ height: 170 }} resizeMode="cover" /> : <View style={{ height: 170, backgroundColor: '#f3f4f6', alignItems: 'center', justifyContent: 'center' }}>
-            <View style={{ width: 64, height: 64, borderRadius: 32, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: '#e5e7eb' }}>
-              <Text style={{ fontSize: 28, fontWeight: '700', color: '#9ca3af' }}>
-                {vendor.businessName?.charAt(0)?.toUpperCase() || 'V'}
-              </Text>
+  const initials = (vendor.businessName || 'VD').slice(0, 2).toUpperCase();
+  const rating = Math.min(5, Math.max(0, vendor.rating || 0));
+  const gradColors = pickGradient(vendor.businessName || 'V');
+  const serviceLabel = vendor.service || typeMeta.label;
+
+  return (
+    <TouchableOpacity style={[s.card, { width }]} onPress={onPress} activeOpacity={0.88}>
+
+      {/* ── Image / Gradient Placeholder ── */}
+      <View style={s.imgWrap}>
+        {vendor.image ? (
+          <Image source={{ uri: vendor.image }} style={s.img} resizeMode="cover" />
+        ) : (
+          <LinearGradient
+            colors={gradColors}
+            style={StyleSheet.absoluteFillObject}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+          >
+            <View style={s.initialsWrap}>
+              <View style={s.initialsCircle}>
+                <Text style={s.initialsText}>{initials}</Text>
+              </View>
             </View>
-            <Text style={{ fontSize: 11, color: '#9ca3af', marginTop: 6, fontWeight: '500' }}>No photo yet</Text>
-          </View>}
+          </LinearGradient>
+        )}
 
-        {/* Favorite */}
-        {showFavorite && onFavoritePress && <TouchableOpacity className="absolute top-3 right-3 w-9 h-9 rounded-full items-center justify-center" style={{
-        backgroundColor: 'rgba(255, 255, 255, 0.95)',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-        elevation: 3,
-      }} activeOpacity={0.7} onPress={onFavoritePress}>
-            <Ionicons name={isFavorite ? 'heart' : 'heart-outline'} size={18} color="#eb278d" />
-          </TouchableOpacity>}
+        {/* Scrim at bottom of image for visual depth */}
+        <LinearGradient
+          colors={['transparent', 'rgba(0,0,0,0.38)']}
+          style={s.scrim}
+        />
 
-        {/* Verified badge */}
-        {vendor.isVerified && <View className="absolute top-3 left-3 bg-green-500 px-2.5 py-1 rounded-full flex-row items-center">
-            <Ionicons name="checkmark-circle" size={13} color="#fff" />
-            <Text className="text-white text-[10px] font-bold ml-1">VERIFIED</Text>
-          </View>}
+        {/* Verified badge — top-left */}
+        {vendor.isVerified && (
+          <View style={s.verifiedBadge}>
+            <Ionicons name="checkmark-circle" size={11} color="#fff" />
+            <Text style={s.verifiedTxt}>VERIFIED</Text>
+          </View>
+        )}
 
+        {/* Heart — top-right, always shown */}
+        <TouchableOpacity
+          style={s.heartBtn}
+          onPress={onFavoritePress}
+          activeOpacity={0.8}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <Ionicons
+            name={isFavorite ? 'heart' : 'heart-outline'}
+            size={16}
+            color={isFavorite ? P : '#444'}
+          />
+        </TouchableOpacity>
 
+        {/* Vendor type chip — bottom-left, sitting on the scrim */}
+        <View style={[s.typePillImg, { backgroundColor: typeMeta.bg }]}>
+          <Text style={[s.typePillTxt, { color: typeMeta.color }]} numberOfLines={1}>
+            {serviceLabel}
+          </Text>
+        </View>
       </View>
 
-      {/* Content */}
-      <View style={{ paddingHorizontal: 12, paddingVertical: 10 }}>
-        {/* Business name */}
-        <Text style={{ fontSize: 15, fontWeight: '700', color: '#111827', textAlign: 'center', marginBottom: 6 }} numberOfLines={2}>
-          {vendor.businessName}
-        </Text>
+      {/* ── Info section ── */}
+      <View style={s.info}>
+        <Text style={s.name} numberOfLines={1}>{vendor.businessName}</Text>
 
-        {/* Service type badge */}
-        <View style={{ alignItems: 'center', marginBottom: 6 }}>
-          <View style={{
-            flexDirection: 'row', alignItems: 'center',
-            backgroundColor: vendor.vendorType === 'home_service' ? '#dbeafe' : vendor.vendorType === 'in_shop' ? '#d1fae5' : '#ede9fe',
-            paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10,
-          }}>
-            <Ionicons
-              name={vendor.vendorType === 'home_service' ? 'home-outline' : vendor.vendorType === 'in_shop' ? 'storefront-outline' : 'layers-outline'}
-              size={12}
-              color={vendor.vendorType === 'home_service' ? '#2563eb' : vendor.vendorType === 'in_shop' ? '#059669' : '#7c3aed'}
-            />
-            <Text style={{
-              fontSize: 11, fontWeight: '600', marginLeft: 4,
-              color: vendor.vendorType === 'home_service' ? '#2563eb' : vendor.vendorType === 'in_shop' ? '#059669' : '#7c3aed',
-            }}>
-              {vendor.service}
-            </Text>
-          </View>
-        </View>
-
-        {/* Rating */}
-        <View style={{ alignItems: 'center', marginBottom: 6 }}>
-          {renderStars(vendor.rating)}
-        </View>
-
-        {/* Reviews */}
-        <View style={{ alignItems: 'center' }}>
-          <Text style={{ fontSize: 11, color: '#6b7280', fontWeight: '500' }}>
+        <View style={s.ratingRow}>
+          <Ionicons name="star" size={13} color="#F59E0B" />
+          <Text style={s.ratingNum}> {rating.toFixed(1)}</Text>
+          <Text style={s.ratingDot}> · </Text>
+          <Text style={s.ratingCount}>
             {vendor.reviews} review{vendor.reviews !== 1 ? 's' : ''}
           </Text>
         </View>
       </View>
-    </TouchableOpacity>;
+    </TouchableOpacity>
+  );
 };
+
+const s = StyleSheet.create({
+  card: {
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    overflow: 'hidden',
+    shadowColor: '#1A1A2E',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.12,
+    shadowRadius: 18,
+    elevation: 7,
+  },
+
+  // Image
+  imgWrap: { width: '100%', height: 200, position: 'relative', backgroundColor: '#F0F0F0' },
+  img: { width: '100%', height: '100%' },
+
+  // Placeholder (fills same space as img via absoluteFillObject)
+  initialsWrap: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  initialsCircle: {
+    width: 72, height: 72, borderRadius: 36,
+    backgroundColor: 'rgba(255,255,255,0.25)',
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 2.5, borderColor: 'rgba(255,255,255,0.55)',
+  },
+  initialsText: { fontSize: 26, fontWeight: '900', color: '#fff', letterSpacing: 1 },
+
+  // Gradient scrim at base of image
+  scrim: {
+    position: 'absolute', left: 0, right: 0, bottom: 0, height: 72,
+  },
+
+  // Verified badge
+  verifiedBadge: {
+    position: 'absolute', top: 10, left: 10,
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    backgroundColor: '#16A34A',
+    paddingHorizontal: 8, paddingVertical: 4, borderRadius: 999,
+  },
+  verifiedTxt: { fontSize: 9, fontWeight: '800', color: '#fff', letterSpacing: 0.5 },
+
+  // Heart button
+  heartBtn: {
+    position: 'absolute', top: 10, right: 10,
+    width: 34, height: 34, borderRadius: 17,
+    backgroundColor: 'rgba(255,255,255,0.95)',
+    alignItems: 'center', justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15, shadowRadius: 4, elevation: 3,
+  },
+
+  // Service type pill overlaid on scrim
+  typePillImg: {
+    position: 'absolute', bottom: 10, left: 10,
+    paddingHorizontal: 9, paddingVertical: 4, borderRadius: 999,
+  },
+  typePillTxt: { fontSize: 10, fontWeight: '700' },
+
+  // Info
+  info: { paddingHorizontal: 13, paddingVertical: 11, gap: 5 },
+  name: { fontSize: 14, fontWeight: '800', color: '#111', letterSpacing: -0.3 },
+  ratingRow: { flexDirection: 'row', alignItems: 'center' },
+  ratingNum: { fontSize: 12, fontWeight: '700', color: '#374151' },
+  ratingDot: { fontSize: 12, color: '#D1D5DB' },
+  ratingCount: { fontSize: 11, color: '#9CA3AF' },
+});
+
 export default VendorCard;
