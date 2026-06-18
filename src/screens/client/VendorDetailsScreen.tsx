@@ -11,7 +11,8 @@ import {
   Share,
   Platform,
   StatusBar,
-  Animated,
+  Modal,
+  FlatList,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -25,28 +26,12 @@ import ReviewCard from '@/components/clientComponent/ReviewCard';
 import { toast } from '@/components/ui/Toast';
 import * as Location from 'expo-location';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
-// ─── Brand Tokens ─────────────────────────────────────────────────────────────
-const BRAND = {
-  primary: '#E04079',
-  primaryLight: '#F08BAC',
-  primarySoft: '#FEF0F5',
-  primaryMuted: '#FCDCE9',
-  accent: '#7C3AED',
-  gold: '#F59E0B',
-  surface: '#FFFFFF',
-  surfaceAlt: '#F9FAFB',
-  border: '#F3F4F6',
-  borderStrong: '#E5E7EB',
-  textPrimary: '#111827',
-  textSecondary: '#6B7280',
-  textMuted: '#9CA3AF',
-  success: '#10B981',
-  successSoft: '#D1FAE5',
-  blue: '#3B82F6',
-  blueSoft: '#DBEAFE',
-};
+// ─── Constants ────────────────────────────────────────────────────────────────
+const PINK = '#E91E63';
+const BG = '#FFF5F8';
+const GOLD = '#F59E0B';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 type Nav = NativeStackNavigationProp<RootStackParamList, 'VendorDetail'>;
@@ -61,21 +46,25 @@ interface VendorData {
   phone: string;
   avatar?: string;
   isOnline: boolean;
+  createdAt?: string;
   vendorProfile: {
     businessName: string;
     businessDescription?: string;
     vendorType: string;
     rating: number;
     totalRatings: number;
+    totalReviews?: number;
     completedBookings: number;
     isVerified: boolean;
+    coverImage?: string;
+    portfolioImages?: string[];
+    yearsOfExperience?: number;
     categories: Array<{ _id: string; name: string; icon: string }>;
     location?: { address: string; city: string; state: string; coordinates?: number[] };
   };
 }
 
-// ─── Sub-components ───────────────────────────────────────────────────────────
-
+// ─── StarRow helper ───────────────────────────────────────────────────────────
 const StarRow: React.FC<{ rating: number; size?: number }> = ({ rating, size = 14 }) => (
   <View style={{ flexDirection: 'row', alignItems: 'center' }}>
     {[1, 2, 3, 4, 5].map((s) => (
@@ -83,163 +72,10 @@ const StarRow: React.FC<{ rating: number; size?: number }> = ({ rating, size = 1
         key={s}
         name={s <= Math.round(rating) ? 'star' : 'star-outline'}
         size={size}
-        color={s <= Math.round(rating) ? BRAND.gold : BRAND.borderStrong}
+        color={s <= Math.round(rating) ? GOLD : '#E5E7EB'}
         style={{ marginRight: 1 }}
       />
     ))}
-  </View>
-);
-
-const StatPill: React.FC<{
-  icon: keyof typeof Ionicons.glyphMap;
-  value: string | number;
-  label: string;
-  color: string;
-  bg: string;
-}> = ({ icon, value, label, color, bg }) => (
-  <View
-    style={{
-      flex: 1,
-      backgroundColor: BRAND.surface,
-      borderRadius: 16,
-      paddingVertical: 16,
-      alignItems: 'center',
-      borderWidth: 1,
-      borderColor: BRAND.border,
-      ...Platform.select({
-        ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 6 },
-        android: { elevation: 2 },
-      }),
-    }}
-  >
-    <View
-      style={{
-        width: 36,
-        height: 36,
-        borderRadius: 11,
-        backgroundColor: bg,
-        alignItems: 'center',
-        justifyContent: 'center',
-        marginBottom: 8,
-      }}
-    >
-      <Ionicons name={icon} size={18} color={color} />
-    </View>
-    <Text style={{ fontSize: 20, fontWeight: '800', color: BRAND.textPrimary, letterSpacing: -0.5 }}>
-      {value}
-    </Text>
-    <Text style={{ fontSize: 11, color: BRAND.textMuted, marginTop: 2, fontWeight: '500' }}>{label}</Text>
-  </View>
-);
-
-const TabBar: React.FC<{
-  tabs: string[];
-  active: string;
-  onChange: (t: any) => void;
-}> = ({ tabs, active, onChange }) => (
-  <View
-    style={{
-      flexDirection: 'row',
-      marginHorizontal: 20,
-      backgroundColor: BRAND.surfaceAlt,
-      borderRadius: 14,
-      padding: 4,
-      borderWidth: 1,
-      borderColor: BRAND.border,
-    }}
-  >
-    {tabs.map((tab) => {
-      const isActive = active === tab;
-      return (
-        <TouchableOpacity
-          key={tab}
-          onPress={() => onChange(tab)}
-          activeOpacity={0.75}
-          style={{
-            flex: 1,
-            paddingVertical: 9,
-            borderRadius: 11,
-            alignItems: 'center',
-            backgroundColor: isActive ? BRAND.surface : 'transparent',
-            ...Platform.select({
-              ios: isActive
-                ? { shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.08, shadowRadius: 4 }
-                : {},
-              android: isActive ? { elevation: 2 } : {},
-            }),
-          }}
-        >
-          <Text
-            style={{
-              fontSize: 13,
-              fontWeight: isActive ? '700' : '500',
-              color: isActive ? BRAND.primary : BRAND.textMuted,
-              textTransform: 'capitalize',
-              letterSpacing: 0.1,
-            }}
-          >
-            {tab}
-          </Text>
-        </TouchableOpacity>
-      );
-    })}
-  </View>
-);
-
-const InfoRow: React.FC<{
-  icon: keyof typeof Ionicons.glyphMap;
-  text: string;
-  sub?: string;
-  iconColor?: string;
-  iconBg?: string;
-}> = ({ icon, text, sub, iconColor = BRAND.primary, iconBg = BRAND.primarySoft }) => (
-  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-    <View
-      style={{
-        width: 38,
-        height: 38,
-        borderRadius: 12,
-        backgroundColor: iconBg,
-        alignItems: 'center',
-        justifyContent: 'center',
-        marginRight: 12,
-      }}
-    >
-      <Ionicons name={icon} size={18} color={iconColor} />
-    </View>
-    <View style={{ flex: 1 }}>
-      <Text style={{ fontSize: 14, fontWeight: '600', color: BRAND.textPrimary }}>{text}</Text>
-      {sub && <Text style={{ fontSize: 12, color: BRAND.textSecondary, marginTop: 1 }}>{sub}</Text>}
-    </View>
-  </View>
-);
-
-const SectionCard: React.FC<{ title: string; children: React.ReactNode; action?: React.ReactNode }> = ({
-  title,
-  children,
-  action,
-}) => (
-  <View
-    style={{
-      backgroundColor: BRAND.surface,
-      borderRadius: 20,
-      padding: 18,
-      marginBottom: 14,
-      borderWidth: 1,
-      borderColor: BRAND.border,
-      ...Platform.select({
-        ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8 },
-        android: { elevation: 2 },
-      }),
-    }}
-  >
-    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-      <Text style={{ fontSize: 16, fontWeight: '700', color: BRAND.textPrimary, letterSpacing: -0.2 }}>
-        {title}
-      </Text>
-      {action}
-    </View>
-    {children}
   </View>
 );
 
@@ -257,16 +93,19 @@ const VendorDetailScreen: React.FC = () => {
   const [products, setProducts] = useState<any[]>([]);
   const [reviews, setReviews] = useState<any[]>([]);
   const [stats, setStats] = useState<any>(null);
-  const [activeTab, setActiveTab] = useState<'about' | 'products' | 'services' | 'reviews'>('about');
+  const [portfolioImages, setPortfolioImages] = useState<string[]>([]);
+  const [activeTab, setActiveTab] = useState<'Portfolio' | 'Service' | 'Product' | 'Reviews'>('Portfolio');
   const [isFavorite, setIsFavorite] = useState(false);
   const [distanceKm, setDistanceKm] = useState<number | null>(null);
-
-  const scrollY = new Animated.Value(0);
+  const [showPortfolioModal, setShowPortfolioModal] = useState(false);
+  const [lightboxImages, setLightboxImages] = useState<string[]>([]);
+  const [lightboxIndex, setLightboxIndex] = useState(0);
+  const [showLightbox, setShowLightbox] = useState(false);
 
   // Haversine formula to calculate distance between two coordinates
   const getDistanceKm = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
     const toRad = (deg: number) => (deg * Math.PI) / 180;
-    const R = 6371; // Earth's radius in km
+    const R = 6371;
     const dLat = toRad(lat2 - lat1);
     const dLon = toRad(lon2 - lon1);
     const a =
@@ -285,8 +124,8 @@ const VendorDetailScreen: React.FC = () => {
         setServices(d.services || []);
         setReviews(d.reviews || []);
         setStats(d.stats);
+        setPortfolioImages(d.vendor?.vendorProfile?.portfolioImages || []);
 
-        // Fetch vendor's products
         try {
           const prodRes = await productAPI.getAllProducts({ seller: vendorId, limit: 50 });
           if (prodRes.success) {
@@ -306,7 +145,6 @@ const VendorDetailScreen: React.FC = () => {
 
   useEffect(() => { fetchVendorDetails(); }, [vendorId]);
 
-  // Calculate distance from user to vendor
   useEffect(() => {
     if (!vendor?.vendorProfile?.location?.coordinates) return;
     const coords = vendor.vendorProfile.location.coordinates;
@@ -317,7 +155,6 @@ const VendorDetailScreen: React.FC = () => {
         const { status } = await Location.requestForegroundPermissionsAsync();
         if (status !== 'granted') return;
         const pos = await Location.getCurrentPositionAsync({});
-        // Backend stores as [longitude, latitude]
         const dist = getDistanceKm(pos.coords.latitude, pos.coords.longitude, coords[1], coords[0]);
         setDistanceKm(dist);
       } catch (e) {
@@ -367,6 +204,7 @@ const VendorDetailScreen: React.FC = () => {
         duration: service.duration,
         category: service.category,
         isActive: service.isActive,
+        image: service.images?.[0] || service.image || undefined,
       },
       vendor: {
         _id: vendor._id,
@@ -388,13 +226,19 @@ const VendorDetailScreen: React.FC = () => {
     return map[type] || 'Service Available';
   };
 
+  const openLightbox = (images: string[], index: number) => {
+    setLightboxImages(images);
+    setLightboxIndex(index);
+    setShowLightbox(true);
+  };
+
   // ── Loading ────────────────────────────────────────────────────────────────
   if (loading) {
     return (
-      <SafeAreaView style={{ flex: 1, backgroundColor: BRAND.surfaceAlt }}>
+      <SafeAreaView style={{ flex: 1, backgroundColor: BG }}>
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-          <ActivityIndicator size="large" color={BRAND.primary} />
-          <Text style={{ color: BRAND.textMuted, fontSize: 14, marginTop: 12, fontWeight: '500' }}>
+          <ActivityIndicator size="large" color={PINK} />
+          <Text style={{ color: '#9CA3AF', fontSize: 14, marginTop: 12, fontWeight: '500' }}>
             Loading vendor details…
           </Text>
         </View>
@@ -404,38 +248,19 @@ const VendorDetailScreen: React.FC = () => {
 
   if (!vendor) {
     return (
-      <SafeAreaView style={{ flex: 1, backgroundColor: BRAND.surfaceAlt }}>
+      <SafeAreaView style={{ flex: 1, backgroundColor: BG }}>
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 }}>
-          <View
-            style={{
-              width: 80,
-              height: 80,
-              borderRadius: 24,
-              backgroundColor: BRAND.surfaceAlt,
-              borderWidth: 1,
-              borderColor: BRAND.border,
-              alignItems: 'center',
-              justifyContent: 'center',
-              marginBottom: 16,
-            }}
-          >
-            <Ionicons name="alert-circle-outline" size={40} color={BRAND.textMuted} />
-          </View>
-          <Text style={{ fontSize: 18, fontWeight: '700', color: BRAND.textPrimary, marginBottom: 6 }}>
+          <Ionicons name="alert-circle-outline" size={56} color="#9CA3AF" style={{ marginBottom: 16 }} />
+          <Text style={{ fontSize: 18, fontWeight: '700', color: '#111827', marginBottom: 6 }}>
             Vendor not found
           </Text>
-          <Text style={{ fontSize: 14, color: BRAND.textSecondary, textAlign: 'center', marginBottom: 24 }}>
+          <Text style={{ fontSize: 14, color: '#6B7280', textAlign: 'center', marginBottom: 24 }}>
             This vendor profile doesn't exist or has been removed.
           </Text>
           <TouchableOpacity
             onPress={() => navigation.goBack()}
             activeOpacity={0.8}
-            style={{
-              backgroundColor: BRAND.primary,
-              paddingHorizontal: 24,
-              paddingVertical: 12,
-              borderRadius: 14,
-            }}
+            style={{ backgroundColor: PINK, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 14 }}
           >
             <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>Go Back</Text>
           </TouchableOpacity>
@@ -444,740 +269,701 @@ const VendorDetailScreen: React.FC = () => {
     );
   }
 
-  const heroHeight = 260;
+  const vendorProfile = vendor.vendorProfile;
+  const vendorType = vendorProfile.vendorType;
+  const isVerified = vendorProfile.isVerified;
+  const businessName = vendorProfile.businessName || `${vendor.firstName} ${vendor.lastName}`;
 
-  // ─────────────────────────────────────────────────────────────────────────
+  // Hero image: coverImage → avatar → gradient
+  const heroImageUri = vendorProfile.coverImage || vendor.avatar || null;
+
+  // Category display
+  const categoryName = vendorProfile.categories?.[0]?.name || formatVendorType(vendorType);
+  const locationCity = vendorProfile.location?.city || '';
+  const locationState = vendorProfile.location?.state || '';
+  const locationLine = [categoryName, locationCity && locationState ? `${locationCity}, ${locationState}` : locationCity || locationState].filter(Boolean).join(' · ');
+
+  // Stats
+  const rating = vendorProfile.rating || 0;
+  const totalReviews = vendorProfile.totalRatings || vendorProfile.totalReviews || 0;
+  const completedBookings = vendorProfile.completedBookings || 0;
+
+  // Experience label from vendor-entered value
+  const expYears = vendorProfile.yearsOfExperience;
+  let yearsExp = 'New';
+  if (expYears !== undefined && expYears !== null) {
+    if (expYears === 0) yearsExp = '<1 Yr';
+    else if (expYears >= 10) yearsExp = '10+ Yrs';
+    else yearsExp = `${expYears}+ Yrs`;
+  }
+
+  // Portfolio grid
+  const GRID_GAP = 4;
+  const GRID_PADDING = 20; // left + right padding
+  const imgSize = (SCREEN_WIDTH - GRID_PADDING * 2 - GRID_GAP * 2) / 3;
+  const displayedPortfolio = portfolioImages.slice(0, 9);
+  const hasMorePortfolio = portfolioImages.length > 9;
+
+  const TABS: Array<'Portfolio' | 'Service' | 'Product' | 'Reviews'> = ['Portfolio', 'Service', 'Product', 'Reviews'];
+
+  // ─────────────────────────────────────────────────────────────────────────────
   return (
-    <View style={{ flex: 1, backgroundColor: BRAND.surfaceAlt }}>
+    <View style={{ flex: 1, backgroundColor: BG }}>
       <StatusBar barStyle="light-content" />
 
-      {/* ── HERO ──────────────────────────────────────────────────────────── */}
-      <View style={{ height: heroHeight, position: 'relative' }}>
-        {vendor.avatar ? (
-          <Image source={{ uri: vendor.avatar }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
-        ) : (
-          <LinearGradient
-            colors={[BRAND.primary, '#B5315F']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={{ flex: 1 }}
-          >
-            <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-              <Text style={{ fontSize: 64, fontWeight: '800', color: 'rgba(255,255,255,0.3)' }}>
-                {vendor.vendorProfile.businessName.charAt(0)}
-              </Text>
-            </View>
-          </LinearGradient>
-        )}
-
-        {/* Gradient overlay at bottom */}
-        <LinearGradient
-          colors={['transparent', 'rgba(0,0,0,0.55)']}
-          style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 130 }}
-        />
-
-        {/* Top nav row */}
-        <SafeAreaView edges={['top']} style={{ position: 'absolute', top: 0, left: 0, right: 0 }}>
-          <View
-            style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              paddingHorizontal: 16,
-              paddingTop: 8,
-            }}
-          >
-            <TouchableOpacity
-              onPress={() => navigation.goBack()}
-              activeOpacity={0.85}
-              style={{
-                width: 40,
-                height: 40,
-                borderRadius: 13,
-                backgroundColor: 'rgba(0,0,0,0.35)',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
+      {/* ── SCROLLABLE CONTENT ──────────────────────────────────────────────── */}
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={{ paddingBottom: 90 + insets.bottom }}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={PINK} colors={[PINK]} />
+        }
+      >
+        {/* ── HERO ────────────────────────────────────────────────────────── */}
+        <View style={{ height: 280, position: 'relative' }}>
+          {heroImageUri ? (
+            <Image source={{ uri: heroImageUri }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
+          ) : (
+            <LinearGradient
+              colors={['#E91E63', '#C2185B']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}
             >
-              <Ionicons name="arrow-back" size={22} color="#fff" />
-            </TouchableOpacity>
+              <Text style={{ fontSize: 72, fontWeight: '800', color: 'rgba(255,255,255,0.3)' }}>
+                {businessName.charAt(0)}
+              </Text>
+            </LinearGradient>
+          )}
 
-            <View style={{ flexDirection: 'row', gap: 8 }}>
-              <TouchableOpacity
-                onPress={handleShareVendor}
-                activeOpacity={0.85}
-                style={{
-                  width: 40,
-                  height: 40,
-                  borderRadius: 13,
-                  backgroundColor: 'rgba(0,0,0,0.35)',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-              >
-                <Ionicons name="share-outline" size={20} color="#fff" />
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={() => setIsFavorite(!isFavorite)}
-                activeOpacity={0.85}
-                style={{
-                  width: 40,
-                  height: 40,
-                  borderRadius: 13,
-                  backgroundColor: isFavorite ? 'rgba(212,38,122,0.75)' : 'rgba(0,0,0,0.35)',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-              >
-                <Ionicons name={isFavorite ? 'heart' : 'heart-outline'} size={20} color="#fff" />
-              </TouchableOpacity>
-            </View>
-          </View>
-        </SafeAreaView>
-
-        {/* Online badge */}
-        {vendor.isOnline && (
-          <View style={{ position: 'absolute', top: 56 + insets.top, alignSelf: 'center' }}>
+          {/* Top nav — back + heart + share */}
+          <SafeAreaView edges={['top']} style={{ position: 'absolute', top: 0, left: 0, right: 0 }}>
             <View
               style={{
                 flexDirection: 'row',
                 alignItems: 'center',
-                backgroundColor: BRAND.success,
-                paddingHorizontal: 12,
-                paddingVertical: 5,
-                borderRadius: 20,
-                borderWidth: 1.5,
-                borderColor: 'rgba(255,255,255,0.5)',
+                justifyContent: 'space-between',
+                paddingHorizontal: 16,
+                paddingTop: 8,
               }}
             >
-              <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#fff', marginRight: 6 }} />
-              <Text style={{ color: '#fff', fontSize: 11, fontWeight: '700', letterSpacing: 0.3 }}>Online Now</Text>
-            </View>
-          </View>
-        )}
-      </View>
-
-      {/* ── SCROLLABLE CONTENT ──────────────────────────────────────────── */}
-      <ScrollView
-        style={{ flex: 1, marginTop: -28 }}
-        contentContainerStyle={{ paddingBottom: 110 }}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={BRAND.primary} colors={[BRAND.primary]} />
-        }
-      >
-      {/* ── PROFILE CARD (overlaps hero) ──────────────────────────────────── */}
-      <View
-        style={{
-          marginHorizontal: 16,
-          backgroundColor: BRAND.surface,
-          borderRadius: 22,
-          padding: 18,
-          borderWidth: 1,
-          borderColor: BRAND.border,
-          ...Platform.select({
-            ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.1, shadowRadius: 16 },
-            android: { elevation: 8 },
-          }),
-          zIndex: 10,
-        }}
-      >
-        {/* Name + verified */}
-        <View style={{ flexDirection: 'row', alignItems: 'flex-start', marginBottom: 8 }}>
-          <View style={{ flex: 1 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginBottom: 4 }}>
-              <Text
+              {/* Back */}
+              <TouchableOpacity
+                onPress={() => navigation.goBack()}
+                activeOpacity={0.85}
                 style={{
-                  fontSize: 21,
-                  fontWeight: '800',
-                  color: BRAND.textPrimary,
-                  letterSpacing: -0.4,
-                  flexShrink: 1,
+                  width: 40,
+                  height: 40,
+                  borderRadius: 20,
+                  backgroundColor: 'rgba(255,255,255,0.25)',
+                  alignItems: 'center',
+                  justifyContent: 'center',
                 }}
-                numberOfLines={2}
               >
-                {vendor.vendorProfile?.businessName || `${vendor.firstName} ${vendor.lastName}`}
-              </Text>
-              {vendor.vendorProfile.isVerified && (
-                <View
+                <Ionicons name="arrow-back" size={22} color="#fff" />
+              </TouchableOpacity>
+
+              {/* Heart + Share */}
+              <View style={{ flexDirection: 'row', gap: 10 }}>
+                <TouchableOpacity
+                  onPress={() => setIsFavorite(!isFavorite)}
+                  activeOpacity={0.85}
                   style={{
-                    flexDirection: 'row',
+                    width: 40,
+                    height: 40,
+                    borderRadius: 20,
+                    backgroundColor: 'rgba(255,255,255,0.25)',
                     alignItems: 'center',
-                    backgroundColor: BRAND.successSoft,
-                    paddingHorizontal: 7,
-                    paddingVertical: 3,
-                    borderRadius: 8,
+                    justifyContent: 'center',
                   }}
                 >
-                  <Ionicons name="checkmark-circle" size={13} color={BRAND.success} />
-                  <Text style={{ fontSize: 10, color: BRAND.success, fontWeight: '700', marginLeft: 3 }}>
-                    Verified
-                  </Text>
-                </View>
-              )}
-            </View>
-
-            {/* Rating row */}
-            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10 }}>
-              <StarRow rating={vendor.vendorProfile.rating} size={14} />
-              <Text style={{ fontSize: 13, fontWeight: '700', color: BRAND.textPrimary, marginLeft: 6 }}>
-                {vendor.vendorProfile.rating.toFixed(1)}
-              </Text>
-              <Text style={{ fontSize: 12, color: BRAND.textMuted, marginLeft: 4 }}>
-                ({vendor.vendorProfile.totalRatings} reviews)
-              </Text>
-            </View>
-
-            {/* Meta info */}
-            <View style={{ gap: 5 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <Ionicons name="storefront-outline" size={13} color={BRAND.textMuted} style={{ marginRight: 5 }} />
-                <Text style={{ fontSize: 12, color: BRAND.textSecondary, fontWeight: '500' }}>
-                  {formatVendorType(vendor.vendorProfile.vendorType)}
-                </Text>
+                  <Ionicons name={isFavorite ? 'heart' : 'heart-outline'} size={20} color="#fff" />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={handleShareVendor}
+                  activeOpacity={0.85}
+                  style={{
+                    width: 40,
+                    height: 40,
+                    borderRadius: 20,
+                    backgroundColor: 'rgba(255,255,255,0.25)',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <Ionicons name="share-outline" size={20} color="#fff" />
+                </TouchableOpacity>
               </View>
-              {vendor.vendorProfile?.location?.city && (
-                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <Ionicons name="location-outline" size={13} color={BRAND.textMuted} style={{ marginRight: 5 }} />
-                  <Text style={{ fontSize: 12, color: BRAND.textSecondary, fontWeight: '500' }}>
-                    {vendor.vendorProfile.location.city}, {vendor.vendorProfile.location.state}
-                  </Text>
-                </View>
-              )}
             </View>
+          </SafeAreaView>
+
+          {/* Circular vendor avatar — overlaps bottom-left edge of hero */}
+          <View
+            style={{
+              position: 'absolute',
+              bottom: -42,
+              left: 20,
+              width: 84,
+              height: 84,
+              borderRadius: 42,
+              borderWidth: 3,
+              borderColor: PINK,
+              backgroundColor: '#fff',
+              overflow: 'hidden',
+            }}
+          >
+            {vendor.avatar ? (
+              <Image source={{ uri: vendor.avatar }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
+            ) : (
+              <LinearGradient
+                colors={['#E91E63', '#C2185B']}
+                style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}
+              >
+                <Text style={{ fontSize: 32, fontWeight: '800', color: '#fff' }}>
+                  {businessName.charAt(0)}
+                </Text>
+              </LinearGradient>
+            )}
           </View>
         </View>
 
-        {/* Category chips */}
-        {vendor.vendorProfile.categories?.length > 0 && (
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: BRAND.border }}>
-            {vendor.vendorProfile.categories.map((cat) => (
+        {/* ── MAIN CONTENT (paddingTop clears avatar overhang) ──────────────── */}
+        <View style={{ paddingTop: 56, paddingHorizontal: 20 }}>
+
+          {/* Business name + verified */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
+            <Text
+              style={{
+                fontSize: 22,
+                fontWeight: '800',
+                color: '#1A1A1A',
+                letterSpacing: -0.4,
+                flexShrink: 1,
+              }}
+              numberOfLines={2}
+            >
+              {businessName}
+            </Text>
+            {isVerified && (
+              <Ionicons name="checkmark-circle" size={20} color={PINK} />
+            )}
+          </View>
+
+          {/* Category · Location */}
+          {locationLine !== '' && (
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4, gap: 5 }}>
+              <Ionicons name="storefront-outline" size={13} color="#9CA3AF" />
+              <Text style={{ fontSize: 13, color: '#6B7280', fontWeight: '500', flexShrink: 1 }}>
+                {locationLine}
+              </Text>
+            </View>
+          )}
+
+          {/* Tags row */}
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
+            {isVerified && (
               <View
-                key={cat._id}
                 style={{
-                  backgroundColor: BRAND.primarySoft,
+                  backgroundColor: '#FCE4EC',
+                  borderRadius: 20,
                   paddingHorizontal: 10,
                   paddingVertical: 4,
-                  borderRadius: 8,
                   borderWidth: 1,
-                  borderColor: BRAND.primaryMuted,
+                  borderColor: PINK,
                 }}
               >
-                <Text style={{ fontSize: 11, color: BRAND.primary, fontWeight: '600' }}>{cat.name}</Text>
+                <Text style={{ fontSize: 12, color: PINK, fontWeight: '600' }}>Verified</Text>
               </View>
-            ))}
-          </View>
-        )}
-      </View>
-
-      {/* ── STAT PILLS ────────────────────────────────────────────────────── */}
-      <View
-        style={{
-          flexDirection: 'row',
-          paddingHorizontal: 16,
-          marginTop: 14,
-          gap: 10,
-        }}
-      >
-        <StatPill
-          icon="checkmark-done-outline"
-          value={vendor.vendorProfile.completedBookings}
-          label="Completed"
-          color={BRAND.success}
-          bg={BRAND.successSoft}
-        />
-        <StatPill
-          icon="briefcase-outline"
-          value={stats?.totalServices || 0}
-          label="Services"
-          color={BRAND.blue}
-          bg={BRAND.blueSoft}
-        />
-        <StatPill
-          icon="chatbubbles-outline"
-          value={stats?.totalReviews || 0}
-          label="Reviews"
-          color={BRAND.gold}
-          bg="#FEF3C7"
-        />
-      </View>
-
-      {/* ── TABS ──────────────────────────────────────────────────────────── */}
-      <View style={{ marginTop: 16, marginBottom: 12 }}>
-        <TabBar
-          tabs={['about', 'products', 'services', 'reviews']}
-          active={activeTab}
-          onChange={setActiveTab}
-        />
-      </View>
-
-      {/* ── TAB CONTENT ───────────────────────────────────────────────────── */}
-      <View style={{ paddingHorizontal: 16 }}>
-        {/* ── ABOUT ──────────────────────────────────────────────────────── */}
-        {activeTab === 'about' && (
-          <View style={{ paddingTop: 4 }}>
-            {vendor.vendorProfile.businessDescription && (
-              <SectionCard title="About">
-                <Text style={{ fontSize: 14, color: BRAND.textSecondary, lineHeight: 22 }}>
-                  {vendor.vendorProfile.businessDescription}
-                </Text>
-              </SectionCard>
             )}
-
-            {vendor.vendorProfile.location && (
-              <SectionCard title="Location">
-                <InfoRow
-                  icon="location"
-                  text={vendor.vendorProfile.location.address}
-                  sub={`${vendor.vendorProfile.location.city}, ${vendor.vendorProfile.location.state}`}
-                />
-              </SectionCard>
-            )}
-
-            {distanceKm !== null && (
+            {(vendorType === 'home_service' || vendorType === 'both') && (
               <View
                 style={{
-                  backgroundColor: BRAND.surface,
+                  backgroundColor: '#EDE9FE',
                   borderRadius: 20,
-                  padding: 16,
+                  paddingHorizontal: 10,
+                  paddingVertical: 4,
                   borderWidth: 1,
-                  borderColor: BRAND.border,
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  ...Platform.select({
-                    ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8 },
-                    android: { elevation: 2 },
-                  }),
+                  borderColor: '#C4B5FD',
                 }}
               >
-                <View style={{ flex: 1, marginRight: 12 }}>
-                  <InfoRow
-                    icon="navigate-circle-outline"
-                    text="Distance from You"
-                    sub="Based on your current location"
-                  />
-                </View>
-                <View
+                <Text style={{ fontSize: 12, color: '#7C3AED', fontWeight: '600' }}>Home Service</Text>
+              </View>
+            )}
+            {(vendorType === 'in_shop' || vendorType === 'both') && (
+              <View
+                style={{
+                  backgroundColor: '#D1FAE5',
+                  borderRadius: 20,
+                  paddingHorizontal: 10,
+                  paddingVertical: 4,
+                  borderWidth: 1,
+                  borderColor: '#6EE7B7',
+                }}
+              >
+                <Text style={{ fontSize: 12, color: '#059669', fontWeight: '600' }}>In-salon</Text>
+              </View>
+            )}
+          </View>
+
+          {/* ── STATS STRIP ─────────────────────────────────────────────────── */}
+          <View
+            style={{
+              flexDirection: 'row',
+              marginTop: 18,
+              backgroundColor: '#fff',
+              borderRadius: 16,
+              overflow: 'hidden',
+              borderWidth: 1,
+              borderColor: '#F3F4F6',
+            }}
+          >
+            {/* Rating */}
+            <View style={{ flex: 1, alignItems: 'center', paddingVertical: 14 }}>
+              <Text style={{ fontSize: 22, fontWeight: '800', color: '#1A1A1A' }}>
+                {rating.toFixed(1)}
+              </Text>
+              <Text style={{ fontSize: 11, color: '#9CA3AF', fontWeight: '500', marginTop: 2 }}>Rating</Text>
+              <Ionicons name="star" size={12} color={GOLD} style={{ marginTop: 2 }} />
+            </View>
+
+            <View style={{ width: 1, backgroundColor: '#E5E7EB', marginVertical: 12 }} />
+
+            {/* Reviews */}
+            <View style={{ flex: 1, alignItems: 'center', paddingVertical: 14 }}>
+              <Text style={{ fontSize: 22, fontWeight: '800', color: '#1A1A1A' }}>
+                {totalReviews}
+              </Text>
+              <Text style={{ fontSize: 11, color: '#9CA3AF', fontWeight: '500', marginTop: 2 }}>Reviews</Text>
+            </View>
+
+            <View style={{ width: 1, backgroundColor: '#E5E7EB', marginVertical: 12 }} />
+
+            {/* Bookings */}
+            <View style={{ flex: 1, alignItems: 'center', paddingVertical: 14 }}>
+              <Text style={{ fontSize: 22, fontWeight: '800', color: '#1A1A1A' }}>
+                {completedBookings > 0 ? `${completedBookings}+` : completedBookings}
+              </Text>
+              <Text style={{ fontSize: 11, color: '#9CA3AF', fontWeight: '500', marginTop: 2 }}>Bookings</Text>
+            </View>
+
+            <View style={{ width: 1, backgroundColor: '#E5E7EB', marginVertical: 12 }} />
+
+            {/* Experience */}
+            <View style={{ flex: 1, alignItems: 'center', paddingVertical: 14 }}>
+              <Text style={{ fontSize: 22, fontWeight: '800', color: '#1A1A1A' }}>{yearsExp}</Text>
+              <Text style={{ fontSize: 11, color: '#9CA3AF', fontWeight: '500', marginTop: 2 }}>Experience</Text>
+            </View>
+          </View>
+
+          {/* ── UNDERLINE TABS ──────────────────────────────────────────────── */}
+          <View
+            style={{
+              flexDirection: 'row',
+              marginTop: 20,
+              borderBottomWidth: 1,
+              borderBottomColor: '#E5E7EB',
+            }}
+          >
+            {TABS.map((tab) => {
+              const isActive = activeTab === tab;
+              return (
+                <TouchableOpacity
+                  key={tab}
+                  onPress={() => setActiveTab(tab)}
+                  activeOpacity={0.75}
                   style={{
-                    flexShrink: 0,
-                    backgroundColor: BRAND.primarySoft,
-                    paddingHorizontal: 12,
-                    paddingVertical: 6,
-                    borderRadius: 10,
-                    borderWidth: 1,
-                    borderColor: BRAND.primaryMuted,
+                    flex: 1,
+                    alignItems: 'center',
+                    paddingVertical: 10,
+                    borderBottomWidth: isActive ? 2 : 0,
+                    borderBottomColor: isActive ? PINK : 'transparent',
+                    marginBottom: -1,
                   }}
                 >
-                  <Text style={{ fontSize: 15, fontWeight: '800', color: BRAND.primary }}>
-                    {distanceKm < 1 ? `${Math.round(distanceKm * 1000)} m` : `${distanceKm.toFixed(1)} km`}
+                  <Text
+                    style={{
+                      fontSize: 13,
+                      fontWeight: isActive ? '800' : '500',
+                      color: isActive ? PINK : '#6B7280',
+                    }}
+                  >
+                    {tab}
                   </Text>
-                </View>
-              </View>
-            )}
-
+                </TouchableOpacity>
+              );
+            })}
           </View>
-        )}
 
-        {/* ── PRODUCTS ──────────────────────────────────────────────────── */}
-        {activeTab === 'products' && (
-          <View style={{ paddingTop: 4 }}>
-            {products.length > 0 ? (
-              <View style={{ gap: 12 }}>
-                {products.map((product: any) => (
-                  <TouchableOpacity
-                    key={product._id}
-                    onPress={() => navigation.navigate('ProductDetail', { productId: product._id })}
-                    activeOpacity={0.85}
-                    style={{
-                      backgroundColor: BRAND.surface,
-                      borderRadius: 18,
-                      overflow: 'hidden',
-                      borderWidth: 1,
-                      borderColor: BRAND.border,
-                      flexDirection: 'row',
-                      ...Platform.select({
-                        ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8 },
-                        android: { elevation: 2 },
-                      }),
-                    }}
-                  >
-                    <Image
-                      source={product.images?.[0] ? { uri: product.images[0] } : require('../../../assets/app-icon.jpg')}
-                      style={{ width: 100, height: 100, backgroundColor: BRAND.surfaceAlt }}
-                      resizeMode="cover"
-                    />
-                    <View style={{ flex: 1, padding: 12, justifyContent: 'center' }}>
-                      <Text numberOfLines={1} style={{ fontSize: 15, fontWeight: '700', color: BRAND.textPrimary, marginBottom: 4 }}>
-                        {product.name}
-                      </Text>
-                      {product.category?.name && (
-                        <Text style={{ fontSize: 12, color: BRAND.textMuted, marginBottom: 6 }}>
-                          {product.category.name}
-                        </Text>
-                      )}
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                        <Text style={{ fontSize: 16, fontWeight: '800', color: BRAND.primary }}>
-                          ₦{(product.finalPrice ?? product.price)?.toLocaleString()}
-                        </Text>
-                        {product.compareAtPrice > product.finalPrice && (
-                          <Text style={{ fontSize: 12, color: BRAND.textMuted, textDecorationLine: 'line-through' }}>
-                            ₦{product.compareAtPrice?.toLocaleString()}
-                          </Text>
-                        )}
-                      </View>
-                      {product.rating > 0 && (
-                        <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4, gap: 4 }}>
-                          <Ionicons name="star" size={12} color={BRAND.gold} />
-                          <Text style={{ fontSize: 12, color: BRAND.textSecondary, fontWeight: '600' }}>
-                            {product.rating.toFixed(1)}
-                          </Text>
-                        </View>
-                      )}
+          {/* ── TAB CONTENT ─────────────────────────────────────────────────── */}
+          <View style={{ marginTop: 16 }}>
+
+            {/* ── PORTFOLIO ─────────────────────────────────────────────────── */}
+            {activeTab === 'Portfolio' && (
+              <View>
+                {/* Business description */}
+                {vendorProfile.businessDescription ? (
+                  <Text style={{ fontSize: 14, color: '#374151', lineHeight: 22, marginBottom: 16 }}>
+                    {vendorProfile.businessDescription}
+                  </Text>
+                ) : null}
+
+                {displayedPortfolio.length > 0 ? (
+                  <>
+                    {/* 3-column grid */}
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: GRID_GAP }}>
+                      {displayedPortfolio.map((uri, idx) => (
+                        <TouchableOpacity
+                          key={idx}
+                          activeOpacity={0.85}
+                          onPress={() => openLightbox(portfolioImages, idx)}
+                        >
+                          <Image
+                            source={{ uri }}
+                            style={{
+                              width: imgSize,
+                              height: imgSize,
+                              borderRadius: 10,
+                              backgroundColor: '#F3F4F6',
+                            }}
+                            resizeMode="cover"
+                          />
+                        </TouchableOpacity>
+                      ))}
                     </View>
-                    <View style={{ justifyContent: 'center', paddingRight: 12 }}>
-                      <Ionicons name="chevron-forward" size={18} color={BRAND.textMuted} />
-                    </View>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            ) : (
-              <View
-                style={{
-                  backgroundColor: BRAND.surface,
-                  borderRadius: 20,
-                  padding: 40,
-                  alignItems: 'center',
-                  borderWidth: 1,
-                  borderColor: BRAND.border,
-                }}
-              >
-                <View
-                  style={{
-                    width: 72,
-                    height: 72,
-                    borderRadius: 22,
-                    backgroundColor: BRAND.surfaceAlt,
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    marginBottom: 14,
-                    borderWidth: 1,
-                    borderColor: BRAND.border,
-                  }}
-                >
-                  <Ionicons name="bag-outline" size={34} color={BRAND.textMuted} />
-                </View>
-                <Text style={{ fontSize: 16, fontWeight: '700', color: BRAND.textPrimary, marginBottom: 6 }}>
-                  No products yet
-                </Text>
-                <Text style={{ fontSize: 13, color: BRAND.textMuted, textAlign: 'center', lineHeight: 19 }}>
-                  This vendor hasn't added any products yet.
-                </Text>
-              </View>
-            )}
-          </View>
-        )}
 
-        {/* ── SERVICES ───────────────────────────────────────────────────── */}
-        {activeTab === 'services' && (
-          <View style={{ paddingTop: 4 }}>
-            {services.length > 0 ? (
-              <View style={{ gap: 12 }}>
-                {services.map((service) => (
-                  <ServiceCard
-                    key={service._id}
-                    service={service}
-                    onPress={() => handleBookService(service._id)}
-                  />
-                ))}
-              </View>
-            ) : (
-              <View
-                style={{
-                  backgroundColor: BRAND.surface,
-                  borderRadius: 20,
-                  padding: 40,
-                  alignItems: 'center',
-                  borderWidth: 1,
-                  borderColor: BRAND.border,
-                }}
-              >
-                <View
-                  style={{
-                    width: 72,
-                    height: 72,
-                    borderRadius: 22,
-                    backgroundColor: BRAND.surfaceAlt,
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    marginBottom: 14,
-                    borderWidth: 1,
-                    borderColor: BRAND.border,
-                  }}
-                >
-                  <Ionicons name="briefcase-outline" size={34} color={BRAND.textMuted} />
-                </View>
-                <Text style={{ fontSize: 16, fontWeight: '700', color: BRAND.textPrimary, marginBottom: 6 }}>
-                  No services yet
-                </Text>
-                <Text style={{ fontSize: 13, color: BRAND.textMuted, textAlign: 'center', lineHeight: 19 }}>
-                  This vendor hasn't added any services yet.
-                </Text>
-              </View>
-            )}
-          </View>
-        )}
-
-        {/* ── REVIEWS ────────────────────────────────────────────────────── */}
-        {activeTab === 'reviews' && (
-          <View style={{ paddingTop: 4 }}>
-            {reviews.length > 0 ? (
-              <>
-                {/* Rating summary */}
-                <View
-                  style={{
-                    backgroundColor: BRAND.surface,
-                    borderRadius: 20,
-                    padding: 18,
-                    marginBottom: 14,
-                    borderWidth: 1,
-                    borderColor: BRAND.border,
-                    ...Platform.select({
-                      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8 },
-                      android: { elevation: 2 },
-                    }),
-                  }}
-                >
-                  <View
-                    style={{
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      marginBottom: 14,
-                    }}
-                  >
-                    <Text style={{ fontSize: 16, fontWeight: '700', color: BRAND.textPrimary }}>
-                      Customer Reviews
+                    {/* View All button */}
+                    {hasMorePortfolio && (
+                      <TouchableOpacity
+                        onPress={() => setShowPortfolioModal(true)}
+                        activeOpacity={0.8}
+                        style={{
+                          marginTop: 14,
+                          borderWidth: 1.5,
+                          borderColor: PINK,
+                          borderRadius: 14,
+                          paddingVertical: 13,
+                          alignItems: 'center',
+                        }}
+                      >
+                        <Text style={{ color: PINK, fontWeight: '700', fontSize: 14 }}>
+                          View All {portfolioImages.length} Photos
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+                  </>
+                ) : (
+                  <View style={{ alignItems: 'center', paddingVertical: 40 }}>
+                    <Ionicons name="images-outline" size={48} color="#D1D5DB" style={{ marginBottom: 12 }} />
+                    <Text style={{ fontSize: 16, fontWeight: '700', color: '#111827', marginBottom: 6 }}>
+                      No portfolio yet
                     </Text>
-                    <TouchableOpacity
-                      onPress={() => navigation.navigate('Reviews', { userId: vendor._id, type: 'vendor' })}
-                      activeOpacity={0.7}
+                    <Text style={{ fontSize: 13, color: '#9CA3AF', textAlign: 'center' }}>
+                      This vendor hasn't added any portfolio images yet.
+                    </Text>
+                  </View>
+                )}
+              </View>
+            )}
+
+            {/* ── SERVICE ───────────────────────────────────────────────────── */}
+            {activeTab === 'Service' && (
+              <View>
+                {services.length > 0 ? (
+                  <View style={{ gap: 12 }}>
+                    {services.map((service) => (
+                      <ServiceCard
+                        key={service._id}
+                        service={service}
+                        onPress={() => handleBookService(service._id)}
+                      />
+                    ))}
+                  </View>
+                ) : (
+                  <View style={{ alignItems: 'center', paddingVertical: 40 }}>
+                    <Ionicons name="briefcase-outline" size={48} color="#D1D5DB" style={{ marginBottom: 12 }} />
+                    <Text style={{ fontSize: 16, fontWeight: '700', color: '#111827', marginBottom: 6 }}>
+                      No services yet
+                    </Text>
+                    <Text style={{ fontSize: 13, color: '#9CA3AF', textAlign: 'center' }}>
+                      This vendor hasn't added any services yet.
+                    </Text>
+                  </View>
+                )}
+              </View>
+            )}
+
+            {/* ── PRODUCT ───────────────────────────────────────────────────── */}
+            {activeTab === 'Product' && (
+              <View>
+                {products.length > 0 ? (
+                  <View style={{ gap: 12 }}>
+                    {products.map((product: any) => (
+                      <TouchableOpacity
+                        key={product._id}
+                        onPress={() => navigation.navigate('ProductDetail', { productId: product._id })}
+                        activeOpacity={0.85}
+                        style={{
+                          backgroundColor: '#fff',
+                          borderRadius: 18,
+                          overflow: 'hidden',
+                          borderWidth: 1,
+                          borderColor: '#F3F4F6',
+                          flexDirection: 'row',
+                          ...Platform.select({
+                            ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8 },
+                            android: { elevation: 2 },
+                          }),
+                        }}
+                      >
+                        <Image
+                          source={product.images?.[0] ? { uri: product.images[0] } : require('../../../assets/app-icon.jpg')}
+                          style={{ width: 100, height: 100, backgroundColor: '#F9FAFB' }}
+                          resizeMode="cover"
+                        />
+                        <View style={{ flex: 1, padding: 12, justifyContent: 'center' }}>
+                          <Text numberOfLines={1} style={{ fontSize: 15, fontWeight: '700', color: '#111827', marginBottom: 4 }}>
+                            {product.name}
+                          </Text>
+                          {product.category?.name && (
+                            <Text style={{ fontSize: 12, color: '#9CA3AF', marginBottom: 6 }}>
+                              {product.category.name}
+                            </Text>
+                          )}
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                            <Text style={{ fontSize: 16, fontWeight: '800', color: PINK }}>
+                              ₦{(product.finalPrice ?? product.price)?.toLocaleString()}
+                            </Text>
+                            {product.compareAtPrice > product.finalPrice && (
+                              <Text style={{ fontSize: 12, color: '#9CA3AF', textDecorationLine: 'line-through' }}>
+                                ₦{product.compareAtPrice?.toLocaleString()}
+                              </Text>
+                            )}
+                          </View>
+                          {product.rating > 0 && (
+                            <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4, gap: 4 }}>
+                              <Ionicons name="star" size={12} color={GOLD} />
+                              <Text style={{ fontSize: 12, color: '#6B7280', fontWeight: '600' }}>
+                                {product.rating.toFixed(1)}
+                              </Text>
+                            </View>
+                          )}
+                        </View>
+                        <View style={{ justifyContent: 'center', paddingRight: 12 }}>
+                          <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
+                        </View>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                ) : (
+                  <View style={{ alignItems: 'center', paddingVertical: 40 }}>
+                    <Ionicons name="bag-outline" size={48} color="#D1D5DB" style={{ marginBottom: 12 }} />
+                    <Text style={{ fontSize: 16, fontWeight: '700', color: '#111827', marginBottom: 6 }}>
+                      No products yet
+                    </Text>
+                    <Text style={{ fontSize: 13, color: '#9CA3AF', textAlign: 'center' }}>
+                      This vendor hasn't added any products yet.
+                    </Text>
+                  </View>
+                )}
+              </View>
+            )}
+
+            {/* ── REVIEWS ───────────────────────────────────────────────────── */}
+            {activeTab === 'Reviews' && (
+              <View>
+                {reviews.length > 0 ? (
+                  <>
+                    {/* Rating summary */}
+                    <View
                       style={{
-                        flexDirection: 'row',
-                        alignItems: 'center',
-                        backgroundColor: BRAND.primarySoft,
-                        paddingHorizontal: 10,
-                        paddingVertical: 5,
+                        backgroundColor: '#fff',
                         borderRadius: 20,
+                        padding: 18,
+                        marginBottom: 14,
+                        borderWidth: 1,
+                        borderColor: '#F3F4F6',
+                        ...Platform.select({
+                          ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8 },
+                          android: { elevation: 2 },
+                        }),
                       }}
                     >
-                      <Text style={{ fontSize: 12, color: BRAND.primary, fontWeight: '600' }}>See All</Text>
-                      <Ionicons name="chevron-forward" size={13} color={BRAND.primary} style={{ marginLeft: 2 }} />
-                    </TouchableOpacity>
-                  </View>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+                        <Text style={{ fontSize: 16, fontWeight: '700', color: '#111827' }}>Customer Reviews</Text>
+                        <TouchableOpacity
+                          onPress={() => navigation.navigate('Reviews', { userId: vendor._id, type: 'vendor' })}
+                          activeOpacity={0.7}
+                          style={{
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            backgroundColor: '#FFF5F8',
+                            paddingHorizontal: 10,
+                            paddingVertical: 5,
+                            borderRadius: 20,
+                          }}
+                        >
+                          <Text style={{ fontSize: 12, color: PINK, fontWeight: '600' }}>See All</Text>
+                          <Ionicons name="chevron-forward" size={13} color={PINK} style={{ marginLeft: 2 }} />
+                        </TouchableOpacity>
+                      </View>
 
-                  <View
-                    style={{
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      backgroundColor: BRAND.surfaceAlt,
-                      borderRadius: 14,
-                      padding: 14,
-                      borderWidth: 1,
-                      borderColor: BRAND.border,
-                    }}
-                  >
-                    {/* Big score */}
-                    <View style={{ alignItems: 'center', marginRight: 20, minWidth: 72 }}>
-                      <Text style={{ fontSize: 44, fontWeight: '800', color: BRAND.primary, letterSpacing: -2 }}>
-                        {(vendor.vendorProfile.rating || 0).toFixed(1)}
-                      </Text>
-                      <StarRow rating={Math.round(vendor.vendorProfile.rating || 0)} size={13} />
-                      <Text style={{ fontSize: 11, color: BRAND.textMuted, marginTop: 4, fontWeight: '500' }}>
-                        {vendor.vendorProfile.totalRatings || 0} reviews
-                      </Text>
+                      <View
+                        style={{
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          backgroundColor: '#F9FAFB',
+                          borderRadius: 14,
+                          padding: 14,
+                          borderWidth: 1,
+                          borderColor: '#F3F4F6',
+                        }}
+                      >
+                        <View style={{ alignItems: 'center', marginRight: 20, minWidth: 72 }}>
+                          <Text style={{ fontSize: 44, fontWeight: '800', color: PINK, letterSpacing: -2 }}>
+                            {(rating || 0).toFixed(1)}
+                          </Text>
+                          <StarRow rating={Math.round(rating || 0)} size={13} />
+                          <Text style={{ fontSize: 11, color: '#9CA3AF', marginTop: 4, fontWeight: '500' }}>
+                            {totalReviews} reviews
+                          </Text>
+                        </View>
+
+                        <View style={{ flex: 1 }}>
+                          {[5, 4, 3, 2, 1].map((star) => {
+                            const count = reviews.filter((r: any) => r.rating === star).length;
+                            const pct = reviews.length ? (count / reviews.length) * 100 : 0;
+                            return (
+                              <View key={star} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 5 }}>
+                                <Text style={{ fontSize: 11, color: '#9CA3AF', width: 20, fontWeight: '600' }}>
+                                  {star}★
+                                </Text>
+                                <View
+                                  style={{
+                                    flex: 1,
+                                    height: 6,
+                                    backgroundColor: '#E5E7EB',
+                                    borderRadius: 3,
+                                    overflow: 'hidden',
+                                    marginHorizontal: 8,
+                                  }}
+                                >
+                                  <View
+                                    style={{
+                                      width: `${pct}%`,
+                                      height: '100%',
+                                      backgroundColor: pct > 0 ? GOLD : 'transparent',
+                                      borderRadius: 3,
+                                    }}
+                                  />
+                                </View>
+                                <Text style={{ fontSize: 11, color: '#9CA3AF', width: 18, textAlign: 'right', fontWeight: '500' }}>
+                                  {count}
+                                </Text>
+                              </View>
+                            );
+                          })}
+                        </View>
+                      </View>
                     </View>
 
-                    {/* Bars */}
-                    <View style={{ flex: 1 }}>
-                      {[5, 4, 3, 2, 1].map((star) => {
-                        const count = reviews.filter((r: any) => r.rating === star).length;
-                        const pct = reviews.length ? (count / reviews.length) * 100 : 0;
-                        return (
-                          <View key={star} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 5 }}>
-                            <Text style={{ fontSize: 11, color: BRAND.textMuted, width: 20, fontWeight: '600' }}>
-                              {star}★
-                            </Text>
-                            <View
-                              style={{
-                                flex: 1,
-                                height: 6,
-                                backgroundColor: BRAND.borderStrong,
-                                borderRadius: 3,
-                                overflow: 'hidden',
-                                marginHorizontal: 8,
-                              }}
-                            >
-                              <View
-                                style={{
-                                  width: `${pct}%`,
-                                  height: '100%',
-                                  backgroundColor: pct > 0 ? BRAND.gold : 'transparent',
-                                  borderRadius: 3,
-                                }}
-                              />
-                            </View>
-                            <Text style={{ fontSize: 11, color: BRAND.textMuted, width: 18, textAlign: 'right', fontWeight: '500' }}>
-                              {count}
-                            </Text>
-                          </View>
-                        );
-                      })}
-                    </View>
-                  </View>
-                </View>
-
-                {/* Recent reviews */}
-                <Text style={{ fontSize: 14, fontWeight: '700', color: BRAND.textPrimary, marginBottom: 10 }}>
-                  Recent Reviews
-                </Text>
-                <View style={{ gap: 10 }}>
-                  {reviews.slice(0, 3).map((review) => (
-                    <ReviewCard key={review._id} review={review} />
-                  ))}
-                </View>
-
-                {reviews.length > 3 && (
-                  <TouchableOpacity
-                    onPress={() => navigation.navigate('Reviews', { userId: vendor._id, type: 'vendor' })}
-                    activeOpacity={0.8}
-                    style={{
-                      marginTop: 12,
-                      backgroundColor: BRAND.surface,
-                      borderRadius: 14,
-                      paddingVertical: 14,
-                      alignItems: 'center',
-                      borderWidth: 1.5,
-                      borderColor: BRAND.primary,
-                    }}
-                  >
-                    <Text style={{ color: BRAND.primary, fontWeight: '700', fontSize: 14 }}>
-                      View All {reviews.length} Reviews
+                    <Text style={{ fontSize: 14, fontWeight: '700', color: '#111827', marginBottom: 10 }}>
+                      Recent Reviews
                     </Text>
-                  </TouchableOpacity>
-                )}
-              </>
-            ) : (
-              <View
-                style={{
-                  backgroundColor: BRAND.surface,
-                  borderRadius: 20,
-                  padding: 40,
-                  alignItems: 'center',
-                  borderWidth: 1,
-                  borderColor: BRAND.border,
-                }}
-              >
-                <View
-                  style={{
-                    width: 72,
-                    height: 72,
-                    borderRadius: 22,
-                    backgroundColor: BRAND.surfaceAlt,
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    marginBottom: 14,
-                    borderWidth: 1,
-                    borderColor: BRAND.border,
-                  }}
-                >
-                  <Ionicons name="chatbubbles-outline" size={34} color={BRAND.textMuted} />
-                </View>
-                <Text style={{ fontSize: 16, fontWeight: '700', color: BRAND.textPrimary, marginBottom: 6 }}>
-                  No reviews yet
-                </Text>
-                <Text style={{ fontSize: 13, color: BRAND.textMuted, textAlign: 'center', lineHeight: 19 }}>
-                  Be the first to review this vendor
-                </Text>
-                {stats?.totalReviews > 0 && (
-                  <TouchableOpacity
-                    onPress={fetchVendorDetails}
-                    activeOpacity={0.8}
-                    style={{
-                      marginTop: 16,
-                      backgroundColor: BRAND.primary,
-                      paddingHorizontal: 22,
-                      paddingVertical: 10,
-                      borderRadius: 22,
-                    }}
-                  >
-                    <Text style={{ color: '#fff', fontWeight: '700', fontSize: 13 }}>Refresh Reviews</Text>
-                  </TouchableOpacity>
+                    <View style={{ gap: 10 }}>
+                      {reviews.slice(0, 3).map((review) => (
+                        <ReviewCard key={review._id} review={review} />
+                      ))}
+                    </View>
+
+                    {reviews.length > 3 && (
+                      <TouchableOpacity
+                        onPress={() => navigation.navigate('Reviews', { userId: vendor._id, type: 'vendor' })}
+                        activeOpacity={0.8}
+                        style={{
+                          marginTop: 12,
+                          backgroundColor: '#fff',
+                          borderRadius: 14,
+                          paddingVertical: 14,
+                          alignItems: 'center',
+                          borderWidth: 1.5,
+                          borderColor: PINK,
+                        }}
+                      >
+                        <Text style={{ color: PINK, fontWeight: '700', fontSize: 14 }}>
+                          View All {reviews.length} Reviews
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+                  </>
+                ) : (
+                  <View style={{ alignItems: 'center', paddingVertical: 40 }}>
+                    <Ionicons name="chatbubbles-outline" size={48} color="#D1D5DB" style={{ marginBottom: 12 }} />
+                    <Text style={{ fontSize: 16, fontWeight: '700', color: '#111827', marginBottom: 6 }}>
+                      No reviews yet
+                    </Text>
+                    <Text style={{ fontSize: 13, color: '#9CA3AF', textAlign: 'center' }}>
+                      Be the first to review this vendor.
+                    </Text>
+                  </View>
                 )}
               </View>
             )}
+
           </View>
-        )}
-      </View>
+        </View>
       </ScrollView>
 
-      {/* ── BOTTOM ACTION BAR ─────────────────────────────────────────────── */}
+      {/* ── BOTTOM ACTION BAR ─────────────────────────────────────────────────── */}
       <View
         style={{
           position: 'absolute',
           bottom: 0,
           left: 0,
           right: 0,
-          backgroundColor: BRAND.surface,
+          backgroundColor: BG,
           paddingHorizontal: 16,
-          paddingTop: 12,
-          paddingBottom: insets.bottom + 12,
-          borderTopWidth: 1,
-          borderTopColor: BRAND.border,
+          paddingTop: 10,
+          paddingBottom: insets.bottom + 10,
           flexDirection: 'row',
-          gap: 10,
-          ...Platform.select({
-            ios: { shadowColor: '#000', shadowOffset: { width: 0, height: -3 }, shadowOpacity: 0.06, shadowRadius: 10 },
-            android: { elevation: 10 },
-          }),
+          alignItems: 'center',
+          gap: 12,
+          borderTopWidth: 1,
+          borderTopColor: '#FCE4EC',
         }}
       >
-        {/* Message button */}
+        {/* Chat bubble */}
         <TouchableOpacity
           onPress={handleMessageVendor}
           activeOpacity={0.8}
           style={{
             width: 52,
             height: 52,
-            borderRadius: 16,
-            backgroundColor: BRAND.primarySoft,
+            borderRadius: 26,
+            backgroundColor: '#FCE4EC',
+            borderWidth: 1,
+            borderColor: '#F9A8D4',
             alignItems: 'center',
             justifyContent: 'center',
-            borderWidth: 1.5,
-            borderColor: BRAND.primaryMuted,
           }}
         >
-          <Ionicons name="chatbubble-ellipses-outline" size={22} color={BRAND.primary} />
+          <Ionicons name="chatbubble-ellipses-outline" size={22} color={PINK} />
         </TouchableOpacity>
 
-        {/* Book / CTA */}
+        {/* Select Service gradient button */}
         <TouchableOpacity
           onPress={() => {
-            if (services.length === 0) {
-              toast.info('No Services', 'This vendor has not added any services yet.');
-              return;
-            }
-            if (activeTab === 'services') {
+            if (activeTab === 'Service' && services.length > 0) {
               handleBookService(services[0]._id);
             } else {
-              setActiveTab('services');
+              setActiveTab('Service');
             }
           }}
           activeOpacity={0.85}
           style={{ flex: 1 }}
         >
           <LinearGradient
-            colors={[BRAND.primary, '#B5315F']}
+            colors={['#E91E63', '#C2185B']}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 0 }}
             style={{
@@ -1186,20 +972,161 @@ const VendorDetailScreen: React.FC = () => {
               alignItems: 'center',
               justifyContent: 'center',
               flexDirection: 'row',
-              gap: 8,
+              gap: 6,
             }}
           >
-            <Ionicons
-              name={activeTab === 'services' && services.length > 0 ? 'calendar-outline' : 'grid-outline'}
-              size={18}
-              color="#fff"
-            />
-            <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700', letterSpacing: 0.1 }}>
-              {activeTab === 'services' && services.length > 0 ? 'Select Service' : 'Book Now'}
-            </Text>
+            <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>Select Service</Text>
+            <Ionicons name="chevron-forward" size={18} color="#fff" />
           </LinearGradient>
         </TouchableOpacity>
       </View>
+
+      {/* ── PORTFOLIO FULL-SCREEN MODAL ─────────────────────────────────────── */}
+      <Modal
+        visible={showPortfolioModal}
+        animationType="slide"
+        transparent={false}
+        statusBarTranslucent
+        onRequestClose={() => setShowPortfolioModal(false)}
+      >
+        <SafeAreaView style={{ flex: 1, backgroundColor: BG }}>
+          {/* Header */}
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              paddingHorizontal: 16,
+              paddingVertical: 12,
+              borderBottomWidth: 1,
+              borderBottomColor: '#FCE4EC',
+            }}
+          >
+            <TouchableOpacity
+              onPress={() => setShowPortfolioModal(false)}
+              activeOpacity={0.8}
+              style={{ width: 36, height: 36, alignItems: 'center', justifyContent: 'center' }}
+            >
+              <Ionicons name="arrow-back" size={22} color="#111827" />
+            </TouchableOpacity>
+            <Text style={{ flex: 1, textAlign: 'center', fontSize: 17, fontWeight: '700', color: '#111827' }}>
+              Portfolio
+            </Text>
+            <View style={{ width: 36 }} />
+          </View>
+
+          {/* Subtitle */}
+          <View style={{ alignItems: 'center', paddingVertical: 8, flexDirection: 'row', justifyContent: 'center', gap: 4 }}>
+            <Text style={{ fontSize: 14, color: '#6B7280' }}>{businessName}</Text>
+            {isVerified && <Ionicons name="checkmark-circle" size={14} color={PINK} />}
+          </View>
+
+          {/* Grid */}
+          <FlatList
+            data={portfolioImages}
+            keyExtractor={(_, idx) => String(idx)}
+            numColumns={3}
+            contentContainerStyle={{ padding: 4 }}
+            renderItem={({ item, index }) => (
+              <TouchableOpacity
+                activeOpacity={0.85}
+                onPress={() => {
+                  setShowPortfolioModal(false);
+                  openLightbox(portfolioImages, index);
+                }}
+                style={{ margin: 2, flex: 1 / 3 }}
+              >
+                <Image
+                  source={{ uri: item }}
+                  style={{
+                    width: '100%',
+                    aspectRatio: 1,
+                    borderRadius: 10,
+                    backgroundColor: '#F3F4F6',
+                  }}
+                  resizeMode="cover"
+                />
+              </TouchableOpacity>
+            )}
+          />
+        </SafeAreaView>
+      </Modal>
+
+      {/* ── IMAGE LIGHTBOX MODAL ────────────────────────────────────────────── */}
+      <Modal
+        visible={showLightbox}
+        animationType="fade"
+        transparent={false}
+        statusBarTranslucent
+        onRequestClose={() => setShowLightbox(false)}
+      >
+        <View style={{ flex: 1, backgroundColor: '#000' }}>
+          {/* Close button — uses insets so it always clears the status bar */}
+          <TouchableOpacity
+            onPress={() => setShowLightbox(false)}
+            activeOpacity={0.8}
+            style={{
+              position: 'absolute',
+              top: insets.top + 10,
+              right: 16,
+              zIndex: 20,
+              width: 40,
+              height: 40,
+              borderRadius: 20,
+              backgroundColor: 'rgba(255,255,255,0.18)',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <Ionicons name="close" size={24} color="#fff" />
+          </TouchableOpacity>
+
+          {/* Paged images */}
+          <FlatList
+            data={lightboxImages}
+            keyExtractor={(_, idx) => String(idx)}
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            initialScrollIndex={lightboxIndex}
+            getItemLayout={(_, index) => ({ length: SCREEN_WIDTH, offset: SCREEN_WIDTH * index, index })}
+            onMomentumScrollEnd={(e) => {
+              const idx = Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH);
+              setLightboxIndex(idx);
+            }}
+            renderItem={({ item }) => (
+              <View
+                style={{
+                  width: SCREEN_WIDTH,
+                  height: SCREEN_HEIGHT,
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                }}
+              >
+                <Image
+                  source={{ uri: item }}
+                  style={{ width: SCREEN_WIDTH, height: SCREEN_HEIGHT }}
+                  resizeMode="contain"
+                />
+              </View>
+            )}
+          />
+
+          {/* Index indicator */}
+          <View
+            style={{
+              position: 'absolute',
+              bottom: insets.bottom + 24,
+              left: 0,
+              right: 0,
+              alignItems: 'center',
+            }}
+          >
+            <Text style={{ color: '#fff', fontSize: 14, fontWeight: '600' }}>
+              {lightboxIndex + 1} / {lightboxImages.length}
+            </Text>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
