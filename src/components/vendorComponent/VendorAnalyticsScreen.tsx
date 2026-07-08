@@ -1,991 +1,317 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
-  View,
-  Text,
-  TouchableOpacity,
-  ScrollView,
-  ActivityIndicator,
-  Platform,
+  View, Text, TouchableOpacity, ScrollView, ActivityIndicator,
+  Platform, StyleSheet, Dimensions, RefreshControl,
 } from 'react-native';
-import { toast } from '@/components/ui/Toast';
-import { Ionicons } from '@expo/vector-icons';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { RootStackParamList } from '@/types/navigation.types';
 import { analyticsAPI, handleAPIError } from '@/api/api';
+import { toast } from '@/components/ui/Toast';
 
-type AnalyticsNavigationProp = NativeStackNavigationProp<RootStackParamList>;
+const { width: SW } = Dimensions.get('window');
 
-interface QuickStats {
-  walletBalance: number;
-  totalBookings: number;
-  totalOrders: number;
-  totalProducts: number;
-  totalServices: number;
-  totalReviews: number;
-  averageRating: number;
-}
+const PINK  = '#E04079';
+const PK2   = '#B5315F';
+const BG    = '#FFF5F9';
+const CARD  = '#FFFFFF';
+const T1    = '#18181B';
+const T2    = '#71717A';
+const T3    = '#A1A1AA';
 
-interface AnalyticsData {
-  overview: {
-    totalRevenue: number;
-    totalOrders: number;
-    totalBookings: number;
-    totalProducts: number;
-    totalServices: number;
-    averageRating: number;
-    totalReviews: number;
-    completedBookings: number;
-    completedOrders: number;
-    pendingOrders: number;
-    pendingBookings: number;
-    activeProducts: number;
-    activeServices: number;
-  };
-  revenue: {
-    total: number;
-    fromBookings: number;
-    fromOrders: number;
-    pending: number;
-    inEscrow: number;
-    released: number;
-    byPeriod: Array<{
-      date: string;
-      revenue: number;
-      bookings: number;
-      orders: number;
-    }>;
-  };
-  bookings: {
-    total: number;
-    completed: number;
-    pending: number;
-    accepted: number;
-    inProgress: number;
-    cancelled: number;
-    completionRate: number;
-    cancellationRate: number;
-    byStatus: Array<{
-      status: string;
-      count: number;
-      percentage: number;
-    }>;
-    topServices: Array<{
-      service: any;
-      bookings: number;
-      revenue: number;
-    }>;
-  };
-  orders: {
-    total: number;
-    completed: number;
-    pending: number;
-    averageOrderValue: number;
-    topProducts: Array<{
-      product: any;
-      orders: number;
-      revenue: number;
-      quantity: number;
-    }>;
-  };
-  reviews: {
-    total: number;
-    averageRating: number;
-    distribution: {
-      1: number;
-      2: number;
-      3: number;
-      4: number;
-      5: number;
-    };
-    positivePercentage: number;
-    negativePercentage: number;
-  };
-  customers: {
-    total: number;
-    returning: number;
-    new: number;
-    returningRate: number;
-  };
-  performance: {
-    responseTime: number;
-    acceptanceRate: number;
-    completionRate: number;
-    cancellationRate: number;
-    onTimeDeliveryRate: number;
-    customerSatisfactionScore: number;
-  };
-}
+type Period  = '7days' | '30days' | '90days' | 'all';
+type TabKey  = 'overview' | 'revenue' | 'performance';
 
-type TimePeriod = '7days' | '30days' | '90days' | 'all';
+const PERIODS: { label: string; value: Period }[] = [
+  { label: '7 Days',  value: '7days'  },
+  { label: '30 Days', value: '30days' },
+  { label: '90 Days', value: '90days' },
+  { label: 'All Time', value: 'all'   },
+];
+
+const lift = Platform.select({
+  ios:     { shadowColor: '#18090F', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.07, shadowRadius: 14 },
+  android: { elevation: 3 },
+}) as any;
+
+const money = (n: number) => `₦${(n || 0).toLocaleString()}`;
+const pct   = (n: number) => `${(n || 0).toFixed(0)}%`;
+const fmt   = (n: number) => {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000)     return `${(n / 1_000).toFixed(1)}K`;
+  return String(n || 0);
+};
+
+const getDateRange = (period: Period) => {
+  const end = new Date().toISOString();
+  const DAY = 86_400_000;
+  const days = period === '7days' ? 7 : period === '30days' ? 30 : period === '90days' ? 90 : null;
+  const start = days ? new Date(Date.now() - days * DAY).toISOString() : new Date(2020, 0, 1).toISOString();
+  return { startDate: start, endDate: end };
+};
+
+// ── Reusable sub-components ──────────────────────────────────────────────────
+
+const SectionHeader = ({ title, subtitle }: { title: string; subtitle?: string }) => (
+  <View style={sc.sectionHead}>
+    <Text style={sc.sectionTitle}>{title}</Text>
+    {subtitle ? <Text style={sc.sectionSub}>{subtitle}</Text> : null}
+  </View>
+);
+
+const ProgressBar = ({ value, color, track = '#F0E6EC' }: { value: number; color: string; track?: string }) => (
+  <View style={[sc.track, { backgroundColor: track }]}>
+    <View style={[sc.fill, { width: `${Math.max(0, Math.min(100, value))}%`, backgroundColor: color }]} />
+  </View>
+);
+
+// ── Main screen ──────────────────────────────────────────────────────────────
 
 const VendorAnalyticsScreen: React.FC = () => {
-  const navigation = useNavigation<AnalyticsNavigationProp>();
-  
-  const [loading, setLoading] = useState(true);
+  const navigation = useNavigation<any>();
+  const insets     = useSafeAreaInsets();
+
+  const [loading,    setLoading]    = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [quickStats, setQuickStats] = useState<QuickStats | null>(null);
-  const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
-  const [selectedPeriod, setSelectedPeriod] = useState<TimePeriod>('30days');
-  const [activeTab, setActiveTab] = useState<'overview' | 'revenue' | 'performance'>('overview');
+  const [period,     setPeriod]     = useState<Period>('30days');
+  const [tab,        setTab]        = useState<TabKey>('overview');
+  const [quick,      setQuick]      = useState<any>(null);
+  const [data,       setData]       = useState<any>(null);
 
-  useEffect(() => {
-    fetchAnalytics();
-  }, [selectedPeriod]);
-
-  const getDateRange = (period: TimePeriod) => {
-    const endDate = new Date().toISOString();
-    let startDate: string;
-
-    switch (period) {
-      case '7days':
-        startDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-        break;
-      case '30days':
-        startDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
-        break;
-      case '90days':
-        startDate = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
-        break;
-      case 'all':
-        startDate = new Date(2020, 0, 1).toISOString();
-        break;
-      default:
-        startDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
-    }
-
-    return { startDate, endDate };
-  };
-
-  const fetchAnalytics = async () => {
+  const load = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
-      setLoading(true);
-
-      
-      const statsResponse = await analyticsAPI.getVendorQuickStats();
-      console.log('Quick stats response:', statsResponse);
-      
-      if (statsResponse.success) {
-        setQuickStats(statsResponse.data);
-      }
-
-      
-      const { startDate, endDate } = getDateRange(selectedPeriod);
-      const analyticsResponse = await analyticsAPI.getVendorAnalytics({
-        startDate,
-        endDate,
-      });
-      
-      console.log('Analytics response:', analyticsResponse);
-
-      if (analyticsResponse.success) {
-        setAnalytics(analyticsResponse.data);
-      }
-    } catch (error) {
-      const apiError = handleAPIError(error);
-      console.error('Analytics error:', apiError);
-      toast.error('Error', apiError.message || 'Failed to load analytics');
+      const [qr, ar] = await Promise.all([
+        analyticsAPI.getVendorQuickStats(),
+        analyticsAPI.getVendorAnalytics(getDateRange(period)),
+      ]);
+      if (qr.success)  setQuick(qr.data);
+      if (ar.success)  setData(ar.data);
+    } catch (e) {
+      toast.error('Error', handleAPIError(e).message);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, [period]);
 
-  const handleRefresh = () => {
-    setRefreshing(true);
-    fetchAnalytics();
-  };
+  useEffect(() => { load(); }, [load]);
 
-  const formatPrice = (price: number) => {
-    return `₦${price.toLocaleString()}`;
-  };
+  const onRefresh = () => { setRefreshing(true); load(true); };
 
-  const formatNumber = (num: number) => {
-    if (num >= 1000000) {
-      return `${(num / 1000000).toFixed(1)}M`;
-    }
-    if (num >= 1000) {
-      return `${(num / 1000).toFixed(1)}K`;
-    }
-    return num.toString();
-  };
+  // ── Hero metrics ──────────────────────────────────────────────────────────
 
-  const renderPeriodSelector = () => (
-    <View className="flex-row px-5 py-3 gap-2">
-      {[
-        { label: '7D', value: '7days' as TimePeriod },
-        { label: '30D', value: '30days' as TimePeriod },
-        { label: '90D', value: '90days' as TimePeriod },
-        { label: 'All', value: 'all' as TimePeriod },
-      ].map((period) => (
-        <TouchableOpacity
-          key={period.value}
-          onPress={() => setSelectedPeriod(period.value)}
-          className={`flex-1 py-2 rounded-xl ${
-            selectedPeriod === period.value ? 'bg-pink-600' : 'bg-white'
-          }`}
-          style={{
-            ...Platform.select({
-              ios: {
-                shadowColor: '#000',
-                shadowOffset: { width: 0, height: 1 },
-                shadowOpacity: 0.1,
-                shadowRadius: 3,
-              },
-              android: { elevation: 2 },
-            }),
-          }}
-          activeOpacity={0.7}
-        >
-          <Text
-            className={`text-center font-bold text-sm ${
-              selectedPeriod === period.value ? 'text-white' : 'text-gray-700'
-            }`}
-          >
-            {period.label}
-          </Text>
-        </TouchableOpacity>
-      ))}
-    </View>
-  );
+  const totalRevenue = data?.revenue?.total ?? 0;
+  const bookings     = data?.bookings?.total ?? quick?.totalBookings ?? 0;
+  const orders       = data?.orders?.total   ?? quick?.totalOrders   ?? 0;
+  const rating       = data?.reviews?.averageRating ?? quick?.averageRating ?? 0;
+  const inEscrow     = data?.revenue?.inEscrow  ?? 0;
+  const released     = data?.revenue?.released  ?? 0;
 
-  const renderTabSelector = () => (
-    <View className="flex-row px-5 py-3 gap-3">
-      {[
-        { label: 'Overview', value: 'overview' as const, icon: 'analytics' },
-        { label: 'Revenue', value: 'revenue' as const, icon: 'cash' },
-        { label: 'Performance', value: 'performance' as const, icon: 'trending-up' },
-      ].map((tab) => (
-        <TouchableOpacity
-          key={tab.value}
-          onPress={() => setActiveTab(tab.value)}
-          className={`flex-1 py-3 rounded-2xl flex-row items-center justify-center ${
-            activeTab === tab.value ? 'bg-pink-600' : 'bg-white'
-          }`}
-          style={{
-            ...Platform.select({
-              ios: {
-                shadowColor: '#000',
-                shadowOffset: { width: 0, height: 2 },
-                shadowOpacity: 0.08,
-                shadowRadius: 8,
-              },
-              android: { elevation: 3 },
-            }),
-          }}
-          activeOpacity={0.7}
-        >
-          <Ionicons
-            name={tab.icon as any}
-            size={18}
-            color={activeTab === tab.value ? '#fff' : '#6b7280'}
-          />
-          <Text
-            className={`ml-2 font-bold text-sm ${
-              activeTab === tab.value ? 'text-white' : 'text-gray-700'
-            }`}
-          >
-            {tab.label}
-          </Text>
-        </TouchableOpacity>
-      ))}
-    </View>
-  );
+  // ── Loading ───────────────────────────────────────────────────────────────
 
-  const renderQuickStatsCards = () => {
-    if (!quickStats) return null;
-
-    const stats = [
-      {
-        icon: 'wallet',
-        label: 'Wallet Balance',
-        value: formatPrice(quickStats.walletBalance),
-        color: '#10b981',
-        bgColor: '#d1fae5',
-      },
-      {
-        icon: 'calendar',
-        label: 'Total Bookings',
-        value: quickStats.totalBookings.toString(),
-        color: '#3b82f6',
-        bgColor: '#dbeafe',
-      },
-      {
-        icon: 'cart',
-        label: 'Total Orders',
-        value: quickStats.totalOrders.toString(),
-        color: '#8b5cf6',
-        bgColor: '#ede9fe',
-      },
-      {
-        icon: 'star',
-        label: 'Average Rating',
-        value: quickStats.averageRating.toFixed(1),
-        color: '#f59e0b',
-        bgColor: '#fef3c7',
-      },
-    ];
-
+  if (loading && !data) {
     return (
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        className="px-5"
-        contentContainerStyle={{ gap: 12 }}
-      >
-        {stats.map((stat, index) => (
-          <View
-            key={index}
-            className="bg-white rounded-2xl p-4 w-36"
-            style={{
-              ...Platform.select({
-                ios: {
-                  shadowColor: '#000',
-                  shadowOffset: { width: 0, height: 2 },
-                  shadowOpacity: 0.08,
-                  shadowRadius: 8,
-                },
-                android: { elevation: 3 },
-              }),
-            }}
-          >
-            <View
-              className="w-12 h-12 rounded-full items-center justify-center mb-3"
-              style={{ backgroundColor: stat.bgColor }}
-            >
-              <Ionicons name={stat.icon as any} size={24} color={stat.color} />
+      <View style={[s.root, { paddingTop: insets.top, alignItems: 'center', justifyContent: 'center' }]}>
+        <ActivityIndicator size="large" color={PINK} />
+        <Text style={s.loadingTxt}>Loading analytics…</Text>
+      </View>
+    );
+  }
+
+  // ── Overview tab ──────────────────────────────────────────────────────────
+
+  const OverviewTab = () => (
+    <View style={s.tabContent}>
+
+      {/* 2×2 stat grid */}
+      <View style={s.grid2}>
+        {[
+          { label: 'Bookings',  val: fmt(bookings), sub: `${fmt(data?.bookings?.completed ?? 0)} completed`, icon: 'calendar-month', ic: 'mc', color: '#2563EB', bg: '#EFF6FF' },
+          { label: 'Orders',    val: fmt(orders),   sub: `${fmt(data?.orders?.completed ?? 0)} completed`,   icon: 'bag',            ic: 'io', color: '#7C3AED', bg: '#F5F3FF' },
+          { label: 'Products',  val: fmt(data?.overview?.totalProducts ?? quick?.totalProducts ?? 0),  sub: `${fmt(data?.overview?.activeProducts ?? 0)} active`,   icon: 'cube',   ic: 'io', color: '#0891B2', bg: '#ECFEFF' },
+          { label: 'Services',  val: fmt(data?.overview?.totalServices ?? quick?.totalServices ?? 0),  sub: `${fmt(data?.overview?.activeServices ?? 0)} active`,   icon: 'briefcase', ic: 'io', color: PINK, bg: '#FFF0F5' },
+        ].map((item, i) => (
+          <View key={i} style={[s.gridCard, lift]}>
+            <View style={[s.gridIcon, { backgroundColor: item.bg }]}>
+              {item.ic === 'mc'
+                ? <MaterialCommunityIcons name={item.icon as any} size={22} color={item.color} />
+                : <Ionicons name={item.icon as any} size={22} color={item.color} />}
             </View>
-            <Text className="text-xs text-gray-600 mb-1">{stat.label}</Text>
-            <Text className="text-xl font-bold text-gray-900">{stat.value}</Text>
+            <Text style={s.gridVal}>{item.val}</Text>
+            <Text style={s.gridLabel}>{item.label}</Text>
+            <Text style={s.gridSub}>{item.sub}</Text>
           </View>
         ))}
-      </ScrollView>
-    );
-  };
+      </View>
 
-  const renderOverviewTab = () => {
-    if (!analytics) return null;
-
-    return (
-      <View className="px-5" style={{ gap: 16 }}>
-        {}
-        <View
-          className="bg-white rounded-3xl p-5"
-          style={{
-            ...Platform.select({
-              ios: {
-                shadowColor: '#000',
-                shadowOffset: { width: 0, height: 2 },
-                shadowOpacity: 0.08,
-                shadowRadius: 12,
-              },
-              android: { elevation: 4 },
-            }),
-          }}
-        >
-          <View className="flex-row items-center justify-between mb-4">
-            <Text className="text-lg font-bold text-gray-900">Revenue Breakdown</Text>
-            <View className="bg-green-100 px-3 py-1 rounded-full">
-              <Text className="text-green-700 font-bold text-xs">
-                {formatPrice(analytics.revenue.total)}
-              </Text>
-            </View>
-          </View>
-
-          <View style={{ gap: 12 }}>
-            <View className="flex-row items-center justify-between p-3 bg-blue-50 rounded-xl">
-              <View className="flex-row items-center">
-                <View className="w-10 h-10 bg-blue-100 rounded-full items-center justify-center mr-3">
-                  <Ionicons name="calendar" size={20} color="#3b82f6" />
-                </View>
-                <Text className="font-medium text-gray-700">From Bookings</Text>
-              </View>
-              <Text className="font-bold text-gray-900">
-                {formatPrice(analytics.revenue.fromBookings)}
-              </Text>
-            </View>
-
-            <View className="flex-row items-center justify-between p-3 bg-purple-50 rounded-xl">
-              <View className="flex-row items-center">
-                <View className="w-10 h-10 bg-purple-100 rounded-full items-center justify-center mr-3">
-                  <Ionicons name="cart" size={20} color="#8b5cf6" />
-                </View>
-                <Text className="font-medium text-gray-700">From Orders</Text>
-              </View>
-              <Text className="font-bold text-gray-900">
-                {formatPrice(analytics.revenue.fromOrders)}
-              </Text>
-            </View>
-
-            <View className="flex-row items-center justify-between p-3 bg-yellow-50 rounded-xl">
-              <View className="flex-row items-center">
-                <View className="w-10 h-10 bg-yellow-100 rounded-full items-center justify-center mr-3">
-                  <Ionicons name="hourglass" size={20} color="#f59e0b" />
-                </View>
-                <Text className="font-medium text-gray-700">In Escrow</Text>
-              </View>
-              <Text className="font-bold text-gray-900">
-                {formatPrice(analytics.revenue.inEscrow)}
-              </Text>
-            </View>
-
-            <View className="flex-row items-center justify-between p-3 bg-green-50 rounded-xl">
-              <View className="flex-row items-center">
-                <View className="w-10 h-10 bg-green-100 rounded-full items-center justify-center mr-3">
-                  <Ionicons name="checkmark-circle" size={20} color="#10b981" />
-                </View>
-                <Text className="font-medium text-gray-700">Released</Text>
-              </View>
-              <Text className="font-bold text-gray-900">
-                {formatPrice(analytics.revenue.released)}
-              </Text>
-            </View>
-          </View>
-        </View>
-
-        {}
-        <View className="flex-row gap-3">
-          <View
-            className="flex-1 bg-white rounded-3xl p-5"
-            style={{
-              ...Platform.select({
-                ios: {
-                  shadowColor: '#000',
-                  shadowOffset: { width: 0, height: 2 },
-                  shadowOpacity: 0.08,
-                  shadowRadius: 12,
-                },
-                android: { elevation: 4 },
-              }),
-            }}
-          >
-            <View className="w-12 h-12 bg-blue-100 rounded-full items-center justify-center mb-3">
-              <Ionicons name="calendar" size={24} color="#3b82f6" />
-            </View>
-            <Text className="text-xs text-gray-600 mb-1">Bookings</Text>
-            <Text className="text-2xl font-bold text-gray-900 mb-2">
-              {analytics.bookings.total}
-            </Text>
-            <View className="flex-row items-center">
-              <View className="flex-1 bg-green-100 rounded px-2 py-1 mr-1">
-                <Text className="text-xs font-bold text-green-700 text-center">
-                  {analytics.bookings.completed}
-                </Text>
-              </View>
-              <View className="flex-1 bg-yellow-100 rounded px-2 py-1">
-                <Text className="text-xs font-bold text-yellow-700 text-center">
-                  {analytics.bookings.pending}
-                </Text>
-              </View>
-            </View>
-          </View>
-
-          <View
-            className="flex-1 bg-white rounded-3xl p-5"
-            style={{
-              ...Platform.select({
-                ios: {
-                  shadowColor: '#000',
-                  shadowOffset: { width: 0, height: 2 },
-                  shadowOpacity: 0.08,
-                  shadowRadius: 12,
-                },
-                android: { elevation: 4 },
-              }),
-            }}
-          >
-            <View className="w-12 h-12 bg-purple-100 rounded-full items-center justify-center mb-3">
-              <Ionicons name="cart" size={24} color="#8b5cf6" />
-            </View>
-            <Text className="text-xs text-gray-600 mb-1">Orders</Text>
-            <Text className="text-2xl font-bold text-gray-900 mb-2">
-              {analytics.orders.total}
-            </Text>
-            <View className="flex-row items-center">
-              <View className="flex-1 bg-green-100 rounded px-2 py-1 mr-1">
-                <Text className="text-xs font-bold text-green-700 text-center">
-                  {analytics.orders.completed}
-                </Text>
-              </View>
-              <View className="flex-1 bg-yellow-100 rounded px-2 py-1">
-                <Text className="text-xs font-bold text-yellow-700 text-center">
-                  {analytics.orders.pending}
-                </Text>
-              </View>
-            </View>
-          </View>
-        </View>
-
-        {}
-        <View className="flex-row gap-3">
-          <View
-            className="flex-1 bg-white rounded-3xl p-5"
-            style={{
-              ...Platform.select({
-                ios: {
-                  shadowColor: '#000',
-                  shadowOffset: { width: 0, height: 2 },
-                  shadowOpacity: 0.08,
-                  shadowRadius: 12,
-                },
-                android: { elevation: 4 },
-              }),
-            }}
-          >
-            <View className="w-12 h-12 bg-pink-100 rounded-full items-center justify-center mb-3">
-              <Ionicons name="pricetag" size={24} color="#ec4899" />
-            </View>
-            <Text className="text-xs text-gray-600 mb-1">Products</Text>
-            <Text className="text-2xl font-bold text-gray-900">
-              {analytics.overview.totalProducts}
-            </Text>
-            <Text className="text-xs text-green-600 font-medium mt-1">
-              {analytics.overview.activeProducts} active
-            </Text>
-          </View>
-
-          <View
-            className="flex-1 bg-white rounded-3xl p-5"
-            style={{
-              ...Platform.select({
-                ios: {
-                  shadowColor: '#000',
-                  shadowOffset: { width: 0, height: 2 },
-                  shadowOpacity: 0.08,
-                  shadowRadius: 12,
-                },
-                android: { elevation: 4 },
-              }),
-            }}
-          >
-            <View className="w-12 h-12 bg-indigo-100 rounded-full items-center justify-center mb-3">
-              <Ionicons name="briefcase" size={24} color="#6366f1" />
-            </View>
-            <Text className="text-xs text-gray-600 mb-1">Services</Text>
-            <Text className="text-2xl font-bold text-gray-900">
-              {analytics.overview.totalServices}
-            </Text>
-            <Text className="text-xs text-green-600 font-medium mt-1">
-              {analytics.overview.activeServices} active
-            </Text>
-          </View>
-        </View>
-
-        {}
-        <View
-          className="bg-white rounded-3xl p-5"
-          style={{
-            ...Platform.select({
-              ios: {
-                shadowColor: '#000',
-                shadowOffset: { width: 0, height: 2 },
-                shadowOpacity: 0.08,
-                shadowRadius: 12,
-              },
-              android: { elevation: 4 },
-            }),
-          }}
-        >
-          <Text className="text-lg font-bold text-gray-900 mb-4">Customer Reviews</Text>
-
-          <View className="flex-row items-center mb-4">
-            <View className="mr-4">
-              <Text className="text-4xl font-bold text-gray-900">
-                {analytics.reviews.averageRating.toFixed(1)}
-              </Text>
-              <View className="flex-row mt-1">
-                {[1, 2, 3, 4, 5].map((star) => (
-                  <Ionicons
-                    key={star}
-                    name={star <= Math.round(analytics.reviews.averageRating) ? 'star' : 'star-outline'}
-                    size={16}
-                    color="#f59e0b"
-                  />
+      {/* Reviews card */}
+      {data?.reviews && (
+        <View style={[s.card, lift]}>
+          <SectionHeader title="Customer Reviews" subtitle={`${data.reviews.total} total`} />
+          <View style={s.ratingRow}>
+            <View style={s.ratingLeft}>
+              <Text style={s.bigRating}>{(data.reviews.averageRating || 0).toFixed(1)}</Text>
+              <View style={s.stars}>
+                {[1,2,3,4,5].map(n => (
+                  <Ionicons key={n} name={n <= Math.round(data.reviews.averageRating) ? 'star' : 'star-outline'} size={14} color="#F59E0B" />
                 ))}
               </View>
-            </View>
-
-            <View className="flex-1">
-              <Text className="text-sm text-gray-600 mb-2">
-                {analytics.reviews.total} total reviews
-              </Text>
-              <View className="flex-row items-center">
-                <View className="flex-1 bg-green-100 rounded-full h-2 mr-2">
-                  <View
-                    className="bg-green-500 rounded-full h-2"
-                    style={{ width: `${analytics.reviews.positivePercentage}%` }}
-                  />
-                </View>
-                <Text className="text-xs font-bold text-green-600">
-                  {analytics.reviews.positivePercentage.toFixed(0)}%
-                </Text>
+              <View style={[s.posPill, { backgroundColor: '#F0FDF4' }]}>
+                <Text style={[s.posText, { color: '#16A34A' }]}>{pct(data.reviews.positivePercentage)} positive</Text>
               </View>
             </View>
+            <View style={{ flex: 1, gap: 6 }}>
+              {[5,4,3,2,1].map(n => {
+                const count = data.reviews.distribution?.[n] ?? 0;
+                const pctVal = data.reviews.total > 0 ? (count / data.reviews.total) * 100 : 0;
+                return (
+                  <View key={n} style={s.ratingBarRow}>
+                    <Text style={s.ratingBarLbl}>{n}</Text>
+                    <Ionicons name="star" size={10} color="#F59E0B" style={{ marginRight: 6 }} />
+                    <View style={{ flex: 1 }}>
+                      <ProgressBar value={pctVal} color="#F59E0B" track="#FEF9EC" />
+                    </View>
+                    <Text style={s.ratingBarCount}>{count}</Text>
+                  </View>
+                );
+              })}
+            </View>
           </View>
+        </View>
+      )}
 
-          <View style={{ gap: 8 }}>
-            {[5, 4, 3, 2, 1].map((rating) => (
-              <View key={rating} className="flex-row items-center">
-                <Text className="text-xs font-medium text-gray-600 w-8">{rating}★</Text>
-                <View className="flex-1 bg-gray-200 rounded-full h-2 mx-2">
-                  <View
-                    className="bg-yellow-500 rounded-full h-2"
-                    style={{
-                      width: `${
-                        analytics.reviews.total > 0
-                          ? (analytics.reviews.distribution[rating as keyof typeof analytics.reviews.distribution] /
-                              analytics.reviews.total) *
-                            100
-                          : 0
-                      }%`,
-                    }}
-                  />
-                </View>
-                <Text className="text-xs font-bold text-gray-700 w-8">
-                  {analytics.reviews.distribution[rating as keyof typeof analytics.reviews.distribution]}
-                </Text>
+      {/* Customer insights */}
+      {data?.customers && (
+        <View style={[s.card, lift]}>
+          <SectionHeader title="Customer Insights" />
+          <View style={s.insightRow}>
+            {[
+              { label: 'Total',     val: data.customers.total,     color: '#2563EB', bg: '#EFF6FF', icon: 'people' },
+              { label: 'Returning', val: data.customers.returning, color: '#16A34A', bg: '#F0FDF4', icon: 'repeat', note: `${pct(data.customers.returningRate)} rate` },
+              { label: 'New',       val: data.customers.new,       color: '#7C3AED', bg: '#F5F3FF', icon: 'person-add' },
+            ].map((c, i) => (
+              <View key={i} style={[s.insightCard, { backgroundColor: c.bg }]}>
+                <Ionicons name={c.icon as any} size={20} color={c.color} />
+                <Text style={[s.insightVal, { color: c.color }]}>{fmt(c.val)}</Text>
+                <Text style={s.insightLabel}>{c.label}</Text>
+                {c.note ? <Text style={[s.insightNote, { color: c.color }]}>{c.note}</Text> : null}
               </View>
             ))}
           </View>
         </View>
+      )}
+    </View>
+  );
 
-        {}
-        <View
-          className="bg-white rounded-3xl p-5"
-          style={{
-            ...Platform.select({
-              ios: {
-                shadowColor: '#000',
-                shadowOffset: { width: 0, height: 2 },
-                shadowOpacity: 0.08,
-                shadowRadius: 12,
-              },
-              android: { elevation: 4 },
-            }),
-          }}
-        >
-          <Text className="text-lg font-bold text-gray-900 mb-4">Customer Insights</Text>
+  // ── Revenue tab ───────────────────────────────────────────────────────────
 
-          <View className="flex-row" style={{ gap: 12 }}>
-            <View className="flex-1 bg-blue-50 rounded-2xl p-4">
-              <View className="w-10 h-10 bg-blue-100 rounded-full items-center justify-center mb-2">
-                <Ionicons name="people" size={20} color="#3b82f6" />
-              </View>
-              <Text className="text-xs text-gray-600 mb-1">Total</Text>
-              <Text className="text-2xl font-bold text-gray-900">
-                {analytics.customers.total}
-              </Text>
-            </View>
-
-            <View className="flex-1 bg-green-50 rounded-2xl p-4">
-              <View className="w-10 h-10 bg-green-100 rounded-full items-center justify-center mb-2">
-                <Ionicons name="repeat" size={20} color="#10b981" />
-              </View>
-              <Text className="text-xs text-gray-600 mb-1">Returning</Text>
-              <Text className="text-2xl font-bold text-gray-900">
-                {analytics.customers.returning}
-              </Text>
-              <Text className="text-xs text-green-600 font-medium mt-1">
-                {analytics.customers.returningRate.toFixed(0)}%
-              </Text>
-            </View>
-
-            <View className="flex-1 bg-purple-50 rounded-2xl p-4">
-              <View className="w-10 h-10 bg-purple-100 rounded-full items-center justify-center mb-2">
-                <Ionicons name="person-add" size={20} color="#8b5cf6" />
-              </View>
-              <Text className="text-xs text-gray-600 mb-1">New</Text>
-              <Text className="text-2xl font-bold text-gray-900">
-                {analytics.customers.new}
-              </Text>
-            </View>
-          </View>
-        </View>
-      </View>
-    );
-  };
-
-  const renderRevenueTab = () => {
-    if (!analytics) return null;
-
-    
-    const revenueData = analytics.revenue.byPeriod?.slice(-7) || [];
-    const maxRevenue = Math.max(...revenueData.map(item => item.revenue || 0), 1);
+  const RevenueTab = () => {
+    const byPeriod  = (data?.revenue?.byPeriod ?? []).slice(-7);
+    const maxRev    = Math.max(...byPeriod.map((d: any) => d.revenue || 0), 1);
+    const bookPct   = totalRevenue > 0 ? (data?.revenue?.fromBookings / totalRevenue) * 100 : 0;
+    const ordPct    = totalRevenue > 0 ? (data?.revenue?.fromOrders   / totalRevenue) * 100 : 0;
 
     return (
-      <View className="px-5" style={{ gap: 16 }}>
-        {}
-        {revenueData.length > 0 && (
-          <View
-            className="bg-white rounded-3xl p-5"
-            style={{
-              ...Platform.select({
-                ios: {
-                  shadowColor: '#000',
-                  shadowOffset: { width: 0, height: 2 },
-                  shadowOpacity: 0.08,
-                  shadowRadius: 12,
-                },
-                android: { elevation: 4 },
-              }),
-            }}
-          >
-            <Text className="text-lg font-bold text-gray-900 mb-4">Revenue Trend (Last 7 Days)</Text>
+      <View style={s.tabContent}>
 
+        {/* Revenue sources split */}
+        <View style={[s.card, lift]}>
+          <SectionHeader title="Revenue Sources" subtitle={money(totalRevenue) + ' total'} />
+          {[
+            { label: 'From Bookings', val: data?.revenue?.fromBookings ?? 0, pct: bookPct, color: '#2563EB', bg: '#EFF6FF', icon: 'calendar' },
+            { label: 'From Orders',   val: data?.revenue?.fromOrders   ?? 0, pct: ordPct,  color: '#7C3AED', bg: '#F5F3FF', icon: 'bag'      },
+            { label: 'In Escrow',     val: inEscrow, pct: totalRevenue > 0 ? (inEscrow / totalRevenue) * 100 : 0, color: '#D97706', bg: '#FFFBEB', icon: 'hourglass' },
+            { label: 'Released',      val: released, pct: totalRevenue > 0 ? (released / totalRevenue) * 100 : 0, color: '#16A34A', bg: '#F0FDF4', icon: 'checkmark-circle' },
+          ].map((item, i) => (
+            <View key={i} style={s.sourceRow}>
+              <View style={[s.sourceIcon, { backgroundColor: item.bg }]}>
+                <Ionicons name={item.icon as any} size={16} color={item.color} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <View style={s.sourceLabelRow}>
+                  <Text style={s.sourceLabel}>{item.label}</Text>
+                  <Text style={[s.sourceVal, { color: item.color }]}>{money(item.val)}</Text>
+                </View>
+                <ProgressBar value={item.pct} color={item.color} />
+              </View>
+            </View>
+          ))}
+        </View>
+
+        {/* Daily revenue bars */}
+        {byPeriod.length > 0 && (
+          <View style={[s.card, lift]}>
+            <SectionHeader title="Revenue Trend" subtitle="Last 7 days" />
             <View style={{ gap: 12 }}>
-              {revenueData.map((item, index) => {
-                const date = new Date(item.date);
-                const percentage = (item.revenue / maxRevenue) * 100;
-                
+              {byPeriod.map((item: any, i: number) => {
+                const pctBar = (item.revenue / maxRev) * 100;
+                const d = new Date(item.date);
+                const label = d.toLocaleDateString('en-GB', { month: 'short', day: 'numeric' });
                 return (
-                  <View key={index}>
-                    <View className="flex-row items-center justify-between mb-2">
-                      <Text className="text-xs font-medium text-gray-600">
-                        {date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                      </Text>
-                      <Text className="text-sm font-bold text-gray-900">
-                        {formatPrice(item.revenue)}
-                      </Text>
+                  <View key={i}>
+                    <View style={s.trendLabelRow}>
+                      <Text style={s.trendDate}>{label}</Text>
+                      <Text style={s.trendAmt}>{money(item.revenue)}</Text>
                     </View>
-                    <View className="bg-gray-200 rounded-full h-8 overflow-hidden mb-1">
-                      <LinearGradient
-                        colors={['#ec4899', '#f472b6']}
-                        start={{ x: 0, y: 0 }}
-                        end={{ x: 1, y: 0 }}
-                        style={{
-                          height: '100%',
-                          width: `${percentage}%`,
-                          borderRadius: 9999,
-                        }}
-                      />
+                    <View style={s.trendBarBg}>
+                      <LinearGradient colors={[PINK, PK2]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={[s.trendBarFill, { width: `${pctBar}%` }]} />
                     </View>
-                    <View className="flex-row justify-between">
-                      <Text className="text-xs text-gray-500">
-                        📅 {item.bookings} bookings
-                      </Text>
-                      <Text className="text-xs text-gray-500">
-                        🛒 {item.orders} orders
-                      </Text>
+                    <View style={s.trendMeta}>
+                      <Text style={s.trendMetaTxt}>{item.bookings} bookings</Text>
+                      <Text style={s.trendMetaTxt}>{item.orders} orders</Text>
                     </View>
                   </View>
                 );
               })}
             </View>
-
-            {}
-            <View className="mt-4 bg-pink-50 rounded-2xl p-4">
-              <Text className="text-sm text-gray-600 mb-1">Total Revenue (Period)</Text>
-              <Text className="text-3xl font-bold text-pink-600">
-                {formatPrice(analytics.revenue.total)}
-              </Text>
-            </View>
           </View>
         )}
 
-        {}
-        <View
-          className="bg-white rounded-3xl p-5"
-          style={{
-            ...Platform.select({
-              ios: {
-                shadowColor: '#000',
-                shadowOffset: { width: 0, height: 2 },
-                shadowOpacity: 0.08,
-                shadowRadius: 12,
-              },
-              android: { elevation: 4 },
-            }),
-          }}
-        >
-          <Text className="text-lg font-bold text-gray-900 mb-4">Revenue Sources</Text>
-
-          <View style={{ gap: 12 }}>
-            <View className="flex-row items-center justify-between">
-              <View className="flex-1">
-                <View className="flex-row items-center mb-2">
-                  <View className="w-4 h-4 bg-blue-500 rounded mr-2" />
-                  <Text className="text-sm font-medium text-gray-700">Bookings</Text>
+        {/* Top Services */}
+        {(data?.bookings?.topServices ?? []).length > 0 && (
+          <View style={[s.card, lift]}>
+            <SectionHeader title="Top Services" subtitle={`${data.bookings.topServices.length} services`} />
+            {data.bookings.topServices.slice(0, 5).map((item: any, i: number) => (
+              <View key={i} style={[s.rankRow, i < 4 && s.rankRowBorder]}>
+                <View style={s.rankBadge}><Text style={s.rankNum}>{i + 1}</Text></View>
+                <View style={{ flex: 1 }}>
+                  <Text style={s.rankName} numberOfLines={1}>{item.service?.name ?? 'Unknown'}</Text>
+                  <Text style={s.rankMeta}>{item.bookings} bookings</Text>
                 </View>
-                <View className="bg-gray-200 rounded-full h-3">
-                  <View
-                    className="bg-blue-500 rounded-full h-3"
-                    style={{
-                      width: `${
-                        analytics.revenue.total > 0
-                          ? (analytics.revenue.fromBookings / analytics.revenue.total) * 100
-                          : 0
-                      }%`,
-                    }}
-                  />
-                </View>
-              </View>
-              <Text className="ml-4 font-bold text-gray-900">
-                {formatPrice(analytics.revenue.fromBookings)}
-              </Text>
-            </View>
-
-            <View className="flex-row items-center justify-between">
-              <View className="flex-1">
-                <View className="flex-row items-center mb-2">
-                  <View className="w-4 h-4 bg-purple-500 rounded mr-2" />
-                  <Text className="text-sm font-medium text-gray-700">Orders</Text>
-                </View>
-                <View className="bg-gray-200 rounded-full h-3">
-                  <View
-                    className="bg-purple-500 rounded-full h-3"
-                    style={{
-                      width: `${
-                        analytics.revenue.total > 0
-                          ? (analytics.revenue.fromOrders / analytics.revenue.total) * 100
-                          : 0
-                      }%`,
-                    }}
-                  />
-                </View>
-              </View>
-              <Text className="ml-4 font-bold text-gray-900">
-                {formatPrice(analytics.revenue.fromOrders)}
-              </Text>
-            </View>
-          </View>
-        </View>
-
-        {}
-        {analytics.bookings.topServices && analytics.bookings.topServices.length > 0 && (
-          <View
-            className="bg-white rounded-3xl p-5"
-            style={{
-              ...Platform.select({
-                ios: {
-                  shadowColor: '#000',
-                  shadowOffset: { width: 0, height: 2 },
-                  shadowOpacity: 0.08,
-                  shadowRadius: 12,
-                },
-                android: { elevation: 4 },
-              }),
-            }}
-          >
-            <View className="flex-row items-center justify-between mb-4">
-              <Text className="text-lg font-bold text-gray-900">Top Services</Text>
-              <View className="bg-blue-100 px-3 py-1 rounded-full">
-                <Text className="text-blue-700 font-bold text-xs">
-                  {analytics.bookings.topServices.length} Services
-                </Text>
-              </View>
-            </View>
-
-            {analytics.bookings.topServices.slice(0, 5).map((item, index) => (
-              <View
-                key={index}
-                className="flex-row items-center justify-between py-3 border-b border-gray-100"
-              >
-                <View className="flex-1">
-                  <View className="flex-row items-center mb-1">
-                    <View className="w-6 h-6 bg-blue-100 rounded-full items-center justify-center mr-2">
-                      <Text className="text-blue-600 font-bold text-xs">{index + 1}</Text>
-                    </View>
-                    <Text className="font-bold text-gray-900 flex-1" numberOfLines={1}>
-                      {item.service?.name || 'Unknown Service'}
-                    </Text>
-                  </View>
-                  <View className="flex-row items-center ml-8">
-                    <Ionicons name="calendar-outline" size={12} color="#6b7280" />
-                    <Text className="text-xs text-gray-600 ml-1">
-                      {item.bookings} bookings
-                    </Text>
-                  </View>
-                </View>
-                <Text className="font-bold text-pink-600 ml-3">
-                  {formatPrice(item.revenue)}
-                </Text>
+                <Text style={s.rankAmt}>{money(item.revenue)}</Text>
               </View>
             ))}
           </View>
         )}
 
-        {}
-        {analytics.orders.topProducts && analytics.orders.topProducts.length > 0 && (
-          <View
-            className="bg-white rounded-3xl p-5"
-            style={{
-              ...Platform.select({
-                ios: {
-                  shadowColor: '#000',
-                  shadowOffset: { width: 0, height: 2 },
-                  shadowOpacity: 0.08,
-                  shadowRadius: 12,
-                },
-                android: { elevation: 4 },
-              }),
-            }}
-          >
-            <View className="flex-row items-center justify-between mb-4">
-              <Text className="text-lg font-bold text-gray-900">Top Products</Text>
-              <View className="bg-purple-100 px-3 py-1 rounded-full">
-                <Text className="text-purple-700 font-bold text-xs">
-                  {analytics.orders.topProducts.length} Products
-                </Text>
-              </View>
-            </View>
-
-            {analytics.orders.topProducts.slice(0, 5).map((item, index) => (
-              <View
-                key={index}
-                className="flex-row items-center justify-between py-3 border-b border-gray-100"
-              >
-                <View className="flex-1">
-                  <View className="flex-row items-center mb-1">
-                    <View className="w-6 h-6 bg-purple-100 rounded-full items-center justify-center mr-2">
-                      <Text className="text-purple-600 font-bold text-xs">{index + 1}</Text>
-                    </View>
-                    <Text className="font-bold text-gray-900 flex-1" numberOfLines={1}>
-                      {item.product?.name || 'Unknown Product'}
-                    </Text>
-                  </View>
-                  <View className="flex-row items-center ml-8">
-                    <Ionicons name="cart-outline" size={12} color="#6b7280" />
-                    <Text className="text-xs text-gray-600 ml-1">
-                      {item.orders} orders • {item.quantity} units
-                    </Text>
-                  </View>
+        {/* Top Products */}
+        {(data?.orders?.topProducts ?? []).length > 0 && (
+          <View style={[s.card, lift]}>
+            <SectionHeader title="Top Products" subtitle={`${data.orders.topProducts.length} products`} />
+            {data.orders.topProducts.slice(0, 5).map((item: any, i: number) => (
+              <View key={i} style={[s.rankRow, i < 4 && s.rankRowBorder]}>
+                <View style={[s.rankBadge, { backgroundColor: '#F5F3FF' }]}><Text style={[s.rankNum, { color: '#7C3AED' }]}>{i + 1}</Text></View>
+                <View style={{ flex: 1 }}>
+                  <Text style={s.rankName} numberOfLines={1}>{item.product?.name ?? 'Unknown'}</Text>
+                  <Text style={s.rankMeta}>{item.orders} orders · {item.quantity} units</Text>
                 </View>
-                <Text className="font-bold text-purple-600 ml-3">
-                  {formatPrice(item.revenue)}
-                </Text>
+                <Text style={[s.rankAmt, { color: '#7C3AED' }]}>{money(item.revenue)}</Text>
               </View>
             ))}
           </View>
         )}
 
-        {}
-        {analytics.orders.averageOrderValue > 0 && (
-          <View
-            className="bg-white rounded-3xl p-5"
-            style={{
-              ...Platform.select({
-                ios: {
-                  shadowColor: '#000',
-                  shadowOffset: { width: 0, height: 2 },
-                  shadowOpacity: 0.08,
-                  shadowRadius: 12,
-                },
-                android: { elevation: 4 },
-              }),
-            }}
-          >
-            <View className="flex-row items-center">
-              <View className="w-16 h-16 bg-green-100 rounded-full items-center justify-center mr-4">
-                <Ionicons name="trending-up" size={32} color="#10b981" />
-              </View>
-              <View className="flex-1">
-                <Text className="text-sm text-gray-600 mb-1">Average Order Value</Text>
-                <Text className="text-3xl font-bold text-gray-900">
-                  {formatPrice(analytics.orders.averageOrderValue)}
-                </Text>
-              </View>
+        {/* Avg order value */}
+        {(data?.orders?.averageOrderValue ?? 0) > 0 && (
+          <View style={[s.card, lift, { flexDirection: 'row', alignItems: 'center', gap: 16 }]}>
+            <View style={[s.bigIconWrap, { backgroundColor: '#F0FDF4' }]}>
+              <Ionicons name="trending-up" size={28} color="#16A34A" />
+            </View>
+            <View>
+              <Text style={s.bigIconLabel}>Avg. Order Value</Text>
+              <Text style={s.bigIconVal}>{money(data.orders.averageOrderValue)}</Text>
             </View>
           </View>
         )}
@@ -993,215 +319,309 @@ const VendorAnalyticsScreen: React.FC = () => {
     );
   };
 
-  const renderPerformanceTab = () => {
-    if (!analytics) return null;
+  // ── Performance tab ───────────────────────────────────────────────────────
 
-    const performanceMetrics = [
-      {
-        icon: 'time',
-        label: 'Avg Response Time',
-        value: `${analytics.performance.responseTime.toFixed(1)}h`,
-        color: '#3b82f6',
-        bgColor: '#dbeafe',
-        percentage: Math.min((24 / (analytics.performance.responseTime || 1)) * 100, 100),
-      },
-      {
-        icon: 'checkmark-circle',
-        label: 'Acceptance Rate',
-        value: `${analytics.performance.acceptanceRate.toFixed(0)}%`,
-        color: '#10b981',
-        bgColor: '#d1fae5',
-        percentage: analytics.performance.acceptanceRate,
-      },
-      {
-        icon: 'flag',
-        label: 'Completion Rate',
-        value: `${analytics.performance.completionRate.toFixed(0)}%`,
-        color: '#8b5cf6',
-        bgColor: '#ede9fe',
-        percentage: analytics.performance.completionRate,
-      },
-      {
-        icon: 'close-circle',
-        label: 'Cancellation Rate',
-        value: `${analytics.performance.cancellationRate.toFixed(0)}%`,
-        color: '#ef4444',
-        bgColor: '#fee2e2',
-        percentage: 100 - analytics.performance.cancellationRate,
-      },
-      {
-        icon: 'rocket',
-        label: 'On-Time Delivery',
-        value: `${analytics.performance.onTimeDeliveryRate.toFixed(0)}%`,
-        color: '#f59e0b',
-        bgColor: '#fef3c7',
-        percentage: analytics.performance.onTimeDeliveryRate,
-      },
-      {
-        icon: 'happy',
-        label: 'Customer Satisfaction',
-        value: `${analytics.performance.customerSatisfactionScore.toFixed(0)}%`,
-        color: '#ec4899',
-        bgColor: '#fce7f3',
-        percentage: analytics.performance.customerSatisfactionScore,
-      },
+  const PerformanceTab = () => {
+    const perf = data?.performance ?? {};
+    const METRICS = [
+      { label: 'Acceptance Rate',       val: pct(perf.acceptanceRate),        pct: perf.acceptanceRate ?? 0,                                     color: '#16A34A', icon: 'checkmark-circle' },
+      { label: 'Completion Rate',       val: pct(perf.completionRate),        pct: perf.completionRate ?? 0,                                     color: '#2563EB', icon: 'flag'             },
+      { label: 'Customer Satisfaction', val: pct(perf.customerSatisfactionScore), pct: perf.customerSatisfactionScore ?? 0,                      color: PINK,      icon: 'happy'            },
+      { label: 'On-Time Delivery',      val: pct(perf.onTimeDeliveryRate),    pct: perf.onTimeDeliveryRate ?? 0,                                 color: '#7C3AED', icon: 'rocket'           },
+      { label: 'Cancellation Rate',     val: pct(perf.cancellationRate),      pct: 100 - (perf.cancellationRate ?? 0),                           color: '#EF4444', icon: 'close-circle'     },
+      { label: 'Avg Response Time',     val: `${(perf.responseTime ?? 0).toFixed(1)}h`, pct: Math.min((24 / (perf.responseTime || 24)) * 100, 100), color: '#D97706', icon: 'time'        },
     ];
 
     return (
-      <View className="px-5" style={{ gap: 16 }}>
-        {performanceMetrics.map((metric, index) => (
-          <View
-            key={index}
-            className="bg-white rounded-3xl p-5"
-            style={{
-              ...Platform.select({
-                ios: {
-                  shadowColor: '#000',
-                  shadowOffset: { width: 0, height: 2 },
-                  shadowOpacity: 0.08,
-                  shadowRadius: 12,
-                },
-                android: { elevation: 4 },
-              }),
-            }}
-          >
-            <View className="flex-row items-center justify-between mb-3">
-              <View className="flex-row items-center flex-1">
-                <View
-                  className="w-12 h-12 rounded-full items-center justify-center mr-3"
-                  style={{ backgroundColor: metric.bgColor }}
-                >
-                  <Ionicons name={metric.icon as any} size={24} color={metric.color} />
+      <View style={s.tabContent}>
+        <View style={[s.card, lift]}>
+          <SectionHeader title="Performance Metrics" />
+          <View style={{ gap: 18 }}>
+            {METRICS.map((m, i) => (
+              <View key={i}>
+                <View style={s.metricHeader}>
+                  <View style={s.metricLeft}>
+                    <View style={[s.metricDot, { backgroundColor: m.color + '20' }]}>
+                      <Ionicons name={m.icon as any} size={14} color={m.color} />
+                    </View>
+                    <Text style={s.metricLabel}>{m.label}</Text>
+                  </View>
+                  <Text style={[s.metricVal, { color: m.color }]}>{m.val}</Text>
                 </View>
-                <View className="flex-1">
-                  <Text className="text-sm text-gray-600 mb-1">{metric.label}</Text>
-                  <Text className="text-2xl font-bold text-gray-900">{metric.value}</Text>
-                </View>
-              </View>
-            </View>
-
-            <View className="bg-gray-200 rounded-full h-3 overflow-hidden">
-              <View
-                className="h-3 rounded-full"
-                style={{
-                  width: `${metric.percentage}%`,
-                  backgroundColor: metric.color,
-                }}
-              />
-            </View>
-          </View>
-        ))}
-
-        {}
-        {analytics.bookings.byStatus && analytics.bookings.byStatus.length > 0 && (
-          <View
-            className="bg-white rounded-3xl p-5"
-            style={{
-              ...Platform.select({
-                ios: {
-                  shadowColor: '#000',
-                  shadowOffset: { width: 0, height: 2 },
-                  shadowOpacity: 0.08,
-                  shadowRadius: 12,
-                },
-                android: { elevation: 4 },
-              }),
-            }}
-          >
-            <Text className="text-lg font-bold text-gray-900 mb-4">Booking Status</Text>
-
-            {analytics.bookings.byStatus.map((status, index) => (
-              <View key={index} className="mb-3">
-                <View className="flex-row items-center justify-between mb-2">
-                  <Text className="text-sm font-medium text-gray-700 capitalize">
-                    {status.status.replace('_', ' ')}
-                  </Text>
-                  <Text className="text-sm font-bold text-gray-900">
-                    {status.count} ({status.percentage.toFixed(0)}%)
-                  </Text>
-                </View>
-                <View className="bg-gray-200 rounded-full h-2">
-                  <View
-                    className="h-2 rounded-full bg-pink-600"
-                    style={{ width: `${status.percentage}%` }}
-                  />
-                </View>
+                <ProgressBar value={m.pct} color={m.color} />
               </View>
             ))}
+          </View>
+        </View>
+
+        {/* Booking status breakdown */}
+        {(data?.bookings?.byStatus ?? []).length > 0 && (
+          <View style={[s.card, lift]}>
+            <SectionHeader title="Booking Status Breakdown" />
+            {data.bookings.byStatus.map((bs: any, i: number) => {
+              const STATUS_COLOR: Record<string, string> = {
+                completed: '#16A34A', pending: '#D97706', cancelled: '#EF4444',
+                confirmed: '#2563EB', in_progress: '#7C3AED', accepted: '#0891B2',
+              };
+              const color = STATUS_COLOR[bs.status] ?? T3;
+              return (
+                <View key={i} style={s.bsRow}>
+                  <View style={[s.bsDot, { backgroundColor: color }]} />
+                  <Text style={s.bsLabel}>{bs.status.replace(/_/g, ' ')}</Text>
+                  <View style={{ flex: 1, marginHorizontal: 10 }}>
+                    <ProgressBar value={bs.percentage} color={color} track="#F5F5F5" />
+                  </View>
+                  <Text style={[s.bsCount, { color }]}>{bs.count}</Text>
+                </View>
+              );
+            })}
+          </View>
+        )}
+
+        {/* Booking rates summary */}
+        {data?.bookings && (
+          <View style={[s.card, lift]}>
+            <SectionHeader title="Booking Summary" />
+            <View style={s.summaryGrid}>
+              {[
+                { label: 'Completed',   val: data.bookings.completed,  color: '#16A34A', bg: '#F0FDF4' },
+                { label: 'Pending',     val: data.bookings.pending,    color: '#D97706', bg: '#FFFBEB' },
+                { label: 'In Progress', val: data.bookings.inProgress, color: '#7C3AED', bg: '#F5F3FF' },
+                { label: 'Cancelled',   val: data.bookings.cancelled,  color: '#EF4444', bg: '#FFF1F2' },
+              ].map((item, i) => (
+                <View key={i} style={[s.summaryCard, { backgroundColor: item.bg }]}>
+                  <Text style={[s.summaryVal, { color: item.color }]}>{fmt(item.val ?? 0)}</Text>
+                  <Text style={s.summaryLabel}>{item.label}</Text>
+                </View>
+              ))}
+            </View>
           </View>
         )}
       </View>
     );
   };
 
-  if (loading && !analytics) {
-    return (
-      <SafeAreaView className="flex-1 bg-gray-50">
-        <View className="flex-1 items-center justify-center">
-          <ActivityIndicator size="large" color="#eb278d" />
-          <Text className="mt-4 text-sm font-medium text-gray-500">Loading analytics...</Text>
-        </View>
-      </SafeAreaView>
-    );
-  }
+  // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <SafeAreaView className="flex-1 bg-gray-50" edges={['top']}>
-      {}
-      <LinearGradient
-        colors={['#eb278d', '#f472b6']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
+    <View style={[s.root, { paddingTop: insets.top }]}>
+      {/* Header */}
+      <View style={s.header}>
+        <TouchableOpacity style={s.hBtn} onPress={() => navigation.goBack()} activeOpacity={0.7}>
+          <Ionicons name="chevron-back" size={20} color={PINK} />
+        </TouchableOpacity>
+        <Text style={s.hTitle}>Analytics</Text>
+        <TouchableOpacity style={s.hBtn} onPress={onRefresh} activeOpacity={0.7} disabled={refreshing}>
+          {refreshing
+            ? <ActivityIndicator size="small" color={PINK} />
+            : <Ionicons name="refresh" size={20} color={PINK} />}
+        </TouchableOpacity>
+      </View>
+
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={PINK} colors={[PINK]} />}
       >
-        <View className="px-5 py-4">
-          <View className="flex-row items-center justify-between">
-            <TouchableOpacity
-              onPress={() => navigation.goBack()}
-              className="h-10 w-10 items-center justify-center rounded-full bg-white/20"
-              activeOpacity={0.7}
-            >
-              <Ionicons name="arrow-back" size={24} color="#fff" />
-            </TouchableOpacity>
-
-            <Text className="text-lg font-bold text-white">Analytics</Text>
-
-            <TouchableOpacity
-              onPress={handleRefresh}
-              className="h-10 w-10 items-center justify-center rounded-full bg-white/20"
-              activeOpacity={0.7}
-              disabled={refreshing}
-            >
-              {refreshing ? (
-                <ActivityIndicator size="small" color="#fff" />
-              ) : (
-                <Ionicons name="refresh" size={24} color="#fff" />
-              )}
-            </TouchableOpacity>
-          </View>
-        </View>
-      </LinearGradient>
-
-      <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
-        {}
-        <View className="py-4">
-          {renderQuickStatsCards()}
+        {/* ── Hero revenue card ── */}
+        <View style={s.heroWrap}>
+          <LinearGradient colors={['#C9306B', '#6C1132']} start={{ x: 0.05, y: 0 }} end={{ x: 0.95, y: 1 }} style={s.heroCard}>
+            <Text style={s.heroWatermark}>₦</Text>
+            <Text style={s.heroLabel}>Total Revenue</Text>
+            <Text style={s.heroAmt}>{money(totalRevenue)}</Text>
+            <View style={s.heroRow}>
+              {[
+                { label: 'Bookings', val: fmt(bookings),      icon: 'calendar'         },
+                { label: 'Orders',   val: fmt(orders),        icon: 'bag'              },
+                { label: 'Rating',   val: rating.toFixed(1),  icon: 'star'             },
+              ].map((h, i) => (
+                <React.Fragment key={h.label}>
+                  <View style={s.heroStat}>
+                    <Ionicons name={h.icon as any} size={14} color="rgba(255,255,255,0.65)" />
+                    <Text style={s.heroStatVal}>{h.val}</Text>
+                    <Text style={s.heroStatLbl}>{h.label}</Text>
+                  </View>
+                  {i < 2 && <View style={s.heroDivider} />}
+                </React.Fragment>
+              ))}
+            </View>
+          </LinearGradient>
         </View>
 
-        {}
-        {renderPeriodSelector()}
+        {/* ── Period pills ── */}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.periodRow}>
+          {PERIODS.map(p => {
+            const on = period === p.value;
+            return (
+              <TouchableOpacity
+                key={p.value}
+                style={[s.periodPill, on && s.periodPillOn]}
+                onPress={() => setPeriod(p.value)}
+                activeOpacity={0.75}
+              >
+                <Text style={[s.periodTxt, on && s.periodTxtOn]}>{p.label}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
 
-        {}
-        {renderTabSelector()}
-
-        {}
-        <View className="py-4 pb-8">
-          {activeTab === 'overview' && renderOverviewTab()}
-          {activeTab === 'revenue' && renderRevenueTab()}
-          {activeTab === 'performance' && renderPerformanceTab()}
+        {/* ── Tab bar ── */}
+        <View style={s.tabBar}>
+          {(['overview', 'revenue', 'performance'] as TabKey[]).map(t => {
+            const on = tab === t;
+            const LABEL: Record<TabKey, string> = { overview: 'Overview', revenue: 'Revenue', performance: 'Performance' };
+            const ICON:  Record<TabKey, string> = { overview: 'analytics-outline', revenue: 'cash-outline', performance: 'trending-up-outline' };
+            return (
+              <TouchableOpacity key={t} style={[s.tabItem, on && s.tabItemOn]} onPress={() => setTab(t)} activeOpacity={0.8}>
+                <Ionicons name={ICON[t] as any} size={16} color={on ? PINK : T3} />
+                <Text style={[s.tabTxt, on && s.tabTxtOn]}>{LABEL[t]}</Text>
+              </TouchableOpacity>
+            );
+          })}
         </View>
+
+        {/* ── Tab content ── */}
+        {tab === 'overview'     && <OverviewTab />}
+        {tab === 'revenue'      && <RevenueTab />}
+        {tab === 'performance'  && <PerformanceTab />}
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 };
+
+// ── Styles ───────────────────────────────────────────────────────────────────
+
+const s = StyleSheet.create({
+  root:        { flex: 1, backgroundColor: BG },
+  loadingTxt:  { marginTop: 12, fontSize: 13, color: T2, fontWeight: '500' },
+
+  header:   { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 10, paddingBottom: 14 },
+  hBtn:     { width: 38, height: 38, borderRadius: 19, backgroundColor: '#FAE8F0', alignItems: 'center', justifyContent: 'center' },
+  hTitle:   { fontSize: 17, fontWeight: '800', color: T1, letterSpacing: -0.4 },
+
+  // hero
+  heroWrap:      { marginHorizontal: 16, marginBottom: 20, borderRadius: 24, ...Platform.select({ ios: { shadowColor: '#7A1040', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.3, shadowRadius: 24 }, android: { elevation: 12 } }) as any },
+  heroCard:      { borderRadius: 24, padding: 22, overflow: 'hidden' },
+  heroWatermark: { position: 'absolute', right: 12, top: -10, fontSize: 120, fontWeight: '900', color: 'rgba(255,255,255,0.05)' },
+  heroLabel:     { fontSize: 12, color: 'rgba(255,255,255,0.65)', fontWeight: '600', marginBottom: 6 },
+  heroAmt:       { fontSize: 36, fontWeight: '900', color: '#fff', letterSpacing: -1, marginBottom: 20 },
+  heroRow:       { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.12)', borderRadius: 16, paddingVertical: 12 },
+  heroStat:      { flex: 1, alignItems: 'center', gap: 3 },
+  heroStatVal:   { fontSize: 16, fontWeight: '800', color: '#fff' },
+  heroStatLbl:   { fontSize: 10, color: 'rgba(255,255,255,0.65)', fontWeight: '600' },
+  heroDivider:   { width: 1, height: 32, backgroundColor: 'rgba(255,255,255,0.2)' },
+
+  // period pills
+  periodRow:  { flexDirection: 'row', gap: 8, paddingHorizontal: 16, paddingBottom: 16 },
+  periodPill: { paddingHorizontal: 18, paddingVertical: 8, borderRadius: 20, backgroundColor: CARD, borderWidth: 1.5, borderColor: '#F0E6EC' },
+  periodPillOn: { backgroundColor: PINK, borderColor: PINK },
+  periodTxt:  { fontSize: 13, fontWeight: '700', color: T2 },
+  periodTxtOn:{ color: '#fff' },
+
+  // tab bar
+  tabBar:    { flexDirection: 'row', marginHorizontal: 16, marginBottom: 20, backgroundColor: CARD, borderRadius: 16, padding: 4, ...Platform.select({ ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8 }, android: { elevation: 2 } }) as any },
+  tabItem:   { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingVertical: 10, borderRadius: 12 },
+  tabItemOn: { backgroundColor: '#FFF0F5' },
+  tabTxt:    { fontSize: 11, fontWeight: '700', color: T3 },
+  tabTxtOn:  { color: PINK },
+
+  // tab content wrapper
+  tabContent: { paddingHorizontal: 16, gap: 16 },
+
+  // generic card
+  card: { backgroundColor: CARD, borderRadius: 20, padding: 18 },
+
+  // section header
+  sectionHead:  { marginBottom: 14 },
+  sectionTitle: { fontSize: 15, fontWeight: '800', color: T1, letterSpacing: -0.2 },
+  sectionSub:   { fontSize: 12, color: T3, marginTop: 2, fontWeight: '500' },
+
+  // progress bar
+  track: { height: 6, borderRadius: 3, overflow: 'hidden' },
+  fill:  { height: 6, borderRadius: 3 },
+
+  // 2×2 grid
+  grid2:     { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+  gridCard:  { width: (SW - 44) / 2, backgroundColor: CARD, borderRadius: 20, padding: 16 },
+  gridIcon:  { width: 44, height: 44, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginBottom: 12 },
+  gridVal:   { fontSize: 26, fontWeight: '900', color: T1, letterSpacing: -0.5, marginBottom: 2 },
+  gridLabel: { fontSize: 12, fontWeight: '700', color: T2, marginBottom: 2 },
+  gridSub:   { fontSize: 11, color: T3 },
+
+  // reviews
+  ratingRow:     { flexDirection: 'row', gap: 16 },
+  ratingLeft:    { alignItems: 'center', gap: 6, marginRight: 4 },
+  bigRating:     { fontSize: 42, fontWeight: '900', color: T1, letterSpacing: -1 },
+  stars:         { flexDirection: 'row', gap: 2 },
+  posPill:       { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 10, marginTop: 4 },
+  posText:       { fontSize: 10, fontWeight: '700' },
+  ratingBarRow:  { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  ratingBarLbl:  { fontSize: 11, color: T2, width: 12, textAlign: 'right', fontWeight: '600' },
+  ratingBarCount:{ fontSize: 11, color: T3, width: 20, textAlign: 'right' },
+
+  // insights
+  insightRow:  { flexDirection: 'row', gap: 10 },
+  insightCard: { flex: 1, borderRadius: 16, padding: 12, alignItems: 'center', gap: 4 },
+  insightVal:  { fontSize: 22, fontWeight: '900', letterSpacing: -0.4 },
+  insightLabel:{ fontSize: 11, color: T2, fontWeight: '600' },
+  insightNote: { fontSize: 10, fontWeight: '700' },
+
+  // revenue sources
+  sourceRow:      { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 14 },
+  sourceIcon:     { width: 34, height: 34, borderRadius: 10, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  sourceLabelRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 },
+  sourceLabel:    { fontSize: 13, fontWeight: '600', color: T1 },
+  sourceVal:      { fontSize: 13, fontWeight: '800' },
+
+  // trend bars
+  trendLabelRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 },
+  trendDate:     { fontSize: 12, color: T2, fontWeight: '600' },
+  trendAmt:      { fontSize: 13, fontWeight: '800', color: T1 },
+  trendBarBg:    { height: 10, backgroundColor: '#F0E6EC', borderRadius: 5, overflow: 'hidden', marginBottom: 4 },
+  trendBarFill:  { height: 10, borderRadius: 5 },
+  trendMeta:     { flexDirection: 'row', justifyContent: 'space-between' },
+  trendMetaTxt:  { fontSize: 10, color: T3 },
+
+  // rank rows
+  rankRow:       { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12 },
+  rankRowBorder: { borderBottomWidth: 1, borderBottomColor: '#F5F5F5' },
+  rankBadge:     { width: 28, height: 28, borderRadius: 8, backgroundColor: '#FFF0F5', alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  rankNum:       { fontSize: 11, fontWeight: '900', color: PINK },
+  rankName:      { fontSize: 14, fontWeight: '700', color: T1, marginBottom: 2 },
+  rankMeta:      { fontSize: 11, color: T3 },
+  rankAmt:       { fontSize: 14, fontWeight: '800', color: PINK },
+
+  // big icon stat
+  bigIconWrap:  { width: 58, height: 58, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
+  bigIconLabel: { fontSize: 12, color: T2, fontWeight: '600', marginBottom: 3 },
+  bigIconVal:   { fontSize: 22, fontWeight: '900', color: T1, letterSpacing: -0.4 },
+
+  // performance metrics
+  metricHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
+  metricLeft:   { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  metricDot:    { width: 28, height: 28, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+  metricLabel:  { fontSize: 13, fontWeight: '600', color: T1 },
+  metricVal:    { fontSize: 15, fontWeight: '900', letterSpacing: -0.3 },
+
+  // booking status
+  bsRow:   { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 12 },
+  bsDot:   { width: 8, height: 8, borderRadius: 4, flexShrink: 0 },
+  bsLabel: { fontSize: 12, fontWeight: '600', color: T1, textTransform: 'capitalize', width: 80 },
+  bsCount: { fontSize: 12, fontWeight: '800', width: 28, textAlign: 'right' },
+
+  // summary grid
+  summaryGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  summaryCard: { width: (SW - 80) / 2, borderRadius: 14, padding: 14, alignItems: 'center' },
+  summaryVal:  { fontSize: 24, fontWeight: '900', letterSpacing: -0.5, marginBottom: 4 },
+  summaryLabel:{ fontSize: 11, fontWeight: '600', color: T2 },
+});
+
+const sc = StyleSheet.create({
+  sectionHead:  { marginBottom: 14 },
+  sectionTitle: { fontSize: 15, fontWeight: '800', color: T1, letterSpacing: -0.2 },
+  sectionSub:   { fontSize: 12, color: T3, marginTop: 2, fontWeight: '500' },
+  track:        { height: 6, borderRadius: 3, overflow: 'hidden' },
+  fill:         { height: 6, borderRadius: 3 },
+});
 
 export default VendorAnalyticsScreen;

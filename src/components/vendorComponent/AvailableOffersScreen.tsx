@@ -1,22 +1,24 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
-  View,
-  Text,
-  TouchableOpacity,
-  ScrollView,
-  ActivityIndicator,
-  RefreshControl,
-  TextInput,
-  Modal,
-  Platform,
+  View, Text, TouchableOpacity, ScrollView, ActivityIndicator,
+  RefreshControl, TextInput, Modal, Platform, StatusBar, StyleSheet,
 } from 'react-native';
 import { toast } from '@/components/ui/Toast';
 import { Ionicons } from '@expo/vector-icons';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { offerAPI, handleAPIError } from '@/api/api';
 import * as Location from 'expo-location';
+
+const BG     = '#FFF5F9';
+const CARD   = '#FFFFFF';
+const PINK   = '#E04079';
+const PRI_DK = '#B5315F';
+const TEXT1  = '#1A1A2E';
+const TEXT2  = '#6B7280';
+const TEXT3  = '#9CA3AF';
+const BORDER = '#F3F4F6';
 
 interface Offer {
   _id: string;
@@ -24,545 +26,328 @@ interface Offer {
   description: string;
   proposedPrice: number;
   status: string;
+  serviceType?: 'home' | 'shop' | 'both';
   createdAt: string;
   expiresAt: string;
-  category: {
-    name: string;
-  };
-  client: {
-    firstName: string;
-    lastName: string;
-  };
-  location: {
-    city: string;
-    state: string;
-  };
+  category: { name: string };
+  client: { firstName: string; lastName: string };
+  location?: { city: string; state: string };
   flexibility: string;
 }
 
+const formatDate = (d: string) =>
+  new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
 const AvailableOffersScreen: React.FC = () => {
-  const navigation = useNavigation();
-  const [loading, setLoading] = useState(true);
+  const navigation = useNavigation<any>();
+  const insets = useSafeAreaInsets();
+
+  const [loading,    setLoading]    = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [offers, setOffers] = useState<Offer[]>([]);
-  const [showRespondModal, setShowRespondModal] = useState(false);
-  const [selectedOffer, setSelectedOffer] = useState<Offer | null>(null);
-  const [responseData, setResponseData] = useState({
-    proposedPrice: '',
-    message: '',
-    estimatedDuration: '',
-  });
+  const [offers,     setOffers]     = useState<Offer[]>([]);
   const [submitting, setSubmitting] = useState(false);
+  const [showModal,  setShowModal]  = useState(false);
+  const [selected,   setSelected]   = useState<Offer | null>(null);
+  const [form, setForm] = useState({ price: '', duration: '', message: '' });
 
   const fetchOffers = async () => {
     try {
       setLoading(true);
-
       const { status } = await Location.requestForegroundPermissionsAsync();
-      let locationParams = {};
-
+      let loc: any = {};
       if (status === 'granted') {
-        const location = await Location.getCurrentPositionAsync({});
-        locationParams = {
-          latitude: location.coords.latitude,
-          longitude: location.coords.longitude,
-          maxDistance: 50,
-        };
+        const pos = await Location.getCurrentPositionAsync({});
+        loc = { latitude: pos.coords.latitude, longitude: pos.coords.longitude, maxDistance: 50 };
       }
-
-      const response = await offerAPI.getAvailableOffers({
-        ...locationParams,
-        page: 1,
-        limit: 50,
-      });
-
-      if (response.success) {
-        const offersData = response.data.offers || response.data || [];
-        setOffers(offersData);
-      }
+      const res = await offerAPI.getAvailableOffers({ ...loc, page: 1, limit: 50 });
+      if (res.success) setOffers(res.data.offers || res.data || []);
     } catch (error) {
-      const apiError = handleAPIError(error);
-      console.error('Error fetching offers:', apiError);
+      handleAPIError(error);
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    fetchOffers();
-  }, []);
-
-  useFocusEffect(
-    useCallback(() => {
-      fetchOffers();
-    }, [])
-  );
+  useFocusEffect(useCallback(() => { fetchOffers(); }, []));
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
     fetchOffers().finally(() => setRefreshing(false));
   }, []);
 
-  const handleRespondToOffer = (offer: Offer) => {
-    setSelectedOffer(offer);
-    setResponseData({
-      proposedPrice: offer.proposedPrice.toString(),
-      message: '',
-      estimatedDuration: '',
-    });
-    setShowRespondModal(true);
+  const openModal = (offer: Offer) => {
+    setSelected(offer);
+    setForm({ price: offer.proposedPrice.toString(), duration: '', message: '' });
+    setShowModal(true);
   };
 
   const submitResponse = async () => {
-    if (!selectedOffer) return;
-
-    if (!responseData.proposedPrice || parseFloat(responseData.proposedPrice) <= 0) {
-      toast.error('Error', 'Please enter a valid price');
-      return;
-    }
-
+    if (!selected) return;
+    const price = parseFloat(form.price);
+    if (!form.price || price <= 0) { toast.error('Error', 'Please enter a valid price'); return; }
     try {
       setSubmitting(true);
-
-      const data = {
-        proposedPrice: parseFloat(responseData.proposedPrice),
-        message: responseData.message || undefined,
-        estimatedDuration: responseData.estimatedDuration
-          ? parseInt(responseData.estimatedDuration)
-          : undefined,
-      };
-
-      const response = await offerAPI.respondToOffer(selectedOffer._id, data);
-
-      if (response.success) {
-        toast.success('Success', 'Your response has been submitted successfully!');
-        setShowRespondModal(false);
+      const res = await offerAPI.respondToOffer(selected._id, {
+        proposedPrice: price,
+        message: form.message || undefined,
+        estimatedDuration: form.duration ? parseInt(form.duration) : undefined,
+      });
+      if (res.success) {
+        toast.success('Success', 'Your proposal has been submitted!');
+        setShowModal(false);
         fetchOffers();
       }
     } catch (error) {
-      const apiError = handleAPIError(error);
-      toast.error('Error', apiError.message);
+      toast.error('Error', handleAPIError(error).message);
     } finally {
       setSubmitting(false);
     }
   };
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-    });
-  };
-
-  const formatPrice = (price: number) => {
-    return `₦${price.toLocaleString()}`;
-  };
-
-  const renderOfferCard = (offer: Offer) => (
-    <TouchableOpacity
-      key={offer._id}
-      className="bg-white rounded-3xl p-5 mb-4"
-      style={{
-        ...Platform.select({
-          ios: {
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: 4 },
-            shadowOpacity: 0.1,
-            shadowRadius: 12,
-          },
-          android: {
-            elevation: 4,
-          },
-        }),
-      }}
-      activeOpacity={0.95}
-    >
-      {}
-      <View className="flex-row items-start justify-between mb-4">
-        <View className="flex-1 mr-3">
-          <Text className="text-lg font-bold text-gray-900 mb-2">{offer.title}</Text>
-          <View className="flex-row items-center">
-            <View className="bg-pink-100 px-3 py-1 rounded-full mr-2">
-              <Text className="text-xs font-bold text-pink-700">{offer.category.name}</Text>
-            </View>
-            <View className="bg-blue-100 px-3 py-1 rounded-full">
-              <Text className="text-xs font-bold text-blue-700 capitalize">{offer.flexibility}</Text>
-            </View>
-          </View>
-        </View>
-      </View>
-
-      {}
-      <Text className="text-sm text-gray-700 mb-4 leading-5" numberOfLines={3}>
-        {offer.description}
-      </Text>
-
-      {}
-      <View className="bg-gray-50 rounded-2xl p-4 mb-4" style={{ gap: 12 }}>
-        <View className="flex-row items-center">
-          <LinearGradient
-            colors={['#eb278d', '#f472b6']}
-            className="w-9 h-9 rounded-xl items-center justify-center mr-3"
-          >
-            <Ionicons name="person" size={18} color="#fff" />
-          </LinearGradient>
-          <View className="flex-1">
-            <Text className="text-xs text-gray-500 mb-0.5 font-medium">Client</Text>
-            <Text className="text-sm font-bold text-gray-900">
-              {offer.client.firstName} {offer.client.lastName}
-            </Text>
-          </View>
-        </View>
-
-        <View className="flex-row items-center">
-          <LinearGradient
-            colors={['#10b981', '#059669']}
-            className="w-9 h-9 rounded-xl items-center justify-center mr-3"
-          >
-            <Ionicons name="cash" size={18} color="#fff" />
-          </LinearGradient>
-          <View className="flex-1">
-            <Text className="text-xs text-gray-500 mb-0.5 font-medium">Budget</Text>
-            <Text className="text-base font-bold text-green-600">
-              {formatPrice(offer.proposedPrice)}
-            </Text>
-          </View>
-        </View>
-
-        <View className="flex-row items-center">
-          <LinearGradient
-            colors={['#3b82f6', '#2563eb']}
-            className="w-9 h-9 rounded-xl items-center justify-center mr-3"
-          >
-            <Ionicons name="location" size={18} color="#fff" />
-          </LinearGradient>
-          <View className="flex-1">
-            <Text className="text-xs text-gray-500 mb-0.5 font-medium">Location</Text>
-            <Text className="text-sm font-bold text-gray-900">
-              {offer.location.city}, {offer.location.state}
-            </Text>
-          </View>
-        </View>
-
-        <View className="flex-row items-center">
-          <LinearGradient
-            colors={['#f59e0b', '#d97706']}
-            className="w-9 h-9 rounded-xl items-center justify-center mr-3"
-          >
-            <Ionicons name="time" size={18} color="#fff" />
-          </LinearGradient>
-          <View className="flex-1">
-            <Text className="text-xs text-gray-500 mb-0.5 font-medium">Expires</Text>
-            <Text className="text-sm font-bold text-gray-900">{formatDate(offer.expiresAt)}</Text>
-          </View>
-        </View>
-      </View>
-
-      {}
-      <View className="flex-row items-center justify-between pt-4 border-t border-gray-100">
-        <Text className="text-xs text-gray-400 font-medium">
-          Posted {formatDate(offer.createdAt)}
-        </Text>
-
-        <TouchableOpacity
-          className="rounded-xl overflow-hidden"
-          onPress={() => handleRespondToOffer(offer)}
-          activeOpacity={0.8}
-        >
-          <LinearGradient
-            colors={['#eb278d', '#f472b6']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            className="px-6 py-2.5"
-            style={{
-              shadowColor: '#eb278d',
-              shadowOffset: { width: 0, height: 4 },
-              shadowOpacity: 0.3,
-              shadowRadius: 6,
-              elevation: 4,
-            }}
-          >
-            <View className="flex-row items-center">
-              <Ionicons name="paper-plane" size={16} color="#fff" />
-              <Text className="text-white font-bold text-sm ml-1.5">Respond</Text>
-            </View>
-          </LinearGradient>
-        </TouchableOpacity>
-      </View>
-    </TouchableOpacity>
-  );
-
   if (loading) {
     return (
-      <SafeAreaView className="flex-1 bg-gray-50">
-        <View className="flex-1 items-center justify-center">
-          <ActivityIndicator size="large" color="#eb278d" />
-          <Text className="text-gray-500 text-sm mt-4 font-medium">Loading offers...</Text>
-        </View>
-      </SafeAreaView>
+      <View style={[s.flex, { backgroundColor: BG, paddingTop: insets.top, alignItems: 'center', justifyContent: 'center' }]}>
+        <StatusBar barStyle="dark-content" backgroundColor={BG} />
+        <ActivityIndicator size="large" color={PINK} />
+      </View>
     );
   }
 
   return (
-    <SafeAreaView className="flex-1 bg-gray-50" edges={['top']}>
-      {}
-      <LinearGradient
-        colors={['#eb278d', '#f472b6']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-      >
-        <View className="px-5 py-4">
-          <View className="flex-row items-center justify-between mb-4">
-            <TouchableOpacity
-              onPress={() => navigation.goBack()}
-              className="w-10 h-10 rounded-full bg-white/20 items-center justify-center"
-              activeOpacity={0.7}
-            >
-              <Ionicons name="arrow-back" size={24} color="#fff" />
-            </TouchableOpacity>
+    <View style={[s.flex, { backgroundColor: BG, paddingTop: insets.top }]}>
+      <StatusBar barStyle="dark-content" backgroundColor={BG} />
 
-            <View className="flex-1 items-center">
-              <Text className="text-xl font-bold text-white">Available Offers</Text>
-              <Text className="text-white/80 text-xs mt-0.5">
-                {offers.length} {offers.length === 1 ? 'offer' : 'offers'} available
-              </Text>
-            </View>
-
-            <TouchableOpacity
-              onPress={() => navigation.navigate('VendorMyResponses')}
-              className="w-10 h-10 rounded-full bg-white/20 items-center justify-center"
-              activeOpacity={0.7}
-            >
-              <Ionicons name="chatbox-ellipses" size={20} color="#fff" />
-            </TouchableOpacity>
-          </View>
-
-          {}
-          <View className="bg-white/20 rounded-2xl p-4">
-            <View className="flex-row items-center justify-between">
-              <View className="flex-1">
-                <Text className="text-white/90 text-xl font-semibold mb-1">Active Offers</Text>
-                <Text className="text-white text-2xl font-bold">{offers.length}</Text>
-              </View>
-              <View className="w-px h-10 bg-black mx-4" />
-             
-            </View>
-          </View>
-        </View>
-      </LinearGradient>
+      {/* Header */}
+      <View style={s.header}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn} activeOpacity={0.7}>
+          <Ionicons name="chevron-back" size={22} color={PINK} />
+        </TouchableOpacity>
+        <Text style={s.headerTitle}>Available Offers</Text>
+        <TouchableOpacity onPress={() => navigation.navigate('VendorMyResponses')} style={s.iconBtn} activeOpacity={0.7}>
+          <Ionicons name="chatbox-ellipses-outline" size={20} color={PINK} />
+        </TouchableOpacity>
+      </View>
 
       <ScrollView
-        className="flex-1"
+        style={s.flex}
         showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            tintColor="#eb278d"
-            colors={['#eb278d']}
-          />
-        }
+        contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 14, paddingBottom: insets.bottom + 90 }}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={PINK} colors={[PINK]} />}
       >
-        <View className="px-5 py-4">
-          {}
-          <View className="bg-blue-50 border border-blue-200 rounded-2xl p-4 mb-4 flex-row">
-            <View className="w-10 h-10 rounded-full bg-blue-100 items-center justify-center mr-3">
-              <Ionicons name="information-circle" size={24} color="#3b82f6" />
-            </View>
-            <Text className="flex-1 text-sm text-blue-900 leading-5 font-medium">
-              These are open offers from clients looking for services. Respond with your best
-              proposal!
-            </Text>
+        {/* Stats banner */}
+        <View style={s.banner}>
+          <View style={{ flex: 1 }}>
+            <Text style={s.bannerLabel}>Open near you</Text>
+            <Text style={s.bannerVal}>{offers.length} {offers.length === 1 ? 'offer' : 'offers'} available</Text>
           </View>
-
-          {offers.length > 0 ? (
-            offers.map((offer) => renderOfferCard(offer))
-          ) : (
-            <View className="flex-1 items-center justify-center py-20 px-8">
-              <LinearGradient
-                colors={['#fce7f3', '#fdf2f8']}
-                className="w-32 h-32 rounded-full items-center justify-center mb-6"
-              >
-                <Ionicons name="pricetag-outline" size={64} color="#eb278d" />
-              </LinearGradient>
-              <Text className="text-xl font-bold text-gray-900 mb-2 text-center">
-                No Offers Available
-              </Text>
-              <Text className="text-gray-600 text-center text-sm leading-5">
-                Check back later for new offers from clients seeking your services
-              </Text>
-            </View>
-          )}
+          <View style={s.bannerIcon}>
+            <Ionicons name="pricetag" size={28} color="rgba(255,255,255,0.9)" />
+          </View>
         </View>
+
+        {/* Empty */}
+        {offers.length === 0 ? (
+          <View style={s.empty}>
+            <LinearGradient colors={[PINK, PRI_DK]} style={s.emptyIcon}>
+              <Ionicons name="pricetag" size={38} color="#fff" />
+            </LinearGradient>
+            <Text style={s.emptyTitle}>No Offers Available</Text>
+            <Text style={s.emptyTxt}>Check back later for new requests from clients near you</Text>
+          </View>
+        ) : (
+          offers.map(offer => (
+            <TouchableOpacity
+              key={offer._id}
+              style={s.card}
+              onPress={() => openModal(offer)}
+              activeOpacity={0.85}
+            >
+              <LinearGradient colors={[PINK, PRI_DK]} style={s.cardIcon}>
+                <Text style={s.cardIconText}>
+                  {(offer.client.firstName).charAt(0).toUpperCase()}
+                </Text>
+              </LinearGradient>
+
+              <View style={s.cardMid}>
+                <Text style={s.cardTitle} numberOfLines={1}>{offer.title}</Text>
+                <Text style={s.cardSub} numberOfLines={1}>
+                  {offer.client.firstName} {offer.client.lastName} · {offer.category.name}
+                </Text>
+                <Text style={s.cardMeta}>
+                  {offer.location ? `${offer.location.city} · ` : ''}Exp {formatDate(offer.expiresAt)}
+                </Text>
+              </View>
+
+              <View style={s.cardRight}>
+                <Text style={s.cardPrice}>₦{offer.proposedPrice.toLocaleString()}</Text>
+                <Text style={s.cardPriceSub}>budget</Text>
+              </View>
+            </TouchableOpacity>
+          ))
+        )}
       </ScrollView>
 
-      {}
-      <Modal visible={showRespondModal} transparent animationType="slide">
-        <View className="flex-1 bg-black/50 justify-end">
-          <View className="bg-white rounded-t-3xl" style={{ maxHeight: '85%' }}>
-            {}
-            <LinearGradient
-              colors={['#eb278d', '#f472b6']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              className="rounded-t-3xl px-6 py-5"
-            >
-              <View className="flex-row items-center justify-between">
-                <View className="flex-1">
-                  <Text className="text-xl font-bold text-white mb-1">Submit Your Proposal</Text>
-                  <Text className="text-white/80 text-xs">Make your best offer to win this job</Text>
-                </View>
-                <TouchableOpacity
-                  onPress={() => setShowRespondModal(false)}
-                  className="w-10 h-10 rounded-full bg-white/20 items-center justify-center"
-                  activeOpacity={0.7}
-                >
-                  <Ionicons name="close" size={24} color="#fff" />
-                </TouchableOpacity>
+      {/* Respond modal */}
+      <Modal visible={showModal} transparent animationType="slide">
+        <View style={s.overlay}>
+          <View style={[s.sheet, { paddingBottom: insets.bottom + 20 }]}>
+            <View style={s.sheetHeader}>
+              <View style={s.flex}>
+                <Text style={s.sheetTitle}>Submit Proposal</Text>
+                {selected && <Text style={s.sheetSub} numberOfLines={1}>{selected.title}</Text>}
               </View>
-            </LinearGradient>
+              <TouchableOpacity onPress={() => setShowModal(false)} style={s.sheetClose} activeOpacity={0.7}>
+                <Ionicons name="close" size={20} color={TEXT2} />
+              </TouchableOpacity>
+            </View>
 
-            <ScrollView className="px-6 py-5" showsVerticalScrollIndicator={false}>
-              {selectedOffer && (
-                <View className="bg-gray-50 rounded-2xl p-4 mb-6">
-                  <Text className="text-base font-bold text-gray-900 mb-2">
-                    {selectedOffer.title}
-                  </Text>
-                  <View className="flex-row items-center">
-                    <Ionicons name="cash" size={16} color="#10b981" />
-                    <Text className="text-sm text-gray-600 ml-2">
-                      Client Budget:{' '}
-                      <Text className="font-bold text-green-600">
-                        {formatPrice(selectedOffer.proposedPrice)}
-                      </Text>
-                    </Text>
-                  </View>
-                </View>
-              )}
+            {selected && (
+              <View style={s.budgetNote}>
+                <Ionicons name="information-circle-outline" size={16} color={PINK} />
+                <Text style={s.budgetNoteTxt}>Client budget: <Text style={{ fontWeight: '800', color: PINK }}>₦{selected.proposedPrice.toLocaleString()}</Text></Text>
+              </View>
+            )}
 
-              {}
-              <View className="mb-5">
-                <Text className="text-sm font-bold text-gray-900 mb-2">
-                  Your Price (₦) <Text className="text-pink-600">*</Text>
-                </Text>
-                <View className="flex-row items-center border-2 border-gray-200 rounded-xl px-4 bg-white">
-                  <View className="w-9 h-9 rounded-lg bg-green-100 items-center justify-center mr-3">
-                    <Ionicons name="cash" size={20} color="#10b981" />
-                  </View>
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ gap: 14, paddingBottom: 4 }}>
+              <View style={s.formGroup}>
+                <Text style={s.formLabel}>Your Price (₦) <Text style={{ color: PINK }}>*</Text></Text>
+                <View style={s.formInput}>
+                  <Text style={s.formPrefix}>₦</Text>
                   <TextInput
-                    className="flex-1 py-4 text-base text-gray-900 font-semibold"
-                    placeholder="Enter your price"
-                    placeholderTextColor="#9ca3af"
-                    value={responseData.proposedPrice}
-                    onChangeText={(text) =>
-                      setResponseData({
-                        ...responseData,
-                        proposedPrice: text.replace(/[^0-9]/g, ''),
-                      })
-                    }
+                    style={s.formInputText}
+                    placeholder="0"
+                    placeholderTextColor={BORDER}
+                    value={form.price}
+                    onChangeText={t => setForm({ ...form, price: t.replace(/[^0-9]/g, '') })}
                     keyboardType="numeric"
                   />
                 </View>
               </View>
 
-              {}
-              <View className="mb-5">
-                <Text className="text-sm font-bold text-gray-900 mb-2">
-                  Estimated Duration (minutes)
-                </Text>
-                <View className="flex-row items-center border-2 border-gray-200 rounded-xl px-4 bg-white">
-                  <View className="w-9 h-9 rounded-lg bg-blue-100 items-center justify-center mr-3">
-                    <Ionicons name="time" size={20} color="#3b82f6" />
-                  </View>
+              <View style={s.formGroup}>
+                <Text style={s.formLabel}>Est. Duration (mins)</Text>
+                <View style={s.formInput}>
+                  <Ionicons name="time-outline" size={18} color={TEXT3} style={{ marginRight: 10 }} />
                   <TextInput
-                    className="flex-1 py-4 text-base text-gray-900 font-semibold"
-                    placeholder="e.g., 60"
-                    placeholderTextColor="#9ca3af"
-                    value={responseData.estimatedDuration}
-                    onChangeText={(text) =>
-                      setResponseData({
-                        ...responseData,
-                        estimatedDuration: text.replace(/[^0-9]/g, ''),
-                      })
-                    }
+                    style={s.formInputText}
+                    placeholder="e.g. 60"
+                    placeholderTextColor={TEXT3}
+                    value={form.duration}
+                    onChangeText={t => setForm({ ...form, duration: t.replace(/[^0-9]/g, '') })}
                     keyboardType="numeric"
                   />
                 </View>
               </View>
 
-              {}
-              <View className="mb-6">
-                <Text className="text-sm font-bold text-gray-900 mb-2">
-                  Message <Text className="text-gray-400">(Optional)</Text>
-                </Text>
-                <View className="border-2 border-gray-200 rounded-xl p-4 bg-white">
-                  <TextInput
-                    className="text-base text-gray-900 min-h-[100px]"
-                    placeholder="Tell the client why you're the best fit for this job..."
-                    placeholderTextColor="#9ca3af"
-                    value={responseData.message}
-                    onChangeText={(text) =>
-                      setResponseData({
-                        ...responseData,
-                        message: text,
-                      })
-                    }
-                    multiline
-                    numberOfLines={4}
-                    textAlignVertical="top"
-                  />
-                </View>
+              <View style={s.formGroup}>
+                <Text style={s.formLabel}>Message <Text style={{ color: TEXT3 }}>(optional)</Text></Text>
+                <TextInput
+                  style={s.formTextarea}
+                  placeholder="Tell the client why you're the best fit…"
+                  placeholderTextColor={TEXT3}
+                  value={form.message}
+                  onChangeText={t => setForm({ ...form, message: t })}
+                  multiline
+                  numberOfLines={4}
+                  textAlignVertical="top"
+                />
               </View>
             </ScrollView>
 
-            {}
-            <View className="px-6 pb-6 pt-4 border-t border-gray-100" style={{ gap: 12 }}>
-              <TouchableOpacity
-                className="bg-gray-100 py-4 rounded-xl items-center"
-                onPress={() => setShowRespondModal(false)}
-                disabled={submitting}
-                activeOpacity={0.8}
-              >
-                <Text className="text-gray-700 font-bold text-base">Cancel</Text>
+            <View style={s.sheetActions}>
+              <TouchableOpacity style={[s.flex, s.cancelBtn]} onPress={() => setShowModal(false)} disabled={submitting} activeOpacity={0.7}>
+                <Text style={s.cancelBtnTxt}>Cancel</Text>
               </TouchableOpacity>
-
-              <TouchableOpacity
-                className="rounded-xl overflow-hidden"
-                onPress={submitResponse}
-                disabled={submitting}
-                activeOpacity={0.8}
-              >
-                <LinearGradient
-                  colors={['#eb278d', '#f472b6']}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  className="py-4 items-center"
-                  style={{
-                    shadowColor: '#eb278d',
-                    shadowOffset: { width: 0, height: 4 },
-                    shadowOpacity: 0.3,
-                    shadowRadius: 8,
-                    elevation: 4,
-                  }}
-                >
-                  {submitting ? (
-                    <ActivityIndicator color="#fff" />
-                  ) : (
-                    <View className="flex-row items-center">
-                      <Ionicons name="send" size={20} color="#fff" />
-                      <Text className="text-white font-bold text-base ml-2">Submit Proposal</Text>
-                    </View>
-                  )}
+              <TouchableOpacity style={s.flex} onPress={submitResponse} disabled={submitting} activeOpacity={0.85}>
+                <LinearGradient colors={[PINK, PRI_DK]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={s.submitBtn}>
+                  {submitting ? <ActivityIndicator color="#fff" size="small" /> : <Text style={s.submitBtnTxt}>Submit</Text>}
                 </LinearGradient>
               </TouchableOpacity>
             </View>
           </View>
         </View>
       </Modal>
-    </SafeAreaView>
+    </View>
   );
 };
+
+const s = StyleSheet.create({
+  flex: { flex: 1 },
+
+  header: {
+    flexDirection: 'row', alignItems: 'center',
+    justifyContent: 'space-between', paddingHorizontal: 20,
+    paddingTop: 10, paddingBottom: 14,
+  },
+  backBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#FEE2EF', alignItems: 'center', justifyContent: 'center' },
+  iconBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#FEE2EF', alignItems: 'center', justifyContent: 'center' },
+  headerTitle: { fontSize: 17, fontWeight: '800', color: TEXT1, letterSpacing: -0.3 },
+
+  banner: {
+    borderRadius: 18, padding: 18, flexDirection: 'row', alignItems: 'center',
+    backgroundColor: PINK, marginBottom: 16,
+    ...Platform.select({
+      ios: { shadowColor: PINK, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.25, shadowRadius: 14 },
+      android: { elevation: 6 },
+    }),
+  },
+  bannerLabel: { fontSize: 11, color: 'rgba(255,255,255,0.75)', fontWeight: '600', marginBottom: 4 },
+  bannerVal: { fontSize: 18, fontWeight: '800', color: '#fff', letterSpacing: -0.3 },
+  bannerIcon: { opacity: 0.7 },
+
+  card: {
+    backgroundColor: CARD, borderRadius: 16, padding: 14, marginBottom: 10,
+    flexDirection: 'row', alignItems: 'center',
+    ...Platform.select({
+      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 10 },
+      android: { elevation: 2 },
+    }),
+  },
+  cardIcon: { width: 46, height: 46, borderRadius: 14, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  cardIconText: { color: '#fff', fontSize: 18, fontWeight: '800' },
+  cardMid: { flex: 1, marginLeft: 12, marginRight: 8 },
+  cardTitle: { fontSize: 14, fontWeight: '700', color: TEXT1, marginBottom: 2 },
+  cardSub: { fontSize: 12, color: TEXT2, fontWeight: '500', marginBottom: 3 },
+  cardMeta: { fontSize: 11, color: TEXT3 },
+  cardRight: { alignItems: 'flex-end' },
+  cardPrice: { fontSize: 14, fontWeight: '800', color: PINK },
+  cardPriceSub: { fontSize: 10, color: TEXT3, fontWeight: '500', marginTop: 2 },
+
+  empty: { alignItems: 'center', paddingTop: 64, paddingHorizontal: 32 },
+  emptyIcon: { width: 84, height: 84, borderRadius: 26, alignItems: 'center', justifyContent: 'center', marginBottom: 18 },
+  emptyTitle: { fontSize: 18, fontWeight: '800', color: TEXT1, marginBottom: 8, letterSpacing: -0.3 },
+  emptyTxt: { fontSize: 13, color: TEXT2, textAlign: 'center', lineHeight: 20 },
+
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  sheet: { backgroundColor: CARD, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingTop: 20, maxHeight: '88%' },
+  sheetHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 6 },
+  sheetTitle: { fontSize: 18, fontWeight: '800', color: TEXT1 },
+  sheetSub: { fontSize: 12, color: TEXT2, marginTop: 2 },
+  sheetClose: { width: 34, height: 34, borderRadius: 10, backgroundColor: BORDER, alignItems: 'center', justifyContent: 'center' },
+
+  budgetNote: { flexDirection: 'row', alignItems: 'center', gap: 7, backgroundColor: '#FFF0F7', borderRadius: 10, padding: 10, marginBottom: 14 },
+  budgetNoteTxt: { fontSize: 13, color: TEXT2 },
+
+  formGroup: { gap: 6 },
+  formLabel: { fontSize: 13, fontWeight: '700', color: TEXT1 },
+  formInput: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: '#F9FAFB', borderWidth: 1.5, borderColor: BORDER,
+    borderRadius: 13, paddingHorizontal: 14, paddingVertical: 4,
+  },
+  formPrefix: { fontSize: 18, fontWeight: '700', color: TEXT2, paddingVertical: 12, marginRight: 4 },
+  formInputText: { flex: 1, fontSize: 16, color: TEXT1, fontWeight: '600', paddingVertical: 12 },
+  formTextarea: {
+    backgroundColor: '#F9FAFB', borderWidth: 1.5, borderColor: BORDER,
+    borderRadius: 13, paddingHorizontal: 14, paddingVertical: 12,
+    fontSize: 14, color: TEXT1, minHeight: 90,
+  },
+
+  sheetActions: { flexDirection: 'row', gap: 12, paddingTop: 16, borderTopWidth: 1, borderTopColor: BORDER, marginTop: 4 },
+  cancelBtn: { backgroundColor: BORDER, borderRadius: 14, alignItems: 'center', justifyContent: 'center', paddingVertical: 14 },
+  cancelBtnTxt: { fontSize: 15, fontWeight: '700', color: TEXT2 },
+  submitBtn: { borderRadius: 14, alignItems: 'center', justifyContent: 'center', paddingVertical: 14 },
+  submitBtnTxt: { color: '#fff', fontSize: 15, fontWeight: '700' },
+});
 
 export default AvailableOffersScreen;

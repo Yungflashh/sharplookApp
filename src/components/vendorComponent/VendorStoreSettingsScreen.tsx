@@ -21,6 +21,7 @@ import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import { vendorAPI, userAPI, categoriesAPI } from '@/api/api';
+import socketService from '@/services/socket.service';
 import { getStoredUser } from '@/utils/authHelper';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import LocationPicker from '@/screens/auth/components/LocationPicker';
@@ -55,7 +56,7 @@ interface DocumentsData {
 
 const VendorStoreSettingsScreen: React.FC = () => {
   const navigation = useNavigation();
-  const { top } = useSafeAreaInsets();
+  const { top, bottom } = useSafeAreaInsets();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [loadingCategories, setLoadingCategories] = useState(false);
@@ -109,6 +110,15 @@ const VendorStoreSettingsScreen: React.FC = () => {
     loadData();
     checkLocationPermission();
     requestMediaLibraryPermission();
+    socketService.onKycStatusChanged((data) => {
+      setKycStatus(data.kycStatus);
+      if (data.kycStatus === 'approved') {
+        toast.success('KYC Approved', 'Your identity is verified. Documents are now locked for security.');
+      } else if (data.kycStatus === 'rejected') {
+        toast.error('KYC Rejected', data.rejectionReason ?? 'Please re-upload valid documents.');
+      }
+    });
+    return () => { socketService.removeListener('kyc:status:changed'); };
   }, []);
 
   const requestMediaLibraryPermission = async () => {
@@ -649,7 +659,7 @@ const VendorStoreSettingsScreen: React.FC = () => {
         <View style={{ width: 36 }} />
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 32 }}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: bottom + 32 }}>
 
         {/* ── Cover + Avatar ─────────────────────────────────────────────── */}
         <View style={ss.coverWrap}>
