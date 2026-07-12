@@ -17,7 +17,7 @@ import {
   StatusBar,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation, useRoute, RouteProp, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -631,13 +631,13 @@ const ChatDetailScreen: React.FC = () => {
   // ── Loading ────────────────────────────────────────────────────────────────
   if (loading) {
     return (
-      <SafeAreaView style={{ flex: 1, backgroundColor: BRAND.surface }}>
+      <View style={{ flex: 1, backgroundColor: BRAND.surface, paddingTop: insets.top }}>
         <StatusBar barStyle="dark-content" />
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
           <ActivityIndicator size="large" color={BRAND.primary} />
           <Text style={{ color: BRAND.textMuted, fontSize: 14, marginTop: 12, fontWeight: '500' }}>Loading messages…</Text>
         </View>
-      </SafeAreaView>
+      </View>
     );
   }
 
@@ -648,7 +648,7 @@ const ChatDetailScreen: React.FC = () => {
 
   // ─────────────────────────────────────────────────────────────────────────
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: BRAND.chatBg }} edges={['top', 'bottom']}>
+    <View style={{ flex: 1, backgroundColor: BRAND.chatBg }}>
       <StatusBar barStyle="light-content" backgroundColor={BRAND.primary} />
 
       <KeyboardAvoidingView
@@ -663,7 +663,7 @@ const ChatDetailScreen: React.FC = () => {
           end={{ x: 1, y: 0 }}
           style={{
             paddingHorizontal: 12,
-            paddingTop: 8,
+            paddingTop: insets.top + 8,
             paddingBottom: 12,
             ...Platform.select({
               ios: { shadowColor: BRAND.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8 },
@@ -913,7 +913,7 @@ const ChatDetailScreen: React.FC = () => {
             borderTopColor: BRAND.border,
             paddingHorizontal: 12,
             paddingTop: 10,
-            paddingBottom: 10,
+            paddingBottom: Math.max(insets.bottom, 10),
             ...Platform.select({
               ios: { shadowColor: '#000', shadowOffset: { width: 0, height: -3 }, shadowOpacity: 0.05, shadowRadius: 8 },
               android: { elevation: 8 },
@@ -1031,7 +1031,7 @@ const ChatDetailScreen: React.FC = () => {
         onPickVideo={handlePickVideo}
         onPickDocument={handlePickDocument}
       />
-    </SafeAreaView>
+    </View>
   );
 };
 

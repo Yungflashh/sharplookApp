@@ -1,8 +1,9 @@
 import { io, Socket } from 'socket.io-client';
 import { getStoredToken } from '@/utils/authHelper';
 
-const SOCKET_URL='https://sharplook-backend-production.onrender.com';
-// const SOCKET_URL = 'http://10.195.125.66:5500';
+const SOCKET_URL = __DEV__
+  ? 'http://10.132.192.66:5500'
+  : 'https://sharplook-backend-production.onrender.com';
 
 class SocketService {
   private socket: Socket | null = null;
@@ -631,6 +632,38 @@ class SocketService {
           }
         });
       }
+    });
+  }
+
+  onNewOffer(callback: (data: {
+    offerId: string;
+    title: string;
+    proposedPrice: number;
+    clientName: string;
+    timestamp: string;
+  }) => void): void {
+    if (!this.socket) {
+      this.pendingListeners.push({ event: 'offer:new', callback });
+      return;
+    }
+    this.socket.on('offer:new', (data) => {
+      console.log('📥 RECEIVED offer:new:', JSON.stringify(data, null, 2));
+      callback(data);
+    });
+  }
+
+  onKycStatusChanged(callback: (data: {
+    kycStatus: 'approved' | 'rejected' | 'pending' | 'not_submitted';
+    rejectionReason?: string;
+    message: string;
+  }) => void): void {
+    if (!this.socket) {
+      this.pendingListeners.push({ event: 'kyc:status:changed', callback });
+      return;
+    }
+    this.socket.on('kyc:status:changed', (data) => {
+      console.log('📥 RECEIVED kyc:status:changed:', JSON.stringify(data, null, 2));
+      callback(data);
     });
   }
 
