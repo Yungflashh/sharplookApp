@@ -1,58 +1,52 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
-  View,
-  Text,
-  TouchableOpacity,
-  ScrollView,
-  TextInput,
-  ActivityIndicator,
-  Platform,
-  Modal,
-  StatusBar,
+  View, Text, TouchableOpacity, ScrollView,
+  TextInput, ActivityIndicator, Platform, StatusBar, Image,
+  Modal, Keyboard, KeyboardAvoidingView,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useNavigation, useFocusEffect, CommonActions } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { RootStackParamList } from '@/types/navigation.types';
+import { orderAPI, cartAPI, handleAPIError, userAPI, sharpPayAPI, paymentAPI, walletAPI } from '@/api/api';
 import { toast } from '@/components/ui/Toast';
 import ConfirmationModal from '@/components/ConfirmationModal';
-import { Ionicons } from '@expo/vector-icons';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { LinearGradient } from 'expo-linear-gradient';
-import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import * as Location from 'expo-location';
-import { RootStackParamList } from '@/types/navigation.types';
-import { orderAPI, cartAPI, handleAPIError, userAPI, sharpPayAPI, paymentAPI } from '@/api/api';
+import LocationPickerModal, { LocationResult } from '@/components/LocationPickerModal';
 
-// ─── Brand Tokens ─────────────────────────────────────────────────────────────
-const BRAND = {
-  primary: '#E04079',
-  primaryDark: '#B5315F',
-  primaryLight: '#F08BAC',
-  primarySoft: '#FEF0F5',
-  primaryMuted: '#FCDCE9',
-  blue: '#3B82F6',
-  blueSoft: '#DBEAFE',
-  blueDark: '#1D4ED8',
-  green: '#10B981',
-  greenSoft: '#D1FAE5',
-  gold: '#F59E0B',
-  goldSoft: '#FEF3C7',
-  orange: '#F97316',
-  orangeSoft: '#FFEDD5',
-  red: '#EF4444',
-  redSoft: '#FEE2E2',
-  purple: '#8B5CF6',
-  purpleSoft: '#EDE9FE',
-  surface: '#FFFFFF',
-  surfaceAlt: '#F9FAFB',
-  border: '#F3F4F6',
-  borderStrong: '#E5E7EB',
-  textPrimary: '#111827',
-  textSecondary: '#6B7280',
-  textMuted: '#9CA3AF',
-};
+// ─── Tokens ───────────────────────────────────────────────────────────────────
+const PRIMARY   = '#E04079';
+const PRI_DARK  = '#B5315F';
+const PRI_SOFT  = '#FEF0F5';
+const PRI_MUTED = '#FCDCE9';
+const GREEN     = '#10B981';
+const GREEN_SOFT= '#D1FAE5';
+const TEXT1     = '#111827';
+const TEXT2     = '#6B7280';
+const TEXT3     = '#9CA3AF';
+const BORDER    = '#F3F4F6';
+const SURFACE   = '#FFFFFF';
+const BG        = '#FFF5F9';
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+const STEP_LABELS = ['Cart', 'Delivery', 'Review', 'Payment'];
+
 type Nav = NativeStackNavigationProp<RootStackParamList, 'Checkout'>;
-type RouteP = RouteProp<RootStackParamList, 'Checkout'>;
+
+interface CartItem {
+  product: {
+    _id: string;
+    name: string;
+    images: string[];
+    price: number;
+    finalPrice: number;
+    stock: number;
+    category?: { _id: string; name: string };
+    seller: { _id: string; firstName: string; lastName: string };
+  };
+  quantity: number;
+  selectedVariant?: { name: string; option: string };
+}
 
 interface DeliveryAddress {
   fullName: string;
@@ -65,119 +59,36 @@ interface DeliveryAddress {
   coordinates?: [number, number];
 }
 
-interface DeliveryFeeInfo {
-  distance: number;
-  deliveryFee: number;
-  estimatedDeliveryTime: string;
-  canDeliver: boolean;
-  message?: string;
-}
-
-// ─── Sub-components ───────────────────────────────────────────────────────────
-
-/** Labelled text field */
-const Field: React.FC<{
-  label: string;
-  required?: boolean;
-  children: React.ReactNode;
-}> = ({ label, required, children }) => (
-  <View>
-    <Text
-      style={{
-        fontSize: 12,
-        fontWeight: '700',
-        color: BRAND.textSecondary,
-        letterSpacing: 0.4,
-        textTransform: 'uppercase',
-        marginBottom: 7,
-      }}
-    >
-      {label}
-      {required && (
-        <Text style={{ color: BRAND.primary }}> *</Text>
-      )}
-    </Text>
-    {children}
-  </View>
-);
-
-/** Styled text input */
-const StyledInput: React.FC<{
+// ─── Small components ─────────────────────────────────────────────────────────
+const IconInput: React.FC<{
+  icon: keyof typeof Ionicons.glyphMap;
   placeholder: string;
   value: string;
   onChangeText: (t: string) => void;
   keyboardType?: any;
-  multiline?: boolean;
-  numberOfLines?: number;
-  maxLength?: number;
   hasError?: boolean;
-}> = ({ hasError, ...props }) => (
-  <TextInput
-    style={{
-      backgroundColor: BRAND.surfaceAlt,
-      borderWidth: 1.5,
-      borderColor: hasError ? BRAND.red : BRAND.border,
-      borderRadius: 12,
-      paddingHorizontal: 14,
-      paddingVertical: Platform.OS === 'ios' ? 12 : 10,
-      fontSize: 14,
-      color: BRAND.textPrimary,
-      textAlignVertical: props.multiline ? 'top' : 'center',
-    }}
-    placeholderTextColor={BRAND.textMuted}
-    autoCorrect={false}
-    {...props}
-  />
-);
-
-/** Section wrapper card */
-const Section: React.FC<{ title: string; icon: keyof typeof Ionicons.glyphMap; children: React.ReactNode; action?: React.ReactNode }> = ({
-  title,
-  icon,
-  children,
-  action,
-}) => (
-  <View
-    style={{
-      backgroundColor: BRAND.surface,
-      borderRadius: 20,
-      padding: 18,
-      marginBottom: 14,
-      borderWidth: 1,
-      borderColor: BRAND.border,
-      ...Platform.select({
-        ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8 },
-        android: { elevation: 2 },
-      }),
-    }}
-  >
-    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-        <View
-          style={{
-            width: 30,
-            height: 30,
-            borderRadius: 9,
-            backgroundColor: BRAND.primarySoft,
-            alignItems: 'center',
-            justifyContent: 'center',
-            marginRight: 10,
-          }}
-        >
-          <Ionicons name={icon} size={15} color={BRAND.primary} />
-        </View>
-        <Text style={{ fontSize: 16, fontWeight: '800', color: BRAND.textPrimary, letterSpacing: -0.2 }}>
-          {title}
-        </Text>
-      </View>
-      {action}
-    </View>
-    {children}
+}> = ({ icon, placeholder, value, onChangeText, keyboardType, hasError }) => (
+  <View style={{
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: SURFACE, borderRadius: 12,
+    borderWidth: 1.5, borderColor: hasError ? PRIMARY : BORDER,
+    paddingHorizontal: 14, paddingVertical: Platform.OS === 'ios' ? 13 : 10,
+    marginBottom: 12,
+  }}>
+    <Ionicons name={icon} size={17} color={TEXT3} style={{ marginRight: 10 }} />
+    <TextInput
+      style={{ flex: 1, fontSize: 14, color: TEXT1, paddingVertical: 0 }}
+      placeholder={placeholder}
+      placeholderTextColor={TEXT3}
+      value={value}
+      onChangeText={onChangeText}
+      keyboardType={keyboardType}
+      autoCorrect={false}
+    />
   </View>
 );
 
-/** Delivery method option */
-const DeliveryOption: React.FC<{
+const DeliveryMethodCard: React.FC<{
   icon: keyof typeof Ionicons.glyphMap;
   title: string;
   subtitle: string;
@@ -188,51 +99,22 @@ const DeliveryOption: React.FC<{
     onPress={onPress}
     activeOpacity={0.8}
     style={{
-      flexDirection: 'row',
-      alignItems: 'center',
-      padding: 14,
-      borderRadius: 14,
-      borderWidth: 1.5,
-      borderColor: selected ? BRAND.primary : BRAND.border,
-      backgroundColor: selected ? BRAND.primarySoft : BRAND.surfaceAlt,
-      marginBottom: 10,
+      flexDirection: 'row', alignItems: 'center',
+      backgroundColor: selected ? PRI_SOFT : SURFACE,
+      borderRadius: 14, borderWidth: 1.5,
+      borderColor: selected ? PRIMARY : BORDER,
+      padding: 14, marginBottom: 10,
     }}
   >
-    <View
-      style={{
-        width: 44,
-        height: 44,
-        borderRadius: 13,
-        backgroundColor: selected ? BRAND.primaryMuted : BRAND.border,
-        alignItems: 'center',
-        justifyContent: 'center',
-        marginRight: 12,
-      }}
-    >
-      <Ionicons name={icon} size={22} color={selected ? BRAND.primary : BRAND.textSecondary} />
+    <View style={{ width: 44, height: 44, borderRadius: 12, backgroundColor: selected ? PRI_MUTED : BORDER, alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
+      <Ionicons name={icon} size={22} color={selected ? PRIMARY : TEXT2} />
     </View>
-
     <View style={{ flex: 1 }}>
-      <Text style={{ fontSize: 14, fontWeight: '700', color: BRAND.textPrimary, marginBottom: 2 }}>
-        {title}
-      </Text>
-      <Text style={{ fontSize: 12, color: BRAND.textSecondary, fontWeight: '400' }}>{subtitle}</Text>
+      <Text style={{ fontSize: 14, fontWeight: '700', color: TEXT1, marginBottom: 2 }}>{title}</Text>
+      <Text style={{ fontSize: 12, color: TEXT2 }}>{subtitle}</Text>
     </View>
-
-    {/* Radio dot */}
-    <View
-      style={{
-        width: 22,
-        height: 22,
-        borderRadius: 11,
-        borderWidth: 2,
-        borderColor: selected ? BRAND.primary : BRAND.borderStrong,
-        backgroundColor: selected ? BRAND.primary : 'transparent',
-        alignItems: 'center',
-        justifyContent: 'center',
-      }}
-    >
-      {selected && <Ionicons name="checkmark" size={13} color="#fff" />}
+    <View style={{ width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: selected ? PRIMARY : BORDER, backgroundColor: selected ? PRIMARY : 'transparent', alignItems: 'center', justifyContent: 'center' }}>
+      {selected && <Ionicons name="checkmark" size={12} color="#fff" />}
     </View>
   </TouchableOpacity>
 );
@@ -240,957 +122,630 @@ const DeliveryOption: React.FC<{
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 const CheckoutScreen: React.FC = () => {
   const navigation = useNavigation<Nav>();
-  const route = useRoute<RouteP>();
-  const { cartItems } = route.params;
-  const insets = useSafeAreaInsets();
+  const insets     = useSafeAreaInsets();
 
-  const [loading, setLoading] = useState(false);
+  // step: 0=Delivery, 1=Review, 2=Payment
+  const [step, setStep] = useState(0);
+
+  // Cart
+  const [cartItems, setCartItems]   = useState<CartItem[]>([]);
+  const [cartLoading, setCartLoading] = useState(true);
+
+  // Delivery
   const [deliveryType, setDeliveryType] = useState<'home_delivery' | 'pickup'>('home_delivery');
-  const [customerNotes, setCustomerNotes] = useState('');
-
-  const [locationLoading, setLocationLoading] = useState(false);
-  const [savedLocation, setSavedLocation] = useState<any>(null);
-  const [showLocationOptions, setShowLocationOptions] = useState(false);
-
-  const [deliveryFeeInfo, setDeliveryFeeInfo] = useState<DeliveryFeeInfo | null>(null);
+  const [deliveryAddress, setDeliveryAddress] = useState<DeliveryAddress>({
+    fullName: '', phone: '', address: '', city: '', state: '', country: 'Nigeria', additionalInfo: '',
+  });
+  const [showMapPicker, setShowMapPicker]       = useState(false);
+  const [clientLocation, setClientLocation]     = useState<LocationResult | null>(null);
+  const [savedLocation, setSavedLocation]       = useState<LocationResult | null>(null);
+  const [deliveryFee, setDeliveryFee]           = useState<number | null>(null);
   const [deliveryFeeLoading, setDeliveryFeeLoading] = useState(false);
 
-  const [showPaymentModal, setShowPaymentModal] = useState(false);
-  const [walletBalance, setWalletBalance] = useState(0);
-  const [walletLoading, setWalletLoading] = useState(false);
+  // Payment
+  const [walletBalance, setWalletBalance]       = useState(0);
+  const [walletLoading, setWalletLoading]       = useState(false);
   const [paymentProcessing, setPaymentProcessing] = useState(false);
+
+  // Add to balance sheet
+  const [showAddBalance, setShowAddBalance]     = useState(false);
+  const [addAmount, setAddAmount]               = useState('');
+  const [addBalanceLoading, setAddBalanceLoading] = useState(false);
+
   const [confirmModal, setConfirmModal] = useState({ visible: false, title: '', message: '', onConfirm: () => {} });
 
-  const [addressError, setAddressError] = useState('');
+  const submittingRef = useRef(false);
 
-  const [deliveryAddress, setDeliveryAddress] = useState<DeliveryAddress>({
-    fullName: '',
-    phone: '',
-    address: '',
-    city: '',
-    state: '',
-    country: 'Nigeria',
-    additionalInfo: '',
-  });
-
-  // ── Effects ────────────────────────────────────────────────────────────────
-  useEffect(() => { fetchUserLocation(); }, []);
+  // ── Data loading ────────────────────────────────────────────────────────────
+  useEffect(() => {
+    const init = async () => {
+      try {
+        setCartLoading(true);
+        const [cartData, profileRes] = await Promise.all([
+          cartAPI.getCart(),
+          userAPI.getProfile().catch(() => null),
+        ]);
+        setCartItems(cartData);
+        const loc = profileRes?.data?.user?.location;
+        if (loc?.coordinates) {
+          setSavedLocation({
+            coordinates: loc.coordinates,
+            address: loc.address || '',
+            city: loc.city || '',
+            state: loc.state || '',
+            country: loc.country || 'Nigeria',
+          });
+        }
+      } catch {
+        toast.error('Error', 'Failed to load cart');
+      } finally {
+        setCartLoading(false);
+      }
+    };
+    init();
+  }, []);
 
   useEffect(() => {
-    if (deliveryType === 'home_delivery' && deliveryAddress.coordinates) {
-      calculateDeliveryFeeForCart();
+    if (deliveryType === 'home_delivery' && clientLocation) {
+      calculateDeliveryFee();
     }
-  }, [deliveryAddress.coordinates, deliveryType]);
+  }, [clientLocation, deliveryType]);
 
-  // ── Helpers ────────────────────────────────────────────────────────────────
-  const fetchUserLocation = async () => {
-    try {
-      const response = await userAPI.getProfile();
-      if (response.success && response.data.user.location) {
-        setSavedLocation(response.data.user.location);
-      }
-    } catch {}
-  };
-
-  const fetchWalletBalance = async () => {
-    try {
-      setWalletLoading(true);
-      const response = await sharpPayAPI.getBalance();
-      if (response.success) setWalletBalance(response.data?.balance || 0);
-    } catch {} finally { setWalletLoading(false); }
-  };
-
-  const useSavedLocation = () => {
-    if (savedLocation) {
-      setDeliveryAddress({
-        ...deliveryAddress,
-        address: savedLocation.address || '',
-        city: savedLocation.city || '',
-        state: savedLocation.state || '',
-        country: savedLocation.country || 'Nigeria',
-        coordinates: savedLocation.coordinates || undefined,
-      });
-      setShowLocationOptions(false);
-      if (savedLocation.address?.trim().length >= 10) setAddressError('');
-      toast.success('Applied', 'Saved location applied to your address.');
+  // ── Helpers ─────────────────────────────────────────────────────────────────
+  // Re-fetch balance when returning from WalletPayment
+  useFocusEffect(useCallback(() => {
+    if (step === 2) {
+      sharpPayAPI.getBalance().then(r => { if (r.success) setWalletBalance(r.data?.balance || 0); }).catch(() => {});
     }
+  }, [step]));
+
+  const fmt = (p: number) => `₦ ${p.toLocaleString()}`;
+
+  const subtotal   = cartItems.reduce((t, i) => t + i.product.finalPrice * i.quantity, 0);
+  const totalFee   = deliveryType === 'pickup' ? 0 : (deliveryFee ?? 0);
+  const total      = subtotal + totalFee;
+
+  const handleLocationConfirm = (result: LocationResult) => {
+    setClientLocation(result);
+    setShowMapPicker(false);
+    setDeliveryAddress(a => ({
+      ...a,
+      address: result.address,
+      city: result.city,
+      state: result.state,
+      country: result.country || 'Nigeria',
+      coordinates: result.coordinates,
+    }));
   };
 
-  const getCurrentLocation = async () => {
-    setLocationLoading(true);
-    try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        toast.error('Permission Required', 'Location permission is needed to calculate delivery fees.');
-        return;
-      }
-      const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
-      const { latitude, longitude } = pos.coords;
-      const geo = await Location.reverseGeocodeAsync({ latitude, longitude });
-      if (geo?.length > 0) {
-        const d = geo[0];
-        const addr = `${d.street || ''} ${d.streetNumber || ''}`.trim() || 'Address not available';
-        setDeliveryAddress({
-          ...deliveryAddress,
-          address: addr,
-          city: d.city || d.subregion || '',
-          state: d.region || '',
-          country: d.country || 'Nigeria',
-          coordinates: [longitude, latitude],
-        });
-        if (addr.trim().length >= 10) setAddressError('');
-        setShowLocationOptions(false);
-        toast.success('Got it', 'Your current location has been applied.');
-      }
-    } catch {
-      toast.error('Location Error', 'Unable to get your location. Please ensure location services are enabled.');
-    } finally {
-      setLocationLoading(false);
-    }
-  };
-
-  const calculateDeliveryFeeForCart = async () => {
-    if (!deliveryAddress.coordinates) return;
+  const calculateDeliveryFee = async () => {
+    if (!clientLocation || !cartItems[0]) return;
     setDeliveryFeeLoading(true);
     try {
-      const firstItem = cartItems[0];
-      if (!firstItem?.product?._id) throw new Error('Invalid cart items');
-      const [longitude, latitude] = deliveryAddress.coordinates;
-      const response = await orderAPI.calculateDeliveryFee(firstItem.product._id, latitude, longitude);
-      if (response.success) {
-        setDeliveryFeeInfo(response.data);
-        if (!response.data.canDeliver) {
-          toast.error('Delivery Not Available', response.data.message || 'This location is outside the delivery range.');
-        }
-      }
-    } catch (error) {
-      toast.error('Error', handleAPIError(error).message || 'Failed to calculate delivery fee');
-    } finally {
+      const [lng, lat] = clientLocation.coordinates;
+      const res = await orderAPI.calculateDeliveryFee(cartItems[0].product._id, lat, lng);
+      if (res.success) setDeliveryFee(res.data.canDeliver ? res.data.deliveryFee : 0);
+    } catch {} finally {
       setDeliveryFeeLoading(false);
     }
   };
 
-  const subtotal = cartItems.reduce((t: number, i: any) => t + i.product.finalPrice * i.quantity, 0);
-  const deliveryFee = deliveryType === 'pickup' ? 0 : (deliveryFeeInfo?.canDeliver ? deliveryFeeInfo.deliveryFee : 0);
-  const total = subtotal + deliveryFee;
-  const formatPrice = (p: number) => `₦${p.toLocaleString()}`;
-
-  const validateForm = () => {
+  const validateDelivery = () => {
     if (deliveryType === 'home_delivery') {
       if (!deliveryAddress.fullName.trim()) { toast.error('Required', 'Please enter your full name'); return false; }
-      if (!deliveryAddress.phone.trim()) { toast.error('Required', 'Please enter your phone number'); return false; }
-      const addr = deliveryAddress.address.trim();
-      if (!addr) { toast.error('Required', 'Please enter your delivery address'); setAddressError('Address is required'); return false; }
-      if (addr.length < 10) { toast.error('Invalid Address', 'Address must be at least 10 characters'); setAddressError('Address must be at least 10 characters'); return false; }
-      if (!deliveryAddress.city.trim()) { toast.error('Required', 'Please enter your city'); return false; }
-      if (!deliveryAddress.state.trim()) { toast.error('Required', 'Please enter your state'); return false; }
-      if (!deliveryAddress.coordinates?.length) {
-        toast.error('Location Required', 'Please select your location to calculate delivery fee.');
-        setShowLocationOptions(true);
+      if (!deliveryAddress.phone.trim())    { toast.error('Required', 'Please enter your phone number'); return false; }
+      if (!deliveryAddress.address.trim() && !clientLocation) {
+        toast.error('Required', 'Please pick your location on the map or enter your address');
         return false;
       }
-      if (deliveryFeeInfo && !deliveryFeeInfo.canDeliver) {
-        toast.error('Delivery Not Available', deliveryFeeInfo.message || 'This location is outside the delivery range.');
+      if (deliveryAddress.address.trim().length > 0 && deliveryAddress.address.trim().length < 20) {
+        toast.error('Address too short', 'Street address must be at least 20 characters');
         return false;
       }
     }
     return true;
   };
 
-  const handleProceedToPayment = async () => {
-    if (!validateForm()) return;
-    await fetchWalletBalance();
-    setShowPaymentModal(true);
+  const handleContinue = async () => {
+    if (step === 0) {
+      if (!validateDelivery()) return;
+      setStep(1);
+    } else if (step === 1) {
+      setWalletLoading(true);
+      try {
+        const res = await sharpPayAPI.getBalance();
+        if (res.success) setWalletBalance(res.data?.balance || 0);
+      } catch {} finally { setWalletLoading(false); }
+      setStep(2);
+    }
+  };
+
+  const handleBack = () => {
+    if (step === 0) navigation.goBack();
+    else setStep(s => s - 1);
   };
 
   const buildOrderData = (method: 'wallet' | 'card') => ({
-    items: cartItems.map((i: any) => ({ product: i.product._id, quantity: i.quantity, selectedVariant: i.selectedVariant })),
+    items: cartItems.map(i => ({ product: i.product._id, quantity: i.quantity, selectedVariant: i.selectedVariant })),
     deliveryType,
     deliveryAddress: deliveryType === 'home_delivery' ? deliveryAddress : undefined,
     paymentMethod: method,
-    customerNotes: customerNotes.trim() || undefined,
   });
 
-  const handlePayFromWallet = async () => {
+  const handlePayFromWallet = () => {
     if (walletBalance < total) {
       setConfirmModal({
         visible: true,
         title: 'Insufficient Balance',
-        message: `You need ${formatPrice(total - walletBalance)} more in your wallet.`,
-        onConfirm: () => { setShowPaymentModal(false); toast.info('Fund Wallet', 'Wallet funding coming soon!'); },
+        message: `You need ${fmt(total - walletBalance)} more in your wallet. Fund your wallet to continue.`,
+        onConfirm: () => {},
       });
       return;
     }
     setConfirmModal({
       visible: true,
       title: 'Confirm Payment',
-      message: `Pay ${formatPrice(total)} from your wallet?`,
+      message: `Pay ${fmt(total)} from your LookReal Pay wallet?`,
       onConfirm: async () => {
+        if (submittingRef.current) return;
+        submittingRef.current = true;
         try {
           setPaymentProcessing(true);
           const orderRes = await orderAPI.createOrder(buildOrderData('wallet'));
-          if (orderRes.success) {
-            const order = orderRes.data.order;
-            const payRes = await paymentAPI.payOrderFromWallet(order._id);
-            if (payRes.success) {
-              await cartAPI.clearCart();
-              setShowPaymentModal(false);
-              toast.success('Payment Successful!', 'Your order has been placed!');
-              navigation.replace('OrderDetail', { orderId: order._id });
-            }
+          const order = orderRes?.data?.order;
+          if (!order?._id) {
+            toast.error('Payment failed', 'Something went wrong. Please try again.');
+            return;
+          }
+          const payRes = await paymentAPI.payOrderFromWallet(order._id);
+          if (payRes.success) {
+            await cartAPI.clearCart();
+            toast.success('Payment Successful!', 'Your order has been placed!');
+            navigation.dispatch(
+              CommonActions.reset({
+                index: 1,
+                routes: [{ name: 'Main' }, { name: 'OrderDetail', params: { orderId: order._id, userType: 'customer' } }],
+              })
+            );
           }
         } catch (error) {
-          toast.error('Payment Failed', handleAPIError(error).message);
+          toast.error('Payment failed', handleAPIError(error).message || 'Unable to process payment. Please try again.');
         } finally {
           setPaymentProcessing(false);
+          submittingRef.current = false;
         }
       },
     });
   };
 
   const handlePayWithCard = async () => {
-    setShowPaymentModal(false);
+    if (submittingRef.current) return;
+    submittingRef.current = true;
     try {
-      setLoading(true);
-      const response = await orderAPI.createOrder(buildOrderData('card'));
-      if (response.success) {
-        const order = response.data.order;
+      setPaymentProcessing(true);
+      const res = await orderAPI.createOrder(buildOrderData('card'));
+      if (res.success) {
         await cartAPI.clearCart();
-        navigation.replace('OrderPayment', { orderId: order._id, amount: order.totalAmount, orderNumber: order.orderNumber });
+        navigation.navigate('WalletPayment', {
+          amount: res.data.totalAmount,
+          reference: res.data.reference,
+          authorizationUrl: res.data.authorizationUrl,
+          paymentType: 'order_payment',
+        });
       }
     } catch (error) {
-      toast.error('Error', handleAPIError(error).message || 'Failed to create order');
+      toast.error('Payment failed', handleAPIError(error).message || 'Unable to initiate payment. Please try again.');
     } finally {
-      setLoading(false);
+      setPaymentProcessing(false);
+      submittingRef.current = false;
     }
   };
 
-  const canPayFromWallet = walletBalance >= total;
+  const handleAddBalance = async () => {
+    const amount = parseInt(addAmount.replace(/[^0-9]/g, ''), 10);
+    if (!amount || amount < 100) { toast.error('Minimum ₦100', 'Please enter at least ₦100'); return; }
+    try {
+      setAddBalanceLoading(true);
+      const res = await walletAPI.initializeWalletFunding(amount);
+      if (res.success) {
+        setShowAddBalance(false);
+        setAddAmount('');
+        navigation.navigate('WalletPayment', {
+          amount,
+          reference: res.data.reference,
+          authorizationUrl: res.data.authorizationUrl,
+          paymentType: 'wallet_funding',
+        });
+      }
+    } catch (error) {
+      toast.error('Error', handleAPIError(error).message);
+    } finally {
+      setAddBalanceLoading(false);
+    }
+  };
 
-  // ─────────────────────────────────────────────────────────────────────────
+  const HEADER_TITLES = ['Check out', 'Review', 'Payment Method'];
+
+  // ── Loading ─────────────────────────────────────────────────────────────────
+  if (cartLoading) {
+    return (
+      <View style={{ flex: 1, backgroundColor: BG, alignItems: 'center', justifyContent: 'center', paddingTop: insets.top }}>
+        <StatusBar barStyle="dark-content" backgroundColor={SURFACE} />
+        <ActivityIndicator size="large" color={PRIMARY} />
+        <Text style={{ color: TEXT3, fontSize: 13, marginTop: 12, fontWeight: '500' }}>Loading checkout…</Text>
+      </View>
+    );
+  }
+
+  // ── Render ──────────────────────────────────────────────────────────────────
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: BRAND.surfaceAlt }} edges={['top']}>
-      <StatusBar barStyle="dark-content" backgroundColor={BRAND.surface} />
+    <View style={{ flex: 1, backgroundColor: BG }}>
+      <StatusBar barStyle="dark-content" backgroundColor={SURFACE} />
 
-      {/* ── HEADER ───────────────────────────────────────────────────────── */}
-      <View
-        style={{
-          backgroundColor: BRAND.surface,
-          paddingHorizontal: 20,
-          paddingTop: 10,
-          paddingBottom: 14,
-          borderBottomWidth: 1,
-          borderBottomColor: BRAND.border,
-          flexDirection: 'row',
-          alignItems: 'center',
-          ...Platform.select({
-            ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8 },
-            android: { elevation: 3 },
-          }),
-        }}
-      >
-        <TouchableOpacity
-          onPress={() => navigation.goBack()}
-          activeOpacity={0.8}
-          style={{
-            width: 40,
-            height: 40,
-            borderRadius: 13,
-            backgroundColor: BRAND.surfaceAlt,
-            alignItems: 'center',
-            justifyContent: 'center',
-            borderWidth: 1,
-            borderColor: BRAND.border,
-            marginRight: 12,
-          }}
-        >
-          <Ionicons name="arrow-back" size={20} color={BRAND.textPrimary} />
-        </TouchableOpacity>
+      {/* Header */}
+      <View style={{ backgroundColor: SURFACE, paddingTop: insets.top + 10, paddingHorizontal: 16, paddingBottom: 0 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 14 }}>
+          <TouchableOpacity
+            onPress={handleBack}
+            activeOpacity={0.8}
+            style={{ width: 38, height: 38, borderRadius: 19, backgroundColor: PRI_SOFT, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: PRI_MUTED }}
+          >
+            <Ionicons name="arrow-back" size={20} color={PRIMARY} />
+          </TouchableOpacity>
 
-        <View>
-          <Text style={{ fontSize: 22, fontWeight: '800', color: BRAND.textPrimary, letterSpacing: -0.5 }}>
-            Checkout
+          <Text style={{ flex: 1, marginLeft: 12, fontSize: 19, fontWeight: '800', color: TEXT1, letterSpacing: -0.4 }}>
+            {HEADER_TITLES[step]}
           </Text>
-          <Text style={{ fontSize: 12, color: BRAND.textMuted, fontWeight: '500', marginTop: 1 }}>
-            {cartItems.length} {cartItems.length === 1 ? 'item' : 'items'}
-          </Text>
+
+          <View style={{ position: 'relative' }}>
+            <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: PRI_SOFT, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: PRI_MUTED }}>
+              <Ionicons name="cart-outline" size={20} color={PRIMARY} />
+            </View>
+            {cartItems.length > 0 && (
+              <View style={{ position: 'absolute', top: -3, right: -3, minWidth: 17, height: 17, borderRadius: 9, backgroundColor: PRIMARY, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 3, borderWidth: 2, borderColor: SURFACE }}>
+                <Text style={{ color: '#fff', fontSize: 8, fontWeight: '800' }}>{cartItems.length}</Text>
+              </View>
+            )}
+          </View>
+        </View>
+
+        {/* Step progress bar */}
+        <View style={{ flexDirection: 'row', paddingBottom: 14, gap: 4 }}>
+          {STEP_LABELS.map((label, i) => {
+            // Cart(i=0) always active; Delivery(i=1) active when step>=0; Review(i=2) when step>=1; Payment(i=3) when step>=2
+            const active = i <= step + 1;
+            return (
+              <View key={i} style={{ flex: 1, alignItems: 'center' }}>
+                <View style={{ height: 4, width: '100%', borderRadius: 2, backgroundColor: active ? PRIMARY : BORDER, marginBottom: 5 }} />
+                <Text style={{ fontSize: 9, color: active ? PRIMARY : TEXT3, fontWeight: active ? '700' : '500' }}>{label}</Text>
+              </View>
+            );
+          })}
         </View>
       </View>
 
-      {/* ── SCROLL CONTENT ───────────────────────────────────────────────── */}
-      <ScrollView
-        style={{ flex: 1 }}
-        contentContainerStyle={{ padding: 16, paddingBottom: 32 }}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-      >
-        {/* ── DELIVERY METHOD ──────────────────────────────────────────── */}
-        <Section title="Delivery Method" icon="bicycle-outline">
-          <DeliveryOption
+      {/* ── STEP 0: DELIVERY ─────────────────────────────────────────────────── */}
+      {step === 0 && (
+        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 32 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+
+          {/* Delivery Method */}
+          <Text style={{ fontSize: 16, fontWeight: '800', color: TEXT1, marginBottom: 12, letterSpacing: -0.3 }}>Delivery Method</Text>
+          <DeliveryMethodCard
             icon="home-outline"
             title="Home Delivery"
-            subtitle={
-              deliveryFeeInfo?.canDeliver
-                ? `${formatPrice(deliveryFeeInfo.deliveryFee)} · ${deliveryFeeInfo.estimatedDeliveryTime}`
-                : 'Calculated based on your location'
-            }
+            subtitle="Get it delivered to your door step"
             selected={deliveryType === 'home_delivery'}
             onPress={() => setDeliveryType('home_delivery')}
           />
-          <DeliveryOption
-            icon="storefront-outline"
-            title="Pickup"
-            subtitle="Collect from seller · Free"
+          <DeliveryMethodCard
+            icon="location-outline"
+            title="Pick up"
+            subtitle="Pick up from vendor location"
             selected={deliveryType === 'pickup'}
             onPress={() => setDeliveryType('pickup')}
           />
-        </Section>
 
-        {/* ── DELIVERY ADDRESS ─────────────────────────────────────────── */}
-        {deliveryType === 'home_delivery' && (
-          <Section
-            title="Delivery Address"
-            icon="location-outline"
-            action={
+          {/* Delivery Address */}
+          {deliveryType === 'home_delivery' && (
+            <View style={{ marginTop: 8 }}>
+              <Text style={{ fontSize: 16, fontWeight: '800', color: TEXT1, marginBottom: 12, letterSpacing: -0.3 }}>Delivery Address</Text>
+
+              <IconInput
+                icon="person-outline"
+                placeholder="Full Name"
+                value={deliveryAddress.fullName}
+                onChangeText={t => setDeliveryAddress(a => ({ ...a, fullName: t }))}
+              />
+              <IconInput
+                icon="call-outline"
+                placeholder="Phone Number"
+                value={deliveryAddress.phone}
+                onChangeText={t => setDeliveryAddress(a => ({ ...a, phone: t }))}
+                keyboardType="phone-pad"
+              />
+              <IconInput
+                icon="location-outline"
+                placeholder="Street Address (min. 20 characters)"
+                value={deliveryAddress.address}
+                onChangeText={t => setDeliveryAddress(a => ({ ...a, address: t }))}
+              />
+              {deliveryAddress.address.trim().length > 0 && deliveryAddress.address.trim().length < 20 && (
+                <Text style={{ fontSize: 11, color: '#F97316', fontWeight: '500', marginTop: -8, marginBottom: 12, marginLeft: 4 }}>
+                  {20 - deliveryAddress.address.trim().length} more characters needed
+                </Text>
+              )}
+
+              {/* Map picker button */}
               <TouchableOpacity
-                onPress={() => setShowLocationOptions(!showLocationOptions)}
-                activeOpacity={0.7}
-                style={{
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  backgroundColor: BRAND.primarySoft,
-                  paddingHorizontal: 10,
-                  paddingVertical: 5,
-                  borderRadius: 20,
-                  borderWidth: 1,
-                  borderColor: BRAND.primaryMuted,
-                }}
+                onPress={() => setShowMapPicker(true)}
+                activeOpacity={0.8}
+                style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: PRI_SOFT, borderRadius: 12, paddingVertical: 12, borderWidth: 1.5, borderColor: clientLocation ? PRIMARY : PRI_MUTED, gap: 8, marginTop: 4, marginBottom: 8 }}
               >
-                <Ionicons name="navigate-outline" size={13} color={BRAND.primary} />
-                <Text style={{ fontSize: 12, color: BRAND.primary, fontWeight: '700', marginLeft: 4 }}>
-                  {showLocationOptions ? 'Hide' : 'Add Location'}
+                <Ionicons name="map-outline" size={16} color={PRIMARY} />
+                <Text style={{ fontSize: 13, color: PRIMARY, fontWeight: '700' }}>
+                  {clientLocation ? 'Change Location on Map' : 'Pick Location on Map'}
                 </Text>
+                {clientLocation && <Ionicons name="checkmark-circle" size={16} color={PRIMARY} />}
               </TouchableOpacity>
-            }
-          >
-            {/* Location picker */}
-            {showLocationOptions && (
-              <View style={{ marginBottom: 14, gap: 10 }}>
-                {savedLocation && (
-                  <TouchableOpacity
-                    onPress={useSavedLocation}
-                    activeOpacity={0.8}
-                    style={{
-                      backgroundColor: BRAND.primarySoft,
-                      borderRadius: 12,
-                      padding: 14,
-                      borderWidth: 1,
-                      borderColor: BRAND.primaryMuted,
-                    }}
-                  >
-                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 5 }}>
-                      <Ionicons name="bookmark-outline" size={15} color={BRAND.primary} />
-                      <Text style={{ fontSize: 13, fontWeight: '700', color: BRAND.primary, marginLeft: 6 }}>
-                        Use Saved Location
-                      </Text>
-                    </View>
-                    <Text style={{ fontSize: 12, color: BRAND.textSecondary }}>
-                      {savedLocation.address}, {savedLocation.city}
-                    </Text>
-                  </TouchableOpacity>
-                )}
 
-                <TouchableOpacity
-                  onPress={getCurrentLocation}
-                  disabled={locationLoading}
-                  activeOpacity={0.8}
-                  style={{
-                    backgroundColor: BRAND.blueSoft,
-                    borderRadius: 12,
-                    padding: 14,
-                    borderWidth: 1,
-                    borderColor: '#BFDBFE',
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    opacity: locationLoading ? 0.6 : 1,
-                  }}
-                >
-                  {locationLoading ? (
-                    <>
-                      <ActivityIndicator size="small" color={BRAND.blue} />
-                      <Text style={{ fontSize: 13, fontWeight: '700', color: BRAND.blue, marginLeft: 8 }}>
-                        Getting location…
-                      </Text>
-                    </>
-                  ) : (
-                    <>
-                      <Ionicons name="navigate" size={16} color={BRAND.blue} />
-                      <Text style={{ fontSize: 13, fontWeight: '700', color: BRAND.blue, marginLeft: 6 }}>
-                        Use Current Location
-                      </Text>
-                    </>
-                  )}
-                </TouchableOpacity>
-              </View>
-            )}
-
-            {/* Delivery fee status */}
-            {deliveryFeeLoading && (
-              <View
-                style={{
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  backgroundColor: BRAND.blueSoft,
-                  borderRadius: 12,
-                  padding: 12,
-                  marginBottom: 14,
-                  borderWidth: 1,
-                  borderColor: '#BFDBFE',
-                }}
-              >
-                <ActivityIndicator size="small" color={BRAND.blue} />
-                <Text style={{ fontSize: 13, color: BRAND.blue, marginLeft: 10, fontWeight: '500' }}>
-                  Calculating delivery fee…
-                </Text>
-              </View>
-            )}
-
-            {deliveryFeeInfo && !deliveryFeeLoading && (
-              <View
-                style={{
-                  borderRadius: 12,
-                  padding: 14,
-                  marginBottom: 14,
-                  borderWidth: 1,
-                  backgroundColor: deliveryFeeInfo.canDeliver ? BRAND.greenSoft : BRAND.redSoft,
-                  borderColor: deliveryFeeInfo.canDeliver ? '#6EE7B7' : '#FECACA',
-                }}
-              >
-                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: deliveryFeeInfo.canDeliver ? 10 : 0 }}>
-                  <Ionicons
-                    name={deliveryFeeInfo.canDeliver ? 'checkmark-circle' : 'alert-circle'}
-                    size={16}
-                    color={deliveryFeeInfo.canDeliver ? BRAND.green : BRAND.red}
-                  />
-                  <Text
-                    style={{
-                      fontSize: 13,
-                      fontWeight: '700',
-                      marginLeft: 6,
-                      color: deliveryFeeInfo.canDeliver ? '#065F46' : '#991B1B',
-                    }}
-                  >
-                    {deliveryFeeInfo.canDeliver ? 'Delivery Available' : 'Delivery Not Available'}
+              {/* Delivery fee pill */}
+              {deliveryFeeLoading && (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: PRI_SOFT, borderRadius: 10, padding: 10, borderWidth: 1, borderColor: PRI_MUTED, marginTop: 4 }}>
+                  <ActivityIndicator size="small" color={PRIMARY} />
+                  <Text style={{ fontSize: 12, color: PRIMARY, fontWeight: '500' }}>Calculating delivery fee…</Text>
+                </View>
+              )}
+              {deliveryFee !== null && !deliveryFeeLoading && (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: GREEN_SOFT, borderRadius: 10, padding: 10, borderWidth: 1, borderColor: '#6EE7B7', marginTop: 4 }}>
+                  <Ionicons name="checkmark-circle" size={15} color={GREEN} />
+                  <Text style={{ fontSize: 12, color: '#065F46', fontWeight: '600' }}>
+                    Delivery fee: {fmt(deliveryFee)}
                   </Text>
                 </View>
-                {deliveryFeeInfo.canDeliver ? (
-                  <View style={{ gap: 4 }}>
-                    {[
-                      { icon: 'locate-outline', text: `${deliveryFeeInfo.distance} km away` },
-                      { icon: 'cash-outline', text: formatPrice(deliveryFeeInfo.deliveryFee) },
-                      { icon: 'time-outline', text: deliveryFeeInfo.estimatedDeliveryTime },
-                    ].map((row, i) => (
-                      <View key={i} style={{ flexDirection: 'row', alignItems: 'center' }}>
-                        <Ionicons name={row.icon as any} size={13} color="#065F46" style={{ marginRight: 6 }} />
-                        <Text style={{ fontSize: 12, color: '#065F46', fontWeight: '500' }}>{row.text}</Text>
-                      </View>
-                    ))}
-                  </View>
-                ) : (
-                  <Text style={{ fontSize: 12, color: '#991B1B', marginTop: 2 }}>{deliveryFeeInfo.message}</Text>
-                )}
+              )}
+            </View>
+          )}
+        </ScrollView>
+      )}
+
+      {/* ── STEP 1: REVIEW ───────────────────────────────────────────────────── */}
+      {step === 1 && (
+        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 32 }} showsVerticalScrollIndicator={false}>
+
+          {/* Delivery summary */}
+          <View style={{ backgroundColor: SURFACE, borderRadius: 16, padding: 16, marginBottom: 14, borderWidth: 1, borderColor: BORDER }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+              <Text style={{ fontSize: 15, fontWeight: '800', color: TEXT1 }}>Delivery</Text>
+              <TouchableOpacity onPress={() => setStep(0)} activeOpacity={0.7}>
+                <Text style={{ fontSize: 13, fontWeight: '700', color: PRIMARY }}>Edit</Text>
+              </TouchableOpacity>
+            </View>
+            {[
+              { label: 'Name',     value: deliveryAddress.fullName || '—' },
+              { label: 'Phone',    value: deliveryAddress.phone || '—' },
+              { label: 'Location', value: deliveryType === 'home_delivery' ? 'Home Delivery' : 'Pick Up' },
+              ...(deliveryType === 'home_delivery' ? [{ label: 'Address', value: [deliveryAddress.address, deliveryAddress.city, deliveryAddress.state].filter(Boolean).join(', ') || '—' }] : []),
+            ].map(row => (
+              <View key={row.label} style={{ flexDirection: 'row', marginBottom: 8 }}>
+                <Text style={{ width: 72, fontSize: 13, color: TEXT3, fontWeight: '500' }}>{row.label}</Text>
+                <Text style={{ flex: 1, fontSize: 13, color: TEXT1, fontWeight: '600' }}>{row.value}</Text>
               </View>
-            )}
-
-            {/* Address form */}
-            <View style={{ gap: 12 }}>
-              <Field label="Full Name" required>
-                <StyledInput
-                  placeholder="Enter your full name"
-                  value={deliveryAddress.fullName}
-                  onChangeText={(t) => setDeliveryAddress({ ...deliveryAddress, fullName: t })}
-                />
-              </Field>
-
-              <Field label="Phone Number" required>
-                <StyledInput
-                  placeholder="08012345678"
-                  keyboardType="phone-pad"
-                  value={deliveryAddress.phone}
-                  onChangeText={(t) => setDeliveryAddress({ ...deliveryAddress, phone: t })}
-                />
-              </Field>
-
-              <Field label="Street Address" required>
-                <StyledInput
-                  placeholder="Enter your full street address (min. 10 characters)"
-                  multiline
-                  numberOfLines={2}
-                  value={deliveryAddress.address}
-                  maxLength={500}
-                  hasError={!!addressError}
-                  onChangeText={(t) => {
-                    setDeliveryAddress({ ...deliveryAddress, address: t });
-                    if (addressError && t.trim().length >= 10) setAddressError('');
-                  }}
-                />
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 5 }}>
-                  {addressError ? (
-                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                      <Ionicons name="alert-circle" size={12} color={BRAND.red} />
-                      <Text style={{ fontSize: 11, color: BRAND.red, marginLeft: 4, fontWeight: '500' }}>{addressError}</Text>
-                    </View>
-                  ) : (
-                    <Text
-                      style={{
-                        fontSize: 11,
-                        fontWeight: '600',
-                        color: deliveryAddress.address.trim().length < 10 ? BRAND.orange : BRAND.green,
-                      }}
-                    >
-                      {deliveryAddress.address.trim().length < 10
-                        ? `${10 - deliveryAddress.address.trim().length} more characters needed`
-                        : '✓ Valid address'}
-                    </Text>
-                  )}
-                  <Text style={{ fontSize: 11, color: BRAND.textMuted }}>
-                    {deliveryAddress.address.length}/500
-                  </Text>
-                </View>
-              </Field>
-
-              <View style={{ flexDirection: 'row', gap: 10 }}>
-                <View style={{ flex: 1 }}>
-                  <Field label="City" required>
-                    <StyledInput
-                      placeholder="City"
-                      value={deliveryAddress.city}
-                      onChangeText={(t) => setDeliveryAddress({ ...deliveryAddress, city: t })}
-                    />
-                  </Field>
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Field label="State" required>
-                    <StyledInput
-                      placeholder="State"
-                      value={deliveryAddress.state}
-                      onChangeText={(t) => setDeliveryAddress({ ...deliveryAddress, state: t })}
-                    />
-                  </Field>
-                </View>
-              </View>
-
-              <Field label="Additional Info">
-                <StyledInput
-                  placeholder="Landmark, gate code, etc. (optional)"
-                  value={deliveryAddress.additionalInfo}
-                  onChangeText={(t) => setDeliveryAddress({ ...deliveryAddress, additionalInfo: t })}
-                />
-              </Field>
-            </View>
-          </Section>
-        )}
-
-        {/* ── ORDER NOTES ──────────────────────────────────────────────── */}
-        <Section title="Order Notes" icon="create-outline">
-          <StyledInput
-            placeholder="Special instructions for the seller (optional)…"
-            multiline
-            numberOfLines={3}
-            value={customerNotes}
-            onChangeText={setCustomerNotes}
-          />
-        </Section>
-
-        {/* ── ORDER SUMMARY ────────────────────────────────────────────── */}
-        <Section title="Order Summary" icon="receipt-outline">
-          <View style={{ gap: 10 }}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-              <Text style={{ fontSize: 13, color: BRAND.textSecondary, fontWeight: '500' }}>
-                Subtotal ({cartItems.length} {cartItems.length === 1 ? 'item' : 'items'})
-              </Text>
-              <Text style={{ fontSize: 13, fontWeight: '700', color: BRAND.textPrimary }}>
-                {formatPrice(subtotal)}
-              </Text>
-            </View>
-
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-              <Text style={{ fontSize: 13, color: BRAND.textSecondary, fontWeight: '500' }}>
-                Delivery fee
-              </Text>
-              <Text style={{ fontSize: 13, fontWeight: '700', color: BRAND.textPrimary }}>
-                {deliveryType === 'pickup' ? 'Free' : deliveryFeeLoading ? 'Calculating…' : formatPrice(deliveryFee)}
-              </Text>
-            </View>
-
-            <View
-              style={{
-                borderTopWidth: 1,
-                borderTopColor: BRAND.border,
-                paddingTop: 12,
-                marginTop: 2,
-                flexDirection: 'row',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-              }}
-            >
-              <Text style={{ fontSize: 16, fontWeight: '800', color: BRAND.textPrimary }}>Total</Text>
-              <Text style={{ fontSize: 22, fontWeight: '800', color: BRAND.primary, letterSpacing: -0.5 }}>
-                {formatPrice(total)}
-              </Text>
-            </View>
+            ))}
           </View>
-        </Section>
-      </ScrollView>
 
-      {/* ── BOTTOM CTA ───────────────────────────────────────────────────── */}
-      <View
-        style={{
-          backgroundColor: BRAND.surface,
-          paddingHorizontal: 20,
-          paddingTop: 14,
-          paddingBottom: insets.bottom + 14,
-          borderTopWidth: 1,
-          borderTopColor: BRAND.border,
-          ...Platform.select({
-            ios: { shadowColor: '#000', shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.07, shadowRadius: 12 },
-            android: { elevation: 10 },
-          }),
-        }}
-      >
-        <TouchableOpacity
-          onPress={handleProceedToPayment}
-          disabled={loading || deliveryFeeLoading || (deliveryType === 'home_delivery' && !!deliveryFeeInfo && !deliveryFeeInfo.canDeliver)}
-          activeOpacity={0.85}
-          style={{ borderRadius: 16, overflow: 'hidden', opacity: loading ? 0.7 : 1 }}
-        >
-          <LinearGradient
-            colors={[BRAND.primary, BRAND.primaryDark]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-            style={{
-              paddingVertical: 16,
-              flexDirection: 'row',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: 10,
-            }}
-          >
-            {loading ? (
-              <ActivityIndicator size="small" color="#fff" />
-            ) : (
-              <>
-                <Ionicons name="card-outline" size={18} color="#fff" />
-                <Text style={{ color: '#fff', fontSize: 16, fontWeight: '800', letterSpacing: 0.1 }}>
-                  Proceed to Payment
-                </Text>
-                <View
-                  style={{
-                    backgroundColor: 'rgba(255,255,255,0.25)',
-                    paddingHorizontal: 10,
-                    paddingVertical: 4,
-                    borderRadius: 20,
-                  }}
-                >
-                  <Text style={{ color: '#fff', fontSize: 13, fontWeight: '800' }}>
-                    {formatPrice(total)}
+          {/* Order summary */}
+          <Text style={{ fontSize: 14, fontWeight: '700', color: TEXT1, marginBottom: 10 }}>order summary</Text>
+          {cartItems.map(item => (
+            <View key={item.product._id} style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: SURFACE, borderRadius: 14, padding: 12, marginBottom: 10, borderWidth: 1, borderColor: BORDER }}>
+              <Image source={{ uri: item.product.images[0] }} style={{ width: 52, height: 52, borderRadius: 10 }} resizeMode="cover" />
+              <View style={{ flex: 1, marginLeft: 12 }}>
+                <Text style={{ fontSize: 13, fontWeight: '700', color: TEXT1 }} numberOfLines={1}>{item.product.name}</Text>
+                <Text style={{ fontSize: 12, color: TEXT3, marginTop: 2 }}>Qty: {item.quantity}</Text>
+              </View>
+              <Text style={{ fontSize: 14, fontWeight: '800', color: TEXT1, letterSpacing: -0.2 }}>
+                {fmt(item.product.finalPrice)}
+              </Text>
+            </View>
+          ))}
+        </ScrollView>
+      )}
+
+      {/* ── STEP 2: PAYMENT ──────────────────────────────────────────────────── */}
+      {step === 2 && (
+        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 32 }} showsVerticalScrollIndicator={false}>
+
+          <Text style={{ fontSize: 15, fontWeight: '800', color: TEXT1, marginBottom: 14, letterSpacing: -0.3 }}>
+            Choose Payment Method
+          </Text>
+
+          {walletLoading ? (
+            <View style={{ alignItems: 'center', paddingVertical: 32 }}>
+              <ActivityIndicator size="large" color={PRIMARY} />
+              <Text style={{ color: TEXT3, fontSize: 13, marginTop: 10, fontWeight: '500' }}>Loading wallet…</Text>
+            </View>
+          ) : (
+            <>
+              {/* LookReal Pay */}
+              <TouchableOpacity
+                onPress={handlePayFromWallet}
+                disabled={paymentProcessing}
+                activeOpacity={0.88}
+                style={{ backgroundColor: SURFACE, borderRadius: 16, padding: 16, marginBottom: 12, borderWidth: 1.5, borderColor: PRI_MUTED, opacity: paymentProcessing ? 0.6 : 1 }}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  {/* Logo */}
+                  <View style={{ width: 44, height: 44, borderRadius: 12, backgroundColor: PRI_SOFT, alignItems: 'center', justifyContent: 'center', marginRight: 12, borderWidth: 1, borderColor: PRI_MUTED }}>
+                    <Text style={{ fontSize: 13, fontWeight: '800', color: PRIMARY }}>LR</Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 14, fontWeight: '800', color: TEXT1 }}>LookReal Pay</Text>
+                    <Text style={{ fontSize: 12, color: TEXT2, marginTop: 1 }}>Pay with wallet balance</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={18} color={TEXT3} />
+                </View>
+
+                {/* Balance row */}
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: BORDER }}>
+                  <Text style={{ fontSize: 14, color: TEXT1, fontWeight: '600' }}>
+                    Wallet Balance{' '}
+                    <Text style={{ fontWeight: '800', color: PRIMARY }}>{fmt(walletBalance)}</Text>
+                  </Text>
+                  <TouchableOpacity
+                    onPress={() => setShowAddBalance(true)}
+                    activeOpacity={0.8}
+                    style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: PRI_SOFT, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20, borderWidth: 1, borderColor: PRI_MUTED, gap: 4 }}
+                  >
+                    <Ionicons name="add-circle-outline" size={14} color={PRIMARY} />
+                    <Text style={{ fontSize: 12, color: PRIMARY, fontWeight: '700' }}>Add to balance</Text>
+                  </TouchableOpacity>
+                </View>
+              </TouchableOpacity>
+
+              {/* Paystack */}
+              <TouchableOpacity
+                onPress={handlePayWithCard}
+                disabled={paymentProcessing}
+                activeOpacity={0.88}
+                style={{ backgroundColor: SURFACE, borderRadius: 16, padding: 16, marginBottom: 20, borderWidth: 1, borderColor: BORDER, opacity: paymentProcessing ? 0.6 : 1 }}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <View style={{ width: 44, height: 44, borderRadius: 12, backgroundColor: '#011B33', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
+                    <Text style={{ fontSize: 10, fontWeight: '800', color: '#00C3F7', letterSpacing: 0.5 }}>PAY</Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 14, fontWeight: '800', color: TEXT1 }}>Paystack</Text>
+                    <Text style={{ fontSize: 12, color: TEXT2, marginTop: 1 }}>Pay With Debit/Credit card</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={18} color={TEXT3} />
+                </View>
+              </TouchableOpacity>
+
+              {/* Order items */}
+              <Text style={{ fontSize: 14, fontWeight: '700', color: TEXT1, marginBottom: 10 }}>order summary</Text>
+              {cartItems.map(item => (
+                <View key={item.product._id} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10 }}>
+                  <Image source={{ uri: item.product.images[0] }} style={{ width: 44, height: 44, borderRadius: 10 }} resizeMode="cover" />
+                  <View style={{ flex: 1, marginLeft: 10 }}>
+                    <Text style={{ fontSize: 13, fontWeight: '600', color: TEXT1 }} numberOfLines={1}>{item.product.name}</Text>
+                    <Text style={{ fontSize: 11, color: TEXT3 }}>Qty: {item.quantity}</Text>
+                  </View>
+                  <Text style={{ fontSize: 13, fontWeight: '800', color: TEXT1 }}>
+                    {fmt(item.product.finalPrice * item.quantity)}
                   </Text>
                 </View>
-              </>
-            )}
-          </LinearGradient>
-        </TouchableOpacity>
+              ))}
 
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 10 }}>
-          <Ionicons name="shield-checkmark-outline" size={13} color={BRAND.green} />
-          <Text style={{ fontSize: 11, color: BRAND.textMuted, marginLeft: 5, fontWeight: '500' }}>
-            Secure payment · Wallet or Card
-          </Text>
+              {/* Processing overlay */}
+              {paymentProcessing && (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: PRI_SOFT, borderRadius: 12, padding: 14, borderWidth: 1, borderColor: PRI_MUTED, marginTop: 8 }}>
+                  <ActivityIndicator size="small" color={PRIMARY} />
+                  <Text style={{ fontSize: 13, color: PRIMARY, fontWeight: '600' }}>Processing payment…</Text>
+                </View>
+              )}
+            </>
+          )}
+        </ScrollView>
+      )}
+
+      {/* ── BOTTOM BUTTON ─────────────────────────────────────────────────────── */}
+      {step < 2 && (
+        <View style={{ backgroundColor: SURFACE, paddingHorizontal: 20, paddingTop: 14, paddingBottom: insets.bottom + 14, borderTopWidth: 1, borderTopColor: BORDER }}>
+          <TouchableOpacity
+            onPress={handleContinue}
+            activeOpacity={0.85}
+            style={{ borderRadius: 14, overflow: 'hidden' }}
+          >
+            <LinearGradient
+              colors={[PRIMARY, PRI_DARK]}
+              start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+              style={{ paddingVertical: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+            >
+              <Text style={{ color: '#fff', fontSize: 16, fontWeight: '800' }}>Continue</Text>
+              <Ionicons name="arrow-forward" size={18} color="#fff" />
+            </LinearGradient>
+          </TouchableOpacity>
         </View>
-      </View>
+      )}
 
-      {/* ── PAYMENT MODAL ────────────────────────────────────────────────── */}
+      {/* Add to balance bottom sheet */}
       <Modal
-        visible={showPaymentModal}
+        visible={showAddBalance}
         transparent
         animationType="slide"
-        onRequestClose={() => setShowPaymentModal(false)}
+        onRequestClose={() => { Keyboard.dismiss(); setShowAddBalance(false); }}
       >
-        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' }}>
-          <View
-            style={{
-              backgroundColor: BRAND.surface,
-              borderTopLeftRadius: 28,
-              borderTopRightRadius: 28,
-              ...Platform.select({
-                ios: { shadowColor: '#000', shadowOffset: { width: 0, height: -6 }, shadowOpacity: 0.15, shadowRadius: 20 },
-                android: { elevation: 16 },
-              }),
-            }}
-          >
-            {/* Handle */}
-            <View style={{ alignItems: 'center', paddingTop: 12, paddingBottom: 4 }}>
-              <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: BRAND.borderStrong }} />
-            </View>
+        <KeyboardAvoidingView
+          style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)' }}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
+          <TouchableOpacity
+            style={{ flex: 1 }}
+            activeOpacity={1}
+            onPress={() => { Keyboard.dismiss(); setShowAddBalance(false); }}
+          />
+          <TouchableOpacity activeOpacity={1}>
+            <View style={{ backgroundColor: SURFACE, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: 36 }}>
+              {/* Handle */}
+              <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: BORDER, alignSelf: 'center', marginBottom: 20 }} />
 
-            {/* Modal header */}
-            <View
-              style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                paddingHorizontal: 20,
-                paddingVertical: 14,
-                borderBottomWidth: 1,
-                borderBottomColor: BRAND.border,
-              }}
-            >
-              <View>
-                <Text style={{ fontSize: 18, fontWeight: '800', color: BRAND.textPrimary, letterSpacing: -0.3 }}>
-                  Choose Payment
-                </Text>
-                <Text style={{ fontSize: 12, color: BRAND.textMuted, marginTop: 2, fontWeight: '500' }}>
-                  Select how you'd like to pay
-                </Text>
+              <Text style={{ fontSize: 18, fontWeight: '800', color: TEXT1, marginBottom: 4, letterSpacing: -0.4 }}>Fund Wallet</Text>
+              <Text style={{ fontSize: 13, color: TEXT2, marginBottom: 20 }}>
+                Current balance: <Text style={{ fontWeight: '700', color: PRIMARY }}>{fmt(walletBalance)}</Text>
+              </Text>
+
+              <Text style={{ fontSize: 12, fontWeight: '700', color: TEXT2, letterSpacing: 0.4, textTransform: 'uppercase', marginBottom: 8 }}>Amount (₦)</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#F9FAFB', borderRadius: 12, borderWidth: 1.5, borderColor: BORDER, paddingHorizontal: 14, paddingVertical: Platform.OS === 'ios' ? 13 : 10, marginBottom: 16 }}>
+                <Text style={{ fontSize: 16, fontWeight: '700', color: TEXT3, marginRight: 6 }}>₦</Text>
+                <TextInput
+                  style={{ flex: 1, fontSize: 16, fontWeight: '700', color: TEXT1, paddingVertical: 0 }}
+                  placeholder="Enter amount"
+                  placeholderTextColor={TEXT3}
+                  value={addAmount}
+                  onChangeText={setAddAmount}
+                  keyboardType="numeric"
+                  returnKeyType="done"
+                  onSubmitEditing={Keyboard.dismiss}
+                  autoFocus
+                />
               </View>
+
               <TouchableOpacity
-                onPress={() => setShowPaymentModal(false)}
-                activeOpacity={0.8}
-                style={{
-                  width: 36,
-                  height: 36,
-                  borderRadius: 11,
-                  backgroundColor: BRAND.surfaceAlt,
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  borderWidth: 1,
-                  borderColor: BRAND.border,
-                }}
+                onPress={handleAddBalance}
+                disabled={addBalanceLoading || !addAmount || parseInt(addAmount) < 100}
+                activeOpacity={0.85}
+                style={{ borderRadius: 14, overflow: 'hidden', opacity: (!addAmount || parseInt(addAmount) < 100) ? 0.5 : 1 }}
               >
-                <Ionicons name="close" size={18} color={BRAND.textPrimary} />
+                <LinearGradient
+                  colors={[PRIMARY, PRI_DARK]}
+                  start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                  style={{ paddingVertical: 15, alignItems: 'center', justifyContent: 'center' }}
+                >
+                  {addBalanceLoading
+                    ? <ActivityIndicator color="#fff" />
+                    : <Text style={{ color: '#fff', fontSize: 15, fontWeight: '800' }}>Proceed to Fund Wallet</Text>
+                  }
+                </LinearGradient>
               </TouchableOpacity>
             </View>
-
-            {walletLoading ? (
-              <View style={{ alignItems: 'center', justifyContent: 'center', paddingVertical: 48 }}>
-                <ActivityIndicator size="large" color={BRAND.primary} />
-                <Text style={{ color: BRAND.textMuted, fontSize: 13, marginTop: 12, fontWeight: '500' }}>
-                  Checking wallet balance…
-                </Text>
-              </View>
-            ) : (
-              <View style={{ padding: 20, paddingBottom: insets.bottom + 20, gap: 12 }}>
-                {/* Amount chip */}
-                <View
-                  style={{
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    backgroundColor: BRAND.surfaceAlt,
-                    borderRadius: 14,
-                    padding: 14,
-                    borderWidth: 1,
-                    borderColor: BRAND.border,
-                  }}
-                >
-                  <Text style={{ fontSize: 13, color: BRAND.textSecondary, fontWeight: '500' }}>
-                    Total to pay
-                  </Text>
-                  <Text style={{ fontSize: 22, fontWeight: '800', color: BRAND.primary, letterSpacing: -0.5 }}>
-                    {formatPrice(total)}
-                  </Text>
-                </View>
-
-                {/* Wallet option */}
-                <TouchableOpacity
-                  onPress={handlePayFromWallet}
-                  disabled={paymentProcessing}
-                  activeOpacity={0.85}
-                  style={{ borderRadius: 18, overflow: 'hidden', opacity: paymentProcessing ? 0.6 : 1 }}
-                >
-                  <LinearGradient
-                    colors={canPayFromWallet ? [BRAND.primary, BRAND.primaryDark] : [BRAND.surfaceAlt, BRAND.border]}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    style={{ padding: 18 }}
-                  >
-                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                        <View
-                          style={{
-                            width: 46,
-                            height: 46,
-                            borderRadius: 14,
-                            backgroundColor: canPayFromWallet ? 'rgba(255,255,255,0.2)' : BRAND.borderStrong,
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            marginRight: 12,
-                          }}
-                        >
-                          <Ionicons name="wallet-outline" size={22} color={canPayFromWallet ? '#fff' : BRAND.textMuted} />
-                        </View>
-                        <View>
-                          <Text style={{ fontSize: 15, fontWeight: '800', color: canPayFromWallet ? '#fff' : BRAND.textPrimary }}>
-                            SharpPAY Wallet
-                          </Text>
-                          <Text style={{ fontSize: 12, color: canPayFromWallet ? 'rgba(255,255,255,0.75)' : BRAND.textMuted, marginTop: 1 }}>
-                            Balance: {formatPrice(walletBalance)}
-                          </Text>
-                        </View>
-                      </View>
-
-                      <View
-                        style={{
-                          paddingHorizontal: 9,
-                          paddingVertical: 4,
-                          borderRadius: 20,
-                          backgroundColor: canPayFromWallet ? 'rgba(255,255,255,0.25)' : BRAND.redSoft,
-                        }}
-                      >
-                        <Text
-                          style={{
-                            fontSize: 10,
-                            fontWeight: '800',
-                            color: canPayFromWallet ? '#fff' : BRAND.red,
-                            letterSpacing: 0.5,
-                          }}
-                        >
-                          {canPayFromWallet ? '⚡ INSTANT' : 'LOW BALANCE'}
-                        </Text>
-                      </View>
-                    </View>
-
-                    <View
-                      style={{
-                        backgroundColor: canPayFromWallet ? 'rgba(255,255,255,0.15)' : BRAND.orangeSoft,
-                        borderRadius: 10,
-                        padding: 10,
-                        flexDirection: 'row',
-                        alignItems: 'center',
-                      }}
-                    >
-                      <Ionicons
-                        name={canPayFromWallet ? 'checkmark-circle-outline' : 'alert-circle-outline'}
-                        size={14}
-                        color={canPayFromWallet ? '#fff' : BRAND.orange}
-                      />
-                      <Text
-                        style={{
-                          fontSize: 12,
-                          marginLeft: 6,
-                          fontWeight: '600',
-                          color: canPayFromWallet ? '#fff' : '#9A3412',
-                        }}
-                      >
-                        {canPayFromWallet
-                          ? 'Instant payment · No extra fees'
-                          : `Need ${formatPrice(total - walletBalance)} more to use wallet`}
-                      </Text>
-                    </View>
-                  </LinearGradient>
-                </TouchableOpacity>
-
-                {/* Card option */}
-                <TouchableOpacity
-                  onPress={handlePayWithCard}
-                  disabled={paymentProcessing}
-                  activeOpacity={0.85}
-                  style={{
-                    backgroundColor: BRAND.surface,
-                    borderRadius: 18,
-                    padding: 18,
-                    borderWidth: 1.5,
-                    borderColor: BRAND.border,
-                    opacity: paymentProcessing ? 0.6 : 1,
-                  }}
-                >
-                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                      <View
-                        style={{
-                          width: 46,
-                          height: 46,
-                          borderRadius: 14,
-                          backgroundColor: BRAND.blueSoft,
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          marginRight: 12,
-                        }}
-                      >
-                        <Ionicons name="card-outline" size={22} color={BRAND.blue} />
-                      </View>
-                      <View>
-                        <Text style={{ fontSize: 15, fontWeight: '800', color: BRAND.textPrimary }}>
-                          Card Payment
-                        </Text>
-                        <Text style={{ fontSize: 12, color: BRAND.textMuted, marginTop: 1 }}>
-                          Debit / Credit card
-                        </Text>
-                      </View>
-                    </View>
-                    <View
-                      style={{
-                        width: 30,
-                        height: 30,
-                        borderRadius: 10,
-                        backgroundColor: BRAND.surfaceAlt,
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                      }}
-                    >
-                      <Ionicons name="chevron-forward" size={16} color={BRAND.textMuted} />
-                    </View>
-                  </View>
-
-                  <View
-                    style={{
-                      backgroundColor: BRAND.blueSoft,
-                      borderRadius: 10,
-                      padding: 10,
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                    }}
-                  >
-                    <Ionicons name="shield-checkmark-outline" size={14} color={BRAND.blue} />
-                    <Text style={{ fontSize: 12, color: '#1D4ED8', marginLeft: 6, fontWeight: '600' }}>
-                      Secured by Paystack
-                    </Text>
-                  </View>
-                </TouchableOpacity>
-
-                {/* Processing */}
-                {paymentProcessing && (
-                  <View
-                    style={{
-                      backgroundColor: BRAND.primarySoft,
-                      borderRadius: 14,
-                      padding: 14,
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      borderWidth: 1,
-                      borderColor: BRAND.primaryMuted,
-                    }}
-                  >
-                    <ActivityIndicator size="small" color={BRAND.primary} />
-                    <Text style={{ fontSize: 13, color: BRAND.primary, marginLeft: 10, fontWeight: '600' }}>
-                      Processing payment…
-                    </Text>
-                  </View>
-                )}
-              </View>
-            )}
-          </View>
-        </View>
+          </TouchableOpacity>
+        </KeyboardAvoidingView>
       </Modal>
+
+      <LocationPickerModal
+        visible={showMapPicker}
+        onClose={() => setShowMapPicker(false)}
+        onConfirm={handleLocationConfirm}
+        initialLocation={clientLocation ?? savedLocation}
+      />
+
       <ConfirmationModal
         visible={confirmModal.visible}
         title={confirmModal.title}
         message={confirmModal.message}
-        onConfirm={() => { confirmModal.onConfirm(); setConfirmModal(prev => ({...prev, visible: false})); }}
-        onCancel={() => setConfirmModal(prev => ({...prev, visible: false}))}
+        onConfirm={() => { confirmModal.onConfirm(); setConfirmModal(p => ({ ...p, visible: false })); }}
+        onCancel={() => setConfirmModal(p => ({ ...p, visible: false }))}
       />
-    </SafeAreaView>
+    </View>
   );
 };
 

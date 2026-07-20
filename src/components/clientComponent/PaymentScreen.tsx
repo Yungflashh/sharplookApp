@@ -8,7 +8,7 @@ import ConfirmationModal from '@/components/ConfirmationModal';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
-import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
+import { useNavigation, useRoute, RouteProp, CommonActions } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '@/types/navigation.types';
 import { bookingAPI, handleAPIError } from '@/api/api';
@@ -80,7 +80,12 @@ const PaymentScreen: React.FC = () => {
     const nav = setTimeout(() => {
       clearInterval(interval);
       LOG('Auto-navigating to BookingDetail:', id);
-      navigation.replace('BookingDetail', { bookingId: id });
+      navigation.dispatch(
+        CommonActions.reset({
+          index: 1,
+          routes: [{ name: 'Main' }, { name: 'BookingDetail', params: { bookingId: id } }],
+        })
+      );
     }, 3000);
 
     return () => { clearInterval(interval); clearTimeout(nav); };
@@ -107,18 +112,8 @@ const PaymentScreen: React.FC = () => {
     return () => clearTimeout(t);
   }, [paymentUrl]);
 
-  // ── Auto-transition to verifying screen after 25s ────────────────────────
-  // Fallback: if user hasn't tapped "done", switch automatically.
-  useEffect(() => {
-    if (!paymentUrl || paymentConfirmed) return;
-    const t = setTimeout(() => {
-      if (!confirmedRef.current) {
-        LOG('25s elapsed — auto-switching to verifying screen');
-        setShowVerifyingScreen(true);
-      }
-    }, 25000);
-    return () => clearTimeout(t);
-  }, [paymentUrl]);
+  // Auto-switch to verifying removed — user must tap "I've Completed Payment"
+  // or Paystack must redirect to our deep link. Avoids premature verification screen.
 
   // ── Background polling: check every 5s once verifying screen is shown ─────
   // Paystack webhook can't reach local dev servers, so we poll as fallback.
@@ -370,14 +365,13 @@ const PaymentScreen: React.FC = () => {
     if (!url) return;
     LOG('WebView nav state URL:', url.substring(0, 120));
 
+    // Only treat as callback if it's our deep link OR Paystack's callback-specific param.
+    // Never match on 'reference=' alone — that param appears in many Paystack intermediate URLs.
     const isCallback =
       url.startsWith('lookreal://') ||
       url.startsWith('sharplook://') ||
       url.startsWith('sharpLook://') ||
-      url.includes('trxref=') ||
-      url.includes('reference=') ||
-      url.includes('/callback') ||
-      url.includes('/verify');
+      url.includes('trxref=');
 
     if (isCallback) {
       const ref = extractRef(url);
@@ -445,7 +439,14 @@ const PaymentScreen: React.FC = () => {
             style={styles.viewBookingBtn}
             onPress={() => {
               const id = confirmedBookingId || bookingIdRef.current;
-              if (id) navigation.replace('BookingDetail', { bookingId: id });
+              if (id) {
+                navigation.dispatch(
+                  CommonActions.reset({
+                    index: 1,
+                    routes: [{ name: 'Main' }, { name: 'BookingDetail', params: { bookingId: id } }],
+                  })
+                );
+              }
             }}
             activeOpacity={0.85}
           >

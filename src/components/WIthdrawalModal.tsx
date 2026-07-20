@@ -14,6 +14,7 @@ import {
 import { toast } from '@/components/ui/Toast';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useNavigation } from '@react-navigation/native';
 import { walletAPI, handleAPIError } from '@/api/api';
 
 interface WithdrawalModalProps {
@@ -56,7 +57,7 @@ const FALLBACK_NIGERIAN_BANKS: Bank[] = [
 const BANK_PALETTE = [
   { bg: '#EFF6FF', text: '#1D4ED8' },
   { bg: '#FAF5FF', text: '#7C3AED' },
-  { bg: '#FFF0F6', text: '#BE185D' },
+  { bg: '#FFF0F7', text: '#BE185D' },
   { bg: '#F0FDF4', text: '#15803D' },
   { bg: '#FFF7ED', text: '#C2410C' },
   { bg: '#FEF2F2', text: '#B91C1C' },
@@ -94,12 +95,12 @@ const StepIndicator: React.FC<{ step: 1 | 2 }> = ({ step }) => (
 const si = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 22, paddingBottom: 20, paddingTop: 4, position: 'relative' },
   dot: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', zIndex: 1 },
-  dotActive: { backgroundColor: '#E8166D' },
+  dotActive: { backgroundColor: '#E04079' },
   dotInactive: { backgroundColor: '#E5E5EA' },
   dotText: { fontSize: 12, fontWeight: '700', color: '#fff' },
   dotTextInactive: { color: '#8E8E93' },
   line: { flex: 1, height: 2, backgroundColor: '#E5E5EA', marginHorizontal: 6 },
-  lineActive: { backgroundColor: '#E8166D' },
+  lineActive: { backgroundColor: '#E04079' },
   labelRow: { position: 'absolute', bottom: 2, left: 14, right: 14, flexDirection: 'row', justifyContent: 'space-between' },
   label: { fontSize: 10, fontWeight: '600', color: '#8E8E93' },
   labelLeft: { marginLeft: 2 },
@@ -122,6 +123,7 @@ const WithdrawalModal: React.FC<WithdrawalModalProps> = ({
   const [accountVerified, setAccountVerified] = useState(false);
   const [step, setStep] = useState<1 | 2>(1);
   const [banks, setBanks] = useState<Bank[]>(FALLBACK_NIGERIAN_BANKS);
+  const navigation = useNavigation();
   const [loadingBanks, setLoadingBanks] = useState(false);
   const [showBankPicker, setShowBankPicker] = useState(false);
   const [bankSearchQuery, setBankSearchQuery] = useState('');
@@ -202,7 +204,14 @@ const WithdrawalModal: React.FC<WithdrawalModalProps> = ({
       }
     } catch (error) {
       const apiError = handleAPIError(error);
-      toast.error('Withdrawal Failed', apiError.message);
+      const msg = apiError.message || '';
+      if (msg.toLowerCase().includes('withdrawal pin') || msg.toLowerCase().includes('set up your')) {
+        toast.info('PIN Required', 'Please set up your withdrawal PIN first');
+        handleClose();
+        navigation.navigate('SetWithdrawalPin' as never);
+      } else {
+        toast.error('Withdrawal Failed', msg);
+      }
     } finally {
       setLoading(false);
     }
@@ -265,7 +274,7 @@ const WithdrawalModal: React.FC<WithdrawalModalProps> = ({
               {step === 1 ? (
                 <>
                   {/* Balance Card */}
-                  <LinearGradient colors={['#E8166D', '#FF5FA0']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.balanceCard}>
+                  <LinearGradient colors={['#E04079', '#C0315E']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.balanceCard}>
                     <Text style={styles.balanceLabel}>Available Balance</Text>
                     <Text style={styles.balanceAmount}>{formatCurrency(currentBalance)}</Text>
                     <View style={styles.balanceDecor} />
@@ -325,7 +334,7 @@ const WithdrawalModal: React.FC<WithdrawalModalProps> = ({
                   >
                     {loadingBanks ? (
                       <View style={styles.bankSelectorInner}>
-                        <ActivityIndicator size="small" color="#E8166D" />
+                        <ActivityIndicator size="small" color="#E04079" />
                         <Text style={styles.bankSelectorPlaceholder}>Loading banks…</Text>
                       </View>
                     ) : (
@@ -347,7 +356,7 @@ const WithdrawalModal: React.FC<WithdrawalModalProps> = ({
                     <Ionicons
                       name={showBankPicker ? 'chevron-up' : 'chevron-down'}
                       size={18}
-                      color={showBankPicker ? '#E8166D' : '#8E8E93'}
+                      color={showBankPicker ? '#E04079' : '#8E8E93'}
                     />
                   </TouchableOpacity>
 
@@ -403,7 +412,7 @@ const WithdrawalModal: React.FC<WithdrawalModalProps> = ({
                                 <Text style={[styles.bankItemName, active && styles.bankItemNameActive]}>
                                   {item.name}
                                 </Text>
-                                {active && <Ionicons name="checkmark-circle" size={18} color="#E8166D" />}
+                                {active && <Ionicons name="checkmark-circle" size={18} color="#E04079" />}
                               </TouchableOpacity>
                             );
                           })
@@ -416,7 +425,7 @@ const WithdrawalModal: React.FC<WithdrawalModalProps> = ({
                   <Text style={styles.sectionLabel}>Account Number</Text>
                   <View style={[
                     styles.accountInputWrap,
-                    verifyingAccount && { borderColor: '#E8166D' },
+                    verifyingAccount && { borderColor: '#E04079' },
                     accountVerified && { borderColor: '#16A34A' },
                   ]}>
                     <TextInput
@@ -429,7 +438,7 @@ const WithdrawalModal: React.FC<WithdrawalModalProps> = ({
                       style={[styles.accountInput, !bankCode && { color: '#C7C7CC' }]}
                       placeholderTextColor="#C7C7CC"
                     />
-                    {verifyingAccount && <ActivityIndicator size="small" color="#E8166D" style={{ marginRight: 14 }} />}
+                    {verifyingAccount && <ActivityIndicator size="small" color="#E04079" style={{ marginRight: 14 }} />}
                     {accountVerified && !verifyingAccount && (
                       <Ionicons name="checkmark-circle" size={22} color="#16A34A" style={{ marginRight: 14 }} />
                     )}
@@ -460,7 +469,7 @@ const WithdrawalModal: React.FC<WithdrawalModalProps> = ({
                     style={{ borderRadius: 16, overflow: 'hidden', marginTop: 4 }}
                   >
                     <LinearGradient
-                      colors={canContinue ? ['#E8166D', '#FF5FA0'] : ['#D1D5DB', '#D1D5DB']}
+                      colors={canContinue ? ['#E04079', '#C0315E'] : ['#D1D5DB', '#D1D5DB']}
                       start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
                       style={styles.ctaBtn}
                     >
@@ -539,7 +548,7 @@ const WithdrawalModal: React.FC<WithdrawalModalProps> = ({
                     style={{ borderRadius: 16, overflow: 'hidden' }}
                   >
                     <LinearGradient
-                      colors={canConfirm ? ['#E8166D', '#FF5FA0'] : ['#D1D5DB', '#D1D5DB']}
+                      colors={canConfirm ? ['#E04079', '#C0315E'] : ['#D1D5DB', '#D1D5DB']}
                       start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
                       style={styles.ctaBtn}
                     >
@@ -622,7 +631,7 @@ const styles = StyleSheet.create({
   feeValue: { fontSize: 14, fontWeight: '600', color: '#1C1C1E' },
   feeDivider: { height: 1, backgroundColor: '#E5E5EA', marginBottom: 10 },
   feeTotalLabel: { fontSize: 15, fontWeight: '700', color: '#1C1C1E' },
-  feeTotalValue: { fontSize: 18, fontWeight: '800', color: '#E8166D', letterSpacing: -0.5 },
+  feeTotalValue: { fontSize: 18, fontWeight: '800', color: '#E04079', letterSpacing: -0.5 },
 
   // Bank Selector
   bankSelector: {
@@ -630,7 +639,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#F2F2F7', borderRadius: 14, paddingHorizontal: 14, paddingVertical: 14,
     borderWidth: 1.5, borderColor: '#E5E5EA', marginBottom: 2,
   },
-  bankSelectorOpen: { borderColor: '#E8166D', borderBottomLeftRadius: 0, borderBottomRightRadius: 0, borderBottomWidth: 0 },
+  bankSelectorOpen: { borderColor: '#E04079', borderBottomLeftRadius: 0, borderBottomRightRadius: 0, borderBottomWidth: 0 },
   bankSelectorInner: { flexDirection: 'row', alignItems: 'center', flex: 1, gap: 10 },
   bankSelectorValue: { fontSize: 15, fontWeight: '600', color: '#1C1C1E' },
   bankSelectorPlaceholder: { fontSize: 15, color: '#C7C7CC' },
@@ -639,7 +648,7 @@ const styles = StyleSheet.create({
 
   // Inline Bank Dropdown
   bankDropdown: {
-    borderWidth: 1.5, borderTopWidth: 0, borderColor: '#E8166D',
+    borderWidth: 1.5, borderTopWidth: 0, borderColor: '#E04079',
     borderBottomLeftRadius: 14, borderBottomRightRadius: 14,
     backgroundColor: '#fff', marginBottom: 20, overflow: 'hidden',
   },
@@ -655,7 +664,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14, paddingVertical: 12,
     borderBottomWidth: 1, borderBottomColor: '#F2F2F7',
   },
-  bankDropdownItemActive: { backgroundColor: '#FFF0F6' },
+  bankDropdownItemActive: { backgroundColor: '#FFF0F7' },
   bankDropdownEmpty: { paddingVertical: 28, alignItems: 'center', gap: 8 },
   bankDropdownEmptyText: { fontSize: 14, color: '#8E8E93', fontWeight: '500' },
 
@@ -665,7 +674,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#F2F2F7', borderRadius: 14, borderWidth: 1.5, borderColor: '#E5E5EA', marginBottom: 8,
   },
   accountInput: { flex: 1, paddingHorizontal: 14, paddingVertical: 14, fontSize: 16, fontWeight: '600', color: '#1C1C1E' },
-  verifyingText: { fontSize: 12, color: '#E8166D', fontWeight: '600', marginBottom: 12 },
+  verifyingText: { fontSize: 12, color: '#E04079', fontWeight: '600', marginBottom: 12 },
 
   // Account Name
   accountNameCard: {
@@ -701,7 +710,7 @@ const styles = StyleSheet.create({
   },
   pinDotsRow: { flexDirection: 'row', justifyContent: 'center', gap: 12, marginBottom: 8 },
   pinDot: { width: 12, height: 12, borderRadius: 6, backgroundColor: '#E5E5EA' },
-  pinDotFilled: { backgroundColor: '#E8166D' },
+  pinDotFilled: { backgroundColor: '#E04079' },
   pinHint: { fontSize: 12, color: '#8E8E93', textAlign: 'center', marginBottom: 20, fontWeight: '500' },
 
   // Security
@@ -720,12 +729,12 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: '#E5E5EA',
   },
   netLabel: { fontSize: 14, fontWeight: '600', color: '#6C6C70' },
-  netValue: { fontSize: 18, fontWeight: '800', color: '#E8166D', letterSpacing: -0.5 },
+  netValue: { fontSize: 18, fontWeight: '800', color: '#E04079', letterSpacing: -0.5 },
 
   bankItemIcon: { width: 38, height: 38, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   bankItemInitial: { fontSize: 13, fontWeight: '800' },
   bankItemName: { flex: 1, fontSize: 14, fontWeight: '500', color: '#1C1C1E' },
-  bankItemNameActive: { color: '#E8166D', fontWeight: '700' },
+  bankItemNameActive: { color: '#E04079', fontWeight: '700' },
 });
 
 export default WithdrawalModal;

@@ -118,7 +118,7 @@ const WalletFundingModal: React.FC<WalletFundingModalProps> = ({
 
             {/* ── Balance Card ────────────────────────────── */}
             <LinearGradient
-              colors={['#E8166D', '#FF5FA0']}
+              colors={['#E04079', '#C0315E']}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
               style={styles.balanceCard}
@@ -196,7 +196,7 @@ const WalletFundingModal: React.FC<WalletFundingModalProps> = ({
               style={{ borderRadius: 16, overflow: 'hidden' }}
             >
               <LinearGradient
-                colors={canProceed ? ['#E8166D', '#FF5FA0'] : ['#D1D5DB', '#D1D5DB']}
+                colors={canProceed ? ['#E04079', '#C0315E'] : ['#D1D5DB', '#D1D5DB']}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 0 }}
                 style={styles.ctaBtn}
@@ -289,9 +289,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16, paddingVertical: 11, borderRadius: 12,
     backgroundColor: '#F2F2F7', borderWidth: 1.5, borderColor: '#E5E5EA',
   },
-  quickChipActive: { backgroundColor: '#FFF0F6', borderColor: '#E8166D' },
+  quickChipActive: { backgroundColor: '#FFF0F7', borderColor: '#E04079' },
   quickChipText: { fontSize: 14, fontWeight: '600', color: '#6C6C70' },
-  quickChipTextActive: { color: '#E8166D' },
+  quickChipTextActive: { color: '#E04079' },
 
   // Input
   inputWrap: {
