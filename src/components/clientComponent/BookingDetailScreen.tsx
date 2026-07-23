@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -8,18 +8,24 @@ import {
   Image,
   StyleSheet,
   Dimensions,
+  Modal,
+  TextInput,
+  KeyboardAvoidingView,
+  Platform,
+  Animated,
 } from 'react-native';
 import { toast } from '@/components/ui/Toast';
 import ConfirmationModal from '@/components/ConfirmationModal';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
+import { useNavigation, useRoute, RouteProp, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '@/types/navigation.types';
 import { bookingAPI, handleAPIError } from '@/api/api';
 import { getStoredUser } from '@/utils/authHelper';
 import CancelBookingModal from '@/components/ui/CancelBookingModal';
+import socketService from '@/services/socket.service';
 
 type BookingDetailNavigationProp = NativeStackNavigationProp<RootStackParamList, 'BookingDetail'>;
 type BookingDetailRouteProp = RouteProp<RootStackParamList, 'BookingDetail'>;
@@ -194,6 +200,19 @@ const SessionTimer: React.FC<{ startedAt: string }> = ({ startedAt }) => {
   );
 };
 
+const BlinkDot: React.FC = () => {
+  const opacity = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(opacity, { toValue: 0.15, duration: 550, useNativeDriver: true }),
+        Animated.timing(opacity, { toValue: 1,    duration: 550, useNativeDriver: true }),
+      ])
+    ).start();
+  }, []);
+  return <Animated.View style={[styles.sessionLiveDot, { opacity }]} />;
+};
+
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 
 const BookingDetailScreen: React.FC = () => {
@@ -208,6 +227,8 @@ const BookingDetailScreen: React.FC = () => {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [isVendor, setIsVendor] = useState(false);
   const [showCancelModal, setShowCancelModal] = useState(false);
+  const [showRejectModal, setShowRejectModal] = useState(false);
+  const [rejectReason, setRejectReason] = useState('');
   const [confirmModal, setConfirmModal] = useState({ visible: false, title: '', message: '', onConfirm: () => {} });
 
   useEffect(() => { loadCurrentUser(); }, []);
@@ -241,7 +262,43 @@ const BookingDetailScreen: React.FC = () => {
     } finally { setLoading(false); }
   };
 
-  useEffect(() => { fetchBookingDetails(); }, [bookingId]);
+  useFocusEffect(
+    useCallback(() => { fetchBookingDetails(); }, [bookingId])
+  );
+
+  // Real-time booking updates via socket
+  useEffect(() => {
+    const attach = (s: any) => {
+      const onStartWaiting = (data: any) => {
+        if (data.bookingId !== bookingId) return;
+        toast.info('Session Update', data.message || 'Session confirmation updated');
+        fetchBookingDetails();
+      };
+      const onCompletionWaiting = (data: any) => {
+        if (data.bookingId !== bookingId) return;
+        toast.info('Almost done!', data.message || 'Completion status updated');
+        fetchBookingDetails();
+      };
+      s.on('booking:start:waiting', onStartWaiting);
+      s.on('booking:completion:waiting', onCompletionWaiting);
+      return () => {
+        s.off('booking:start:waiting', onStartWaiting);
+        s.off('booking:completion:waiting', onCompletionWaiting);
+      };
+    };
+
+    let cleanup: (() => void) | undefined;
+    const existing = socketService.getSocket();
+    if (existing) {
+      cleanup = attach(existing);
+    } else {
+      socketService.connect().then(() => {
+        const s = socketService.getSocket();
+        if (s) cleanup = attach(s);
+      });
+    }
+    return () => { if (cleanup) cleanup(); };
+  }, [bookingId]);
 
   useEffect(() => {
     let interval: NodeJS.Timeout;
@@ -278,6 +335,10 @@ const BookingDetailScreen: React.FC = () => {
     if (!booking) return;
     if (!['accepted', 'in_progress', 'completed'].includes(booking.status.toLowerCase())) {
       toast.warning('Cannot Create Dispute', 'Disputes can only be created for active bookings.');
+      return;
+    }
+    if (booking.status.toLowerCase() === 'completed' && booking.paymentStatus === 'released') {
+      toast.warning('Cannot Create Dispute', 'This booking is fully settled — payment has already been released.');
       return;
     }
     if (booking.hasDispute) {
@@ -351,6 +412,51 @@ const BookingDetailScreen: React.FC = () => {
       const apiError = handleAPIError(error);
       toast.error('Error', apiError.message || 'Failed to cancel booking');
     } finally { setActionLoading(false); }
+  };
+
+  const handleAcceptBooking = () => {
+    setConfirmModal({
+      visible: true,
+      title: 'Accept Booking',
+      message: 'Accept this booking request? The client will be notified.',
+      onConfirm: async () => {
+        try {
+          setActionLoading(true);
+          const r = await bookingAPI.acceptBooking(bookingId);
+          if (r.success) { toast.success('Accepted', 'Booking accepted successfully'); fetchBookingDetails(); }
+        } catch (e) { toast.error('Error', handleAPIError(e).message); }
+        finally { setActionLoading(false); }
+      },
+    });
+  };
+
+  const handleRejectBooking = async () => {
+    const t = rejectReason.trim();
+    if (t.length < 10) { toast.warning('Too Short', 'Reason must be at least 10 characters'); return; }
+    try {
+      setActionLoading(true);
+      setShowRejectModal(false);
+      const r = await bookingAPI.rejectBooking(bookingId, t);
+      if (r.success) { toast.success('Rejected', 'Booking has been rejected'); fetchBookingDetails(); }
+    } catch (e) { toast.error('Error', handleAPIError(e).message); }
+    finally { setActionLoading(false); setRejectReason(''); }
+  };
+
+  const handleStartSession = async () => {
+    try {
+      setActionLoading(true);
+      const r = await bookingAPI.startBooking(bookingId);
+      if (r.success) {
+        if (r.data?.waiting) {
+          const other = r.data.waitingFor === 'client' ? 'client' : 'vendor';
+          toast.info('Confirmed!', `Waiting for the ${other} to also confirm start.`);
+        } else {
+          toast.success('Session Live!', 'Both parties confirmed. Session has started!');
+        }
+        fetchBookingDetails();
+      }
+    } catch (e) { toast.error('Error', handleAPIError(e).message); }
+    finally { setActionLoading(false); }
   };
 
   const handleMarkComplete = () => {
@@ -557,14 +663,14 @@ const BookingDetailScreen: React.FC = () => {
         {isActive && booking.sessionStartedAt && (
           <View style={styles.sessionTimerRow}>
             <View style={styles.sessionTimerIcon}>
-              <Ionicons name="timer-outline" size={16} color="#7C3AED" />
+              <Ionicons name="timer-outline" size={16} color="#16A34A" />
             </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.sessionTimerLabel}>Session running</Text>
               <SessionTimer startedAt={booking.sessionStartedAt} />
             </View>
             <View style={styles.sessionLivePill}>
-              <View style={styles.sessionLiveDot} />
+              <BlinkDot />
               <Text style={styles.sessionLiveText}>LIVE</Text>
             </View>
           </View>
@@ -584,10 +690,47 @@ const BookingDetailScreen: React.FC = () => {
           </View>
         )}
 
-        {/* Waiting message */}
-        {!!waitMsg && (
-          <View style={styles.sessionWaitRow}>
-            <Ionicons name="hourglass-outline" size={14} color="#C2410C" />
+        {/* Confirm start button — shown inline when status is accepted */}
+        {!isActive && (() => {
+          const myConfirmed    = isVendor ? vendorReady : clientReady;
+          const otherConfirmed = isVendor ? clientReady : vendorReady;
+          const otherLabel     = isVendor ? 'client' : 'vendor';
+
+          if (!myConfirmed) {
+            return (
+              <TouchableOpacity
+                onPress={handleStartSession}
+                disabled={actionLoading}
+                style={styles.sessionStartBtn}
+                activeOpacity={0.85}
+              >
+                {actionLoading
+                  ? <ActivityIndicator size="small" color="#fff" />
+                  : <>
+                      <Ionicons name="play-circle-outline" size={17} color="#fff" />
+                      <Text style={styles.sessionStartBtnTxt}>
+                        {otherConfirmed ? `${otherLabel === 'client' ? 'Client' : 'Vendor'} confirmed — tap to go live!` : 'Confirm Session Start'}
+                      </Text>
+                    </>
+                }
+              </TouchableOpacity>
+            );
+          }
+
+          return (
+            <View style={styles.sessionWaitRow}>
+              <ActivityIndicator size="small" color="#7C3AED" style={{ marginRight: 4 }} />
+              <Text style={[styles.sessionWaitText, { color: '#7C3AED' }]}>
+                Waiting for {otherLabel} to confirm start…
+              </Text>
+            </View>
+          );
+        })()}
+
+        {/* Waiting message (only shown when neither has confirmed yet) */}
+        {!!waitMsg && !vendorReady && !clientReady && (
+          <View style={[styles.sessionWaitRow, { marginTop: 8 }]}>
+            <Ionicons name="information-circle-outline" size={14} color="#C2410C" />
             <Text style={styles.sessionWaitText}>{waitMsg}</Text>
           </View>
         )}
@@ -770,6 +913,85 @@ const BookingDetailScreen: React.FC = () => {
     const status = booking.status.toLowerCase();
     const serviceInfo = getServiceInfo();
 
+    // ── Vendor: Accept / Reject pending booking ──
+    if (status === 'pending' && isVendor) {
+      return (
+        <View style={[styles.actionBar, { paddingBottom: bottom + 16, gap: 10 }]}>
+          <Text style={styles.abHint}>
+            Review this booking request and accept or decline.
+          </Text>
+          <View style={styles.abRow}>
+            <TouchableOpacity
+              onPress={() => { setRejectReason(''); setShowRejectModal(true); }}
+              disabled={actionLoading}
+              style={[styles.abSecondary, styles.abSecondaryRed, { flex: 1 }]}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="close-circle-outline" size={18} color="#DC2626" />
+              <Text style={[styles.abSecondaryText, { color: '#DC2626' }]}>Decline</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={handleAcceptBooking}
+              disabled={actionLoading}
+              style={[styles.abPrimary, { flex: 1, backgroundColor: PRIMARY }]}
+              activeOpacity={0.85}
+            >
+              {actionLoading
+                ? <ActivityIndicator size="small" color="#fff" />
+                : <>
+                    <Ionicons name="checkmark-circle-outline" size={20} color="#fff" />
+                    <Text style={styles.abPrimaryText}>Accept</Text>
+                  </>
+              }
+            </TouchableOpacity>
+          </View>
+        </View>
+      );
+    }
+
+    // ── Accepted: Reschedule (client only) + Cancel ──
+    if (status === 'accepted') {
+      return (
+        <View style={[styles.actionBar, { paddingBottom: bottom + 16, gap: 10 }]}>
+          {!isVendor && (
+            <View style={styles.abRow}>
+              <TouchableOpacity
+                onPress={() => navigation.navigate('Reschedule', {
+                  bookingId: booking._id,
+                  scheduledDate: booking.scheduledDate,
+                  scheduledTime: booking.scheduledTime,
+                  vendorName: booking.vendor?.vendorProfile?.businessName || `${booking.vendor?.firstName} ${booking.vendor?.lastName}`,
+                  serviceName: serviceInfo?.name || 'Service',
+                  serviceImage: serviceInfo?.images?.[0] || booking.vendor?.avatar,
+                  serviceType: booking.serviceType,
+                  location: booking.location,
+                })}
+                style={[styles.abSecondary, styles.abSecondaryBlue, { flex: 1 }]}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="calendar-outline" size={18} color="#2563EB" />
+                <Text style={[styles.abSecondaryText, { color: '#2563EB' }]}>Reschedule</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => setShowCancelModal(true)}
+                style={[styles.abSecondary, styles.abSecondaryRed, { flex: 1 }]}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="close-circle-outline" size={18} color="#DC2626" />
+                <Text style={[styles.abSecondaryText, { color: '#DC2626' }]}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+          {isVendor && (
+            <TouchableOpacity onPress={() => setShowCancelModal(true)} style={styles.abTertiary} activeOpacity={0.7}>
+              <Ionicons name="close-circle-outline" size={14} color="#9CA3AF" />
+              <Text style={[styles.abTertiaryText, { color: '#9CA3AF' }]}>Cancel Booking</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      );
+    }
+
     // ── Payment pending ──
     if (booking.paymentStatus === 'pending') {
       return (
@@ -782,6 +1004,46 @@ const BookingDetailScreen: React.FC = () => {
               <Text style={styles.abLockedTitle}>Payment Pending</Text>
               <Text style={styles.abLockedSub}>Complete payment to unlock all actions</Text>
             </View>
+          </View>
+        </View>
+      );
+    }
+
+    // ── In-progress: Mark Complete + Report Issue side by side ──
+    if (status === 'in_progress' && !booking.hasDispute) {
+      const done  = isVendor ? booking.vendorMarkedComplete : booking.clientMarkedComplete;
+      const label = isVendor
+        ? (done ? 'Marked as Done'     : 'Mark as Done')
+        : (done ? 'Marked Complete'    : 'Mark Complete');
+      return (
+        <View style={[styles.actionBar, { paddingBottom: bottom + 16 }]}>
+          <View style={styles.abRow}>
+            <TouchableOpacity
+              onPress={handleCreateDispute}
+              style={[styles.abCompact, styles.abCompactOrange]}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="flag-outline" size={15} color="#EA580C" />
+              <Text style={[styles.abCompactTxt, { color: '#EA580C' }]}>Report</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={handleMarkComplete}
+              disabled={actionLoading || done}
+              style={[styles.abCompact, { flex: 2 }, done ? styles.abCompactGreenDone : styles.abCompactGreen]}
+              activeOpacity={0.85}
+            >
+              {actionLoading
+                ? <ActivityIndicator size="small" color={done ? '#16A34A' : '#fff'} />
+                : <>
+                    <Ionicons
+                      name={done ? 'checkmark-circle' : 'checkmark-circle-outline'}
+                      size={16}
+                      color={done ? '#16A34A' : '#fff'}
+                    />
+                    <Text style={[styles.abCompactTxt, { color: done ? '#16A34A' : '#fff' }]}>{label}</Text>
+                  </>
+              }
+            </TouchableOpacity>
           </View>
         </View>
       );
@@ -804,60 +1066,6 @@ const BookingDetailScreen: React.FC = () => {
     let showReschedule = false;
     let showCancel = false;
     let showReport = false;
-
-    // Primary: Mark Complete (client, session started)
-    if (status === 'in_progress' && !isVendor) {
-      const done = booking.clientMarkedComplete;
-      primary = (
-        <TouchableOpacity
-          onPress={handleMarkComplete}
-          disabled={actionLoading || done}
-          style={[styles.abPrimary, done ? styles.abPrimaryDoneGreen : styles.abPrimaryGreen]}
-          activeOpacity={0.85}
-        >
-          {actionLoading
-            ? <ActivityIndicator size="small" color={done ? '#16A34A' : '#fff'} />
-            : <>
-                <Ionicons
-                  name={done ? 'checkmark-circle' : 'checkmark-circle-outline'}
-                  size={22}
-                  color={done ? '#16A34A' : '#fff'}
-                />
-                <Text style={[styles.abPrimaryText, done && { color: '#16A34A' }]}>
-                  {done ? 'Marked Complete' : 'Mark as Complete'}
-                </Text>
-              </>
-          }
-        </TouchableOpacity>
-      );
-    }
-
-    // Primary: Mark Done (vendor, in_progress)
-    if (status === 'in_progress' && isVendor) {
-      const done = booking.vendorMarkedComplete;
-      primary = (
-        <TouchableOpacity
-          onPress={handleMarkComplete}
-          disabled={actionLoading || done}
-          style={[styles.abPrimary, done ? styles.abPrimaryDoneGreen : styles.abPrimaryGreen]}
-          activeOpacity={0.85}
-        >
-          {actionLoading
-            ? <ActivityIndicator size="small" color={done ? '#16A34A' : '#fff'} />
-            : <>
-                <Ionicons
-                  name={done ? 'checkmark-circle' : 'checkmark-circle-outline'}
-                  size={22}
-                  color={done ? '#16A34A' : '#fff'}
-                />
-                <Text style={[styles.abPrimaryText, done && { color: '#16A34A' }]}>
-                  {done ? 'Marked as Done' : 'Mark as Done'}
-                </Text>
-              </>
-          }
-        </TouchableOpacity>
-      );
-    }
 
     // Primary: Write Review (client, completed, no review yet)
     if (status === 'completed' && !booking.hasReview && !isVendor) {
@@ -893,7 +1101,7 @@ const BookingDetailScreen: React.FC = () => {
     // Reschedule + Cancel only when session has NOT started
     showReschedule = ['pending', 'accepted'].includes(status) && booking.paymentStatus === 'escrowed' && !isVendor;
     showCancel = ['pending', 'accepted'].includes(status) && booking.paymentStatus === 'escrowed';
-    showReport = ['accepted', 'in_progress', 'completed'].includes(status);
+    showReport = false; // completed means both parties done + payment settled, no new disputes
 
     const hasSecondaryRow = showReschedule || showCancel;
 
@@ -1024,13 +1232,10 @@ const BookingDetailScreen: React.FC = () => {
             <Text style={styles.heroPillText}>{formatStatus(booking.status)}</Text>
           </View>
 
-          {/* Back + Share buttons */}
+          {/* Back button */}
           <View style={[styles.heroButtons, { top: top + 12 }]}>
             <TouchableOpacity onPress={() => navigation.goBack()} style={styles.heroBtn} activeOpacity={0.75}>
               <Ionicons name="arrow-back" size={20} color="#fff" />
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.heroBtn} activeOpacity={0.75}>
-              <Ionicons name="share-social-outline" size={20} color="#fff" />
             </TouchableOpacity>
           </View>
         </View>
@@ -1236,6 +1441,7 @@ const BookingDetailScreen: React.FC = () => {
         loading={actionLoading}
         booking={booking ? {
           vendorName: booking.vendor?.vendorProfile?.businessName || `${booking.vendor?.firstName} ${booking.vendor?.lastName}`,
+          vendorAvatar: booking.vendor?.avatar,
           serviceName: serviceInfo?.name || 'Service',
           duration: booking.duration,
           scheduledDate: booking.scheduledDate,
@@ -1253,6 +1459,42 @@ const BookingDetailScreen: React.FC = () => {
         onConfirm={() => { confirmModal.onConfirm(); setConfirmModal(p => ({ ...p, visible: false })); }}
         onCancel={() => setConfirmModal(p => ({ ...p, visible: false }))}
       />
+
+      {/* Reject Booking Modal */}
+      <Modal visible={showRejectModal} transparent animationType="slide" onRequestClose={() => setShowRejectModal(false)}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1, justifyContent: 'flex-end' }}>
+          <TouchableOpacity style={styles.rejectOverlay} activeOpacity={1} onPress={() => setShowRejectModal(false)} />
+          <View style={styles.rejectSheet}>
+            <View style={styles.rejectHandle} />
+            <Text style={styles.rejectTitle}>Decline Booking</Text>
+            <Text style={styles.rejectSub}>Please tell the client why you're declining this request.</Text>
+            <TextInput
+              style={styles.rejectInput}
+              placeholder="Enter reason (min 10 characters)…"
+              placeholderTextColor="#9CA3AF"
+              value={rejectReason}
+              onChangeText={setRejectReason}
+              multiline
+              numberOfLines={4}
+              maxLength={500}
+              textAlignVertical="top"
+              autoFocus
+            />
+            <Text style={styles.rejectCount}>{rejectReason.trim().length}/500</Text>
+            <TouchableOpacity
+              onPress={handleRejectBooking}
+              disabled={actionLoading || rejectReason.trim().length < 10}
+              style={[styles.rejectBtn, (actionLoading || rejectReason.trim().length < 10) && { opacity: 0.45 }]}
+              activeOpacity={0.85}
+            >
+              {actionLoading
+                ? <ActivityIndicator size="small" color="#fff" />
+                : <Text style={styles.rejectBtnTxt}>Decline Booking</Text>
+              }
+            </TouchableOpacity>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </View>
   );
 };
@@ -1395,25 +1637,34 @@ const styles = StyleSheet.create({
   },
   // Primary buttons
   abPrimary: {
-    height: 56, borderRadius: 18,
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10,
+    height: 44, borderRadius: 13,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
   },
   abPrimaryGreen: { backgroundColor: '#16A34A' },
   abPrimaryDoneGreen: { backgroundColor: '#F0FDF4', borderWidth: 1.5, borderColor: '#86EFAC' },
   abPrimaryOrange: {
-    height: 56, borderRadius: 18, backgroundColor: '#EA580C',
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10,
+    height: 44, borderRadius: 13, backgroundColor: '#EA580C',
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
   },
-  abPrimaryText: { fontSize: 16, fontWeight: '700', color: '#fff', letterSpacing: 0.1 },
+  abPrimaryText: { fontSize: 14, fontWeight: '700', color: '#fff', letterSpacing: 0.1 },
   // Secondary row
   abSecondaryRow: { flexDirection: 'row', gap: 10 },
   abSecondary: {
-    flex: 1, height: 48, borderRadius: 14, borderWidth: 1.5,
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7,
+    flex: 1, height: 42, borderRadius: 12, borderWidth: 1.5,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
   },
   abSecondaryBlue: { backgroundColor: '#EFF6FF', borderColor: '#BFDBFE' },
   abSecondaryRed: { backgroundColor: '#FEF2F2', borderColor: '#FECACA' },
-  abSecondaryText: { fontSize: 14, fontWeight: '600' },
+  abSecondaryText: { fontSize: 13, fontWeight: '600' },
+  // Compact side-by-side (in_progress)
+  abCompact: {
+    flex: 1, height: 42, borderRadius: 12,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+  },
+  abCompactOrange: { backgroundColor: '#FFF7ED', borderWidth: 1, borderColor: '#FDBA74' },
+  abCompactGreen: { backgroundColor: '#16A34A' },
+  abCompactGreenDone: { backgroundColor: '#F0FDF4', borderWidth: 1.5, borderColor: '#86EFAC' },
+  abCompactTxt: { fontSize: 13, fontWeight: '700' },
   // Tertiary (report issue)
   abTertiary: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
@@ -1455,18 +1706,18 @@ const styles = StyleSheet.create({
   sessionConnector: { height: 2, flex: 0.6, marginBottom: 18 },
   sessionTimerRow: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
-    backgroundColor: '#FAF5FF', borderRadius: 14, padding: 14,
+    backgroundColor: '#F0FDF4', borderRadius: 14, padding: 14,
     marginBottom: 12,
   },
-  sessionTimerIcon: { width: 36, height: 36, borderRadius: 10, backgroundColor: '#EDE9FE', alignItems: 'center', justifyContent: 'center' },
-  sessionTimerLabel: { fontSize: 11, color: '#6D28D9', fontWeight: '600', marginBottom: 2 },
-  sessionElapsed: { fontSize: 22, fontWeight: '800', color: '#4C1D95', letterSpacing: -0.5 },
+  sessionTimerIcon: { width: 36, height: 36, borderRadius: 10, backgroundColor: '#DCFCE7', alignItems: 'center', justifyContent: 'center' },
+  sessionTimerLabel: { fontSize: 11, color: '#16A34A', fontWeight: '600', marginBottom: 2 },
+  sessionElapsed: { fontSize: 22, fontWeight: '800', color: '#14532D', letterSpacing: -0.5 },
   sessionLivePill: {
     flexDirection: 'row', alignItems: 'center', gap: 5,
-    backgroundColor: '#EDE9FE', borderRadius: 20, paddingHorizontal: 10, paddingVertical: 5,
+    backgroundColor: '#DCFCE7', borderRadius: 20, paddingHorizontal: 10, paddingVertical: 5,
   },
-  sessionLiveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#7C3AED' },
-  sessionLiveText: { fontSize: 10, fontWeight: '800', color: '#7C3AED', letterSpacing: 1 },
+  sessionLiveDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: '#16A34A' },
+  sessionLiveText: { fontSize: 10, fontWeight: '800', color: '#15803D', letterSpacing: 1 },
   sessionCompleteRow: { flexDirection: 'row', gap: 10, marginBottom: 12 },
   sessionCompleteItem: {
     flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6,
@@ -1474,8 +1725,54 @@ const styles = StyleSheet.create({
   },
   sessionCompleteItemDone: { backgroundColor: '#F0FDF4' },
   sessionCompleteLabel: { fontSize: 13, fontWeight: '600', color: '#8E8E93' },
-  sessionWaitRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, backgroundColor: '#FFF7ED', borderRadius: 10, padding: 12 },
+  sessionWaitRow: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#FFF7ED', borderRadius: 10, padding: 12 },
   sessionWaitText: { flex: 1, fontSize: 12, color: '#C2410C', fontWeight: '500', lineHeight: 17 },
+  sessionStartBtn: {
+    height: 42, borderRadius: 12, backgroundColor: '#7C3AED',
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 7, marginTop: 14,
+  },
+  sessionStartBtnTxt: { fontSize: 13, fontWeight: '700', color: '#fff' },
+
+  // New action bar helpers
+  abSessionBtn: {
+    height: 44, borderRadius: 13, backgroundColor: '#7C3AED',
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+  },
+  abSessionBtnTxt: { fontSize: 14, fontWeight: '700', color: '#fff' },
+  abHint: { fontSize: 13, color: '#6B7280', textAlign: 'center', lineHeight: 18 },
+  abRow: { flexDirection: 'row', gap: 10 },
+  abWaiting: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: '#F5F3FF', borderRadius: 14,
+    padding: 16, borderWidth: 1, borderColor: '#DDD6FE',
+  },
+  abWaitingTitle: { fontSize: 14, fontWeight: '700', color: '#4C1D95' },
+  abWaitingSub: { fontSize: 12, color: '#7C3AED', marginTop: 2 },
+
+  // Reject modal
+  rejectOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.45)' },
+  rejectSheet: {
+    backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24,
+    padding: 24, paddingBottom: 40,
+  },
+  rejectHandle: {
+    width: 40, height: 4, borderRadius: 2, backgroundColor: '#E5E7EB',
+    alignSelf: 'center', marginBottom: 20,
+  },
+  rejectTitle: { fontSize: 18, fontWeight: '800', color: TEXT_DARK, marginBottom: 6 },
+  rejectSub: { fontSize: 13, color: '#6B7280', marginBottom: 16, lineHeight: 18 },
+  rejectInput: {
+    backgroundColor: '#F9FAFB', borderRadius: 14, padding: 14,
+    fontSize: 14, color: TEXT_DARK, minHeight: 110,
+    borderWidth: 1.5, borderColor: '#E5E7EB', marginBottom: 6,
+  },
+  rejectCount: { fontSize: 11, color: '#9CA3AF', textAlign: 'right', marginBottom: 16 },
+  rejectBtn: {
+    backgroundColor: '#DC2626', borderRadius: 14, paddingVertical: 16,
+    alignItems: 'center',
+  },
+  rejectBtnTxt: { color: '#fff', fontSize: 15, fontWeight: '700' },
 });
 
 export default BookingDetailScreen;
