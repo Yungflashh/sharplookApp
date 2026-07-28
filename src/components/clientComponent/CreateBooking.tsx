@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -6,1113 +6,1331 @@ import {
   ScrollView,
   TextInput,
   ActivityIndicator,
+  StyleSheet,
+  Dimensions,
+  StatusBar,
   Platform,
+  BackHandler,
+  Image,
+  Modal,
+  KeyboardAvoidingView,
+  Keyboard,
 } from 'react-native';
-import { toast } from '@/components/ui/Toast';
-import ConfirmationModal from '@/components/ConfirmationModal';
-import { Ionicons } from '@expo/vector-icons';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import { toast } from '@/components/ui/Toast';
+import { Ionicons } from '@expo/vector-icons';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useNavigation, useRoute, RouteProp, useFocusEffect } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as Location from 'expo-location';
 import { LinearGradient } from 'expo-linear-gradient';
 import { RootStackParamList } from '@/types/navigation.types';
-import { bookingAPI, handleAPIError, sharpPayAPI } from '@/api/api';
-import { getStoredUser } from '@/utils/authHelper';
+import { bookingAPI, handleAPIError, sharpPayAPI, walletAPI, couponAPI } from '@/api/api';
+import LocationPickerModal, { LocationResult } from '@/components/LocationPickerModal';
 
-type CreateBookingNavigationProp = NativeStackNavigationProp<RootStackParamList, 'CreateBooking'>;
-type CreateBookingRouteProp = RouteProp<RootStackParamList, 'CreateBooking'>;
+const { width: SW } = Dimensions.get('window');
 
+const PINK = '#E91E63';
+const BG = '#FFF5F8';
+
+const MONTHS = [
+  'January','February','March','April','May','June',
+  'July','August','September','October','November','December',
+];
+const DAYS_SHORT = ['SUN','MON','TUE','WED','THU','FRI','SAT'];
+const STEP_LABELS = ['Date & Time', 'Location', 'Confirm', 'Payment'];
+
+const haversineKm = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+  const R = 6371;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+};
+
+const formatDriveTime = (km: number) => {
+  const mins = Math.round(km * 2.5);
+  return mins < 60 ? `about ${mins} min drive` : `about ${Math.round(mins / 60)} hr drive`;
+};
+
+const fmt12h = (date: Date) => {
+  const h = date.getHours();
+  const m = date.getMinutes();
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  const h12 = h % 12 || 12;
+  return `${h12}:${m.toString().padStart(2, '0')} ${ampm}`;
+};
+
+const fmt24h = (date: Date) =>
+  `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
+
+type Nav = NativeStackNavigationProp<RootStackParamList, 'CreateBooking'>;
+type RouteP = RouteProp<RootStackParamList, 'CreateBooking'>;
 type PaymentMethod = 'wallet' | 'card';
 
-const CreateBookingScreen: React.FC = () => {
-  const navigation = useNavigation<CreateBookingNavigationProp>();
-  const route = useRoute<CreateBookingRouteProp>();
-  const { service, vendor } = route.params;
+const defaultPickerTime = () => {
+  const d = new Date();
+  d.setHours(9, 0, 0, 0);
+  return d;
+};
 
-  // Steps: 1 = Date/Time, 2 = Location, 3 = Payment Method, 4 = Review & Confirm
+const CreateBookingScreen: React.FC = () => {
+  const navigation = useNavigation<Nav>();
+  const route = useRoute<RouteP>();
+  const { service, vendor } = route.params;
+  const insets = useSafeAreaInsets();
+
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
-  const [scheduledDate, setScheduledDate] = useState(new Date());
-  const [scheduledTime, setScheduledTime] = useState('');
-  const [showDatePicker, setShowDatePicker] = useState(false);
+
+  // Calendar
+  const today = new Date();
+  const [calYear, setCalYear] = useState(today.getFullYear());
+  const [calMonth, setCalMonth] = useState(today.getMonth());
+  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+
+  // Clock time picker
+  const [pickerTime, setPickerTime] = useState<Date>(defaultPickerTime);
+  const [timeConfirmed, setTimeConfirmed] = useState(false); // user must explicitly pick
   const [showTimePicker, setShowTimePicker] = useState(false);
-  const [locationType, setLocationType] = useState<'home' | 'shop'>('home');
-  const [address, setAddress] = useState('');
-  const [city, setCity] = useState('');
-  const [state, setState] = useState('');
-  const [coordinates, setCoordinates] = useState<[number, number]>([0, 0]);
-  const [clientNotes, setClientNotes] = useState('');
+
+  // Location
+  const isHomeAvailable =
+    vendor.vendorProfile.vendorType === 'home_service' ||
+    vendor.vendorProfile.vendorType === 'both';
+  const isShopAvailable =
+    vendor.vendorProfile.vendorType === 'in_shop' ||
+    vendor.vendorProfile.vendorType === 'both';
+
+  const [locationType, setLocationType] = useState<'home' | 'shop'>(
+    isHomeAvailable ? 'home' : 'shop'
+  );
+  const [clientLocation, setClientLocation] = useState<LocationResult | null>(null);
+  const [showMapPicker, setShowMapPicker] = useState(false);
+  const [distanceKm, setDistanceKm] = useState<number | null>(null);
+
+  // Pricing
   const [servicePrice, setServicePrice] = useState(service.basePrice || 0);
   const [distanceCharge, setDistanceCharge] = useState(0);
   const [totalAmount, setTotalAmount] = useState(service.basePrice || 0);
+  const [priceLoading, setPriceLoading] = useState(false);
 
   // Payment
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('wallet');
   const [walletBalance, setWalletBalance] = useState(0);
   const [walletLoading, setWalletLoading] = useState(true);
 
-  // Price Preview
-  const [priceLoading, setPriceLoading] = useState(false);
-  const [calculatedDistance, setCalculatedDistance] = useState<number | null>(null);
+  const [clientNotes, setClientNotes] = useState('');
 
-  // Location
-  const [locationLoading, setLocationLoading] = useState(false);
-  const [locationError, setLocationError] = useState('');
-  const [confirmModal, setConfirmModal] = useState({ visible: false, title: '', message: '', onConfirm: () => {} });
-  const [locationPermissionGranted, setLocationPermissionGranted] = useState(false);
+  // Coupon
+  const [couponInput, setCouponInput] = useState('');
+  const [couponLoading, setCouponLoading] = useState(false);
+  const [appliedCoupon, setAppliedCoupon] = useState<{
+    code: string; discountAmount: number; finalAmount: number;
+  } | null>(null);
 
-  const isHomeServiceAvailable =
-    vendor.vendorProfile.vendorType === 'home_service' ||
-    vendor.vendorProfile.vendorType === 'both';
-  const isShopServiceAvailable =
-    vendor.vendorProfile.vendorType === 'in_shop' ||
-    vendor.vendorProfile.vendorType === 'both';
+  // Add to balance sheet
+  const [showAddBalance, setShowAddBalance] = useState(false);
+  const [addAmount, setAddAmount] = useState('');
+  const [addBalanceLoading, setAddBalanceLoading] = useState(false);
 
+  // Disable swipe-back gesture so Android/iOS back always goes through our step logic
   useEffect(() => {
-    if (!isHomeServiceAvailable && isShopServiceAvailable) {
-      setLocationType('shop');
-    }
+    navigation.setOptions({ gestureEnabled: false });
   }, []);
 
-  useEffect(() => {
-    setTotalAmount(servicePrice + distanceCharge);
-  }, [servicePrice, distanceCharge]);
+  // Intercept Android hardware back button
+  useFocusEffect(
+    useCallback(() => {
+      const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+        handleBack();
+        return true;
+      });
+      return () => sub.remove();
+    }, [step])
+  );
 
-  useEffect(() => {
-    checkLocationPermission();
-    fetchWalletBalance();
-  }, []);
+  useEffect(() => { fetchWalletBalance(); tryGetDistance(); }, []);
+  // Re-fetch balance when screen regains focus (e.g. returning from WalletPayment)
+  useFocusEffect(useCallback(() => { fetchWalletBalance(); }, []));
+  useEffect(() => { setTotalAmount(servicePrice + distanceCharge); }, [servicePrice, distanceCharge]);
+  useEffect(() => { if (step === 3) fetchPricePreview(); }, [step]);
 
-  // Fetch price preview when entering step 3 or when location changes
-  useEffect(() => {
-    if (step >= 3) {
-      fetchPricePreview();
-    }
-  }, [step, locationType, coordinates[0], coordinates[1]]);
+  const tryGetDistance = async () => {
+    const coords = vendor.vendorProfile.location?.coordinates;
+    if (!coords) return;
+    try {
+      const { status } = await Location.getForegroundPermissionsAsync();
+      if (status !== 'granted') return;
+      const pos = await Location.getLastKnownPositionAsync();
+      if (!pos) return;
+      const d = haversineKm(pos.coords.latitude, pos.coords.longitude, coords[1], coords[0]);
+      setDistanceKm(d);
+    } catch {}
+  };
 
-  // Fetch wallet balance for payment method selection
+  const handleLocationConfirm = (result: LocationResult) => {
+    setClientLocation(result);
+    setShowMapPicker(false);
+  };
+
   const fetchWalletBalance = async () => {
     try {
       setWalletLoading(true);
-      const response = await sharpPayAPI.getBalance();
-      if (response.success) {
-        setWalletBalance(response.data.balance || 0);
-      }
-    } catch (error) {
-      console.error('Error fetching wallet balance:', error);
-    } finally {
-      setWalletLoading(false);
-    }
+      const res = await sharpPayAPI.getBalance();
+      if (res.success) setWalletBalance(res.data.balance || 0);
+    } catch {}
+    finally { setWalletLoading(false); }
   };
 
-  // Fetch price preview to calculate distance charge
   const fetchPricePreview = async () => {
     try {
       setPriceLoading(true);
-      
-      const previewData: any = {
-        serviceId: service._id,
-        serviceType: locationType,
-      };
-
-      // Only send location for home service
-      if (locationType === 'home' && coordinates[0] !== 0 && coordinates[1] !== 0) {
-        previewData.location = {
-          coordinates: coordinates, // [longitude, latitude]
-        };
+      const previewData: any = { serviceId: service._id, serviceType: locationType };
+      if (locationType === 'home' && clientLocation?.coordinates) {
+        previewData.location = { coordinates: clientLocation.coordinates };
       }
-
-      console.log('📊 Fetching price preview:', previewData);
-      const response = await bookingAPI.previewPrice(previewData);
-      console.log('📊 Price preview response:', response);
-
-      if (response.success) {
-        const { servicePrice, distanceCharge, totalAmount, distance } = response.data;
-        setServicePrice(servicePrice);
-        setDistanceCharge(distanceCharge);
-        setTotalAmount(totalAmount);
-        if (distance !== undefined) {
-          setCalculatedDistance(distance);
-        }
-        console.log(`✅ Price updated: Service ₦${servicePrice}, Distance ₦${distanceCharge}, Total ₦${totalAmount}`);
+      const res = await bookingAPI.previewPrice(previewData);
+      if (res.success) {
+        setServicePrice(res.data.servicePrice);
+        setDistanceCharge(res.data.distanceCharge);
+        setTotalAmount(res.data.totalAmount);
       }
-    } catch (error) {
-      console.error('Error fetching price preview:', error);
-      // Fallback to base price
+    } catch {
       setDistanceCharge(0);
       setTotalAmount(service.basePrice);
-    } finally {
-      setPriceLoading(false);
+    } finally { setPriceLoading(false); }
+  };
+
+  // ── Clock picker ──────────────────────────────────────────────────────────
+
+  // Returns the earliest selectable time: now+30min when today is selected, undefined for future dates
+  const getMinimumPickerTime = (): Date | undefined => {
+    if (!selectedDate) return undefined;
+    const todayMidnight = new Date(); todayMidnight.setHours(0, 0, 0, 0);
+    const selMidnight   = new Date(selectedDate); selMidnight.setHours(0, 0, 0, 0);
+    if (selMidnight.getTime() !== todayMidnight.getTime()) return undefined;
+    const min = new Date();
+    min.setMinutes(min.getMinutes() + 30, 0, 0);
+    return min;
+  };
+
+  const onTimeChange = (_event: any, date?: Date) => {
+    if (Platform.OS === 'android') setShowTimePicker(false);
+    if (date) {
+      setPickerTime(date);
+      setTimeConfirmed(true);
     }
   };
 
-  const checkLocationPermission = async () => {
-    try {
-      const { status } = await Location.getForegroundPermissionsAsync();
-      setLocationPermissionGranted(status === 'granted');
-    } catch (error) {
-      console.error('Error checking location permission:', error);
-    }
+  const confirmIOSTime = () => {
+    setTimeConfirmed(true);
+    setShowTimePicker(false);
   };
 
-  const requestLocationPermission = async () => {
-    try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      setLocationPermissionGranted(status === 'granted');
-      return status === 'granted';
-    } catch (error) {
-      console.error('Error requesting location permission:', error);
-      return false;
-    }
+  // ── Calendar ──────────────────────────────────────────────────────────────
+  const getDaysInMonth = (y: number, m: number) => new Date(y, m + 1, 0).getDate();
+  const getFirstDay  = (y: number, m: number) => new Date(y, m, 1).getDay();
+
+  const prevMonth = () => {
+    if (calMonth === 0) { setCalMonth(11); setCalYear(y => y - 1); }
+    else setCalMonth(m => m - 1);
+  };
+  const nextMonth = () => {
+    if (calMonth === 11) { setCalMonth(0); setCalYear(y => y + 1); }
+    else setCalMonth(m => m + 1);
   };
 
-  const getCurrentLocation = async () => {
-    setLocationLoading(true);
-    setLocationError('');
+  const buildCells = () => {
+    const total = getDaysInMonth(calYear, calMonth);
+    const first = getFirstDay(calYear, calMonth);
+    const cells: (number | null)[] = Array(first).fill(null);
+    for (let d = 1; d <= total; d++) cells.push(d);
+    return cells;
+  };
 
+  const isPast = (day: number) => {
+    const d = new Date(calYear, calMonth, day);
+    const t = new Date(); t.setHours(0, 0, 0, 0);
+    return d < t;
+  };
+  const isSel = (day: number) =>
+    !!selectedDate &&
+    selectedDate.getFullYear() === calYear &&
+    selectedDate.getMonth() === calMonth &&
+    selectedDate.getDate() === day;
+  const isToday = (day: number) => {
+    const t = new Date();
+    return t.getFullYear() === calYear && t.getMonth() === calMonth && t.getDate() === day;
+  };
+
+  // ── Coupon ────────────────────────────────────────────────────────────────
+  const handleApplyCoupon = async () => {
+    const code = couponInput.trim().toUpperCase();
+    if (!code) return;
     try {
-      if (!locationPermissionGranted) {
-        const granted = await requestLocationPermission();
-        if (!granted) {
-          setLocationError('Location permission is required');
-          toast.error('Location Permission Required', 'Please enable location permissions in your device settings to use this feature.');
-          setLocationLoading(false);
-          return;
-        }
-      }
-
-      const position = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.High,
-      });
-
-      const { latitude, longitude } = position.coords;
-
-      const geocode = await Location.reverseGeocodeAsync({
-        latitude,
-        longitude,
-      });
-
-      if (geocode && geocode.length > 0) {
-        const addressData = geocode[0];
-        setAddress(
-          `${addressData.street || ''} ${addressData.streetNumber || ''}`.trim() ||
-            'Address not available'
-        );
-        setCity(addressData.city || addressData.subregion || 'Unknown City');
-        setState(addressData.region || 'Unknown State');
-        setCoordinates([longitude, latitude]);
-        toast.success('Success', 'Location captured successfully!');
+      setCouponLoading(true);
+      const res = await couponAPI.validate(code, totalAmount);
+      if (res.success && res.data.valid) {
+        setAppliedCoupon({
+          code: res.data.code,
+          discountAmount: res.data.discountAmount,
+          finalAmount: res.data.finalAmount,
+        });
+        toast.success('Coupon applied!', `You saved ₦${res.data.discountAmount.toLocaleString()}`);
       } else {
-        throw new Error('Unable to get address details');
+        toast.error('Invalid coupon', res.data?.reason || 'This coupon cannot be applied.');
+        setAppliedCoupon(null);
       }
-    } catch (error: any) {
-      console.error('Location error:', error);
-      setLocationError('Failed to get location. Please try again.');
-      toast.error('Location Error', 'Unable to get your location. Please ensure location services are enabled and try again.');
-    } finally {
-      setLocationLoading(false);
-    }
+    } catch (e: any) {
+      const err = handleAPIError(e);
+      toast.error('Invalid coupon', err.message || 'Could not apply coupon.');
+      setAppliedCoupon(null);
+    } finally { setCouponLoading(false); }
   };
 
-  const onDateChange = (_event: any, selectedDate?: Date) => {
-    setShowDatePicker(Platform.OS === 'ios');
-    if (selectedDate) {
-      setScheduledDate(selectedDate);
-    }
+  const handleRemoveCoupon = () => {
+    setAppliedCoupon(null);
+    setCouponInput('');
   };
 
-  const onTimeChange = (_event: any, selectedDate?: Date) => {
-    setShowTimePicker(Platform.OS === 'ios');
-    if (selectedDate) {
-      const hours = selectedDate.getHours().toString().padStart(2, '0');
-      const minutes = selectedDate.getMinutes().toString().padStart(2, '0');
-      setScheduledTime(`${hours}:${minutes}`);
+  // ── Add to balance ────────────────────────────────────────────────────────
+  const handleAddBalance = async () => {
+    const amount = parseInt(addAmount.replace(/[^0-9]/g, ''), 10);
+    if (!amount || amount < 100) {
+      toast.error('Minimum ₦100', 'Please enter at least ₦100.');
+      return;
     }
+    try {
+      setAddBalanceLoading(true);
+      const res = await walletAPI.initializeWalletFunding(amount);
+      if (res.success) {
+        setShowAddBalance(false);
+        setAddAmount('');
+        navigation.navigate('WalletPayment', {
+          amount,
+          reference: res.data.reference,
+          authorizationUrl: res.data.authorizationUrl,
+          paymentType: 'wallet_funding',
+        });
+      }
+    } catch (e: any) {
+      const err = handleAPIError(e);
+      toast.error('Error', err.message || 'Could not initialize payment.');
+    } finally { setAddBalanceLoading(false); }
   };
 
-  // Get the Date object for time picker with currently selected time
-  const getTimePickerDate = () => {
-    if (scheduledTime) {
-      const [hours, minutes] = scheduledTime.split(':').map(Number);
-      const date = new Date(scheduledDate);
-      date.setHours(hours, minutes, 0, 0);
-      return date;
-    }
-    // Default to 9 AM on the selected date
-    const date = new Date(scheduledDate);
-    date.setHours(9, 0, 0, 0);
-    return date;
+  // ── Navigation / Validation ───────────────────────────────────────────────
+  const handleBack = () => {
+    if (step > 1) setStep(s => s - 1);
+    else navigation.goBack();
   };
 
   const validateStep1 = () => {
-    if (!scheduledDate) {
-      toast.error('Error', 'Please select a date');
-      return false;
-    }
-    if (!scheduledTime) {
-      toast.error('Error', 'Please select a time');
-      return false;
+    if (!selectedDate) { toast.error('Select a date', 'Please pick a date.'); return false; }
+    if (!timeConfirmed) { toast.error('Select a time', 'Please tap the clock and pick a time.'); return false; }
+
+    // Block past times when today is selected
+    const todayMidnight = new Date(); todayMidnight.setHours(0, 0, 0, 0);
+    const selMidnight   = new Date(selectedDate); selMidnight.setHours(0, 0, 0, 0);
+    if (selMidnight.getTime() === todayMidnight.getTime()) {
+      const chosen = new Date();
+      chosen.setHours(pickerTime.getHours(), pickerTime.getMinutes(), 0, 0);
+      const cutoff = new Date();
+      cutoff.setMinutes(cutoff.getMinutes() + 30, 0, 0);
+      if (chosen < cutoff) {
+        toast.error('Time already passed', 'Please select a time at least 30 minutes from now.');
+        return false;
+      }
     }
     return true;
   };
-
   const validateStep2 = () => {
-    if (locationType === 'home' && isHomeServiceAvailable) {
-      if (!address.trim()) {
-        toast.error('Error', 'Please enter your address');
-        return false;
-      }
-      if (!city.trim()) {
-        toast.error('Error', 'Please enter your city');
-        return false;
-      }
-      if (!state.trim()) {
-        toast.error('Error', 'Please enter your state');
-        return false;
-      }
-    }
-    return true;
-  };
-
-  const validateStep3 = () => {
-    if (paymentMethod === 'wallet' && walletBalance < totalAmount) {
-      setConfirmModal({
-        visible: true,
-        title: 'Insufficient Balance',
-        message: `Your wallet balance (₦${walletBalance.toLocaleString()}) is less than the booking amount (₦${totalAmount.toLocaleString()}). Would you like to use card payment instead?`,
-        onConfirm: () => setPaymentMethod('card'),
-      });
+    if (locationType === 'home' && isHomeAvailable && !clientLocation) {
+      toast.error('Location required', 'Please pick your location on the map.');
       return false;
     }
     return true;
   };
 
   const handleNext = () => {
-    if (step === 1 && validateStep1()) {
-      setStep(2);
-    } else if (step === 2 && validateStep2()) {
-      setStep(3);
-    } else if (step === 3 && validateStep3()) {
-      setStep(4);
-    }
+    if (step === 1 && validateStep1()) setStep(2);
+    else if (step === 2 && validateStep2()) setStep(3);
+    else if (step === 3) setStep(4);
   };
 
-  const handleBack = () => {
-    if (step > 1) {
-      setStep(step - 1);
-    } else {
-      navigation.goBack();
+  const handlePay = async () => {
+    const payableAmount = appliedCoupon ? appliedCoupon.finalAmount : totalAmount;
+    if (paymentMethod === 'wallet' && walletBalance < payableAmount) {
+      setShowAddBalance(true);
+      return;
     }
-  };
-
-  const handleCreateBooking = async () => {
     try {
       setLoading(true);
+      const payableAmount = appliedCoupon ? appliedCoupon.finalAmount : totalAmount;
 
-      if (service.isActive === false) {
-        toast.error('Service Unavailable', 'This service is currently not available. Please choose another service or contact the vendor.');
-        return;
-      }
-
-      // ✅ NEW: Include paymentMethod in the request
       const bookingData: any = {
         service: service._id,
-        scheduledDate: scheduledDate.toISOString(),
-        scheduledTime,
+        scheduledDate: selectedDate!.toISOString(),
+        scheduledTime: fmt24h(pickerTime),
         serviceType: locationType,
-        paymentMethod, // ✅ Required field now
+        paymentMethod,
+        ...(appliedCoupon ? { couponCode: appliedCoupon.code } : {}),
       };
-
-      if (clientNotes.trim()) {
-        bookingData.clientNotes = clientNotes.trim();
-      }
-
-      if (locationType === 'home' && isHomeServiceAvailable) {
+      if (clientNotes.trim()) bookingData.clientNotes = clientNotes.trim();
+      if (locationType === 'home' && isHomeAvailable && clientLocation) {
         bookingData.location = {
-          address: address.trim(),
-          city: city.trim(),
-          state: state.trim(),
-          coordinates,
+          address: clientLocation.address,
+          city: clientLocation.city,
+          state: clientLocation.state,
+          coordinates: clientLocation.coordinates,
         };
       }
-
-      console.log('Creating booking with data:', bookingData);
-      const response = await bookingAPI.createBooking(bookingData);
-      console.log('📦 Full booking response:', JSON.stringify(response, null, 2));
-
-      if (response.success) {
-        // ✅ DEBUG: Log what we received
-        console.log('📦 Response data:', response.data);
-        console.log('📦 authorizationUrl:', response.data?.authorizationUrl);
-        console.log('📦 paymentMethod selected:', paymentMethod);
-
-        // ✅ Get actual amount from backend (may include distance charge)
-        const actualAmount = response.data.booking?.totalAmount || totalAmount;
-        const backendDistanceCharge = response.data.booking?.distanceCharge || 0;
-        
-        // ✅ Warn if price is different than expected
-        if (actualAmount !== totalAmount) {
-          console.log(`⚠️ Price difference! Frontend: ₦${totalAmount}, Backend: ₦${actualAmount}`);
-        }
-
-        // ✅ Handle different payment methods
-        const hasAuthUrl = response.data?.authorizationUrl;
-        
-        if (paymentMethod === 'card' && hasAuthUrl) {
-          console.log('🔀 Navigating to PaymentScreen with URL:', hasAuthUrl);
-          // Navigate to in-app PaymentScreen with WebView
-          // ✅ Use actual amount from backend
+      const res = await bookingAPI.createBooking(bookingData);
+      if (res.success) {
+        const actual = res.data.booking?.totalAmount || totalAmount;
+        if (paymentMethod === 'card' && res.data?.authorizationUrl) {
           navigation.replace('Payment', {
-            bookingId: response.data.booking._id,
-            amount: actualAmount, // Use backend-calculated amount
-            authorizationUrl: hasAuthUrl,
-            reference: response.data.reference || response.data.booking?.paymentReference,
+            bookingId: res.data.booking?._id,
+            amount: actual,
+            authorizationUrl: res.data.authorizationUrl,
+            reference: res.data.reference || res.data.booking?.paymentReference,
           });
-        } else if (paymentMethod === 'card' && !hasAuthUrl) {
-          // Card was selected but no authorizationUrl returned - something went wrong
-          console.error('❌ Card payment selected but no authorizationUrl in response!');
-          toast.error('Payment Error', 'Failed to initialize card payment. Please try again or use wallet.');
+        } else if (paymentMethod === 'card') {
+          toast.error('Payment Error', 'Failed to initialize card payment. Try again.');
         } else {
-          // Wallet payment - booking is already paid!
-          toast.success('Booking Confirmed!', `Your booking has been created and payment of ₦${actualAmount.toLocaleString()} was successful!${backendDistanceCharge > 0 ? `\n\n(Includes ₦${backendDistanceCharge.toLocaleString()} distance charge)` : ''}\n\nThe vendor will be notified and can accept your booking.`);
-          navigation.navigate('BookingDetail', {
-            bookingId: response.data.booking._id,
-          });
+          toast.success('Booking Confirmed!', `Payment of ₦${actual.toLocaleString()} was successful!`);
+          navigation.navigate('BookingDetail', { bookingId: res.data.booking._id });
         }
       }
     } catch (error: any) {
       const apiError = handleAPIError(error);
-      console.error('Booking creation error:', error);
-
-      let errorMessage = 'Failed to create booking';
-      if (error.response?.data?.error?.message) {
-        errorMessage = error.response.data.error.message;
-      } else if (error.response?.data?.message) {
-        errorMessage = error.response.data.message;
-      } else if (apiError.message) {
-        errorMessage = apiError.message;
-      }
-
-      toast.error('Booking Error', errorMessage);
-    } finally {
-      setLoading(false);
-    }
+      toast.error('Booking Error', error.response?.data?.error?.message || apiError.message || 'Failed to create booking');
+    } finally { setLoading(false); }
   };
 
-  const formatPrice = (price: number) => {
-    return `₦${price.toLocaleString()}`;
+  const durationLabel = () => {
+    const mins = service.duration || 60;
+    const h = Math.floor(mins / 60);
+    const m = mins % 60;
+    if (h === 0) return `${m} Min`;
+    return m > 0 ? `${h} Hr ${m} Min` : `${h} Hour${h > 1 ? 's' : ''}`;
   };
 
-  const formatDate = (date: Date) => {
-    return date.toLocaleDateString('en-US', {
-      weekday: 'short',
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    });
-  };
+  const formatDateShort = (d: Date) =>
+    d.toLocaleDateString('en-US', { weekday: 'short', month: 'long', day: 'numeric', year: 'numeric' });
 
-  const canPayWithWallet = walletBalance >= totalAmount;
+  const cells = buildCells();
+  const DAY_W = Math.floor((SW - 40 - 12) / 7);
 
+  // ── RENDER ────────────────────────────────────────────────────────────────
   return (
-    <SafeAreaView className="flex-1 bg-gray-50">
-      {/* Header */}
-      <View className="bg-white px-5 py-4 border-b border-gray-100">
-        <View className="flex-row items-center justify-between">
-          <TouchableOpacity
-            onPress={handleBack}
-            className="w-10 h-10 rounded-full bg-gray-100 items-center justify-center"
-          >
-            <Ionicons name="arrow-back" size={24} color="#1f2937" />
+    <View style={{ flex: 1, backgroundColor: BG }}>
+      <StatusBar barStyle="dark-content" backgroundColor={BG} />
+
+      {/* ── HEADER ── */}
+      <SafeAreaView edges={['top']} style={{ backgroundColor: BG }}>
+        <View style={ss.header}>
+          <TouchableOpacity onPress={handleBack} activeOpacity={0.8} style={ss.backBtn}>
+            <Ionicons name="arrow-back" size={20} color="#1A1A1A" />
           </TouchableOpacity>
-
-          <Text className="text-lg font-bold text-gray-900">Book Service</Text>
-
-          <View className="w-10" />
+          <Text style={ss.headerTitle}>Book Appointment</Text>
+          <View style={{ width: 36 }} />
         </View>
 
-        {/* Progress Bar - Now 4 steps */}
-        <View className="flex-row items-center justify-center mt-4 gap-2">
-          {[1, 2, 3, 4].map((s) => (
-            <View
-              key={s}
-              className={`h-1 flex-1 rounded-full ${s <= step ? 'bg-pink-500' : 'bg-gray-200'}`}
-            />
-          ))}
+        {/* Progress bar + labels */}
+        <View style={ss.progressWrap}>
+          {STEP_LABELS.map((label, i) => {
+            const s = i + 1;
+            return (
+              <View key={s} style={ss.progressItem}>
+                <View style={[ss.progBar, s <= step && ss.progBarActive]} />
+                <Text style={[ss.progLabel, s === step && ss.progLabelActive]}>{label}</Text>
+              </View>
+            );
+          })}
         </View>
+      </SafeAreaView>
 
-        {/* Step Label */}
-        <Text className="text-center text-sm text-gray-600 mt-2">
-          {step === 1 && 'Select Date & Time'}
-          {step === 2 && 'Choose Location'}
-          {step === 3 && 'Payment Method'}
-          {step === 4 && 'Review & Pay'}
-        </Text>
-      </View>
+      {/* ── CONTENT ── */}
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 100 + insets.bottom }}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
 
-      {/* Content */}
-      <ScrollView className="flex-1 px-5" showsVerticalScrollIndicator={false}>
-        {/* Step 1: Date & Time */}
+        {/* ════════════════ STEP 1: DATE & TIME ════════════════ */}
         {step === 1 && (
-          <View className="py-6">
-            {/* Service Info */}
-            <View className="bg-white rounded-2xl p-4 mb-6">
-              <Text className="text-base font-bold text-gray-900 mb-2">{service.name}</Text>
-              <View className="flex-row items-center justify-between">
-                <View className="flex-row items-center">
-                  <Ionicons name="time-outline" size={16} color="#6b7280" />
-                  <Text className="text-sm text-gray-600 ml-1">{service.duration} min</Text>
+          <View style={{ paddingTop: 16 }}>
+
+            {/* Service card */}
+            <View style={ss.card}>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                {/* Service image or gradient fallback */}
+                <View style={ss.svcAvatar}>
+                  {service.image ? (
+                    <Image source={{ uri: service.image }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
+                  ) : (
+                    <LinearGradient colors={['#E91E63', '#C2185B']} style={ss.svcAvatarGrad}>
+                      <Text style={ss.svcAvatarLetter}>
+                        {(vendor.vendorProfile.businessName || 'V').charAt(0)}
+                      </Text>
+                    </LinearGradient>
+                  )}
                 </View>
-                <Text className="text-lg font-bold text-pink-600">
-                  {formatPrice(service.basePrice)}
+                <View style={{ flex: 1, marginLeft: 10 }}>
+                  <Text style={ss.svcName}>{service.name}</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 3 }}>
+                    <Ionicons name="time-outline" size={12} color="#9CA3AF" />
+                    <Text style={ss.svcSub}>{durationLabel()} · {vendor.vendorProfile.businessName}</Text>
+                  </View>
+                </View>
+                <View style={ss.priceChip}>
+                  <Text style={ss.priceChipTxt}>₦{servicePrice.toLocaleString()}</Text>
+                </View>
+              </View>
+            </View>
+
+            {/* Calendar */}
+            <Text style={ss.secLabel}>Select a date</Text>
+            <View style={ss.card}>
+              <View style={ss.calHeader}>
+                <TouchableOpacity onPress={prevMonth} activeOpacity={0.7} style={ss.calNavBtn}>
+                  <Ionicons name="chevron-back" size={18} color={PINK} />
+                </TouchableOpacity>
+                <Text style={ss.calMonthTxt}>{MONTHS[calMonth]} {calYear}</Text>
+                <TouchableOpacity onPress={nextMonth} activeOpacity={0.7} style={ss.calNavBtn}>
+                  <Ionicons name="chevron-forward" size={18} color={PINK} />
+                </TouchableOpacity>
+              </View>
+
+              <View style={{ flexDirection: 'row', marginBottom: 8 }}>
+                {DAYS_SHORT.map(d => (
+                  <Text key={d} style={[ss.calDayName, { width: DAY_W }]}>{d}</Text>
+                ))}
+              </View>
+
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
+                {cells.map((day, idx) => {
+                  if (!day) return <View key={`_${idx}`} style={{ width: DAY_W, height: DAY_W }} />;
+                  const past = isPast(day);
+                  const sel  = isSel(day);
+                  const tod  = isToday(day);
+                  return (
+                    <TouchableOpacity
+                      key={day}
+                      onPress={() => {
+                        if (past) return;
+                        const picked = new Date(calYear, calMonth, day);
+                        setSelectedDate(picked);
+                        // Reset time when today is picked so stale past times can't carry over
+                        const todayMidnight = new Date(); todayMidnight.setHours(0, 0, 0, 0);
+                        const pickedMidnight = new Date(picked); pickedMidnight.setHours(0, 0, 0, 0);
+                        if (pickedMidnight.getTime() === todayMidnight.getTime()) {
+                          setTimeConfirmed(false);
+                          setPickerTime(defaultPickerTime());
+                        }
+                      }}
+                      activeOpacity={past ? 1 : 0.75}
+                      style={[ss.calCell, { width: DAY_W, height: DAY_W }, sel && ss.calCellSel]}
+                    >
+                      <Text style={[
+                        ss.calCellTxt,
+                        past ? ss.calCellPast : undefined,
+                        tod && !sel ? ss.calCellToday : undefined,
+                        sel ? ss.calCellTxtSel : undefined,
+                      ]}>
+                        {day}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+
+            {/* Clock time picker */}
+            <Text style={ss.secLabel}>Select a time</Text>
+            <TouchableOpacity
+              style={ss.card}
+              onPress={() => setShowTimePicker(true)}
+              activeOpacity={0.8}
+            >
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+                <View style={ss.clockIconBox}>
+                  <Ionicons name="time-outline" size={26} color={PINK} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={timeConfirmed ? ss.timeSelected : ss.timePlaceholder}>
+                    {timeConfirmed ? fmt12h(pickerTime) : 'Tap to select time'}
+                  </Text>
+                  {timeConfirmed && (
+                    <Text style={ss.timeTapHint}>Tap to change</Text>
+                  )}
+                </View>
+                <Ionicons name="chevron-forward" size={18} color="#D1D5DB" />
+              </View>
+            </TouchableOpacity>
+
+            {/* Android: DateTimePicker renders as a dialog directly */}
+            {showTimePicker && Platform.OS === 'android' && (
+              <DateTimePicker
+                value={pickerTime}
+                mode="time"
+                display="clock"
+                onChange={onTimeChange}
+                minimumDate={getMinimumPickerTime()}
+              />
+            )}
+
+            {/* iOS: wrap in a bottom-sheet modal */}
+            {Platform.OS === 'ios' && (
+              <Modal visible={showTimePicker} transparent animationType="slide">
+                <View style={ss.timeModalOverlay}>
+                  <View style={ss.timeModalSheet}>
+                    <View style={ss.timeModalHandle} />
+                    <View style={ss.timeModalHeader}>
+                      <TouchableOpacity onPress={() => setShowTimePicker(false)} activeOpacity={0.7}>
+                        <Text style={ss.timeModalCancel}>Cancel</Text>
+                      </TouchableOpacity>
+                      <Text style={ss.timeModalTitle}>Select Time</Text>
+                      <TouchableOpacity onPress={confirmIOSTime} activeOpacity={0.7}>
+                        <Text style={ss.timeModalDone}>Done</Text>
+                      </TouchableOpacity>
+                    </View>
+                    <DateTimePicker
+                      value={pickerTime}
+                      mode="time"
+                      display="spinner"
+                      onChange={onTimeChange}
+                      minimumDate={getMinimumPickerTime()}
+                      style={{ width: '100%' }}
+                      textColor="#111827"
+                    />
+                  </View>
+                </View>
+              </Modal>
+            )}
+          </View>
+        )}
+
+        {/* ════════════════ STEP 2: LOCATION ════════════════ */}
+        {step === 2 && (
+          <View style={{ paddingTop: 16 }}>
+            <Text style={ss.stepQ}>Where should the session be?</Text>
+
+            {isHomeAvailable && (
+              <TouchableOpacity
+                onPress={() => setLocationType('home')}
+                activeOpacity={0.85}
+                style={[ss.locCard, locationType === 'home' && ss.locCardSel]}
+              >
+                <View style={[ss.locIconBox, locationType === 'home' && ss.locIconBoxSel]}>
+                  <Ionicons name="home-outline" size={22} color={locationType === 'home' ? PINK : '#9CA3AF'} />
+                </View>
+                <View style={{ flex: 1, marginLeft: 12 }}>
+                  <Text style={ss.locTitle}>Home Service</Text>
+                  <Text style={ss.locSub}>Artist Comes to your location</Text>
+                </View>
+                <View style={[ss.radio, locationType === 'home' && ss.radioSel]}>
+                  {locationType === 'home' && <View style={ss.radioDot} />}
+                </View>
+              </TouchableOpacity>
+            )}
+
+            {isShopAvailable && (
+              <TouchableOpacity
+                onPress={() => setLocationType('shop')}
+                activeOpacity={0.85}
+                style={[ss.locCard, locationType === 'shop' && ss.locCardSel]}
+              >
+                <View style={[ss.locIconBox, locationType === 'shop' && ss.locIconBoxSel]}>
+                  <Ionicons name="storefront-outline" size={22} color={locationType === 'shop' ? PINK : '#9CA3AF'} />
+                </View>
+                <View style={{ flex: 1, marginLeft: 12 }}>
+                  <Text style={ss.locTitle}>In-Shop</Text>
+                  <Text style={ss.locSub}>Visit {vendor.vendorProfile.businessName}</Text>
+                </View>
+                <View style={[ss.radio, locationType === 'shop' && ss.radioSel]}>
+                  {locationType === 'shop' && <View style={ss.radioDot} />}
+                </View>
+              </TouchableOpacity>
+            )}
+
+            {/* Home: map picker */}
+            {locationType === 'home' && isHomeAvailable && (
+              <View style={{ marginTop: 20 }}>
+                <Text style={ss.addrTitle}>Your Address</Text>
+
+                {/* Map picker trigger */}
+                <TouchableOpacity
+                  onPress={() => setShowMapPicker(true)}
+                  activeOpacity={0.85}
+                  style={ss.mapPickerBtn}
+                >
+                  <View style={ss.mapPickerIcon}>
+                    <Ionicons name="map-outline" size={22} color={PINK} />
+                  </View>
+                  <View style={{ flex: 1, marginLeft: 12 }}>
+                    <Text style={ss.mapPickerTitle}>
+                      {clientLocation ? 'Change location on map' : 'Pick location on map'}
+                    </Text>
+                    <Text style={ss.mapPickerSub}>
+                      {clientLocation ? 'Tap to adjust your pin' : 'Drop a pin to set your address'}
+                    </Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={18} color="#D1D5DB" />
+                </TouchableOpacity>
+
+                {/* Address fields — read-only, only visible after map confirms */}
+                {clientLocation && (
+                  <View style={[ss.addrConfirm, { marginTop: 12, flexDirection: 'column', gap: 6 }]}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <Ionicons name="checkmark-circle" size={16} color="#059669" />
+                      <Text style={[ss.addrConfirmTxt, { fontWeight: '700' }]}>Location confirmed</Text>
+                    </View>
+                    <Text style={ss.addrConfirmTxt}>{clientLocation.address}</Text>
+                    <Text style={ss.addrConfirmTxt}>{clientLocation.city}, {clientLocation.state}</Text>
+                  </View>
+                )}
+              </View>
+            )}
+
+            {/* In-Shop: distance only — no vendor address shown */}
+            {locationType === 'shop' && (
+              <View style={[ss.card, { marginTop: 20 }]}>
+                <Text style={ss.vendorLocTitle}>Distance from you</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <View style={ss.pinBox}>
+                    <Ionicons name="car-outline" size={20} color={PINK} />
+                  </View>
+                  <View style={{ flex: 1, marginLeft: 10 }}>
+                    {distanceKm !== null ? (
+                      <>
+                        <Text style={ss.vendorLocCity}>{distanceKm.toFixed(1)} km away</Text>
+                        <Text style={ss.vendorLocDist}>{formatDriveTime(distanceKm)}</Text>
+                      </>
+                    ) : (
+                      <Text style={ss.vendorLocDist}>Distance unavailable — enable location for estimate</Text>
+                    )}
+                  </View>
+                </View>
+              </View>
+            )}
+          </View>
+        )}
+
+        {/* ════════════════ STEP 3: CONFIRM ════════════════ */}
+        {step === 3 && (
+          <View style={{ paddingTop: 16 }}>
+            <View style={ss.card}>
+              <View style={ss.confirmTitleRow}>
+                <Text style={ss.confirmTitle}>Booking Details</Text>
+                <TouchableOpacity onPress={() => setStep(1)} activeOpacity={0.7}>
+                  <Text style={ss.editBtn}>Edit</Text>
+                </TouchableOpacity>
+              </View>
+
+              {[
+                { label: 'Service',  value: service.name },
+                { label: 'Date',     value: selectedDate ? formatDateShort(selectedDate) : '—' },
+                { label: 'Time',     value: timeConfirmed ? fmt12h(pickerTime) : '—' },
+                { label: 'Duration', value: durationLabel() },
+                {
+                  label: 'Location',
+                  value: locationType === 'home'
+                    ? clientLocation ? `${clientLocation.address}, ${clientLocation.city}` : 'Home Service'
+                    : 'In-Shop',
+                },
+              ].map(({ label, value }, i, arr) => (
+                <View key={label} style={[ss.confRow, i === arr.length - 1 && { borderBottomWidth: 0 }]}>
+                  <Text style={ss.confLabel}>{label}</Text>
+                  <Text style={ss.confValue} numberOfLines={2}>{value}</Text>
+                </View>
+              ))}
+            </View>
+
+            <View style={[ss.card, { marginTop: 14 }]}>
+              <Text style={ss.confirmTitle}>Price Breakdown</Text>
+              {priceLoading
+                ? <ActivityIndicator color={PINK} style={{ marginTop: 10 }} />
+                : <>
+                    <View style={ss.confRow}>
+                      <Text style={ss.confLabel}>Service fee</Text>
+                      <Text style={ss.confValue}>₦{servicePrice.toLocaleString()}</Text>
+                    </View>
+                    {distanceCharge > 0 && (
+                      <View style={ss.confRow}>
+                        <Text style={ss.confLabel}>Distance charge</Text>
+                        <Text style={ss.confValue}>₦{distanceCharge.toLocaleString()}</Text>
+                      </View>
+                    )}
+                    <View style={[ss.confRow, { borderBottomWidth: 0, paddingTop: 12, borderTopWidth: 1, borderTopColor: '#F3F4F6' }]}>
+                      <Text style={[ss.confLabel, { fontWeight: '700', color: '#111827', fontSize: 14 }]}>Total</Text>
+                      <Text style={{ fontSize: 16, fontWeight: '800', color: PINK }}>
+                        ₦{totalAmount.toLocaleString()}
+                      </Text>
+                    </View>
+                  </>
+              }
+            </View>
+
+            <View style={ss.cancelCard}>
+              <Ionicons name="information-circle-outline" size={18} color="#D97706" style={{ marginTop: 1 }} />
+              <View style={{ flex: 1, marginLeft: 10 }}>
+                <Text style={ss.cancelTitle}>Cancellation Policy</Text>
+                <Text style={ss.cancelTxt}>
+                  - Free cancellation up to 59 minutes before your appointment{'\n'}
+                  - 20% fee for cancellations within 59 minutes
                 </Text>
               </View>
             </View>
-
-            {/* Date Picker */}
-            <View className="bg-white rounded-2xl p-5 mb-4">
-              <Text className="text-base font-bold text-gray-900 mb-4">Select Date</Text>
-              <TouchableOpacity
-                onPress={() => setShowDatePicker(true)}
-                className="border-2 border-gray-200 rounded-xl p-4 flex-row items-center justify-between"
-              >
-                <View className="flex-row items-center">
-                  <Ionicons name="calendar" size={24} color="#eb278d" />
-                  <Text className="text-base text-gray-900 ml-3">{formatDate(scheduledDate)}</Text>
-                </View>
-                <Ionicons name="chevron-down" size={24} color="#6b7280" />
-              </TouchableOpacity>
-
-              {showDatePicker && (
-                <DateTimePicker
-                  value={scheduledDate}
-                  mode="date"
-                  display="default"
-                  onChange={onDateChange}
-                  minimumDate={new Date()}
-                />
-              )}
-            </View>
-
-            {/* Time Picker */}
-            <View className="bg-white rounded-2xl p-5">
-              <Text className="text-base font-bold text-gray-900 mb-4">Select Time</Text>
-              <TouchableOpacity
-                onPress={() => setShowTimePicker(true)}
-                className="border-2 border-gray-200 rounded-xl p-4 flex-row items-center justify-between"
-              >
-                <View className="flex-row items-center">
-                  <Ionicons name="time" size={24} color="#eb278d" />
-                  <Text className="text-base text-gray-900 ml-3">
-                    {scheduledTime || 'Select time'}
-                  </Text>
-                </View>
-                <Ionicons name="chevron-down" size={24} color="#6b7280" />
-              </TouchableOpacity>
-
-              {showTimePicker && (
-                <DateTimePicker
-                  value={getTimePickerDate()}
-                  mode="time"
-                  display="default"
-                  onChange={onTimeChange}
-                />
-              )}
-            </View>
           </View>
         )}
 
-        {/* Step 2: Location */}
-        {step === 2 && (
-          <View className="py-6">
-            {/* Location Type Selection */}
-            <View className="bg-white rounded-2xl p-5 mb-4">
-              <Text className="text-base font-bold text-gray-900 mb-4">
-                Where should we provide the service?
-              </Text>
+        {/* ════════════════ STEP 4: PAYMENT ════════════════ */}
+        {step === 4 && (
+          <View style={{ paddingTop: 16 }}>
+            <Text style={ss.stepQ}>Choose Payment Method</Text>
 
-              <View className="gap-3">
-                {isHomeServiceAvailable && (
-                  <TouchableOpacity
-                    onPress={() => setLocationType('home')}
-                    className={`border-2 rounded-xl p-4 ${
-                      locationType === 'home' ? 'border-pink-500 bg-pink-50' : 'border-gray-200'
-                    }`}
-                  >
-                    <View className="flex-row items-center justify-between">
-                      <View className="flex-row items-center">
-                        <View
-                          className={`w-12 h-12 rounded-full items-center justify-center ${
-                            locationType === 'home' ? 'bg-pink-100' : 'bg-gray-100'
-                          }`}
-                        >
-                          <Ionicons
-                            name="home"
-                            size={24}
-                            color={locationType === 'home' ? '#eb278d' : '#6b7280'}
-                          />
-                        </View>
-                        <View className="ml-3">
-                          <Text className="text-base font-bold text-gray-900">At My Location</Text>
-                          <Text className="text-sm text-gray-500">Home service available</Text>
-                        </View>
-                      </View>
-                      <Ionicons
-                        name={locationType === 'home' ? 'radio-button-on' : 'radio-button-off'}
-                        size={24}
-                        color={locationType === 'home' ? '#eb278d' : '#d1d5db'}
-                      />
+            {/* LookReal Pay */}
+            <TouchableOpacity
+              onPress={() => setPaymentMethod('wallet')}
+              activeOpacity={0.85}
+              style={[ss.payCard, paymentMethod === 'wallet' && ss.payCardSel]}
+            >
+              <View style={ss.lrLogo}><Text style={ss.lrLogoTxt}>LR</Text></View>
+              <View style={{ flex: 1, marginLeft: 12 }}>
+                <Text style={ss.payTitle}>LookReal Pay</Text>
+                <Text style={ss.paySub}>Pay with wallet balance</Text>
+                {walletLoading
+                  ? <ActivityIndicator size="small" color={PINK} style={{ marginTop: 6 }} />
+                  : <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8, gap: 10 }}>
+                      <Text style={[ss.walletBal, walletBalance < (appliedCoupon?.finalAmount ?? totalAmount) && { color: '#EF4444' }]}>
+                        ₦{walletBalance.toLocaleString()}
+                      </Text>
+                      <TouchableOpacity onPress={() => setShowAddBalance(true)} activeOpacity={0.8} style={ss.addBalBtn}>
+                        <Ionicons name="add-circle-outline" size={13} color={PINK} />
+                        <Text style={ss.addBalTxt}> Add to balance</Text>
+                      </TouchableOpacity>
                     </View>
-                  </TouchableOpacity>
-                )}
-
-                {isShopServiceAvailable && (
-                  <TouchableOpacity
-                    onPress={() => setLocationType('shop')}
-                    className={`border-2 rounded-xl p-4 ${
-                      locationType === 'shop' ? 'border-pink-500 bg-pink-50' : 'border-gray-200'
-                    }`}
-                  >
-                    <View className="flex-row items-center justify-between">
-                      <View className="flex-row items-center">
-                        <View
-                          className={`w-12 h-12 rounded-full items-center justify-center ${
-                            locationType === 'shop' ? 'bg-pink-100' : 'bg-gray-100'
-                          }`}
-                        >
-                          <Ionicons
-                            name="storefront"
-                            size={24}
-                            color={locationType === 'shop' ? '#eb278d' : '#6b7280'}
-                          />
-                        </View>
-                        <View className="ml-3">
-                          <Text className="text-base font-bold text-gray-900">
-                            At Vendor's Shop
-                          </Text>
-                          <Text className="text-sm text-gray-500">Visit the service location</Text>
-                        </View>
-                      </View>
-                      <Ionicons
-                        name={locationType === 'shop' ? 'radio-button-on' : 'radio-button-off'}
-                        size={24}
-                        color={locationType === 'shop' ? '#eb278d' : '#d1d5db'}
-                      />
-                    </View>
-                  </TouchableOpacity>
-                )}
+                }
               </View>
-            </View>
+              <View style={[ss.radio, paymentMethod === 'wallet' && ss.radioSel]}>
+                {paymentMethod === 'wallet' && <View style={ss.radioDot} />}
+              </View>
+            </TouchableOpacity>
 
-            {/* Address Input (Home Service) */}
-            {locationType === 'home' && isHomeServiceAvailable && (
-              <View className="bg-white rounded-2xl p-5">
-                <View className="flex-row items-center justify-between mb-4">
-                  <Text className="text-base font-bold text-gray-900">Your Address</Text>
-                  <TouchableOpacity
-                    onPress={getCurrentLocation}
-                    disabled={locationLoading}
-                    className="flex-row items-center"
-                    activeOpacity={0.7}
-                  >
-                    {locationLoading ? (
-                      <ActivityIndicator size="small" color="#eb278d" />
-                    ) : (
-                      <>
-                        <Ionicons name="navigate" size={16} color="#eb278d" />
-                        <Text className="text-sm text-pink-600 ml-1 font-semibold">
-                          Use current
-                        </Text>
-                      </>
-                    )}
+            {/* Paystack */}
+            <TouchableOpacity
+              onPress={() => setPaymentMethod('card')}
+              activeOpacity={0.85}
+              style={[ss.payCard, paymentMethod === 'card' && ss.payCardSel]}
+            >
+              <View style={ss.psLogo}><Ionicons name="card-outline" size={22} color="#fff" /></View>
+              <View style={{ flex: 1, marginLeft: 12 }}>
+                <Text style={ss.payTitle}>Paystack</Text>
+                <Text style={ss.paySub}>Pay With Debit/Credit card</Text>
+              </View>
+              <View style={[ss.radio, paymentMethod === 'card' && ss.radioSel]}>
+                {paymentMethod === 'card' && <View style={ss.radioDot} />}
+              </View>
+            </TouchableOpacity>
+
+            {/* Coupon code */}
+            <View style={[ss.card, { marginTop: 14 }]}>
+              <Text style={ss.couponTitle}>Have a coupon?</Text>
+              {appliedCoupon ? (
+                <View style={ss.couponApplied}>
+                  <Ionicons name="pricetag" size={16} color="#059669" />
+                  <Text style={ss.couponAppliedTxt}>{appliedCoupon.code} — saved ₦{appliedCoupon.discountAmount.toLocaleString()}</Text>
+                  <TouchableOpacity onPress={handleRemoveCoupon} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                    <Ionicons name="close-circle" size={18} color="#9CA3AF" />
                   </TouchableOpacity>
-                </View>
-
-                {locationError ? (
-                  <View className="bg-red-50 border border-red-200 rounded-xl p-3 mb-4 flex-row items-center">
-                    <Ionicons name="alert-circle" size={18} color="#DC2626" />
-                    <Text className="text-red-600 text-xs ml-2 flex-1">{locationError}</Text>
-                  </View>
-                ) : null}
-
-                <View className="gap-4">
-                  <View>
-                    <Text className="text-sm font-semibold text-gray-700 mb-2">
-                      Street Address *
-                    </Text>
-                    <TextInput
-                      className="border-2 border-gray-200 rounded-xl px-4 py-3 text-gray-900"
-                      placeholder="Enter your street address"
-                      value={address}
-                      onChangeText={setAddress}
-                      multiline
-                      editable={!locationLoading}
-                    />
-                  </View>
-
-                  <View>
-                    <Text className="text-sm font-semibold text-gray-700 mb-2">City *</Text>
-                    <TextInput
-                      className="border-2 border-gray-200 rounded-xl px-4 py-3 text-gray-900"
-                      placeholder="Enter city"
-                      value={city}
-                      onChangeText={setCity}
-                      editable={!locationLoading}
-                    />
-                  </View>
-
-                  <View>
-                    <Text className="text-sm font-semibold text-gray-700 mb-2">State *</Text>
-                    <TextInput
-                      className="border-2 border-gray-200 rounded-xl px-4 py-3 text-gray-900"
-                      placeholder="Enter state"
-                      value={state}
-                      onChangeText={setState}
-                      editable={!locationLoading}
-                    />
-                  </View>
-                </View>
-
-                {address && city && state && (
-                  <View className="bg-green-50 border border-green-200 rounded-xl p-3 mt-4">
-                    <View className="flex-row items-center mb-2">
-                      <Ionicons name="checkmark-circle" size={20} color="#059669" />
-                      <Text className="text-green-700 font-semibold ml-2">Location Set</Text>
-                    </View>
-                    <Text className="text-gray-700 text-sm">
-                      {address}, {city}, {state}
-                    </Text>
-                  </View>
-                )}
-              </View>
-            )}
-
-            {/* Vendor Location (Shop Service) */}
-            {locationType === 'shop' && vendor.vendorProfile.location && (
-              <View className="bg-white rounded-2xl p-5">
-                <Text className="text-base font-bold text-gray-900 mb-4">Vendor's Location</Text>
-                <View className="flex-row items-start">
-                  <Ionicons name="location" size={24} color="#eb278d" />
-                  <View className="flex-1 ml-3">
-                    <Text className="text-base text-gray-900 font-semibold">
-                      {vendor.vendorProfile.businessName}
-                    </Text>
-                    <Text className="text-sm text-gray-600 mt-1">
-                      {vendor.vendorProfile.location.address}
-                    </Text>
-                    <Text className="text-sm text-gray-600">
-                      {vendor.vendorProfile.location.city}, {vendor.vendorProfile.location.state}
-                    </Text>
-                  </View>
-                </View>
-              </View>
-            )}
-          </View>
-        )}
-
-        {/* Step 3: Payment Method Selection */}
-        {step === 3 && (
-          <View className="py-6">
-            {/* Price Summary Card */}
-            <View className="bg-white rounded-2xl p-5 mb-4">
-              <Text className="text-base font-bold text-gray-900 mb-3">Amount to Pay</Text>
-              
-              {priceLoading ? (
-                <View className="flex-row items-center">
-                  <ActivityIndicator size="small" color="#eb278d" />
-                  <Text className="text-gray-500 ml-2">Calculating price...</Text>
                 </View>
               ) : (
-                <>
-                  {/* Price Breakdown */}
-                  <View className="mb-3">
-                    <View className="flex-row justify-between items-center mb-1">
-                      <Text className="text-gray-600">Service Fee</Text>
-                      <Text className="text-gray-900 font-semibold">{formatPrice(servicePrice)}</Text>
-                    </View>
-                    
-                    {distanceCharge > 0 && (
-                      <View className="flex-row justify-between items-center mb-1">
-                        <View className="flex-row items-center">
-                          <Text className="text-gray-600">Distance Charge</Text>
-                          {calculatedDistance && (
-                            <Text className="text-gray-400 text-xs ml-1">
-                              ({calculatedDistance.toFixed(1)} km)
-                            </Text>
-                          )}
-                        </View>
-                        <Text className="text-gray-900 font-semibold">{formatPrice(distanceCharge)}</Text>
-                      </View>
-                    )}
-                    
-                    <View className="border-t border-gray-200 pt-2 mt-2">
-                      <View className="flex-row justify-between items-center">
-                        <Text className="text-base font-bold text-gray-900">Total</Text>
-                        <Text className="text-2xl font-bold text-pink-600">{formatPrice(totalAmount)}</Text>
-                      </View>
-                    </View>
-                  </View>
-
-                  {/* Distance Charge Info */}
-                  {locationType === 'home' && distanceCharge > 0 && (
-                    <View className="bg-blue-50 rounded-lg p-3 flex-row items-center">
-                      <Ionicons name="car" size={16} color="#3b82f6" />
-                      <Text className="text-blue-700 text-xs ml-2 flex-1">
-                        Distance charge applies for home service delivery
-                      </Text>
-                    </View>
-                  )}
-
-                  {locationType === 'shop' && (
-                    <View className="bg-green-50 rounded-lg p-3 flex-row items-center">
-                      <Ionicons name="storefront" size={16} color="#10b981" />
-                      <Text className="text-green-700 text-xs ml-2 flex-1">
-                        No distance charge - visiting vendor's location
-                      </Text>
-                    </View>
-                  )}
-                </>
+                <View style={ss.couponRow}>
+                  <TextInput
+                    style={ss.couponInput}
+                    value={couponInput}
+                    onChangeText={t => setCouponInput(t.toUpperCase())}
+                    placeholder="Enter coupon code"
+                    placeholderTextColor="#D1D5DB"
+                    autoCapitalize="characters"
+                    returnKeyType="done"
+                    onSubmitEditing={handleApplyCoupon}
+                  />
+                  <TouchableOpacity
+                    onPress={handleApplyCoupon}
+                    disabled={couponLoading || !couponInput.trim()}
+                    activeOpacity={0.8}
+                    style={[ss.couponApplyBtn, (!couponInput.trim()) && { opacity: 0.4 }]}
+                  >
+                    {couponLoading
+                      ? <ActivityIndicator size="small" color="#fff" />
+                      : <Text style={ss.couponApplyTxt}>Apply</Text>
+                    }
+                  </TouchableOpacity>
+                </View>
               )}
             </View>
 
-            <View className="bg-white rounded-2xl p-5">
-              <Text className="text-base font-bold text-gray-900 mb-4">
-                Select Payment Method
-              </Text>
-
-              <View className="gap-3">
-                {/* Wallet Payment Option */}
-                <TouchableOpacity
-                  onPress={() => setPaymentMethod('wallet')}
-                  disabled={walletLoading}
-                  className={`border-2 rounded-xl p-4 ${
-                    paymentMethod === 'wallet'
-                      ? 'border-pink-500 bg-pink-50'
-                      : 'border-gray-200'
-                  }`}
-                >
-                  <View className="flex-row items-center justify-between">
-                    <View className="flex-row items-center flex-1">
-                      <View
-                        className={`w-12 h-12 rounded-full items-center justify-center ${
-                          paymentMethod === 'wallet' ? 'bg-pink-100' : 'bg-gray-100'
-                        }`}
-                      >
-                        <Ionicons
-                          name="wallet"
-                          size={24}
-                          color={paymentMethod === 'wallet' ? '#eb278d' : '#6b7280'}
-                        />
-                      </View>
-                      <View className="ml-3 flex-1">
-                        <Text className="text-base font-bold text-gray-900">SharpPAY Wallet</Text>
-                        {walletLoading ? (
-                          <ActivityIndicator size="small" color="#6b7280" />
-                        ) : (
-                          <Text
-                            className={`text-sm ${
-                              canPayWithWallet ? 'text-green-600' : 'text-red-500'
-                            }`}
-                          >
-                            Balance: {formatPrice(walletBalance)}
-                            {!canPayWithWallet && ' (Insufficient)'}
-                          </Text>
-                        )}
-                      </View>
-                    </View>
-                    <Ionicons
-                      name={paymentMethod === 'wallet' ? 'radio-button-on' : 'radio-button-off'}
-                      size={24}
-                      color={paymentMethod === 'wallet' ? '#eb278d' : '#d1d5db'}
-                    />
-                  </View>
-
-                  {paymentMethod === 'wallet' && canPayWithWallet && (
-                    <View className="mt-3 bg-green-50 rounded-lg p-3 flex-row items-center">
-                      <Ionicons name="flash" size={16} color="#10b981" />
-                      <Text className="text-green-700 text-sm ml-2 font-medium">
-                        Instant payment - No redirect required
-                      </Text>
-                    </View>
-                  )}
-
-                  {paymentMethod === 'wallet' && !canPayWithWallet && !walletLoading && (
-                    <TouchableOpacity
-                      onPress={() => navigation.navigate('FundWallet')}
-                      className="mt-3 bg-pink-100 rounded-lg p-3 flex-row items-center justify-center"
-                    >
-                      <Ionicons name="add-circle" size={16} color="#eb278d" />
-                      <Text className="text-pink-600 text-sm ml-2 font-bold">Fund Wallet</Text>
-                    </TouchableOpacity>
-                  )}
-                </TouchableOpacity>
-
-                {/* Card Payment Option */}
-                <TouchableOpacity
-                  onPress={() => setPaymentMethod('card')}
-                  className={`border-2 rounded-xl p-4 ${
-                    paymentMethod === 'card'
-                      ? 'border-pink-500 bg-pink-50'
-                      : 'border-gray-200'
-                  }`}
-                >
-                  <View className="flex-row items-center justify-between">
-                    <View className="flex-row items-center">
-                      <View
-                        className={`w-12 h-12 rounded-full items-center justify-center ${
-                          paymentMethod === 'card' ? 'bg-pink-100' : 'bg-gray-100'
-                        }`}
-                      >
-                        <Ionicons
-                          name="card"
-                          size={24}
-                          color={paymentMethod === 'card' ? '#eb278d' : '#6b7280'}
-                        />
-                      </View>
-                      <View className="ml-3">
-                        <Text className="text-base font-bold text-gray-900">Debit/Credit Card</Text>
-                        <Text className="text-sm text-gray-500">Pay with Paystack</Text>
-                      </View>
-                    </View>
-                    <Ionicons
-                      name={paymentMethod === 'card' ? 'radio-button-on' : 'radio-button-off'}
-                      size={24}
-                      color={paymentMethod === 'card' ? '#eb278d' : '#d1d5db'}
-                    />
-                  </View>
-
-                  {paymentMethod === 'card' && (
-                    <View className="mt-3 bg-blue-50 rounded-lg p-3 flex-row items-center">
-                      <Ionicons name="shield-checkmark" size={16} color="#3b82f6" />
-                      <Text className="text-blue-700 text-sm ml-2 font-medium">
-                        Secure payment via Paystack
-                      </Text>
-                    </View>
-                  )}
-                </TouchableOpacity>
+            {/* Amount summary */}
+            <View style={[ss.card, { marginTop: 14 }]}>
+              <View style={ss.confRow}>
+                <Text style={ss.confLabel}>Service fee</Text>
+                <Text style={ss.confValue}>₦{totalAmount.toLocaleString()}</Text>
               </View>
-            </View>
-
-            {/* Cancellation Policy Notice */}
-            <View className="bg-amber-50 border border-amber-200 rounded-2xl p-4 mt-4">
-              <View className="flex-row items-start">
-                <Ionicons name="information-circle" size={24} color="#f59e0b" />
-                <View className="flex-1 ml-3">
-                  <Text className="text-amber-800 font-bold mb-1">Cancellation Policy</Text>
-                  <Text className="text-amber-700 text-sm">
-                    • Free cancellation up to 59 minutes before appointment{'\n'}
-                    • 20% fee applies for cancellations within 59 minutes
+              {appliedCoupon && (
+                <View style={ss.confRow}>
+                  <Text style={[ss.confLabel, { color: '#059669' }]}>Coupon ({appliedCoupon.code})</Text>
+                  <Text style={{ fontSize: 13, fontWeight: '600', color: '#059669' }}>
+                    -₦{appliedCoupon.discountAmount.toLocaleString()}
                   </Text>
                 </View>
+              )}
+              <View style={[ss.confRow, { borderBottomWidth: 0, borderTopWidth: 1, borderTopColor: '#F3F4F6', paddingTop: 10 }]}>
+                <Text style={[ss.confLabel, { fontWeight: '700', color: '#111827' }]}>Amount Due</Text>
+                <Text style={{ fontSize: 16, fontWeight: '800', color: PINK }}>
+                  ₦{(appliedCoupon ? appliedCoupon.finalAmount : totalAmount).toLocaleString()}
+                </Text>
               </View>
+              <View style={[ss.confRow, { borderBottomWidth: 0 }]}>
+                <Text style={ss.confLabel}>Service</Text>
+                <Text style={ss.confValue}>{service.name}</Text>
+              </View>
+              {selectedDate && timeConfirmed && (
+                <View style={[ss.confRow, { borderBottomWidth: 0 }]}>
+                  <Text style={ss.confLabel}>Date & Time</Text>
+                  <Text style={ss.confValue}>
+                    {selectedDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}, {fmt12h(pickerTime)}
+                  </Text>
+                </View>
+              )}
             </View>
-
-            {/* Distance Charge Info for Home Service */}
-            {locationType === 'home' && distanceCharge > 0 && (
-              <View className="bg-blue-50 border border-blue-200 rounded-2xl p-4 mt-4">
-                <View className="flex-row items-start">
-                  <Ionicons name="car" size={24} color="#3b82f6" />
-                  <View className="flex-1 ml-3">
-                    <Text className="text-blue-800 font-bold mb-1">Distance Charge Included</Text>
-                    <Text className="text-blue-700 text-sm">
-                      A {formatPrice(distanceCharge)} distance fee has been added for home service delivery
-                      {calculatedDistance ? ` (${calculatedDistance.toFixed(1)} km from vendor)` : ''}.
-                    </Text>
-                  </View>
-                </View>
-              </View>
-            )}
-
-            {locationType === 'home' && distanceCharge === 0 && !priceLoading && (
-              <View className="bg-green-50 border border-green-200 rounded-2xl p-4 mt-4">
-                <View className="flex-row items-start">
-                  <Ionicons name="checkmark-circle" size={24} color="#10b981" />
-                  <View className="flex-1 ml-3">
-                    <Text className="text-green-800 font-bold mb-1">No Distance Charge</Text>
-                    <Text className="text-green-700 text-sm">
-                      You're within the free delivery zone!
-                    </Text>
-                  </View>
-                </View>
-              </View>
-            )}
           </View>
         )}
 
-        {/* Step 4: Review & Confirm */}
-        {step === 4 && (
-          <View className="py-6">
-            {/* Booking Summary */}
-            <View className="bg-white rounded-2xl p-5 mb-4">
-              <Text className="text-lg font-bold text-gray-900 mb-4">Booking Summary</Text>
-
-              <View className="border-b border-gray-100 pb-4 mb-4">
-                <Text className="text-sm text-gray-500 mb-1">Service</Text>
-                <Text className="text-base font-semibold text-gray-900">{service.name}</Text>
-              </View>
-
-              <View className="border-b border-gray-100 pb-4 mb-4">
-                <Text className="text-sm text-gray-500 mb-1">Date & Time</Text>
-                <Text className="text-base font-semibold text-gray-900">
-                  {formatDate(scheduledDate)} at {scheduledTime}
-                </Text>
-              </View>
-
-              <View className="border-b border-gray-100 pb-4 mb-4">
-                <Text className="text-sm text-gray-500 mb-1">Location</Text>
-                {locationType === 'home' ? (
-                  <Text className="text-base font-semibold text-gray-900">
-                    {address}, {city}, {state}
-                  </Text>
-                ) : (
-                  <Text className="text-base font-semibold text-gray-900">
-                    {vendor.vendorProfile.location?.address}
-                  </Text>
-                )}
-              </View>
-
-              <View className="border-b border-gray-100 pb-4 mb-4">
-                <Text className="text-sm text-gray-500 mb-1">Vendor</Text>
-                <Text className="text-base font-semibold text-gray-900">
-                  {vendor.vendorProfile.businessName}
-                </Text>
-              </View>
-
-              <View>
-                <Text className="text-sm text-gray-500 mb-1">Payment Method</Text>
-                <View className="flex-row items-center">
-                  <Ionicons
-                    name={paymentMethod === 'wallet' ? 'wallet' : 'card'}
-                    size={20}
-                    color="#eb278d"
-                  />
-                  <Text className="text-base font-semibold text-gray-900 ml-2">
-                    {paymentMethod === 'wallet' ? 'SharpPAY Wallet' : 'Debit/Credit Card'}
-                  </Text>
-                </View>
-              </View>
-            </View>
-
-            {/* Price Breakdown */}
-            <View className="bg-white rounded-2xl p-5 mb-4">
-              <Text className="text-lg font-bold text-gray-900 mb-4">Price Breakdown</Text>
-
-              <View className="gap-3">
-                <View className="flex-row items-center justify-between">
-                  <Text className="text-gray-600">Service Fee</Text>
-                  <Text className="text-gray-900 font-semibold">{formatPrice(servicePrice)}</Text>
-                </View>
-
-                {distanceCharge > 0 && (
-                  <View className="flex-row items-center justify-between">
-                    <Text className="text-gray-600">Distance Charge</Text>
-                    <Text className="text-gray-900 font-semibold">
-                      {formatPrice(distanceCharge)}
-                    </Text>
-                  </View>
-                )}
-
-                <View className="border-t border-gray-200 pt-3 mt-2">
-                  <View className="flex-row items-center justify-between">
-                    <Text className="text-lg font-bold text-gray-900">Total</Text>
-                    <Text className="text-xl font-bold text-pink-600">
-                      {formatPrice(totalAmount)}
-                    </Text>
-                  </View>
-                </View>
-              </View>
-            </View>
-
-            {/* Additional Notes */}
-            <View className="bg-white rounded-2xl p-5">
-              <Text className="text-base font-bold text-gray-900 mb-3">
-                Additional Notes (Optional)
-              </Text>
-              <TextInput
-                className="border-2 border-gray-200 rounded-xl px-4 py-3 text-gray-900 min-h-[100px]"
-                placeholder="Any special requests or notes for the vendor..."
-                value={clientNotes}
-                onChangeText={setClientNotes}
-                multiline
-                textAlignVertical="top"
-              />
-            </View>
-          </View>
-        )}
       </ScrollView>
 
-      {/* Footer Button */}
-      <View className="bg-white border-t border-gray-100 px-5 py-4">
-        {step < 4 ? (
-          <TouchableOpacity
-            className="bg-pink-500 py-4 rounded-xl items-center"
-            style={{
-              shadowColor: '#eb278d',
-              shadowOffset: { width: 0, height: 4 },
-              shadowOpacity: 0.3,
-              shadowRadius: 8,
-              elevation: 6,
-            }}
-            onPress={handleNext}
-            activeOpacity={0.8}
+      {/* ── FOOTER ── */}
+      <View style={[ss.footer, { paddingBottom: insets.bottom + 12 }]}>
+        <TouchableOpacity
+          onPress={step === 4 ? handlePay : handleNext}
+          activeOpacity={0.85}
+          disabled={loading}
+          style={{ borderRadius: 16, overflow: 'hidden' }}
+        >
+          <LinearGradient
+            colors={loading ? ['#D1D5DB', '#9CA3AF'] : ['#E91E63', '#C2185B']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={ss.continueBtn}
           >
-            <Text className="text-white text-base font-bold">Continue</Text>
-          </TouchableOpacity>
-        ) : (
+            {loading
+              ? <ActivityIndicator color="#fff" />
+              : <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Text style={ss.continueTxt}>
+                    {step === 4
+                      ? paymentMethod === 'wallet'
+                        ? `Pay ₦${(appliedCoupon?.finalAmount ?? totalAmount).toLocaleString()}`
+                        : 'Pay with Card'
+                      : 'Continue'}
+                  </Text>
+                  <Ionicons name="chevron-forward" size={18} color="#fff" />
+                </View>
+            }
+          </LinearGradient>
+        </TouchableOpacity>
+      </View>
+
+      <LocationPickerModal
+        visible={showMapPicker}
+        onClose={() => setShowMapPicker(false)}
+        onConfirm={handleLocationConfirm}
+        initialLocation={clientLocation}
+      />
+
+      {/* ── Add to balance bottom sheet ── */}
+      <Modal
+        visible={showAddBalance}
+        transparent
+        animationType="slide"
+        onRequestClose={() => { Keyboard.dismiss(); setShowAddBalance(false); }}
+      >
+        <View style={{ flex: 1 }}>
           <TouchableOpacity
-            onPress={handleCreateBooking}
-            disabled={loading || (paymentMethod === 'wallet' && !canPayWithWallet)}
-            activeOpacity={0.8}
+            style={ss.absOverlay}
+            activeOpacity={1}
+            onPress={() => { Keyboard.dismiss(); setShowAddBalance(false); }}
+          />
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={{ flex: 1, justifyContent: 'flex-end' }}
+          >
+        <View style={[ss.addBalSheet, { paddingBottom: insets.bottom + 20 }]}>
+          <View style={ss.sheetHandle} />
+          <Text style={ss.sheetTitle}>Add to Balance</Text>
+          <Text style={ss.sheetSub}>
+            Your balance is{' '}
+            <Text style={{ color: '#EF4444', fontWeight: '700' }}>₦{walletBalance.toLocaleString()}</Text>
+            {'. '}You need{' '}
+            <Text style={{ color: PINK, fontWeight: '700' }}>
+              ₦{((appliedCoupon?.finalAmount ?? totalAmount) - walletBalance).toLocaleString()}
+            </Text>
+            {' '}more.
+          </Text>
+          <Text style={ss.sheetFieldLabel}>How much would you like to add?</Text>
+          <TextInput
+            style={ss.sheetInput}
+            value={addAmount}
+            onChangeText={t => setAddAmount(t.replace(/[^0-9]/g, ''))}
+            placeholder="₦0"
+            placeholderTextColor="#D1D5DB"
+            keyboardType="numeric"
+            returnKeyType="done"
+          />
+          <TouchableOpacity
+            onPress={handleAddBalance}
+            disabled={addBalanceLoading || !addAmount || parseInt(addAmount) < 100}
+            activeOpacity={0.85}
+            style={{ borderRadius: 14, overflow: 'hidden', marginTop: 16 }}
           >
             <LinearGradient
               colors={
-                loading || (paymentMethod === 'wallet' && !canPayWithWallet)
-                  ? ['#d1d5db', '#9ca3af']
-                  : ['#eb278d', '#f472b6']
+                addBalanceLoading || !addAmount || parseInt(addAmount) < 100
+                  ? ['#D1D5DB', '#9CA3AF']
+                  : ['#E91E63', '#C2185B']
               }
               start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              className="py-4 rounded-xl items-center"
-              style={{
-                shadowColor: '#eb278d',
-                shadowOffset: { width: 0, height: 4 },
-                shadowOpacity: 0.3,
-                shadowRadius: 8,
-                elevation: 6,
-              }}
+              end={{ x: 1, y: 0 }}
+              style={ss.sheetBtn}
             >
-              {loading ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <View className="flex-row items-center">
-                  <Ionicons
-                    name={paymentMethod === 'wallet' ? 'wallet' : 'card'}
-                    size={20}
-                    color="#fff"
-                  />
-                  <Text className="text-white text-base font-bold ml-2">
-                    {paymentMethod === 'wallet'
-                      ? `Pay ${formatPrice(totalAmount)} & Confirm`
-                      : `Proceed to Pay ${formatPrice(totalAmount)}`}
-                  </Text>
-                </View>
-              )}
+              {addBalanceLoading
+                ? <ActivityIndicator color="#fff" />
+                : <Text style={ss.sheetBtnTxt}>Proceed to Fund Wallet</Text>
+              }
             </LinearGradient>
           </TouchableOpacity>
-        )}
-      </View>
-
-      <ConfirmationModal
-        visible={confirmModal.visible}
-        title={confirmModal.title}
-        message={confirmModal.message}
-        onConfirm={() => { confirmModal.onConfirm(); setConfirmModal(prev => ({...prev, visible: false})); }}
-        onCancel={() => setConfirmModal(prev => ({...prev, visible: false}))}
-      />
-    </SafeAreaView>
+        </View>
+          </KeyboardAvoidingView>
+        </View>
+      </Modal>
+    </View>
   );
 };
+
+const ss = StyleSheet.create({
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+  },
+  backBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#FCE4EC',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerTitle: { fontSize: 17, fontWeight: '800', color: '#1A1A1A' },
+  progressWrap: {
+    flexDirection: 'row',
+    paddingHorizontal: 20,
+    paddingBottom: 14,
+    gap: 4,
+  },
+  progressItem: { flex: 1, alignItems: 'center' },
+  progBar: { height: 4, width: '100%', borderRadius: 2, backgroundColor: '#E5E7EB', marginBottom: 5 },
+  progBarActive: { backgroundColor: PINK },
+  progLabel: { fontSize: 9, color: '#9CA3AF', fontWeight: '500', textAlign: 'center' },
+  progLabelActive: { color: PINK, fontWeight: '700' },
+
+  card: { backgroundColor: '#fff', borderRadius: 18, padding: 16, borderWidth: 1, borderColor: '#F3F4F6' },
+  secLabel: { fontSize: 15, fontWeight: '700', color: '#111827', marginTop: 18, marginBottom: 10 },
+
+  // Service card
+  svcAvatar: { width: 48, height: 48, borderRadius: 12, overflow: 'hidden' },
+  svcAvatarGrad: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  svcAvatarLetter: { color: '#fff', fontSize: 20, fontWeight: '800' },
+  svcName: { fontSize: 14, fontWeight: '700', color: '#111827' },
+  svcSub: { fontSize: 12, color: '#9CA3AF' },
+  priceChip: {
+    backgroundColor: '#FCE4EC',
+    borderRadius: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderWidth: 1,
+    borderColor: '#F9A8D4',
+  },
+  priceChipTxt: { fontSize: 13, fontWeight: '700', color: PINK },
+
+  // Calendar
+  calHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 },
+  calNavBtn: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center' },
+  calMonthTxt: { fontSize: 15, fontWeight: '700', color: '#111827' },
+  calDayName: { fontSize: 10, fontWeight: '600', color: '#9CA3AF', textAlign: 'center' },
+  calCell: { borderRadius: 999, alignItems: 'center', justifyContent: 'center' },
+  calCellSel: { backgroundColor: PINK },
+  calCellTxt: { fontSize: 13, fontWeight: '600', color: PINK },
+  calCellPast: { color: '#D1D5DB' },
+  calCellToday: { color: '#111827', fontWeight: '800' },
+  calCellTxtSel: { color: '#fff' },
+
+  // Clock picker
+  clockIconBox: {
+    width: 52,
+    height: 52,
+    borderRadius: 14,
+    backgroundColor: '#FCE4EC',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  timeSelected: { fontSize: 20, fontWeight: '800', color: '#111827' },
+  timePlaceholder: { fontSize: 15, color: '#9CA3AF', fontWeight: '500' },
+  timeTapHint: { fontSize: 11, color: '#9CA3AF', marginTop: 2 },
+
+  // iOS time picker modal
+  timeModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'flex-end',
+  },
+  timeModalSheet: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingBottom: 32,
+  },
+  timeModalHandle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#E5E7EB',
+    alignSelf: 'center',
+    marginTop: 12,
+    marginBottom: 4,
+  },
+  timeModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  timeModalCancel: { fontSize: 15, color: '#6B7280', fontWeight: '600' },
+  timeModalTitle: { fontSize: 16, fontWeight: '700', color: '#111827' },
+  timeModalDone: { fontSize: 15, color: PINK, fontWeight: '700' },
+
+  // Location step
+  stepQ: { fontSize: 16, fontWeight: '700', color: '#111827', marginBottom: 14 },
+  locCard: {
+    backgroundColor: '#fff',
+    borderRadius: 18,
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: '#F3F4F6',
+    marginBottom: 10,
+  },
+  locCardSel: { borderColor: PINK, backgroundColor: '#FFF5F8' },
+  locIconBox: { width: 44, height: 44, borderRadius: 12, backgroundColor: '#F3F4F6', alignItems: 'center', justifyContent: 'center' },
+  locIconBoxSel: { backgroundColor: '#FCE4EC' },
+  locTitle: { fontSize: 14, fontWeight: '700', color: '#111827' },
+  locSub: { fontSize: 12, color: '#9CA3AF', marginTop: 2 },
+  radio: { width: 20, height: 20, borderRadius: 10, borderWidth: 2, borderColor: '#D1D5DB', alignItems: 'center', justifyContent: 'center' },
+  radioSel: { borderColor: PINK },
+  radioDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: PINK },
+
+  // Address / map picker
+  addrTitle: { fontSize: 15, fontWeight: '700', color: '#111827', marginBottom: 12 },
+  mapPickerBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    borderRadius: 18,
+    padding: 16,
+    borderWidth: 1.5,
+    borderColor: PINK,
+  },
+  mapPickerIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: '#FCE4EC',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  mapPickerTitle: { fontSize: 14, fontWeight: '700', color: '#111827' },
+  mapPickerSub: { fontSize: 12, color: '#9CA3AF', marginTop: 2 },
+  addrConfirm: {
+    backgroundColor: '#D1FAE5',
+    borderRadius: 14,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+  },
+  addrConfirmTxt: { fontSize: 13, color: '#065F46', fontWeight: '500' },
+
+  // Vendor location
+  vendorLocTitle: { fontSize: 14, fontWeight: '700', color: '#111827', marginBottom: 12 },
+  pinBox: { width: 36, height: 36, borderRadius: 10, backgroundColor: '#FCE4EC', alignItems: 'center', justifyContent: 'center' },
+  vendorLocCity: { fontSize: 14, fontWeight: '600', color: '#111827' },
+  vendorLocDist: { fontSize: 12, color: '#6B7280' },
+
+  // Confirm step
+  confirmTitleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
+  confirmTitle: { fontSize: 15, fontWeight: '700', color: '#111827' },
+  editBtn: { fontSize: 13, color: PINK, fontWeight: '700' },
+  confRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 9,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F9FAFB',
+  },
+  confLabel: { fontSize: 13, color: '#6B7280' },
+  confValue: { fontSize: 13, fontWeight: '600', color: '#111827', maxWidth: '58%', textAlign: 'right' },
+  cancelCard: {
+    backgroundColor: '#FFFBEB',
+    borderRadius: 16,
+    padding: 14,
+    marginTop: 14,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+  },
+  cancelTitle: { fontSize: 13, fontWeight: '700', color: '#92400E', marginBottom: 4 },
+  cancelTxt: { fontSize: 12, color: '#B45309', lineHeight: 18 },
+
+  // Payment step
+  payCard: {
+    backgroundColor: '#fff',
+    borderRadius: 18,
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: '#F3F4F6',
+    marginBottom: 10,
+  },
+  payCardSel: { borderColor: PINK, backgroundColor: '#FFF5F8' },
+  lrLogo: { width: 44, height: 44, borderRadius: 12, backgroundColor: PINK, alignItems: 'center', justifyContent: 'center' },
+  lrLogoTxt: { color: '#fff', fontSize: 16, fontWeight: '900' },
+  psLogo: { width: 44, height: 44, borderRadius: 12, backgroundColor: '#1A1A2E', alignItems: 'center', justifyContent: 'center' },
+  payTitle: { fontSize: 14, fontWeight: '700', color: '#111827' },
+  paySub: { fontSize: 12, color: '#9CA3AF', marginTop: 2 },
+  walletBal: { fontSize: 14, fontWeight: '700', color: '#111827' },
+  addBalBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FCE4EC',
+    borderRadius: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderWidth: 1,
+    borderColor: '#F9A8D4',
+  },
+  addBalTxt: { fontSize: 11, color: PINK, fontWeight: '600' },
+
+  // Coupon
+  couponTitle: { fontSize: 13, fontWeight: '700', color: '#111827', marginBottom: 10 },
+  couponRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  couponInput: {
+    flex: 1,
+    height: 44,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: '#E5E7EB',
+    paddingHorizontal: 14,
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#111827',
+    backgroundColor: '#F9FAFB',
+    letterSpacing: 1,
+  },
+  couponApplyBtn: {
+    height: 44,
+    paddingHorizontal: 18,
+    borderRadius: 12,
+    backgroundColor: PINK,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  couponApplyTxt: { fontSize: 13, fontWeight: '700', color: '#fff' },
+  couponApplied: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#D1FAE5',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 8,
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+  },
+  couponAppliedTxt: { flex: 1, fontSize: 13, fontWeight: '600', color: '#065F46' },
+
+  // Add to balance sheet
+  absOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.45)' },
+  addBalSheet: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    paddingHorizontal: 24,
+    paddingTop: 12,
+  },
+  sheetHandle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#E5E7EB',
+    alignSelf: 'center',
+    marginBottom: 20,
+  },
+  sheetTitle: { fontSize: 18, fontWeight: '800', color: '#111827', marginBottom: 6 },
+  sheetSub: { fontSize: 13, color: '#6B7280', lineHeight: 20, marginBottom: 20 },
+  sheetFieldLabel: { fontSize: 12, fontWeight: '600', color: '#6B7280', marginBottom: 8 },
+  sheetInput: {
+    height: 52,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: '#E5E7EB',
+    paddingHorizontal: 16,
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#111827',
+    backgroundColor: '#F9FAFB',
+  },
+  sheetBtn: { height: 52, alignItems: 'center', justifyContent: 'center', borderRadius: 14 },
+  sheetBtnTxt: { fontSize: 15, fontWeight: '700', color: '#fff' },
+
+  // Footer
+  footer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    backgroundColor: BG,
+    borderTopWidth: 1,
+    borderTopColor: '#FCE4EC',
+  },
+  continueBtn: { height: 54, alignItems: 'center', justifyContent: 'center', borderRadius: 16 },
+  continueTxt: { color: '#fff', fontSize: 16, fontWeight: '700' },
+});
 
 export default CreateBookingScreen;

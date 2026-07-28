@@ -1,12 +1,24 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, ActivityIndicator, Image, TextInput, Modal } from 'react-native';
+import {
+  View, Text, TouchableOpacity, ScrollView, ActivityIndicator,
+  Image, TextInput, Modal, StyleSheet, Platform, StatusBar,
+} from 'react-native';
 import { toast } from '@/components/ui/Toast';
 import ConfirmationModal from '@/components/ConfirmationModal';
 import { Ionicons } from '@expo/vector-icons';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { offerAPI, handleAPIError } from '@/api/api';
+
+const BG     = '#FFF5F9';
+const CARD   = '#FFFFFF';
+const PINK   = '#E04079';
+const PRI_DK = '#B5315F';
+const TEXT1  = '#1A1A2E';
+const TEXT2  = '#6B7280';
+const TEXT3  = '#9CA3AF';
+const BORDER = '#F3F4F6';
 
 interface OfferResponse {
   _id: string;
@@ -14,10 +26,7 @@ interface OfferResponse {
     _id: string;
     firstName: string;
     lastName: string;
-    vendorProfile: {
-      businessName: string;
-      rating: number;
-    };
+    vendorProfile: { businessName: string; rating: number };
   };
   proposedPrice: number;
   counterOffer?: number;
@@ -33,103 +42,99 @@ interface Offer {
   description: string;
   proposedPrice: number;
   status: string;
-  serviceType: 'home' | 'shop' | 'both'; // ✅ NEW FIELD
+  serviceType: 'home' | 'shop' | 'both';
   responses: OfferResponse[];
   createdAt: string;
   expiresAt: string;
   images: string[];
-  category: {
-    name: string;
-  };
-  location?: { // ✅ Now optional
-    address: string;
-    city: string;
-    state: string;
-  };
+  category: { name: string };
+  location?: { address: string; city: string; state: string };
   flexibility: string;
   preferredDate?: string;
   preferredTime?: string;
 }
 
+const STATUS_MAP: Record<string, { label: string; bg: string; color: string }> = {
+  open:     { label: 'Open',     bg: '#D1FAE5', color: '#065F46' },
+  accepted: { label: 'Accepted', bg: '#DBEAFE', color: '#1E40AF' },
+  closed:   { label: 'Closed',   bg: '#F3F4F6', color: '#6B7280' },
+  expired:  { label: 'Expired',  bg: '#FEE2E2', color: '#991B1B' },
+};
+
+const SVC_LABEL: Record<string, string> = {
+  home: 'Home Service',
+  shop: 'In-Shop',
+  both: 'Flexible',
+};
+
+const formatDate = (d: string) =>
+  new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+
+const InfoRow: React.FC<{ icon: keyof typeof Ionicons.glyphMap; label: string; value: string }> = ({ icon, label, value }) => (
+  <View style={s.infoRow}>
+    <Ionicons name={icon} size={16} color={PINK} style={{ marginRight: 10 }} />
+    <Text style={s.infoLabel}>{label}</Text>
+    <Text style={s.infoValue} numberOfLines={1}>{value}</Text>
+  </View>
+);
+
 const OfferDetailScreen: React.FC = () => {
-  const navigation = useNavigation();
+  const navigation = useNavigation<any>();
   const route = useRoute();
+  const insets = useSafeAreaInsets();
   const { offerId } = route.params as { offerId: string };
 
-  const [loading, setLoading] = useState(true);
-  const [offer, setOffer] = useState<Offer | null>(null);
-  const [showCounterModal, setShowCounterModal] = useState(false);
-  const [showPaymentMethodModal, setShowPaymentMethodModal] = useState(false); // ✅ NEW
-  const [selectedResponse, setSelectedResponse] = useState<string | null>(null);
-  const [selectedResponseForAccept, setSelectedResponseForAccept] = useState<string | null>(null); // ✅ NEW
-  const [counterPrice, setCounterPrice] = useState('');
+  const [loading,    setLoading]    = useState(true);
+  const [offer,      setOffer]      = useState<Offer | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  const [showCounterModal,  setShowCounterModal]  = useState(false);
+  const [showPaymentModal,  setShowPaymentModal]  = useState(false);
+  const [selectedResponse,  setSelectedResponse]  = useState<string | null>(null);
+  const [selectedForAccept, setSelectedForAccept] = useState<string | null>(null);
+  const [counterPrice,      setCounterPrice]      = useState('');
   const [confirmModal, setConfirmModal] = useState({ visible: false, title: '', message: '', onConfirm: () => {} });
 
-  useEffect(() => {
-    fetchOfferDetail();
-  }, []);
+  useEffect(() => { fetchOffer(); }, []);
 
-  const fetchOfferDetail = async () => {
+  const fetchOffer = async () => {
     try {
       setLoading(true);
-      const response = await offerAPI.getOfferById(offerId);
-      if (response.success) {
-        setOffer(response.data);
-      }
+      const res = await offerAPI.getOfferById(offerId);
+      if (res.success) setOffer(res.data);
     } catch (error) {
-      const apiError = handleAPIError(error);
-      toast.error('Error', apiError.message);
+      toast.error('Error', handleAPIError(error).message);
       navigation.goBack();
     } finally {
       setLoading(false);
     }
   };
 
-  const handleAcceptResponse = async (responseId: string) => {
-    // ✅ Show payment method selection first
-    setSelectedResponseForAccept(responseId);
-    setShowPaymentMethodModal(true);
+  const handleAcceptResponse = (responseId: string) => {
+    setSelectedForAccept(responseId);
+    setShowPaymentModal(true);
   };
 
-  // ✅ NEW: Handle payment method selection and process acceptance
-  const processAcceptResponse = async (paymentMethod: 'wallet' | 'card') => {
-    if (!selectedResponseForAccept) return;
-
-    setShowPaymentMethodModal(false);
+  const processAccept = async (paymentMethod: 'wallet' | 'card') => {
+    if (!selectedForAccept) return;
+    setShowPaymentModal(false);
     setSubmitting(true);
-
     try {
-      const response = await offerAPI.acceptResponse(offerId, selectedResponseForAccept, paymentMethod);
-      
-      if (response.success) {
-        const { offer: acceptedOffer, booking } = response.data;
-        
-        // ✅ Check if payment is required (Paystack flow)
+      const res = await offerAPI.acceptResponse(offerId, selectedForAccept, paymentMethod);
+      if (res.success) {
+        const { booking } = res.data;
         if (paymentMethod === 'card' && booking.authorizationUrl) {
-          // Navigate to PaymentScreen with Paystack URL
-          navigation.navigate('Payment', {
-            bookingId: booking._id,
-            amount: booking.totalAmount,
-            authorizationUrl: booking.authorizationUrl,
-            reference: booking.paymentReference,
-          });
-        } else if (booking.paymentStatus === 'escrowed') {
-          // Payment already completed (wallet payment)
-          toast.success('Success', 'Response accepted! Your booking has been created and paid.');
-          navigation.navigate('BookingDetail', { bookingId: booking._id });
+          navigation.navigate('Payment', { bookingId: booking._id, amount: booking.totalAmount, authorizationUrl: booking.authorizationUrl, reference: booking.paymentReference });
         } else {
-          // Unknown payment status
-          toast.success('Success', 'Response accepted! Your booking has been created.');
+          toast.success('Success', 'Response accepted! Booking created.');
           navigation.navigate('BookingDetail', { bookingId: booking._id });
         }
       }
     } catch (error) {
-      const apiError = handleAPIError(error);
-      toast.error('Error', apiError.message);
+      toast.error('Error', handleAPIError(error).message);
     } finally {
       setSubmitting(false);
-      setSelectedResponseForAccept(null);
+      setSelectedForAccept(null);
     }
   };
 
@@ -141,30 +146,24 @@ const OfferDetailScreen: React.FC = () => {
 
   const submitCounterOffer = async () => {
     if (!selectedResponse || !counterPrice) return;
-
     const price = parseFloat(counterPrice);
-    if (price <= 0) {
-      toast.error('Error', 'Please enter a valid price');
-      return;
-    }
-
+    if (price <= 0) { toast.error('Error', 'Please enter a valid price'); return; }
     try {
       setSubmitting(true);
-      const response = await offerAPI.counterOffer(offerId, selectedResponse, price);
-      if (response.success) {
-        toast.success('Success', 'Counter offer submitted successfully');
+      const res = await offerAPI.counterOffer(offerId, selectedResponse, price);
+      if (res.success) {
+        toast.success('Success', 'Counter offer submitted');
         setShowCounterModal(false);
-        fetchOfferDetail();
+        fetchOffer();
       }
     } catch (error) {
-      const apiError = handleAPIError(error);
-      toast.error('Error', apiError.message);
+      toast.error('Error', handleAPIError(error).message);
     } finally {
       setSubmitting(false);
     }
   };
 
-  const handleCloseOffer = async () => {
+  const handleCloseOffer = () => {
     setConfirmModal({
       visible: true,
       title: 'Close Offer',
@@ -172,14 +171,10 @@ const OfferDetailScreen: React.FC = () => {
       onConfirm: async () => {
         try {
           setSubmitting(true);
-          const response = await offerAPI.closeOffer(offerId);
-          if (response.success) {
-            toast.success('Success', 'Offer closed successfully');
-            navigation.goBack();
-          }
+          const res = await offerAPI.closeOffer(offerId);
+          if (res.success) { toast.success('Success', 'Offer closed'); navigation.goBack(); }
         } catch (error) {
-          const apiError = handleAPIError(error);
-          toast.error('Error', apiError.message);
+          toast.error('Error', handleAPIError(error).message);
         } finally {
           setSubmitting(false);
         }
@@ -187,594 +182,192 @@ const OfferDetailScreen: React.FC = () => {
     });
   };
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-    });
-  };
-
-  const formatPrice = (price: number) => {
-    return `₦${price.toLocaleString()}`;
-  };
-
-  const getStatusConfig = (status: string) => {
-    switch (status.toLowerCase()) {
-      case 'open':
-        return {
-          bg: 'bg-green-100',
-          text: 'text-green-800',
-          icon: 'checkmark-circle' as const,
-        };
-      case 'accepted':
-        return {
-          bg: 'bg-blue-100',
-          text: 'text-blue-800',
-          icon: 'thumbs-up' as const,
-        };
-      case 'expired':
-        return {
-          bg: 'bg-gray-100',
-          text: 'text-gray-800',
-          icon: 'time' as const,
-        };
-      case 'closed':
-        return {
-          bg: 'bg-red-100',
-          text: 'text-red-800',
-          icon: 'close-circle' as const,
-        };
-      default:
-        return {
-          bg: 'bg-gray-100',
-          text: 'text-gray-800',
-          icon: 'help-circle' as const,
-        };
-    }
-  };
-
-  // ✅ NEW: Service type configuration
-  const getServiceTypeConfig = (type: string) => {
-    switch (type) {
-      case 'home':
-        return {
-          icon: 'home' as const,
-          label: 'Home Service',
-          description: 'Vendor comes to you',
-          color: '#10b981',
-          bgColor: '#d1fae5',
-        };
-      case 'shop':
-        return {
-          icon: 'storefront' as const,
-          label: 'In-Shop',
-          description: 'You visit vendor',
-          color: '#3b82f6',
-          bgColor: '#dbeafe',
-        };
-      case 'both':
-        return {
-          icon: 'repeat' as const,
-          label: 'Flexible',
-          description: 'Either location works',
-          color: '#f59e0b',
-          bgColor: '#fef3c7',
-        };
-      default:
-        return {
-          icon: 'help-circle' as const,
-          label: 'Unknown',
-          description: 'Service type not specified',
-          color: '#6b7280',
-          bgColor: '#f3f4f6',
-        };
-    }
-  };
-
   if (loading || !offer) {
     return (
-      <SafeAreaView className="flex-1 bg-gray-50">
-        <View className="flex-1 items-center justify-center">
-          <ActivityIndicator size="large" color="#eb278d" />
-          <Text className="text-gray-500 text-sm mt-4 font-medium">
-            Loading offer details...
-          </Text>
-        </View>
-      </SafeAreaView>
+      <View style={[s.flex, { backgroundColor: BG, paddingTop: insets.top, alignItems: 'center', justifyContent: 'center' }]}>
+        <StatusBar barStyle="dark-content" backgroundColor={BG} />
+        <ActivityIndicator size="large" color={PINK} />
+      </View>
     );
   }
 
-  const statusConfig = getStatusConfig(offer.status);
-  const serviceTypeConfig = getServiceTypeConfig(offer.serviceType); // ✅ NEW
+  const sc = STATUS_MAP[offer.status.toLowerCase()] ?? { label: offer.status, bg: BORDER, color: TEXT2 };
 
   return (
-    <SafeAreaView className="flex-1 bg-gray-50" edges={['top']}>
+    <View style={[s.flex, { backgroundColor: BG, paddingTop: insets.top }]}>
+      <StatusBar barStyle="dark-content" backgroundColor={BG} />
+
       {/* Header */}
-      <LinearGradient
-        colors={['#eb278d', '#f472b6']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={{
-          shadowColor: '#eb278d',
-          shadowOffset: { width: 0, height: 4 },
-          shadowOpacity: 0.3,
-          shadowRadius: 8,
-          elevation: 8,
-        }}
-      >
-        <View className="px-5 py-4">
-          <View className="flex-row items-center justify-between">
-            <TouchableOpacity
-              onPress={() => navigation.goBack()}
-              className="w-10 h-10 rounded-full bg-white/20 items-center justify-center"
-              activeOpacity={0.7}
-            >
-              <Ionicons name="arrow-back" size={24} color="#fff" />
-            </TouchableOpacity>
+      <View style={s.header}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn} activeOpacity={0.7}>
+          <Ionicons name="chevron-back" size={22} color={PINK} />
+        </TouchableOpacity>
+        <Text style={s.headerTitle}>Offer Details</Text>
+        {offer.status === 'open' ? (
+          <TouchableOpacity onPress={handleCloseOffer} style={s.closeBtn} disabled={submitting} activeOpacity={0.7}>
+            <Ionicons name="close-circle-outline" size={22} color="#EF4444" />
+          </TouchableOpacity>
+        ) : (
+          <View style={{ width: 40 }} />
+        )}
+      </View>
 
-            <Text className="text-lg font-bold text-white">Offer Details</Text>
+      <ScrollView style={s.flex} showsVerticalScrollIndicator={false} contentContainerStyle={s.scroll}>
 
-            {offer.status === 'open' ? (
-              <TouchableOpacity
-                onPress={handleCloseOffer}
-                disabled={submitting}
-                className="w-10 h-10 rounded-full bg-white/20 items-center justify-center"
-                activeOpacity={0.7}
-              >
-                <Ionicons name="close-circle" size={24} color="#fff" />
-              </TouchableOpacity>
-            ) : (
-              <View className="w-10" />
-            )}
+        {/* Top pink banner */}
+        <View style={s.banner}>
+          <View style={{ flex: 1, marginRight: 12 }}>
+            <Text style={s.bannerCat}>{offer.category?.name}</Text>
+            <Text style={s.bannerTitle} numberOfLines={2}>{offer.title}</Text>
+          </View>
+          <View style={s.bannerRight}>
+            <View style={[s.badge, { backgroundColor: sc.bg }]}>
+              <Text style={[s.badgeTxt, { color: sc.color }]}>{sc.label}</Text>
+            </View>
+            <Text style={s.bannerPrice}>₦{offer.proposedPrice.toLocaleString()}</Text>
           </View>
         </View>
-      </LinearGradient>
 
-      <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
-        {/* Main Info Card */}
-        <View className="px-5 py-6">
-          <View
-            className="bg-white rounded-3xl p-5 mb-4"
-            style={{
-              shadowColor: '#000',
-              shadowOffset: { width: 0, height: 2 },
-              shadowOpacity: 0.08,
-              shadowRadius: 8,
-              elevation: 4,
-            }}
-          >
-            {/* Title & Status */}
-            <View className="mb-4">
-              <Text className="text-xl font-bold text-gray-900 mb-3">
-                {offer.title}
-              </Text>
-              <View className="flex-row items-center gap-2 flex-wrap">
-                <View
-                  className={`px-3 py-1.5 rounded-full ${statusConfig.bg} flex-row items-center`}
-                >
-                  <Ionicons name={statusConfig.icon} size={14} color={statusConfig.text.includes('green') ? '#059669' : statusConfig.text.includes('blue') ? '#3b82f6' : statusConfig.text.includes('red') ? '#dc2626' : '#6b7280'} />
-                  <Text className={`text-xs font-bold ml-1 capitalize ${statusConfig.text}`}>
-                    {offer.status}
-                  </Text>
-                </View>
-                <View className="px-3 py-1.5 rounded-full bg-pink-50 border border-pink-200">
-                  <Text className="text-xs font-bold text-pink-700">
-                    {offer.category.name}
-                  </Text>
-                </View>
-                {/* ✅ NEW: Service Type Badge */}
-                <View 
-                  className="px-3 py-1.5 rounded-full flex-row items-center"
-                  style={{ backgroundColor: serviceTypeConfig.bgColor }}
-                >
-                  <Ionicons 
-                    name={serviceTypeConfig.icon} 
-                    size={14} 
-                    color={serviceTypeConfig.color} 
-                  />
-                  <Text 
-                    className="text-xs font-bold ml-1"
-                    style={{ color: serviceTypeConfig.color }}
-                  >
-                    {serviceTypeConfig.label}
-                  </Text>
-                </View>
-              </View>
-            </View>
+        {/* Description */}
+        <View style={s.card}>
+          <Text style={s.sectionTitle}>Description</Text>
+          <Text style={s.descTxt}>{offer.description}</Text>
+        </View>
 
-            {/* Description */}
-            <View className="bg-gray-50 rounded-2xl p-4 mb-4">
-              <Text className="text-base text-gray-700 leading-6">
-                {offer.description}
-              </Text>
-            </View>
+        {/* Images */}
+        {offer.images?.length > 0 && (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10, paddingHorizontal: 16, paddingVertical: 4 }}>
+            {offer.images.map((img, i) => (
+              <Image key={i} source={{ uri: img }} style={s.offerImg} resizeMode="cover" />
+            ))}
+          </ScrollView>
+        )}
 
-            {/* Images */}
-            {offer.images && offer.images.length > 0 && (
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                className="mb-4"
-                contentContainerStyle={{ gap: 12 }}
-              >
-                {offer.images.map((image, index) => (
-                  <Image
-                    key={index}
-                    source={{ uri: image }}
-                    className="w-32 h-32 rounded-2xl"
-                    resizeMode="cover"
-                  />
-                ))}
-              </ScrollView>
-            )}
+        {/* Details */}
+        <View style={s.card}>
+          <Text style={s.sectionTitle}>Details</Text>
+          <InfoRow icon="pricetag-outline"  label="Budget"       value={`₦${offer.proposedPrice.toLocaleString()}`} />
+          <InfoRow icon="swap-horizontal"   label="Service"      value={SVC_LABEL[offer.serviceType] ?? offer.serviceType} />
+          {offer.location && (offer.serviceType === 'home' || offer.serviceType === 'both') && (
+            <InfoRow icon="location-outline" label="Location" value={`${offer.location.city}, ${offer.location.state}`} />
+          )}
+          <InfoRow icon="time-outline"      label="Timing"       value={offer.flexibility} />
+          <InfoRow icon="calendar-outline"  label="Expires"      value={formatDate(offer.expiresAt)} />
+        </View>
 
-            {/* Details Grid */}
-            <View className="gap-3">
-              {/* Budget */}
-              <View className="bg-pink-50 rounded-2xl p-4 flex-row items-center">
-                <View className="w-10 h-10 rounded-full bg-pink-100 items-center justify-center mr-3">
-                  <Ionicons name="cash" size={20} color="#eb278d" />
-                </View>
-                <View className="flex-1">
-                  <Text className="text-xs text-pink-600 font-semibold mb-0.5">
-                    YOUR BUDGET
-                  </Text>
-                  <Text className="text-lg font-bold text-pink-900">
-                    {formatPrice(offer.proposedPrice)}
-                  </Text>
-                </View>
-              </View>
-
-              {/* ✅ NEW: Service Type Card */}
-              <View 
-                className="rounded-2xl p-4 flex-row items-center"
-                style={{ backgroundColor: serviceTypeConfig.bgColor }}
-              >
-                <View 
-                  className="w-10 h-10 rounded-full items-center justify-center mr-3"
-                  style={{ backgroundColor: `${serviceTypeConfig.color}20` }}
-                >
-                  <Ionicons 
-                    name={serviceTypeConfig.icon} 
-                    size={20} 
-                    color={serviceTypeConfig.color} 
-                  />
-                </View>
-                <View className="flex-1">
-                  <Text 
-                    className="text-xs font-semibold mb-0.5"
-                    style={{ color: serviceTypeConfig.color }}
-                  >
-                    SERVICE TYPE
-                  </Text>
-                  <Text 
-                    className="text-sm font-bold mb-0.5"
-                    style={{ color: serviceTypeConfig.color }}
-                  >
-                    {serviceTypeConfig.label}
-                  </Text>
-                  <Text 
-                    className="text-xs"
-                    style={{ color: serviceTypeConfig.color, opacity: 0.8 }}
-                  >
-                    {serviceTypeConfig.description}
-                  </Text>
-                </View>
-              </View>
-
-              {/* ✅ UPDATED: Location - Only show for home/both */}
-              {(offer.serviceType === 'home' || offer.serviceType === 'both') && offer.location && (
-                <View className="bg-blue-50 rounded-2xl p-4 flex-row items-center">
-                  <View className="w-10 h-10 rounded-full bg-blue-100 items-center justify-center mr-3">
-                    <Ionicons name="location" size={20} color="#3b82f6" />
-                  </View>
-                  <View className="flex-1">
-                    <Text className="text-xs text-blue-600 font-semibold mb-0.5">
-                      LOCATION
-                    </Text>
-                    <Text className="text-sm font-bold text-blue-900">
-                      {offer.location.city}, {offer.location.state}
-                    </Text>
-                    <Text className="text-xs text-blue-700 mt-0.5" numberOfLines={1}>
-                      {offer.location.address}
-                    </Text>
-                  </View>
-                </View>
-              )}
-
-              {/* Timing */}
-              <View className="bg-purple-50 rounded-2xl p-4 flex-row items-center">
-                <View className="w-10 h-10 rounded-full bg-purple-100 items-center justify-center mr-3">
-                  <Ionicons name="time" size={20} color="#a855f7" />
-                </View>
-                <View className="flex-1">
-                  <Text className="text-xs text-purple-600 font-semibold mb-0.5">
-                    TIMING
-                  </Text>
-                  <Text className="text-sm font-bold text-purple-900 capitalize">
-                    {offer.flexibility}
-                    {offer.preferredDate && ` • ${formatDate(offer.preferredDate)}`}
-                  </Text>
-                </View>
-              </View>
-
-              {/* Expiry */}
-              <View className="bg-orange-50 rounded-2xl p-4 flex-row items-center">
-                <View className="w-10 h-10 rounded-full bg-orange-100 items-center justify-center mr-3">
-                  <Ionicons name="calendar" size={20} color="#f97316" />
-                </View>
-                <View className="flex-1">
-                  <Text className="text-xs text-orange-600 font-semibold mb-0.5">
-                    EXPIRES ON
-                  </Text>
-                  <Text className="text-sm font-bold text-orange-900">
-                    {formatDate(offer.expiresAt)}
-                  </Text>
-                </View>
-              </View>
+        {/* Responses */}
+        <View style={s.card}>
+          <View style={s.responsesHeader}>
+            <Text style={s.sectionTitle}>Vendor Responses</Text>
+            <View style={[s.badge, { backgroundColor: '#FEE2EF' }]}>
+              <Text style={[s.badgeTxt, { color: PINK }]}>{offer.responses.length}</Text>
             </View>
           </View>
 
-          {/* Responses Section */}
-          <View
-            className="bg-white rounded-3xl p-5"
-            style={{
-              shadowColor: '#000',
-              shadowOffset: { width: 0, height: 2 },
-              shadowOpacity: 0.08,
-              shadowRadius: 8,
-              elevation: 4,
-            }}
-          >
-            <View className="flex-row items-center justify-between mb-5">
-              <View className="flex-row items-center">
-                <View className="w-10 h-10 rounded-full bg-pink-100 items-center justify-center mr-3">
-                  <Ionicons name="chatbubbles" size={20} color="#eb278d" />
-                </View>
-                <View>
-                  <Text className="text-lg font-bold text-gray-900">
-                    Vendor Responses
-                  </Text>
-                  <Text className="text-xs text-gray-500">
-                    {offer.responses.length} {offer.responses.length === 1 ? 'response' : 'responses'}
-                  </Text>
-                </View>
-              </View>
+          {offer.responses.length === 0 ? (
+            <View style={s.emptyResponses}>
+              <Ionicons name="chatbubble-ellipses-outline" size={36} color={TEXT3} />
+              <Text style={s.emptyResponsesTxt}>No responses yet — vendors will reply soon</Text>
             </View>
-
-            {offer.responses.length === 0 ? (
-              <View className="items-center py-12">
-                <View className="w-24 h-24 rounded-full bg-gray-100 items-center justify-center mb-4">
-                  <Ionicons name="chatbubble-ellipses-outline" size={48} color="#d1d5db" />
-                </View>
-                <Text className="text-gray-900 text-base font-bold mb-1">
-                  No responses yet
-                </Text>
-                <Text className="text-sm text-gray-500 text-center">
-                  Vendors will respond to your offer soon
-                </Text>
-              </View>
-            ) : (
-              <View style={{ gap: 16 }}>
-                {offer.responses.map((response) => (
-                  <View
-                    key={response._id}
-                    className="rounded-2xl p-4 border-2"
-                    style={{
-                      backgroundColor: response.isAccepted ? '#f0fdf4' : '#fff',
-                      borderColor: response.isAccepted ? '#86efac' : '#e5e7eb',
-                    }}
-                  >
-                    {/* Vendor Info */}
-                    <View className="flex-row items-center justify-between mb-4">
-                      <View className="flex-1">
-                        <Text className="text-base font-bold text-gray-900 mb-1">
-                          {response.vendor.vendorProfile.businessName ||
-                            `${response.vendor.firstName} ${response.vendor.lastName}`}
-                        </Text>
-                        <View className="flex-row items-center">
-                          <Ionicons name="star" size={14} color="#fbbf24" />
-                          <Text className="text-sm text-gray-600 ml-1 font-medium">
-                            {response.vendor.vendorProfile.rating?.toFixed(1) || 'New'}
-                          </Text>
-                        </View>
-                      </View>
-
-                      {response.isAccepted && (
-                        <View className="bg-green-500 px-3 py-1.5 rounded-full flex-row items-center">
-                          <Ionicons name="checkmark-circle" size={14} color="#fff" />
-                          <Text className="text-xs font-bold text-white ml-1">
-                            Accepted
-                          </Text>
-                        </View>
-                      )}
-                    </View>
-
-                    {/* Price Details */}
-                    <View className="bg-gray-50 rounded-2xl p-4 mb-3" style={{ gap: 12 }}>
-                      <View className="flex-row items-center justify-between">
-                        <Text className="text-sm text-gray-600 font-medium">
-                          Proposed Price
-                        </Text>
-                        <Text className="text-xl font-bold text-pink-600">
-                          {formatPrice(response.proposedPrice)}
-                        </Text>
-                      </View>
-
-                      {response.counterOffer && (
-                        <View className="flex-row items-center justify-between">
-                          <Text className="text-sm text-gray-600 font-medium">
-                            Your Counter Offer
-                          </Text>
-                          <Text className="text-lg font-bold text-orange-600">
-                            {formatPrice(response.counterOffer)}
-                          </Text>
-                        </View>
-                      )}
-
-                      {response.estimatedDuration && (
-                        <View className="flex-row items-center justify-between">
-                          <Text className="text-sm text-gray-600 font-medium">
-                            Estimated Duration
-                          </Text>
-                          <View className="flex-row items-center">
-                            <Ionicons name="time" size={16} color="#6b7280" />
-                            <Text className="text-sm font-bold text-gray-700 ml-1">
-                              {response.estimatedDuration} mins
-                            </Text>
-                          </View>
-                        </View>
-                      )}
-                    </View>
-
-                    {/* Message */}
-                    {response.message && (
-                      <View className="bg-blue-50 rounded-2xl p-3 mb-3">
-                        <Text className="text-sm text-blue-900 leading-5">
-                          "{response.message}"
-                        </Text>
-                      </View>
-                    )}
-
-                    {/* Timestamp */}
-                    <Text className="text-xs text-gray-400 mb-3">
-                      Responded on {formatDate(response.respondedAt)}
+          ) : (
+            offer.responses.map(resp => (
+              <View key={resp._id} style={[s.respCard, resp.isAccepted && s.respCardAccepted]}>
+                {/* Vendor row */}
+                <View style={s.vendorRow}>
+                  <LinearGradient colors={[PINK, PRI_DK]} style={s.vendorAvatar}>
+                    <Text style={s.vendorInitial}>
+                      {(resp.vendor.vendorProfile.businessName || resp.vendor.firstName).charAt(0).toUpperCase()}
                     </Text>
-
-                    {/* Actions */}
-                    {offer.status === 'open' && !response.isAccepted && (
-                      <View className="flex-row gap-3">
-                        <TouchableOpacity
-                          className="flex-1"
-                          onPress={() => handleAcceptResponse(response._id)}
-                          disabled={submitting}
-                          activeOpacity={0.8}
-                        >
-                          <LinearGradient
-                            colors={['#eb278d', '#f472b6']}
-                            className="py-3.5 rounded-2xl items-center"
-                            style={{
-                              shadowColor: '#eb278d',
-                              shadowOffset: { width: 0, height: 2 },
-                              shadowOpacity: 0.3,
-                              shadowRadius: 4,
-                              elevation: 4,
-                            }}
-                          >
-                            {submitting ? (
-                              <ActivityIndicator color="#fff" />
-                            ) : (
-                              <View className="flex-row items-center">
-                                <Ionicons name="checkmark-circle" size={18} color="#fff" />
-                                <Text className="text-white text-base font-bold ml-2">
-                                  Accept
-                                </Text>
-                              </View>
-                            )}
-                          </LinearGradient>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity
-                          className="flex-1 border-2 border-pink-500 py-3.5 rounded-2xl items-center"
-                          onPress={() =>
-                            handleCounterOffer(response._id, response.proposedPrice)
-                          }
-                          disabled={submitting}
-                          activeOpacity={0.7}
-                        >
-                          <View className="flex-row items-center">
-                            <Ionicons name="swap-horizontal" size={18} color="#eb278d" />
-                            <Text className="text-pink-600 text-base font-bold ml-2">
-                              Counter
-                            </Text>
-                          </View>
-                        </TouchableOpacity>
-                      </View>
-                    )}
+                  </LinearGradient>
+                  <View style={s.flex}>
+                    <Text style={s.vendorName}>
+                      {resp.vendor.vendorProfile.businessName || `${resp.vendor.firstName} ${resp.vendor.lastName}`}
+                    </Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                      <Ionicons name="star" size={12} color="#FBBF24" />
+                      <Text style={s.vendorRating}>{resp.vendor.vendorProfile.rating?.toFixed(1) || 'New'}</Text>
+                    </View>
                   </View>
-                ))}
+                  {resp.isAccepted && (
+                    <View style={[s.badge, { backgroundColor: '#D1FAE5' }]}>
+                      <Text style={[s.badgeTxt, { color: '#065F46' }]}>Accepted</Text>
+                    </View>
+                  )}
+                </View>
+
+                {/* Prices */}
+                <View style={s.priceRow}>
+                  <Text style={s.priceLabel}>Proposed</Text>
+                  <Text style={s.priceVal}>₦{resp.proposedPrice.toLocaleString()}</Text>
+                </View>
+                {resp.counterOffer !== undefined && resp.counterOffer > 0 && (
+                  <View style={s.priceRow}>
+                    <Text style={s.priceLabel}>Your counter</Text>
+                    <Text style={[s.priceVal, { color: TEXT2 }]}>₦{resp.counterOffer.toLocaleString()}</Text>
+                  </View>
+                )}
+                {resp.estimatedDuration !== undefined && (
+                  <View style={s.priceRow}>
+                    <Text style={s.priceLabel}>Est. duration</Text>
+                    <Text style={[s.priceVal, { color: TEXT2 }]}>{resp.estimatedDuration} mins</Text>
+                  </View>
+                )}
+
+                {/* Message */}
+                {resp.message ? (
+                  <Text style={s.respMessage}>"{resp.message}"</Text>
+                ) : null}
+
+                <Text style={s.respDate}>Responded {formatDate(resp.respondedAt)}</Text>
+
+                {/* Actions */}
+                {offer.status === 'open' && !resp.isAccepted && (
+                  <View style={s.respActions}>
+                    <TouchableOpacity style={s.flex} onPress={() => handleAcceptResponse(resp._id)} disabled={submitting} activeOpacity={0.85}>
+                      <LinearGradient colors={[PINK, PRI_DK]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={s.acceptBtn}>
+                        {submitting ? <ActivityIndicator color="#fff" size="small" /> : <Text style={s.acceptBtnTxt}>Accept</Text>}
+                      </LinearGradient>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={[s.flex, s.counterBtn]} onPress={() => handleCounterOffer(resp._id, resp.proposedPrice)} disabled={submitting} activeOpacity={0.7}>
+                      <Text style={s.counterBtnTxt}>Counter</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
               </View>
-            )}
-          </View>
+            ))
+          )}
         </View>
       </ScrollView>
 
-      {/* Counter Offer Modal */}
+      {/* Counter offer modal */}
       <Modal visible={showCounterModal} transparent animationType="slide">
-        <View className="flex-1 bg-black/50 justify-end">
-          <View className="bg-white rounded-t-3xl p-6">
-            {/* Modal Header */}
-            <View className="flex-row items-center justify-between mb-6">
-              <View className="flex-row items-center">
-                <View className="w-10 h-10 rounded-full bg-pink-100 items-center justify-center mr-3">
-                  <Ionicons name="swap-horizontal" size={20} color="#eb278d" />
-                </View>
-                <Text className="text-xl font-bold text-gray-900">Counter Offer</Text>
-              </View>
-              <TouchableOpacity
-                onPress={() => setShowCounterModal(false)}
-                className="w-10 h-10 rounded-full bg-gray-100 items-center justify-center"
-                activeOpacity={0.7}
-              >
-                <Ionicons name="close" size={24} color="#6b7280" />
+        <View style={s.overlay}>
+          <View style={[s.sheet, { paddingBottom: insets.bottom + 20 }]}>
+            <View style={s.sheetHeader}>
+              <Text style={s.sheetTitle}>Counter Offer</Text>
+              <TouchableOpacity onPress={() => setShowCounterModal(false)} style={s.sheetClose} activeOpacity={0.7}>
+                <Ionicons name="close" size={20} color={TEXT2} />
               </TouchableOpacity>
             </View>
-
-            <Text className="text-sm text-gray-600 mb-4">
-              Enter your counter offer amount
-            </Text>
-
-            {/* Price Input */}
-            <View className="bg-gray-50 rounded-2xl p-4 mb-6 flex-row items-center border-2 border-gray-200">
-              <View className="w-10 h-10 rounded-full bg-pink-100 items-center justify-center mr-3">
-                <Ionicons name="cash" size={20} color="#eb278d" />
-              </View>
+            <Text style={s.sheetSub}>Enter your counter offer amount</Text>
+            <View style={s.priceInput}>
+              <Text style={s.priceInputPrefix}>₦</Text>
               <TextInput
-                className="flex-1 text-2xl font-bold text-gray-900"
+                style={s.priceInputText}
                 placeholder="0"
+                placeholderTextColor={BORDER}
                 value={counterPrice}
-                onChangeText={(text) => setCounterPrice(text.replace(/[^0-9]/g, ''))}
+                onChangeText={t => setCounterPrice(t.replace(/[^0-9]/g, ''))}
                 keyboardType="numeric"
-                placeholderTextColor="#d1d5db"
               />
-              <Text className="text-gray-500 text-base font-medium">NGN</Text>
             </View>
-
-            {/* Action Buttons */}
-            <View className="flex-row gap-3">
-              <TouchableOpacity
-                className="flex-1 bg-gray-100 py-4 rounded-2xl items-center"
-                onPress={() => setShowCounterModal(false)}
-                disabled={submitting}
-                activeOpacity={0.7}
-              >
-                <Text className="text-gray-700 text-base font-bold">Cancel</Text>
+            <View style={s.sheetActions}>
+              <TouchableOpacity style={[s.flex, s.sheetCancelBtn]} onPress={() => setShowCounterModal(false)} activeOpacity={0.7}>
+                <Text style={s.sheetCancelTxt}>Cancel</Text>
               </TouchableOpacity>
-
-              <TouchableOpacity
-                className="flex-1"
-                onPress={submitCounterOffer}
-                disabled={submitting}
-                activeOpacity={0.8}
-              >
-                <LinearGradient
-                  colors={['#eb278d', '#f472b6']}
-                  className="py-4 rounded-2xl items-center"
-                  style={{
-                    shadowColor: '#eb278d',
-                    shadowOffset: { width: 0, height: 2 },
-                    shadowOpacity: 0.3,
-                    shadowRadius: 4,
-                    elevation: 4,
-                  }}
-                >
-                  {submitting ? (
-                    <ActivityIndicator color="#fff" />
-                  ) : (
-                    <Text className="text-white text-base font-bold">Submit Offer</Text>
-                  )}
+              <TouchableOpacity style={s.flex} onPress={submitCounterOffer} disabled={submitting} activeOpacity={0.85}>
+                <LinearGradient colors={[PINK, PRI_DK]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={s.sheetConfirmBtn}>
+                  {submitting ? <ActivityIndicator color="#fff" size="small" /> : <Text style={s.sheetConfirmTxt}>Submit</Text>}
                 </LinearGradient>
               </TouchableOpacity>
             </View>
@@ -782,89 +375,39 @@ const OfferDetailScreen: React.FC = () => {
         </View>
       </Modal>
 
-      {/* ✅ NEW: Payment Method Selection Modal */}
-      <Modal visible={showPaymentMethodModal} transparent animationType="slide">
-        <View className="flex-1 bg-black/50 justify-end">
-          <View className="bg-white rounded-t-3xl p-6">
-            {/* Modal Header */}
-            <View className="flex-row items-center justify-between mb-6">
-              <View className="flex-row items-center">
-                <View className="w-10 h-10 rounded-full bg-pink-100 items-center justify-center mr-3">
-                  <Ionicons name="card" size={20} color="#eb278d" />
-                </View>
-                <Text className="text-xl font-bold text-gray-900">Choose Payment</Text>
+      {/* Payment method modal */}
+      <Modal visible={showPaymentModal} transparent animationType="slide">
+        <View style={s.overlay}>
+          <View style={[s.sheet, { paddingBottom: insets.bottom + 20 }]}>
+            <View style={s.sheetHeader}>
+              <Text style={s.sheetTitle}>Choose Payment</Text>
+              <TouchableOpacity onPress={() => { setShowPaymentModal(false); setSelectedForAccept(null); }} style={s.sheetClose} activeOpacity={0.7}>
+                <Ionicons name="close" size={20} color={TEXT2} />
+              </TouchableOpacity>
+            </View>
+            <Text style={s.sheetSub}>How do you want to pay for this booking?</Text>
+
+            <TouchableOpacity style={s.payOpt} onPress={() => processAccept('wallet')} disabled={submitting} activeOpacity={0.8}>
+              <Ionicons name="wallet-outline" size={22} color={PINK} />
+              <View style={s.flex}>
+                <Text style={s.payOptTitle}>SharpPay Wallet</Text>
+                <Text style={s.payOptSub}>Instant payment from your wallet</Text>
               </View>
-              <TouchableOpacity
-                onPress={() => {
-                  setShowPaymentMethodModal(false);
-                  setSelectedResponseForAccept(null);
-                }}
-                className="w-10 h-10 rounded-full bg-gray-100 items-center justify-center"
-                activeOpacity={0.7}
-              >
-                <Ionicons name="close" size={24} color="#6b7280" />
-              </TouchableOpacity>
-            </View>
+              <Ionicons name="chevron-forward" size={18} color={TEXT3} />
+            </TouchableOpacity>
 
-            <Text className="text-sm text-gray-600 mb-6">
-              Select how you want to pay for this booking
-            </Text>
+            <TouchableOpacity style={s.payOpt} onPress={() => processAccept('card')} disabled={submitting} activeOpacity={0.8}>
+              <Ionicons name="card-outline" size={22} color={PINK} />
+              <View style={s.flex}>
+                <Text style={s.payOptTitle}>Pay with Card</Text>
+                <Text style={s.payOptSub}>Secure payment via Paystack</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={TEXT3} />
+            </TouchableOpacity>
 
-            {/* Payment Options */}
-            <View className="gap-3">
-              {/* SharpPay Wallet Payment */}
-              <TouchableOpacity
-                className="border-2 border-green-500 rounded-2xl p-4 bg-green-50"
-                onPress={() => processAcceptResponse('wallet')}
-                disabled={submitting}
-                activeOpacity={0.7}
-              >
-                <View className="flex-row items-center">
-                  <View className="w-12 h-12 rounded-full bg-green-100 items-center justify-center mr-4">
-                    <Ionicons name="wallet" size={24} color="#10b981" />
-                  </View>
-                  <View className="flex-1">
-                    <Text className="text-base font-bold text-green-900 mb-1">
-                      Pay with SharpPay
-                    </Text>
-                    <Text className="text-sm text-green-700">
-                      Instant payment from your SharpPay wallet
-                    </Text>
-                  </View>
-                  <Ionicons name="chevron-forward" size={20} color="#10b981" />
-                </View>
-              </TouchableOpacity>
-
-              {/* Paystack Card Payment */}
-              <TouchableOpacity
-                className="border-2 border-pink-500 rounded-2xl p-4 bg-pink-50"
-                onPress={() => processAcceptResponse('card')}
-                disabled={submitting}
-                activeOpacity={0.7}
-              >
-                <View className="flex-row items-center">
-                  <View className="w-12 h-12 rounded-full bg-pink-100 items-center justify-center mr-4">
-                    <Ionicons name="card" size={24} color="#eb278d" />
-                  </View>
-                  <View className="flex-1">
-                    <Text className="text-base font-bold text-pink-900 mb-1">
-                      Pay with Paystack
-                    </Text>
-                    <Text className="text-sm text-pink-700">
-                      Secure card payment via Paystack
-                    </Text>
-                  </View>
-                  <Ionicons name="chevron-forward" size={20} color="#eb278d" />
-                </View>
-              </TouchableOpacity>
-            </View>
-
-            {/* Secured Badge */}
-            <View className="mt-6 bg-blue-50 rounded-xl p-3 flex-row items-center justify-center">
-              <Ionicons name="shield-checkmark" size={18} color="#3b82f6" />
-              <Text className="text-blue-700 text-xs font-medium ml-2">
-                All payments are secured in escrow
-              </Text>
+            <View style={s.escrowNote}>
+              <Ionicons name="shield-checkmark-outline" size={15} color={PINK} />
+              <Text style={s.escrowNoteTxt}>All payments are secured in escrow</Text>
             </View>
           </View>
         </View>
@@ -874,11 +417,118 @@ const OfferDetailScreen: React.FC = () => {
         visible={confirmModal.visible}
         title={confirmModal.title}
         message={confirmModal.message}
-        onConfirm={() => { confirmModal.onConfirm(); setConfirmModal(prev => ({...prev, visible: false})); }}
-        onCancel={() => setConfirmModal(prev => ({...prev, visible: false}))}
+        onConfirm={() => { confirmModal.onConfirm(); setConfirmModal(p => ({ ...p, visible: false })); }}
+        onCancel={() => setConfirmModal(p => ({ ...p, visible: false }))}
       />
-    </SafeAreaView>
+    </View>
   );
 };
+
+const s = StyleSheet.create({
+  flex: { flex: 1 },
+  scroll: { paddingHorizontal: 16, paddingTop: 14, paddingBottom: 32, gap: 12 },
+
+  header: {
+    flexDirection: 'row', alignItems: 'center',
+    justifyContent: 'space-between', paddingHorizontal: 20,
+    paddingTop: 10, paddingBottom: 14,
+  },
+  backBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#FEE2EF', alignItems: 'center', justifyContent: 'center' },
+  closeBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#FEE2E2', alignItems: 'center', justifyContent: 'center' },
+  headerTitle: { fontSize: 17, fontWeight: '800', color: TEXT1, letterSpacing: -0.3 },
+
+  banner: {
+    backgroundColor: PINK, borderRadius: 18, padding: 18,
+    flexDirection: 'row', alignItems: 'center', marginBottom: 0,
+    ...Platform.select({
+      ios: { shadowColor: PINK, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.25, shadowRadius: 14 },
+      android: { elevation: 6 },
+    }),
+  },
+  bannerCat: { fontSize: 11, color: 'rgba(255,255,255,0.75)', fontWeight: '600', marginBottom: 4 },
+  bannerTitle: { fontSize: 17, fontWeight: '800', color: '#fff', letterSpacing: -0.3 },
+  bannerRight: { alignItems: 'flex-end', gap: 8 },
+  bannerPrice: { fontSize: 18, fontWeight: '800', color: '#fff', letterSpacing: -0.5 },
+
+  badge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10 },
+  badgeTxt: { fontSize: 11, fontWeight: '700' },
+
+  card: {
+    backgroundColor: CARD, borderRadius: 16, padding: 16,
+    ...Platform.select({
+      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 10 },
+      android: { elevation: 2 },
+    }),
+  },
+  sectionTitle: { fontSize: 15, fontWeight: '800', color: TEXT1, marginBottom: 12, letterSpacing: -0.2 },
+
+  descTxt: { fontSize: 14, color: TEXT2, lineHeight: 22 },
+
+  offerImg: { width: 110, height: 110, borderRadius: 14 },
+
+  infoRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: BORDER },
+  infoLabel: { fontSize: 13, color: TEXT3, fontWeight: '500', width: 72 },
+  infoValue: { flex: 1, fontSize: 13, color: TEXT1, fontWeight: '600', textAlign: 'right', textTransform: 'capitalize' },
+
+  responsesHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
+  emptyResponses: { alignItems: 'center', paddingVertical: 28, gap: 10 },
+  emptyResponsesTxt: { fontSize: 13, color: TEXT3, textAlign: 'center' },
+
+  respCard: {
+    backgroundColor: '#F9FAFB', borderRadius: 14, padding: 14, marginBottom: 10,
+    borderWidth: 1, borderColor: BORDER,
+  },
+  respCardAccepted: { backgroundColor: '#F0FDF4', borderColor: '#BBF7D0' },
+
+  vendorRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 12 },
+  vendorAvatar: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  vendorInitial: { color: '#fff', fontSize: 16, fontWeight: '800' },
+  vendorName: { fontSize: 14, fontWeight: '700', color: TEXT1, marginBottom: 2 },
+  vendorRating: { fontSize: 12, color: TEXT2, fontWeight: '500' },
+
+  priceRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 5 },
+  priceLabel: { fontSize: 13, color: TEXT2 },
+  priceVal: { fontSize: 14, fontWeight: '800', color: PINK },
+
+  respMessage: { fontSize: 13, color: TEXT2, fontStyle: 'italic', lineHeight: 19, marginTop: 8, marginBottom: 4 },
+  respDate: { fontSize: 11, color: TEXT3, marginTop: 4, marginBottom: 10 },
+
+  respActions: { flexDirection: 'row', gap: 10, marginTop: 4 },
+  acceptBtn: { borderRadius: 12, paddingVertical: 11, alignItems: 'center', justifyContent: 'center' },
+  acceptBtnTxt: { color: '#fff', fontSize: 14, fontWeight: '700' },
+  counterBtn: { borderRadius: 12, paddingVertical: 11, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: PINK, backgroundColor: '#FFF0F7' },
+  counterBtnTxt: { color: PINK, fontSize: 14, fontWeight: '700' },
+
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  sheet: { backgroundColor: CARD, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingTop: 20 },
+  sheetHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 },
+  sheetTitle: { fontSize: 18, fontWeight: '800', color: TEXT1 },
+  sheetClose: { width: 34, height: 34, borderRadius: 10, backgroundColor: BORDER, alignItems: 'center', justifyContent: 'center' },
+  sheetSub: { fontSize: 13, color: TEXT2, marginBottom: 18 },
+
+  priceInput: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    backgroundColor: '#F9FAFB', borderWidth: 1.5, borderColor: BORDER,
+    borderRadius: 14, paddingHorizontal: 16, marginBottom: 20,
+  },
+  priceInputPrefix: { fontSize: 22, fontWeight: '800', color: TEXT2, paddingVertical: 14 },
+  priceInputText: { flex: 1, fontSize: 22, fontWeight: '800', color: TEXT1, paddingVertical: 14 },
+
+  sheetActions: { flexDirection: 'row', gap: 12 },
+  sheetCancelBtn: { backgroundColor: BORDER, borderRadius: 14, alignItems: 'center', justifyContent: 'center', paddingVertical: 14 },
+  sheetCancelTxt: { fontSize: 15, fontWeight: '700', color: TEXT2 },
+  sheetConfirmBtn: { borderRadius: 14, alignItems: 'center', justifyContent: 'center', paddingVertical: 14 },
+  sheetConfirmTxt: { color: '#fff', fontSize: 15, fontWeight: '700' },
+
+  payOpt: {
+    flexDirection: 'row', alignItems: 'center', gap: 14,
+    paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: BORDER,
+  },
+  payOptTitle: { fontSize: 14, fontWeight: '700', color: TEXT1, marginBottom: 2 },
+  payOptSub: { fontSize: 12, color: TEXT2 },
+
+  escrowNote: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 14 },
+  escrowNoteTxt: { fontSize: 12, color: TEXT2, fontWeight: '500' },
+});
 
 export default OfferDetailScreen;
