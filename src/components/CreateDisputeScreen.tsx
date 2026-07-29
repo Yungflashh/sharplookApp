@@ -1,228 +1,540 @@
-import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, TextInput, Alert, ActivityIndicator } from 'react-native';
+import React, { useState, useCallback } from 'react';
+import {
+  View, Text, TouchableOpacity, ScrollView, TextInput,
+  ActivityIndicator, Modal, StatusBar, StyleSheet, Dimensions,
+  Platform,
+} from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '@/types/navigation.types';
 import { disputeAPI, handleAPIError } from '@/api/api';
-type CreateDisputeNavigationProp = NativeStackNavigationProp<RootStackParamList, 'CreateDispute'>;
-type CreateDisputeRouteProp = RouteProp<RootStackParamList, 'CreateDispute'>;
-const DISPUTE_CATEGORIES = [{
-  value: 'service_quality',
-  label: 'Service Quality Issues',
-  icon: 'star-outline'
-}, {
-  value: 'no_show',
-  label: 'Vendor No-Show',
-  icon: 'close-circle-outline'
-}, {
-  value: 'pricing',
-  label: 'Pricing Dispute',
-  icon: 'cash-outline'
-}, {
-  value: 'damage',
-  label: 'Property Damage',
-  icon: 'warning-outline'
-}, {
-  value: 'incomplete',
-  label: 'Incomplete Service',
-  icon: 'alert-circle-outline'
-}, {
-  value: 'safety',
-  label: 'Safety Concerns',
-  icon: 'shield-outline'
-}, {
-  value: 'communication',
-  label: 'Poor Communication',
-  icon: 'chatbubble-outline'
-}, {
-  value: 'other',
-  label: 'Other',
-  icon: 'help-circle-outline'
-}];
-const DISPUTE_REASONS = {
-  service_quality: ['Poor workmanship', 'Not as described', 'Unprofessional behavior', 'Rushed service'],
-  no_show: ['Vendor did not show up', 'Vendor arrived too late', 'Vendor left early', 'No notification given'],
-  pricing: ['Hidden charges', 'Price different from agreed', 'Unauthorized extra charges', 'Refund not processed'],
-  damage: ['Property was damaged', 'Items were lost', 'Stains or marks left', 'Equipment damage'],
-  incomplete: ['Service not fully completed', 'Missing agreed components', 'Partial service only', 'Left work unfinished'],
-  safety: ['Unsafe practices', 'Health hazard', 'Inappropriate behavior', 'Threatening conduct'],
-  communication: ['No response to messages', 'Rude communication', 'Wrong information given', 'Ignored instructions'],
-  other: ['Other reason (please describe)']
-};
+import { toast } from '@/components/ui/Toast';
+
+type Nav = NativeStackNavigationProp<RootStackParamList, 'CreateDispute'>;
+type RouteP = RouteProp<RootStackParamList, 'CreateDispute'>;
+
+// ─── Constants ────────────────────────────────────────────────────────────────
+const { height: SCREEN_H } = Dimensions.get('window');
+const PRIMARY   = '#E04079';
+const TEXT      = '#1A1A2E';
+const GRAY      = '#6B7280';
+const MUTED     = '#9CA3AF';
+const BORDER    = '#F0F0F0';
+const WHITE     = '#FFFFFF';
+const MAX_CHARS = 500;
+
+const CLIENT_REASONS = [
+  { key: 'service_not_completed', label: 'Service Not Completed' },
+  { key: 'poor_quality',          label: 'Poor Quality of Service' },
+  { key: 'wrong_service',         label: 'Wrong Service Delivered' },
+  { key: 'no_show',               label: 'Vendor Did Not Show Up' },
+  { key: 'overcharged',           label: 'Overcharged' },
+  { key: 'other',                 label: 'Other' },
+];
+
+const VENDOR_REASONS = [
+  { key: 'client_no_show',         label: 'Client Did Not Show Up' },
+  { key: 'client_refused_payment', label: 'Client Refused to Pay' },
+  { key: 'abusive_behavior',       label: 'Abusive / Inappropriate Behavior' },
+  { key: 'late_cancellation',      label: 'Late Cancellation / No Notice' },
+  { key: 'fraudulent_booking',     label: 'Fraudulent Booking' },
+  { key: 'other',                  label: 'Other' },
+];
+
+const EVIDENCE_TYPES = [
+  { key: 'receipt',           label: 'Receipt',           icon: 'receipt-outline' as const },
+  { key: 'chat_conversation', label: 'Chat Conversation', icon: 'chatbubbles-outline' as const },
+  { key: 'video_recording',   label: 'Video Recording',   icon: 'videocam-outline' as const },
+  { key: 'other_document',    label: 'Other Document',    icon: 'document-outline' as const },
+];
+
+type Step = 1 | 2 | 4 | 5;
+
+// ─── Row item ─────────────────────────────────────────────────────────────────
+const ActionRow: React.FC<{
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  badge?: string;
+  onPress: () => void;
+}> = ({ icon, label, badge, onPress }) => (
+  <TouchableOpacity onPress={onPress} activeOpacity={0.75} style={styles.actionRow}>
+    <View style={styles.actionRowLeft}>
+      <View style={styles.actionRowIcon}>
+        <Ionicons name={icon} size={20} color={PRIMARY} />
+      </View>
+      <Text style={styles.actionRowLabel}>{label}</Text>
+    </View>
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+      {badge ? (
+        <View style={styles.badge}>
+          <Text style={styles.badgeText}>{badge}</Text>
+        </View>
+      ) : null}
+      <Ionicons name="chevron-forward" size={18} color={MUTED} />
+    </View>
+  </TouchableOpacity>
+);
+
+// ─── Main ─────────────────────────────────────────────────────────────────────
 const CreateDisputeScreen: React.FC = () => {
-  const navigation = useNavigation<CreateDisputeNavigationProp>();
-  const route = useRoute<CreateDisputeRouteProp>();
-  const {
-    bookingId
-  } = route.params;
-  const [loading, setLoading] = useState(false);
-  const [selectedCategory, setSelectedCategory] = useState<string>('');
-  const [selectedReason, setSelectedReason] = useState<string>('');
-  const [description, setDescription] = useState('');
-  const handleSubmitDispute = async () => {
-    if (!selectedCategory) {
-      Alert.alert('Error', 'Please select a dispute category');
-      return;
+  const navigation = useNavigation<Nav>();
+  const route      = useRoute<RouteP>();
+  const { bookingId, role } = route.params;
+  const REASONS = role === 'vendor' ? VENDOR_REASONS : CLIENT_REASONS;
+  const insets     = useSafeAreaInsets();
+
+  const [step, setStep]                   = useState<Step>(1);
+  const [reason, setReason]               = useState('');
+  const [description, setDescription]     = useState('');
+  const [evidenceType, setEvidenceType]   = useState('');
+  const [evidenceFile, setEvidenceFile]   = useState<ImagePicker.ImagePickerAsset | null>(null);
+  const [loading, setLoading]             = useState(false);
+  const [dispute, setDispute]             = useState<{ _id: string; disputeNumber?: string } | null>(null);
+  const [errorMsg, setErrorMsg]           = useState('');
+  const errorTimer                        = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const showError = useCallback((msg: string) => {
+    setErrorMsg(msg);
+    if (errorTimer.current) clearTimeout(errorTimer.current);
+    errorTimer.current = setTimeout(() => setErrorMsg(''), 4500);
+  }, []);
+
+  // ── Navigation helpers ────────────────────────────────────────────────────
+  const goBack = useCallback(() => {
+    if (step === 1) navigation.goBack();
+    else if (step === 2) setStep(1);
+    else if (step === 4) setStep(2);
+  }, [step, navigation]);
+
+  const dismiss = useCallback(() => navigation.goBack(), [navigation]);
+
+  // ── Evidence file picker ──────────────────────────────────────────────────
+  const requestPermission = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      toast.warning('Permission needed', 'Please allow access to your photo library.');
+      return false;
     }
-    if (!selectedReason) {
-      Alert.alert('Error', 'Please select a reason');
-      return;
+    return true;
+  };
+
+  const pickEvidenceFile = async (type: string) => {
+    if (!(await requestPermission())) return;
+    const mediaType = type === 'video_recording'
+      ? ImagePicker.MediaTypeOptions.Videos
+      : ImagePicker.MediaTypeOptions.Images;
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: mediaType,
+      quality: 0.8,
+      allowsEditing: false,
+    });
+    if (!result.canceled && result.assets.length > 0) {
+      setEvidenceFile(result.assets[0]);
     }
-    if (!description || description.trim().length < 20) {
-      Alert.alert('Error', 'Please provide a detailed description (minimum 20 characters)');
+  };
+
+  // ── Submit ────────────────────────────────────────────────────────────────
+  const handleSubmit = async () => {
+    if (!description.trim() || description.trim().length < 20) {
+      showError('Please describe the issue in at least 20 characters.');
       return;
     }
     try {
       setLoading(true);
-      const disputeData = {
+      const res = await disputeAPI.createDispute({
         bookingId,
-        category: selectedCategory,
-        reason: selectedReason,
-        description: description.trim()
-      };
-      const response = await disputeAPI.createDispute(disputeData);
-      if (response.success) {
-        Alert.alert('Dispute Created', 'Your dispute has been submitted. Our team will review it shortly.', [{
-          text: 'OK',
-          onPress: () => {
-            navigation.goBack();
-          }
-        }]);
+        reason,
+        description: description.trim(),
+        evidenceType: evidenceType || undefined,
+        photos: evidenceFile ? [{
+          uri: evidenceFile.uri,
+          mimeType: evidenceFile.mimeType || undefined,
+          fileName: evidenceFile.fileName || undefined,
+        }] : [],
+      });
+      if (res.success) {
+        setDispute(res.data?.dispute ?? null);
+        setStep(5);
+      } else {
+        showError(res.message || 'Could not submit dispute. Please try again.');
       }
-    } catch (error) {
-      const apiError = handleAPIError(error);
-      Alert.alert('Error', apiError.message || 'Failed to create dispute');
+    } catch (err) {
+      const apiErr = handleAPIError(err);
+      showError(apiErr.message || 'Something went wrong. Please try again.');
     } finally {
       setLoading(false);
     }
   };
-  return <SafeAreaView className="flex-1 bg-gray-50">
-      {}
-      <View className="bg-white px-5 py-4 border-b border-gray-100">
-        <View className="flex-row items-center justify-between">
-          <View className="flex-row items-center">
-            <TouchableOpacity onPress={() => navigation.goBack()} className="mr-3">
-              <Ionicons name="arrow-back" size={24} color="#374151" />
-            </TouchableOpacity>
-            <Text className="text-xl font-bold text-gray-900">Create Dispute</Text>
-          </View>
+
+  // ── Shared header ─────────────────────────────────────────────────────────
+  const renderHeader = (showBack = true) => (
+    <View style={styles.header}>
+      {showBack ? (
+        <TouchableOpacity onPress={goBack} style={styles.headerBtn} activeOpacity={0.7}>
+          <Ionicons name="arrow-back" size={20} color={TEXT} />
+        </TouchableOpacity>
+      ) : <View style={styles.headerBtn} />}
+      <View style={styles.dragHandle} />
+      <TouchableOpacity onPress={dismiss} style={styles.headerBtn} activeOpacity={0.7}>
+        <Ionicons name="close" size={20} color={TEXT} />
+      </TouchableOpacity>
+    </View>
+  );
+
+  const renderPinkBtn = (label: string, onPress: () => void, disabled = false) => (
+    <TouchableOpacity
+      onPress={onPress}
+      disabled={disabled || loading}
+      activeOpacity={0.85}
+      style={[styles.pinkBtn, (disabled || loading) && { opacity: 0.45 }]}
+    >
+      {loading ? (
+        <ActivityIndicator color={WHITE} />
+      ) : (
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <Text style={styles.pinkBtnText}>{label}</Text>
+          <Ionicons name="chevron-forward" size={18} color={WHITE} />
         </View>
-      </View>
+      )}
+    </TouchableOpacity>
+  );
 
-      <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
-        <View className="px-5 py-6">
-          {}
-          <View className="bg-amber-50 rounded-xl p-4 mb-6 flex-row items-start">
-            <Ionicons name="warning" size={24} color="#f59e0b" />
-            <View className="flex-1 ml-3">
-              <Text className="text-sm font-semibold text-amber-800 mb-1">
-                Important Notice
-              </Text>
-              <Text className="text-xs text-amber-700">
-                Please provide accurate information. False disputes may result in
-                account suspension. All disputes are reviewed by our team.
-              </Text>
-            </View>
-          </View>
+  // ─── STEP 1: Reason selection ─────────────────────────────────────────────
+  const renderStep1 = () => (
+    <View style={styles.sheet}>
+      {renderHeader(false)}
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 24 }}>
+        <View style={styles.content}>
+          <Text style={styles.title}>Raise Dispute</Text>
+          <Text style={styles.subtitle}>Select the reason for your dispute.</Text>
 
-          {}
-          <View className="mb-6">
-            <Text className="text-base font-bold text-gray-900 mb-3">
-              Select Category <Text className="text-red-500">*</Text>
-            </Text>
-
-            <View className="gap-3">
-              {DISPUTE_CATEGORIES.map(category => <TouchableOpacity key={category.value} onPress={() => {
-              setSelectedCategory(category.value);
-              setSelectedReason('');
-            }} className={`flex-row items-center p-4 rounded-xl border ${selectedCategory === category.value ? 'bg-pink-50 border-pink-500' : 'bg-white border-gray-200'}`} activeOpacity={0.7}>
-                  <View className={`w-10 h-10 rounded-full items-center justify-center ${selectedCategory === category.value ? 'bg-pink-100' : 'bg-gray-100'}`}>
-                    <Ionicons name={category.icon as any} size={20} color={selectedCategory === category.value ? '#ec4899' : '#6b7280'} />
-                  </View>
-
-                  <Text className={`flex-1 ml-3 font-semibold ${selectedCategory === category.value ? 'text-pink-700' : 'text-gray-700'}`}>
-                    {category.label}
-                  </Text>
-
-                  {selectedCategory === category.value && <Ionicons name="checkmark-circle" size={24} color="#ec4899" />}
-                </TouchableOpacity>)}
-            </View>
-          </View>
-
-          {}
-          {selectedCategory && <View className="mb-6">
-              <Text className="text-base font-bold text-gray-900 mb-3">
-                Select Reason <Text className="text-red-500">*</Text>
-              </Text>
-
-              <View className="gap-2">
-                {DISPUTE_REASONS[selectedCategory as keyof typeof DISPUTE_REASONS]?.map(reason => <TouchableOpacity key={reason} onPress={() => setSelectedReason(reason)} className={`flex-row items-center p-3 rounded-lg border ${selectedReason === reason ? 'bg-pink-50 border-pink-500' : 'bg-white border-gray-200'}`} activeOpacity={0.7}>
-                      <View className={`w-5 h-5 rounded-full border-2 items-center justify-center mr-3 ${selectedReason === reason ? 'border-pink-500' : 'border-gray-300'}`}>
-                        {selectedReason === reason && <View className="w-3 h-3 rounded-full bg-pink-500" />}
-                      </View>
-
-                      <Text className={`flex-1 ${selectedReason === reason ? 'text-pink-700 font-semibold' : 'text-gray-700'}`}>
-                        {reason}
-                      </Text>
-                    </TouchableOpacity>)}
-              </View>
-            </View>}
-
-          {}
-          <View className="mb-6">
-            <Text className="text-base font-bold text-gray-900 mb-3">
-              Detailed Description <Text className="text-red-500">*</Text>
-            </Text>
-            <Text className="text-sm text-gray-600 mb-2">
-              Provide a clear and detailed explanation of the issue. Include dates,
-              times, and any relevant details.
-            </Text>
-
-            <TextInput className="bg-white border border-gray-200 rounded-xl p-4 text-gray-900" placeholder="Describe the issue in detail (minimum 20 characters)..." placeholderTextColor="#9ca3af" value={description} onChangeText={setDescription} multiline numberOfLines={8} textAlignVertical="top" style={{
-            minHeight: 150
-          }} />
-
-            <Text className="text-xs text-gray-500 mt-2">
-              {description.length} characters
-            </Text>
-          </View>
-
-          {}
-          <View className="bg-blue-50 rounded-xl p-4 mb-6">
-            <View className="flex-row items-start mb-2">
-              <Ionicons name="bulb" size={20} color="#2563eb" />
-              <Text className="text-sm font-semibold text-blue-900 ml-2">
-                Tips for a Better Resolution
-              </Text>
-            </View>
-            <View className="ml-7 gap-2">
-              <Text className="text-xs text-blue-700">
-                • Be specific about what went wrong
-              </Text>
-              <Text className="text-xs text-blue-700">
-                • Include dates and times if relevant
-              </Text>
-              <Text className="text-xs text-blue-700">
-                • Provide any supporting evidence
-              </Text>
-              <Text className="text-xs text-blue-700">
-                • Be honest and fair in your description
-              </Text>
-            </View>
+          <View style={{ gap: 0 }}>
+            {REASONS.map((r, i) => (
+              <TouchableOpacity
+                key={r.key}
+                onPress={() => setReason(r.key)}
+                activeOpacity={0.7}
+                style={[
+                  styles.radioRow,
+                  i < REASONS.length - 1 && styles.radioRowBorder,
+                ]}
+              >
+                <View style={[styles.radioOuter, reason === r.key && styles.radioOuterActive]}>
+                  {reason === r.key && <View style={styles.radioInner} />}
+                </View>
+                <Text style={[styles.radioLabel, reason === r.key && { color: PRIMARY, fontWeight: '600' }]}>
+                  {r.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
           </View>
         </View>
       </ScrollView>
+      <View style={[styles.footer, { paddingBottom: insets.bottom + 16 }]}>
+        {renderPinkBtn('Continue', () => setStep(2), !reason)}
+      </View>
+    </View>
+  );
 
-      {}
-      <View className="bg-white px-5 py-4 border-t border-gray-100">
-        <TouchableOpacity onPress={handleSubmitDispute} disabled={loading || !selectedCategory || !selectedReason || !description} className={`py-4 rounded-xl ${loading || !selectedCategory || !selectedReason || !description ? 'bg-gray-300' : 'bg-pink-600'}`} activeOpacity={0.7}>
-          {loading ? <ActivityIndicator size="small" color="#fff" /> : <Text className="text-white text-center font-bold text-base">
-              Submit Dispute
-            </Text>}
+  // ─── STEP 2: Description + media ─────────────────────────────────────────
+  const renderStep2 = () => (
+    <View style={styles.sheet}>
+      {renderHeader()}
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 24 }}>
+        <View style={styles.content}>
+          <Text style={styles.title}>Describe the Issue</Text>
+          <Text style={styles.subtitle}>Tell us what happened?</Text>
+
+          <TextInput
+            style={styles.textarea}
+            placeholder="Describe what went wrong, in details..."
+            placeholderTextColor={MUTED}
+            value={description}
+            onChangeText={t => setDescription(t.slice(0, MAX_CHARS))}
+            multiline
+            textAlignVertical="top"
+          />
+          <Text style={[styles.charCount, description.length >= MAX_CHARS && { color: PRIMARY }]}>
+            {description.length}/{MAX_CHARS}
+          </Text>
+
+          <View style={styles.divider} />
+
+          <ActionRow
+            icon="attach-outline"
+            label="Add Evidence"
+            badge={evidenceFile ? '1' : undefined}
+            onPress={() => setStep(4)}
+          />
+        </View>
+      </ScrollView>
+      <View style={[styles.footer, { paddingBottom: insets.bottom + 16 }]}>
+        {errorMsg ? (
+          <View style={styles.errorBanner}>
+            <Ionicons name="alert-circle" size={16} color="#C0392B" />
+            <Text style={styles.errorBannerText}>{errorMsg}</Text>
+          </View>
+        ) : null}
+        {renderPinkBtn('Submit Dispute', handleSubmit)}
+      </View>
+    </View>
+  );
+
+  // ─── STEP 4: Add Evidence ─────────────────────────────────────────────────
+  const renderStep4 = () => (
+    <View style={styles.sheet}>
+      {renderHeader()}
+      <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 24 }}>
+        <View style={styles.content}>
+          <Text style={styles.title}>Add Evidence</Text>
+          <Text style={styles.subtitle}>Select a type — your gallery will open to pick the file.</Text>
+
+          <View style={{ gap: 0 }}>
+            {EVIDENCE_TYPES.map((e, i) => {
+              const isSelected = evidenceType === e.key;
+              return (
+                <React.Fragment key={e.key}>
+                  <TouchableOpacity
+                    onPress={async () => {
+                      setEvidenceType(e.key);
+                      await pickEvidenceFile(e.key);
+                    }}
+                    activeOpacity={0.75}
+                    style={[styles.actionRow, isSelected && evidenceFile && { backgroundColor: '#FDE8EF' }]}
+                  >
+                    <View style={styles.actionRowLeft}>
+                      <View style={[styles.actionRowIcon, isSelected && evidenceFile && { backgroundColor: '#F9B8CC' }]}>
+                        <Ionicons name={e.icon} size={20} color={PRIMARY} />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={[styles.actionRowLabel, isSelected && evidenceFile && { color: PRIMARY, fontWeight: '700' }]}>
+                          {e.label}
+                        </Text>
+                        {isSelected && evidenceFile ? (
+                          <Text style={{ fontSize: 11, color: PRIMARY, marginTop: 2 }} numberOfLines={1}>
+                            {evidenceFile.fileName || 'File attached'}
+                          </Text>
+                        ) : null}
+                      </View>
+                    </View>
+                    {isSelected && evidenceFile
+                      ? <Ionicons name="checkmark-circle" size={20} color={PRIMARY} />
+                      : <Ionicons name="chevron-forward" size={18} color={MUTED} />
+                    }
+                  </TouchableOpacity>
+                  {i < EVIDENCE_TYPES.length - 1 && <View style={styles.divider} />}
+                </React.Fragment>
+              );
+            })}
+          </View>
+        </View>
+      </ScrollView>
+      <View style={[styles.footer, { paddingBottom: insets.bottom + 16 }]}>
+        {renderPinkBtn('Continue', () => setStep(2))}
+      </View>
+    </View>
+  );
+
+  // ─── STEP 5: Success ──────────────────────────────────────────────────────
+  const renderStep5 = () => (
+    <View style={styles.sheet}>
+      <View style={styles.header}>
+        <View style={styles.headerBtn} />
+        <View style={styles.dragHandle} />
+        <TouchableOpacity onPress={dismiss} style={styles.headerBtn} activeOpacity={0.7}>
+          <Ionicons name="close" size={20} color={TEXT} />
         </TouchableOpacity>
       </View>
-    </SafeAreaView>;
+
+      <View style={[styles.content, { flex: 1, justifyContent: 'center', alignItems: 'center', paddingTop: 32 }]}>
+        <View style={styles.successCircle}>
+          <View style={styles.successInnerCircle}>
+            <Ionicons name="shield-checkmark" size={48} color={PRIMARY} />
+          </View>
+        </View>
+
+        <Text style={[styles.title, { textAlign: 'center', marginTop: 28 }]}>Dispute Submitted</Text>
+
+        {dispute?.disputeNumber ? (
+          <Text style={styles.caseNumber}>Case: {dispute.disputeNumber}</Text>
+        ) : null}
+
+        <Text style={[styles.subtitle, { textAlign: 'center', marginTop: 14, lineHeight: 22 }]}>
+          Your payment has been temporarily placed on hold while we review the issue.
+        </Text>
+      </View>
+
+      <View style={[styles.footer, { paddingBottom: insets.bottom + 16 }]}>
+        <TouchableOpacity
+          onPress={() => {
+            if (dispute?._id) {
+              navigation.replace('DisputeDetail', { disputeId: dispute._id });
+            } else {
+              navigation.goBack();
+            }
+          }}
+          activeOpacity={0.85}
+          style={styles.pinkBtn}
+        >
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <Text style={styles.pinkBtnText}>View Details</Text>
+            <Ionicons name="chevron-forward" size={18} color={WHITE} />
+          </View>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+
+  // ─── Root ─────────────────────────────────────────────────────────────────
+  return (
+    <View style={styles.root}>
+      <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
+      <View style={[styles.overlay, { paddingTop: insets.top }]}>
+        {step === 1 && renderStep1()}
+        {step === 2 && renderStep2()}
+        {step === 4 && renderStep4()}
+        {step === 5 && renderStep5()}
+      </View>
+    </View>
+  );
 };
+
+// ─── Styles ───────────────────────────────────────────────────────────────────
+const styles = StyleSheet.create({
+  root: { flex: 1, backgroundColor: 'rgba(0,0,0,0.35)' },
+  overlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  sheet: {
+    backgroundColor: WHITE,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    maxHeight: SCREEN_H * 0.92,
+    flex: 1,
+  },
+
+  // Header
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingTop: 14,
+    paddingBottom: 8,
+  },
+  headerBtn: {
+    width: 36, height: 36, borderRadius: 18,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  dragHandle: {
+    width: 36, height: 4, borderRadius: 2,
+    backgroundColor: '#D1D5DB',
+  },
+
+  // Content
+  content: { paddingHorizontal: 24, paddingTop: 8 },
+  title: { fontSize: 22, fontWeight: '800', color: TEXT, marginBottom: 8, letterSpacing: -0.4 },
+  subtitle: { fontSize: 14, color: GRAY, marginBottom: 24, lineHeight: 20 },
+
+  // Textarea
+  textarea: {
+    borderWidth: 1, borderColor: BORDER, borderRadius: 14,
+    padding: 14, fontSize: 14, color: TEXT,
+    minHeight: 140, textAlignVertical: 'top',
+    backgroundColor: '#FAFAFA',
+  },
+  charCount: { fontSize: 11, color: MUTED, textAlign: 'right', marginTop: 6, marginBottom: 16 },
+
+  // Divider
+  divider: { height: 1, backgroundColor: BORDER, marginVertical: 2 },
+
+  // Action row
+  actionRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingVertical: 14, paddingHorizontal: 4, borderRadius: 10,
+  },
+  actionRowLeft: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  actionRowIcon: {
+    width: 40, height: 40, borderRadius: 12,
+    backgroundColor: '#FDE8EF', alignItems: 'center', justifyContent: 'center',
+  },
+  actionRowLabel: { fontSize: 15, fontWeight: '600', color: TEXT },
+
+  // Badge
+  badge: {
+    backgroundColor: PRIMARY, borderRadius: 10,
+    minWidth: 20, paddingHorizontal: 6, paddingVertical: 2,
+    alignItems: 'center',
+  },
+  badgeText: { fontSize: 11, fontWeight: '700', color: WHITE },
+
+  // Radio
+  radioRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 16,
+    paddingVertical: 16,
+  },
+  radioRowBorder: { borderBottomWidth: 1, borderBottomColor: BORDER },
+  radioOuter: {
+    width: 22, height: 22, borderRadius: 11,
+    borderWidth: 2, borderColor: '#D1D5DB',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  radioOuterActive: { borderColor: PRIMARY },
+  radioInner: {
+    width: 10, height: 10, borderRadius: 5,
+    backgroundColor: PRIMARY,
+  },
+  radioLabel: { fontSize: 15, color: TEXT, flex: 1 },
+
+  // Icon circle (step 3 & 4)
+  iconCircle: {
+    width: 88, height: 88, borderRadius: 44,
+    backgroundColor: '#FDE8EF',
+    alignItems: 'center', justifyContent: 'center',
+    alignSelf: 'center', marginBottom: 20, marginTop: 8,
+  },
+
+  // Supported note
+  supportedNote: { alignItems: 'center', marginTop: 24, gap: 4 },
+  supportedText: { fontSize: 12, color: MUTED, fontWeight: '500' },
+
+  // Success
+  successCircle: {
+    width: 120, height: 120, borderRadius: 60,
+    backgroundColor: '#FDE8EF',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  successInnerCircle: {
+    width: 88, height: 88, borderRadius: 44,
+    backgroundColor: '#F9B8CC',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  caseNumber: {
+    fontSize: 16, fontWeight: '700', color: PRIMARY,
+    marginTop: 10, letterSpacing: 0.3,
+  },
+
+  // Footer / button
+  footer: { paddingHorizontal: 24, paddingTop: 12 },
+  errorBanner: {
+    flexDirection: 'row', alignItems: 'flex-start', gap: 8,
+    backgroundColor: '#FFF0F0', borderRadius: 10,
+    borderWidth: 1, borderColor: '#FBBBB0',
+    paddingHorizontal: 12, paddingVertical: 10,
+    marginBottom: 10,
+  },
+  errorBannerText: { flex: 1, fontSize: 13, color: '#C0392B', lineHeight: 18, fontWeight: '500' },
+  pinkBtn: {
+    borderRadius: 16, backgroundColor: PRIMARY,
+    paddingVertical: 16,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  pinkBtnText: { fontSize: 16, fontWeight: '700', color: WHITE },
+});
+
 export default CreateDisputeScreen;

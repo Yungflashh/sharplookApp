@@ -20,6 +20,10 @@ export interface RawVendorData {
     isVerified?: boolean;
     vendorType?: 'home_service' | 'in_shop' | 'both';
     serviceCategories?: string[];
+    categories?: any[];
+    totalServices?: number;
+    totalReviews?: number;
+    portfolioImages?: string[];
     location?: {
       address?: string;
       city?: string;
@@ -38,6 +42,7 @@ export interface FormattedVendor {
   phone?: string;
   image?: string;
   coverImage?: string;
+  portfolioImages?: string[];
   service: string;
   rating: number;
   reviews: number;
@@ -47,6 +52,8 @@ export interface FormattedVendor {
   isPhoneVerified: boolean;
   status?: string;
   serviceCategories?: string[];
+  totalServices?: number;
+  startingPrice?: number;
   location?: {
     address?: string;
     city?: string;
@@ -84,7 +91,10 @@ export const parseVendor = (rawVendor: RawVendorData): FormattedVendor => {
     isEmailVerified: rawVendor.isEmailVerified || false,
     isPhoneVerified: rawVendor.isPhoneVerified || false,
     status: rawVendor.status,
-    serviceCategories: vendorProfile.serviceCategories,
+    serviceCategories: vendorProfile.serviceCategories || vendorProfile.categories?.map((c: any) => c?.name || c),
+    totalServices: vendorProfile.totalServices,
+    portfolioImages: vendorProfile.portfolioImages || (rawVendor as any).portfolioImages || [],
+    startingPrice: (vendorProfile as any).startingPrice || (rawVendor as any).startingPrice,
     location: vendorProfile.location ? {
       address: vendorProfile.location.address,
       city: vendorProfile.location.city,

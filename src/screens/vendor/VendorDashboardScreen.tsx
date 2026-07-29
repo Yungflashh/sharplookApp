@@ -1,624 +1,673 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StatusBar, Animated, Dimensions, RefreshControl, Platform, Alert } from 'react-native';
-import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
+import {
+  View, Text, TouchableOpacity, ScrollView, StatusBar,
+  Dimensions, RefreshControl, Platform, Image, ActivityIndicator,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useNavigation } from '@react-navigation/native';
+import { LineChart } from 'react-native-chart-kit';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '@/types/navigation.types';
 import VendorSidebar from '@/components/VendorSidebar';
-import { vendorAPI, walletAPI, bookingAPI, servicesAPI, handleAPIError, userAPI } from '@/api/api';
-const {
-  width: SCREEN_WIDTH
-} = Dimensions.get('window');
-interface QuickAction {
-  id: string;
-  title: string;
-  icon: string;
-  iconFamily: 'ionicons' | 'material' | 'feather';
-  color: string;
-  bgColor: string;
-  onPress: () => void;
-}
-interface Stat {
-  label: string;
-  value: string;
-  change: string;
-  isPositive: boolean;
-}
-interface VendorProfile {
-  businessName: string;
-  businessDescription?: string;
-  rating?: number;
-  totalReviews?: number;
-  isActive?: boolean;
-  createdAt?: string;
-}
-interface WalletData {
-  balance: number;
-  pendingBalance: number;
-  totalEarnings: number;
-}
-interface RecentActivity {
-  icon: string;
-  title: string;
-  subtitle: string;
-  time: string;
-  color: string;
-}
-type VendorDashboardScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Main'>;
-const VendorDashboardScreen: React.FC = () => {
-  const navigation = useNavigation<VendorDashboardScreenNavigationProp>();
-  const [showBalance, setShowBalance] = useState<boolean>(false);
-  const [refreshing, setRefreshing] = useState<boolean>(false);
-  const [selectedPeriod, setSelectedPeriod] = useState<'day' | 'week' | 'month'>('week');
-  const [sidebarVisible, setSidebarVisible] = useState<boolean>(false);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [vendorProfile, setVendorProfile] = useState<VendorProfile | null>(null);
-  const [walletData, setWalletData] = useState<WalletData>({
-    balance: 0,
-    pendingBalance: 0,
-    totalEarnings: 0
+import { analyticsAPI, notificationAPI, messageAPI, handleAPIError } from '@/api/api';
+import { getStoredUser, updateStoredUser } from '@/utils/authHelper';
+import socketService from '@/services/socket.service';
+import WalletFundingModal from '@/components/WalletFundingModal';
+import WithdrawalModal from '@/components/WIthdrawalModal';
+import KycGateModal from '@/components/KycGateModal';
+
+const { width: SW } = Dimensions.get('window');
+const PINK = '#E91E63';
+const BG = '#FFF0F5';
+const WHITE = '#FFFFFF';
+
+const shadow = (elevation = 4) =>
+  Platform.select({
+    ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.07, shadowRadius: 8 },
+    android: { elevation },
   });
-  const [bookingsData, setBookingsData] = useState<any[]>([]);
-  const [servicesData, setServicesData] = useState<any[]>([]);
-  const [stats, setStats] = useState<Stat[]>([{
-    label: 'Total Orders',
-    value: '0',
-    change: '+0%',
-    isPositive: true
-  }, {
-    label: 'Active Products',
-    value: '0',
-    change: '+0',
-    isPositive: true
-  }, {
-    label: 'Avg. Rating',
-    value: '0.0',
-    change: '+0.0',
-    isPositive: true
-  }, {
-    label: 'Response Rate',
-    value: '0%',
-    change: '0%',
-    isPositive: true
-  }]);
-  const [recentActivities, setRecentActivities] = useState<RecentActivity[]>([]);
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(50)).current;
-  const scaleAnim = useRef(new Animated.Value(0.95)).current;
-  const balanceOpacity = useRef(new Animated.Value(0)).current;
-  const fetchDashboardData = async () => {
+
+type Nav = StackNavigationProp<RootStackParamList, 'Main'>;
+type Period = 'today' | 'week' | 'month';
+
+const getGreeting = () => {
+  const h = new Date().getHours();
+  if (h < 12) return 'Good morning 👋';
+  if (h < 18) return 'Good afternoon 👋';
+  return 'Good evening 👋';
+};
+
+const fmt = (n: number) => `₦${n.toLocaleString()}`;
+
+const statusConfig: Record<string, { label: string; bg: string; color: string }> = {
+  pending:    { label: 'Pending',     bg: '#FEF3C7', color: '#D97706' },
+  accepted:   { label: 'Upcoming',    bg: '#D1FAE5', color: '#059669' },
+  in_progress:{ label: 'In progress', bg: '#E0F2FE', color: '#0284C7' },
+  inProgress: { label: 'In progress', bg: '#E0F2FE', color: '#0284C7' },
+  completed:  { label: 'Completed',   bg: '#F3F4F6', color: '#6B7280' },
+  cancelled:  { label: 'Cancelled',   bg: '#FEE2E2', color: '#DC2626' },
+  rejected:   { label: 'Rejected',    bg: '#FEE2E2', color: '#DC2626' },
+};
+
+interface DashboardData {
+  wallet: { balance: number; escrow: number; totalEarned: number };
+  stats: { totalBookings: number; totalOrders: number; averageRating: number };
+  isActive: boolean;
+  businessName: string;
+  todaySchedule: Array<{
+    _id: string; clientName: string; clientAvatar: string | null;
+    serviceName: string; scheduledDate: string; scheduledTime: string;
+    status: string; totalAmount: number;
+  }>;
+  analytics: {
+    period: Period;
+    earnings: { value: number; change: number };
+    bookings: { value: number; change: number };
+    orders: { value: number; change: number };
+    chart: Array<{ label: string; value: number }>;
+  };
+  vendorProfile?: { kycStatus?: string };
+  email?: string;
+  avatar?: string;
+}
+
+// ── Avatar placeholder ─────────────────────────────────────────────────────
+const AvatarPlaceholder: React.FC<{ name: string; size: number }> = ({ name, size }) => {
+  const initials = name.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase();
+  return (
+    <View style={{
+      width: size, height: size, borderRadius: size / 2,
+      backgroundColor: PINK + '30', alignItems: 'center', justifyContent: 'center',
+    }}>
+      <Text style={{ fontSize: size * 0.35, fontWeight: '700', color: PINK }}>{initials}</Text>
+    </View>
+  );
+};
+
+// ── Notification badge ─────────────────────────────────────────────────────
+const Badge: React.FC<{ count: number }> = ({ count }) => {
+  if (count <= 0) return null;
+  return (
+    <View style={{
+      position: 'absolute', top: -4, right: -4,
+      minWidth: 18, height: 18, borderRadius: 9,
+      backgroundColor: '#FF6B00',
+      alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4,
+    }}>
+      <Text style={{ color: WHITE, fontSize: 10, fontWeight: '800' }}>
+        {count > 99 ? '99+' : count}
+      </Text>
+    </View>
+  );
+};
+
+// ── Main screen ────────────────────────────────────────────────────────────
+const VendorDashboardScreen: React.FC = () => {
+  const navigation = useNavigation<Nav>();
+
+  const [data, setData]                 = useState<DashboardData | null>(null);
+  const [loading, setLoading]           = useState(true);
+  const [refreshing, setRefreshing]     = useState(false);
+  const [period, setPeriod]             = useState<Period>('week');
+  const [periodLoading, setPeriodLoading] = useState(false);
+  const [showBalance, setShowBalance]   = useState(false);
+  const [sidebarVisible, setSidebarVisible]             = useState(false);
+  const [fundingVisible, setFundingVisible]             = useState(false);
+  const [withdrawalVisible, setWithdrawalVisible]       = useState(false);
+  const [kycVisible, setKycVisible]                     = useState(false);
+  const [unreadNotif, setUnreadNotif]   = useState(0);
+  const [unreadMsg, setUnreadMsg]       = useState(0);
+
+  // ── Counts ──────────────────────────────────────────────────────────────
+  const fetchCounts = async () => {
     try {
-      setLoading(true);
-      const profileResponse = await userAPI.getProfile();
-      console.log(profileResponse.data);
-      if (profileResponse.success) {
-        setVendorProfile(profileResponse.data.user);
-      }
-      const walletResponse = await walletAPI.getBalance();
-      if (walletResponse.success) {
-        setWalletData({
-          balance: walletResponse.data.balance || 0,
-          pendingBalance: walletResponse.data.pendingBalance || 0,
-          totalEarnings: walletResponse.data.totalEarnings || 0
-        });
-      }
-      const bookingsResponse = await vendorAPI.getBookings();
-      if (bookingsResponse.success) {
-        setBookingsData(bookingsResponse.data || []);
-        updateStatsFromBookings(bookingsResponse.data || []);
-        generateRecentActivities(bookingsResponse.data || []);
-      }
-      const servicesResponse = await servicesAPI.getMyServices();
-      if (servicesResponse.success) {
-        setServicesData(servicesResponse.data || []);
-        updateServicesStats(servicesResponse.data || []);
-      }
-    } catch (error) {
-      const apiError = handleAPIError(error);
-      console.error('Dashboard fetch error:', apiError);
-      Alert.alert('Error', apiError.message);
+      const [nr, mr] = await Promise.all([
+        notificationAPI.getUnreadCount(),
+        messageAPI.getUnreadCount(),
+      ]);
+      setUnreadNotif(nr.data?.count ?? nr.data?.data?.count ?? 0);
+      setUnreadMsg(mr.data?.unreadCount ?? mr.unreadCount ?? 0);
+    } catch {}
+  };
+
+  useFocusEffect(useCallback(() => {
+    fetchCounts();
+    if (!socketService.isSocketConnected()) socketService.connect();
+    const interval = setInterval(fetchCounts, 30000);
+    return () => clearInterval(interval);
+  }, []));
+
+  useEffect(() => {
+    socketService.connect();
+    socketService.onNewMessage(() => setUnreadMsg(p => p + 1));
+
+    // KYC real-time gate: lift or notify without logout
+    const unsubKyc = socketService.onKycStatusChanged(async ({ kycStatus, rejectionReason, message }) => {
+      try {
+        const stored = await getStoredUser();
+        if (stored) {
+          if (!stored.vendorProfile) stored.vendorProfile = {} as any;
+          stored.vendorProfile.kycStatus = kycStatus;
+          if (rejectionReason) stored.vendorProfile.kycRejectionReason = rejectionReason;
+          await updateStoredUser(stored);
+        }
+        // Refresh dashboard data so KYC gate state updates
+        setData(prev => prev ? {
+          ...prev,
+          vendorProfile: { ...prev.vendorProfile, kycStatus },
+        } : prev);
+        setKycVisible(false);
+
+        if (kycStatus === 'approved') {
+          const { toast } = require('@/components/ui/Toast');
+          toast.success('Verified!', 'Your account is now verified. You can accept bookings.');
+        } else if (kycStatus === 'rejected') {
+          const { toast } = require('@/components/ui/Toast');
+          toast.error('Verification Rejected', rejectionReason || message);
+        }
+      } catch {}
+    });
+
+    return () => {
+      socketService.removeListener('message:new');
+      unsubKyc();
+    };
+  }, []);
+
+  // ── Data ─────────────────────────────────────────────────────────────────
+  const fetchDashboard = async (p: Period, isRefresh = false) => {
+    try {
+      if (isRefresh) setRefreshing(true);
+      else if (p !== period) setPeriodLoading(true);
+      else setLoading(true);
+
+      const res = await analyticsAPI.getDashboard(p);
+      console.log('📊 Dashboard res:', JSON.stringify(res?.data ?? res, null, 2));
+      if (res.success) setData(res.data);
+    } catch (err) {
+      console.warn('Dashboard fetch error:', handleAPIError(err).message);
     } finally {
       setLoading(false);
-    }
-  };
-  const updateStatsFromBookings = (bookings: any[]) => {
-    const completedBookings = bookings.filter(b => b.status === 'completed');
-    const pendingBookings = bookings.filter(b => b.status === 'pending');
-    setStats(prevStats => [{
-      label: 'Total Orders',
-      value: bookings.length.toString(),
-      change: `+${pendingBookings.length}%`,
-      isPositive: pendingBookings.length > 0
-    }, prevStats[1], prevStats[2], {
-      label: 'Completed',
-      value: completedBookings.length.toString(),
-      change: `${Math.round(completedBookings.length / (bookings.length || 1) * 100)}%`,
-      isPositive: true
-    }]);
-  };
-  const updateServicesStats = (services: any[]) => {
-    const activeServices = services.filter(s => s.isActive !== false);
-    setStats(prevStats => [prevStats[0], {
-      label: 'Active Services',
-      value: activeServices.length.toString(),
-      change: `+${services.length - activeServices.length}`,
-      isPositive: activeServices.length > 0
-    }, prevStats[2], prevStats[3]]);
-  };
-  const generateRecentActivities = (bookings: any[]) => {
-    const activities: RecentActivity[] = bookings.slice(0, 3).map((booking, index) => {
-      const timeAgo = getTimeAgo(booking.createdAt || new Date());
-      return {
-        icon: booking.status === 'completed' ? 'checkmark-circle' : booking.status === 'pending' ? 'time' : 'cart',
-        title: `Booking #${booking._id?.slice(-4) || index}`,
-        subtitle: `${booking.serviceName || 'Service'} • ₦${booking.totalAmount?.toLocaleString() || '0'}`,
-        time: timeAgo,
-        color: booking.status === 'completed' ? '#10b981' : booking.status === 'pending' ? '#f59e0b' : '#3b82f6'
-      };
-    });
-    setRecentActivities(activities);
-  };
-  const getTimeAgo = (date: Date | string): string => {
-    const now = new Date();
-    const past = new Date(date);
-    const diffMs = now.getTime() - past.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMs / 3600000);
-    const diffDays = Math.floor(diffMs / 86400000);
-    if (diffMins < 60) return `${diffMins} min ago`;
-    if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
-    return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
-  };
-  useEffect(() => {
-    if (vendorProfile?.rating) {
-      setStats(prevStats => {
-        const newStats = [...prevStats];
-        newStats[2] = {
-          label: 'Avg. Rating',
-          value: vendorProfile.rating?.toFixed(1) || '0.0',
-          change: '+0.2',
-          isPositive: true
-        };
-        return newStats;
-      });
-    }
-  }, [vendorProfile]);
-  useEffect(() => {
-    fetchDashboardData();
-  }, []);
-  useEffect(() => {
-    Animated.parallel([Animated.timing(fadeAnim, {
-      toValue: 1,
-      duration: 600,
-      useNativeDriver: true
-    }), Animated.timing(slideAnim, {
-      toValue: 0,
-      duration: 500,
-      useNativeDriver: true
-    }), Animated.spring(scaleAnim, {
-      toValue: 1,
-      friction: 8,
-      tension: 40,
-      useNativeDriver: true
-    })]).start();
-  }, []);
-  useEffect(() => {
-    Animated.timing(balanceOpacity, {
-      toValue: showBalance ? 1 : 0,
-      duration: 300,
-      useNativeDriver: true
-    }).start();
-  }, [showBalance]);
-  const onRefresh = useCallback(() => {
-    setRefreshing(true);
-    fetchDashboardData().finally(() => {
       setRefreshing(false);
-    });
-  }, []);
-  const formatBalance = (amount: number): string => {
-    return `₦${amount.toLocaleString()}`;
-  };
-  const quickActions: QuickAction[] = [{
-    id: '1',
-    title: 'Add Service',
-    icon: 'add-circle-outline',
-    iconFamily: 'ionicons',
-    color: '#eb278d',
-    bgColor: '#fce7f3',
-    onPress: () => {
-      console.log('Add Service');
-    }
-  }, {
-    id: '2',
-    title: 'Bookings',
-    icon: 'package',
-    iconFamily: 'feather',
-    color: '#3b82f6',
-    bgColor: '#dbeafe',
-    onPress: () => {
-      console.log('Bookings');
-    }
-  }, {
-    id: '3',
-    title: 'My Services',
-    icon: 'briefcase-outline',
-    iconFamily: 'ionicons',
-    color: '#10b981',
-    bgColor: '#d1fae5',
-    onPress: () => {
-      console.log('My Services');
-    }
-  }, {
-    id: '4',
-    title: 'Wallet',
-    icon: 'wallet-outline',
-    iconFamily: 'ionicons',
-    color: '#f59e0b',
-    bgColor: '#fed7aa',
-    onPress: () => {
-      console.log('Wallet');
-    }
-  }];
-  const renderIcon = (iconFamily: string, iconName: string, size: number, color: string): JSX.Element => {
-    switch (iconFamily) {
-      case 'material':
-        return <MaterialCommunityIcons name={iconName as any} size={size} color={color} />;
-      case 'feather':
-        return <Feather name={iconName as any} size={size} color={color} />;
-      default:
-        return <Ionicons name={iconName as any} size={size} color={color} />;
+      setPeriodLoading(false);
     }
   };
-  const getGreeting = (): string => {
-    const hour = new Date().getHours();
-    if (hour < 12) return 'Good morning! 👋';
-    if (hour < 18) return 'Good afternoon! 👋';
-    return 'Good evening! 👋';
+
+  useEffect(() => { fetchDashboard('week'); }, []);
+
+  const changePeriod = (p: Period) => {
+    setPeriod(p);
+    fetchDashboard(p);
   };
-  return <SafeAreaView className="flex-1 bg-gray-50">
-      <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
-      
-      {}
-      <View className="bg-white shadow-sm">
-        <View className="flex-row items-center justify-between px-5 py-4">
-          <TouchableOpacity className="w-10 h-10 items-center justify-center" activeOpacity={0.7} onPress={() => setSidebarVisible(true)}>
-            <Ionicons name="menu" size={28} color="#eb278d" />
+
+  const onRefresh = useCallback(() => fetchDashboard(period, true), [period]);
+
+  // ── Chart config ─────────────────────────────────────────────────────────
+  const chartConfig = {
+    backgroundGradientFrom: WHITE,
+    backgroundGradientTo: WHITE,
+    decimalPlaces: 0,
+    color: (opacity = 1) => `rgba(233, 30, 99, ${opacity})`,
+    labelColor: () => '#9CA3AF',
+    propsForDots: { r: '3', strokeWidth: '2', stroke: PINK },
+    fillShadowGradient: PINK,
+    fillShadowGradientOpacity: 0.12,
+    propsForBackgroundLines: { stroke: 'transparent' },
+    propsForLabels: { fontSize: 9 },
+  };
+
+  const CHART_H_PAD = 24; // horizontal padding inside the card around the chart
+  const chartWidth  = SW - 32 - CHART_H_PAD * 2; // card is SW-32, minus inner padding
+
+  const chartData = data?.analytics?.chart ?? [];
+  const chartValues = chartData.map(c => c.value || 0);
+  const hasChartData = chartValues.some(v => v > 0);
+
+  // ── Render ────────────────────────────────────────────────────────────────
+  if (loading) {
+    return (
+      <SafeAreaView style={{ flex: 1, backgroundColor: WHITE, alignItems: 'center', justifyContent: 'center' }} edges={['top']}>
+        <StatusBar barStyle="dark-content" backgroundColor={WHITE} />
+        <ActivityIndicator size="large" color={PINK} />
+      </SafeAreaView>
+    );
+  }
+
+  const wallet = data?.wallet ?? { balance: 0, escrow: 0, totalEarned: 0 };
+  const stats = data?.stats ?? { totalBookings: 0, totalOrders: 0, averageRating: 0 };
+  const analytics = data?.analytics;
+
+  return (
+    <SafeAreaView style={{ flex: 1, backgroundColor: WHITE }} edges={['top']}>
+      <StatusBar barStyle="dark-content" backgroundColor={WHITE} />
+
+      {/* ── HEADER ──────────────────────────────────────────────────────── */}
+      <View style={{
+        backgroundColor: WHITE, paddingHorizontal: 20,
+        paddingTop: 12, paddingBottom: 14,
+        flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+      }}>
+        <TouchableOpacity
+          onPress={() => setSidebarVisible(true)}
+          activeOpacity={0.75}
+          style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: BG, alignItems: 'center', justifyContent: 'center' }}
+        >
+          <Ionicons name="menu" size={22} color="#1a1a1a" />
+        </TouchableOpacity>
+
+        <Text style={{ fontSize: 18, fontWeight: '800', color: '#1a1a1a', letterSpacing: -0.3 }}>Dashboard</Text>
+
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <TouchableOpacity
+            onPress={() => navigation.navigate('Notifications')}
+            activeOpacity={0.75}
+            style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: BG, alignItems: 'center', justifyContent: 'center' }}
+          >
+            <Ionicons name="notifications" size={22} color="#1a1a1a" />
+            <Badge count={unreadNotif} />
           </TouchableOpacity>
-          
-          <Text className="text-lg font-bold text-gray-800">Dashboard</Text>
-          
-          <View className="flex-row items-center gap-3">
-            <TouchableOpacity className="relative w-10 h-10 items-center justify-center" activeOpacity={0.7} onPress={() => navigation.navigate('Message')}>
-              <Ionicons name="chatbubble-ellipses-outline" size={24} color="#eb278d" />
-              <View className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white" />
-            </TouchableOpacity>
-            
-            <TouchableOpacity className="relative w-10 h-10 items-center justify-center" activeOpacity={0.7} onPress={() => navigation.navigate('Notification')}>
-              <Ionicons name="notifications-outline" size={26} color="#eb278d" />
-              <View className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white" />
-            </TouchableOpacity>
-          </View>
+          <TouchableOpacity
+            onPress={() => navigation.navigate('ChatList')}
+            activeOpacity={0.75}
+            style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: BG, alignItems: 'center', justifyContent: 'center' }}
+          >
+            <Ionicons name="chatbubble-ellipses" size={21} color="#1a1a1a" />
+            <Badge count={unreadMsg} />
+          </TouchableOpacity>
         </View>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{
-      paddingBottom: 100
-    }} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#eb278d" colors={['#eb278d']} />}>
-        {}
-        <Animated.View className="bg-white px-5 py-6" style={{
-        opacity: fadeAnim,
-        transform: [{
-          translateY: slideAnim
-        }]
-      }}>
-          <View className="flex-row items-center justify-between">
-            <View className="flex-1">
-              <Text className="text-gray-600 text-sm mb-1">{getGreeting()}</Text>
-              <Text className="text-2xl font-bold text-gray-900">
-                {vendorProfile?.businessName || vendorProfile?.firstName || "User"}
+      <ScrollView
+        style={{ flex: 1, backgroundColor: BG }}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: 120 }}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={PINK} colors={[PINK]} />
+        }
+      >
+        {/* ── GREETING ────────────────────────────────────────────────────── */}
+        <View style={{ paddingHorizontal: 20, paddingTop: 18, paddingBottom: 16, backgroundColor: WHITE, marginBottom: 4 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 13, color: '#9CA3AF', fontWeight: '500', marginBottom: 4 }}>
+                {getGreeting()}
               </Text>
-              <View className="flex-row items-center mt-2">
-                <View className="flex-row items-center bg-green-100 px-2 py-1 rounded-full">
-                  <View className="w-2 h-2 bg-green-500 rounded-full mr-1.5" />
-                  <Text className="text-green-700 text-xs font-semibold">
-                    {vendorProfile?.isActive !== false ? 'Active' : 'Inactive'}
-                  </Text>
-                </View>
-                {vendorProfile?.createdAt && <Text className="text-gray-500 text-xs ml-3">
-                    Since {new Date(vendorProfile.createdAt).toLocaleDateString('en-US', {
-                  month: 'short',
-                  year: 'numeric'
-                })}
-                  </Text>}
-              </View>
+              <Text style={{ fontSize: 22, fontWeight: '800', color: '#1a1a1a', letterSpacing: -0.5 }} numberOfLines={1}>
+                {data?.businessName || 'Vendor'}
+              </Text>
             </View>
-            
-            {}
-            <TouchableOpacity activeOpacity={0.7}>
-              <LinearGradient colors={['#eb278d', '#f472b6']} start={{
-              x: 0,
-              y: 0
-            }} end={{
-              x: 1,
-              y: 1
-            }} className="w-16 h-16 rounded-full p-0.5">
-                <View className="w-full h-full rounded-full bg-white items-center justify-center">
-                  <Ionicons name="person" size={32} color="#eb278d" />
-                </View>
-              </LinearGradient>
-            </TouchableOpacity>
-          </View>
-        </Animated.View>
-
-        {}
-        <View className="px-5 py-4">
-          <Animated.View style={{
-          transform: [{
-            scale: scaleAnim
-          }],
-          opacity: fadeAnim
-        }}>
-            <LinearGradient colors={['#eb278d', '#f472b6']} start={{
-            x: 0,
-            y: 0
-          }} end={{
-            x: 1,
-            y: 1
-          }} className="rounded-3xl p-6 overflow-hidden" style={{
-            shadowColor: '#eb278d',
-            shadowOffset: {
-              width: 0,
-              height: 8
-            },
-            shadowOpacity: 0.3,
-            shadowRadius: 16,
-            elevation: 12
-          }}>
-              {}
-              <View className="absolute top-0 right-0 w-40 h-40 rounded-full opacity-10 bg-white" style={{
-              transform: [{
-                translateX: 20
-              }, {
-                translateY: -60
-              }]
-            }} />
-              
-              {}
-              <View className="flex-row items-center justify-between mb-6">
-                <View className="flex-row items-center gap-2">
-                  <Text className="text-white/90 text-sm font-medium">
-                    Total Balance
-                  </Text>
-                  <TouchableOpacity onPress={() => setShowBalance(!showBalance)} className="w-8 h-8 items-center justify-center rounded-full" style={{
-                  backgroundColor: 'rgba(255, 255, 255, 0.2)'
-                }} activeOpacity={0.7}>
-                    <Ionicons name={showBalance ? "eye-outline" : "eye-off-outline"} size={16} color="#fff" />
-                  </TouchableOpacity>
-                </View>
-                
-                <TouchableOpacity className="flex-row items-center gap-1 bg-white/20 px-3 py-1.5 rounded-full" activeOpacity={0.7} onPress={async () => {
-                try {
-                  const transactions = await walletAPI.getTransactions();
-                  console.log('Transactions:', transactions);
-                } catch (error) {
-                  const apiError = handleAPIError(error);
-                  Alert.alert('Error', apiError.message);
-                }
+            {data?.isActive && (
+              <View style={{
+                flexDirection: 'row', alignItems: 'center',
+                backgroundColor: '#D1FAE5', paddingHorizontal: 10, paddingVertical: 5,
+                borderRadius: 20, marginTop: 2,
               }}>
-                  <Text className="text-white text-xs font-semibold">
-                    History
-                  </Text>
-                  <Ionicons name="chevron-forward" size={14} color="#fff" />
-                </TouchableOpacity>
+                <View style={{ width: 7, height: 7, borderRadius: 3.5, backgroundColor: '#059669', marginRight: 5 }} />
+                <Text style={{ color: '#059669', fontSize: 12, fontWeight: '700' }}>Active</Text>
               </View>
-
-              {}
-              <View className="mb-8">
-                {showBalance ? <Animated.View style={{
-                opacity: balanceOpacity
-              }}>
-                    <Text className="text-white text-4xl font-bold tracking-tight mb-2">
-                      {formatBalance(walletData.balance)}
-                    </Text>
-                    <View className="flex-row items-center gap-4">
-                      <View>
-                        <Text className="text-white/70 text-xs">Pending</Text>
-                        <Text className="text-white font-semibold">
-                          {formatBalance(walletData.pendingBalance)}
-                        </Text>
-                      </View>
-                      <View className="w-px h-8 bg-white/30" />
-                      <View>
-                        <Text className="text-white/70 text-xs">Total Earned</Text>
-                        <Text className="text-white font-semibold">
-                          {formatBalance(walletData.totalEarnings)}
-                        </Text>
-                      </View>
-                    </View>
-                  </Animated.View> : <View>
-                    <Text className="text-white text-4xl font-bold tracking-widest mb-2">
-                      ••••••
-                    </Text>
-                    <Text className="text-white/70 text-sm">Tap eye to view balance</Text>
-                  </View>}
-              </View>
-
-              {}
-              <View className="flex-row gap-4">
-                <TouchableOpacity className="flex-1 bg-white/20 rounded-2xl py-3 items-center flex-row justify-center gap-2" activeOpacity={0.7} onPress={() => {
-                console.log('Fund Wallet');
-              }}>
-                  <View className="w-10 h-10 rounded-full bg-white/30 items-center justify-center">
-                    <Ionicons name="add" size={20} color="#fff" />
-                  </View>
-                  <Text className="text-white text-sm font-semibold">Fund Wallet</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity className="flex-1 bg-white rounded-2xl py-3 items-center flex-row justify-center gap-2" activeOpacity={0.7} onPress={() => {
-                console.log('Withdraw');
-              }}>
-                  <View className="w-10 h-10 rounded-full bg-pink-100 items-center justify-center">
-                    <Ionicons name="arrow-up" size={20} color="#eb278d" />
-                  </View>
-                  <Text className="text-gray-800 text-sm font-semibold">Withdraw</Text>
-                </TouchableOpacity>
-              </View>
-            </LinearGradient>
-          </Animated.View>
-        </View>
-
-        {}
-        <View className="px-5 py-4">
-          <Text className="text-lg font-bold text-gray-900 mb-4">Quick Actions</Text>
-          <View className="flex-row flex-wrap gap-4">
-            {quickActions.map((action, index) => <TouchableOpacity key={action.id} activeOpacity={0.7} onPress={action.onPress} className="flex-1" style={{
-            minWidth: (SCREEN_WIDTH - 60) / 2
-          }}>
-                <Animated.View className="bg-white rounded-2xl p-4 items-center" style={{
-              opacity: fadeAnim,
-              transform: [{
-                translateY: slideAnim.interpolate({
-                  inputRange: [0, 50],
-                  outputRange: [0, index * 10]
-                })
-              }],
-              shadowColor: '#000',
-              shadowOffset: {
-                width: 0,
-                height: 2
-              },
-              shadowOpacity: 0.05,
-              shadowRadius: 8,
-              elevation: 3
-            }}>
-                  <View className="w-12 h-12 rounded-xl items-center justify-center mb-3" style={{
-                backgroundColor: action.bgColor
-              }}>
-                    {renderIcon(action.iconFamily, action.icon, 24, action.color)}
-                  </View>
-                  <Text className="text-gray-800 text-sm font-semibold">{action.title}</Text>
-                </Animated.View>
-              </TouchableOpacity>)}
+            )}
           </View>
         </View>
 
-        {}
-        <View className="px-5 py-4">
-          <View className="flex-row items-center justify-between mb-4">
-            <Text className="text-lg font-bold text-gray-900">Performance</Text>
-            <View className="flex-row bg-gray-100 rounded-lg p-1">
-              {(['day', 'week', 'month'] as const).map(period => <TouchableOpacity key={period} onPress={() => setSelectedPeriod(period)} className={`px-4 py-1.5 rounded-md ${selectedPeriod === period ? 'bg-white' : ''}`} activeOpacity={0.7}>
-                  <Text className={`text-xs font-semibold capitalize ${selectedPeriod === period ? 'text-pink-600' : 'text-gray-500'}`}>
-                    {period === 'day' ? 'Today' : period === 'week' ? 'This Week' : 'This Month'}
-                  </Text>
-                </TouchableOpacity>)}
+        {/* ── LOOKREAL PAY CARD ───────────────────────────────────────────── */}
+        <View style={{ paddingHorizontal: 16, marginTop: 12 }}>
+          <LinearGradient
+            colors={['#6D0B3C', '#C01070']}
+            start={{ x: 0, y: 0.5 }}
+            end={{ x: 1, y: 0.5 }}
+            style={{ borderRadius: 20, padding: 20, overflow: 'hidden', ...shadow(8) }}
+          >
+            {/* Watermark */}
+            <Text style={{
+              position: 'absolute', right: -8, top: 12,
+              fontSize: 80, fontWeight: '900', color: 'rgba(255,255,255,0.06)',
+              letterSpacing: -4,
+            }}>LR</Text>
+
+            {/* Card header */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <View style={{
+                  width: 34, height: 34, borderRadius: 17,
+                  backgroundColor: PINK, alignItems: 'center', justifyContent: 'center',
+                }}>
+                  <Text style={{ color: WHITE, fontWeight: '900', fontSize: 16 }}>R</Text>
+                </View>
+                <Text style={{ color: WHITE, fontSize: 14, fontWeight: '700' }}>LookReal Pay</Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => navigation.navigate('Transactions')}
+                activeOpacity={0.8}
+                style={{
+                  flexDirection: 'row', alignItems: 'center',
+                  borderWidth: 1, borderColor: 'rgba(255,255,255,0.4)',
+                  paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, gap: 4,
+                }}
+              >
+                <Text style={{ color: WHITE, fontSize: 12, fontWeight: '600' }}>History</Text>
+                <Ionicons name="chevron-forward" size={12} color={WHITE} />
+              </TouchableOpacity>
             </View>
-          </View>
 
-          <View className="flex-row flex-wrap gap-3">
-            {stats.map((stat, index) => <View key={index} className="bg-white rounded-2xl p-4" style={{
-            width: (SCREEN_WIDTH - 52) / 2,
-            shadowColor: '#000',
-            shadowOffset: {
-              width: 0,
-              height: 2
-            },
-            shadowOpacity: 0.05,
-            shadowRadius: 8,
-            elevation: 3
-          }}>
-                <View className="flex-row items-center justify-between mb-2">
-                  <Text className="text-gray-500 text-xs">{stat.label}</Text>
-                  <View className={`flex-row items-center px-2 py-0.5 rounded-full ${stat.isPositive ? 'bg-green-100' : 'bg-red-100'}`}>
-                    <Ionicons name={stat.isPositive ? 'trending-up' : 'trending-down'} size={12} color={stat.isPositive ? '#10b981' : '#ef4444'} />
-                    <Text className={`text-xs ml-1 font-semibold ${stat.isPositive ? 'text-green-600' : 'text-red-600'}`}>
-                      {stat.change}
-                    </Text>
-                  </View>
-                </View>
-                <Text className="text-2xl font-bold text-gray-900">{stat.value}</Text>
-              </View>)}
-          </View>
-        </View>
+            {/* Balance */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+              <Text style={{ color: 'rgba(255,255,255,0.75)', fontSize: 13 }}>Available Balance</Text>
+              <TouchableOpacity onPress={() => setShowBalance(p => !p)} activeOpacity={0.8}>
+                <Ionicons
+                  name={showBalance ? 'eye-outline' : 'eye-off-outline'}
+                  size={16} color="rgba(255,255,255,0.75)"
+                />
+              </TouchableOpacity>
+            </View>
 
-        {}
-        <View className="px-5 py-4">
-          <View className="flex-row items-center justify-between mb-4">
-            <Text className="text-lg font-bold text-gray-900">Recent Activity</Text>
-            <TouchableOpacity activeOpacity={0.7}>
-              <Text className="text-pink-600 text-sm font-semibold">View all</Text>
-            </TouchableOpacity>
-          </View>
+            <Text style={{ color: WHITE, fontSize: 34, fontWeight: '800', letterSpacing: -1, marginBottom: 14 }}>
+              {showBalance ? fmt(wallet.balance) : '₦ ••••••'}
+            </Text>
 
-          <View className="bg-white rounded-2xl overflow-hidden">
-            {}
-            {recentActivities.length > 0 ? recentActivities.map((item, index) => <TouchableOpacity key={index} className="flex-row items-center p-4 border-b border-gray-100" activeOpacity={0.7}>
-                  <View className="w-10 h-10 rounded-xl items-center justify-center mr-3" style={{
-              backgroundColor: `${item.color}20`
-            }}>
-                    <Ionicons name={item.icon as any} size={20} color={item.color} />
-                  </View>
-                  <View className="flex-1">
-                    <Text className="text-gray-900 font-semibold text-sm">{item.title}</Text>
-                    <Text className="text-gray-500 text-xs mt-0.5">{item.subtitle}</Text>
-                  </View>
-                  <Text className="text-gray-400 text-xs">{item.time}</Text>
-                </TouchableOpacity>) : <View className="p-8 items-center">
-                <Ionicons name="time-outline" size={48} color="#d1d5db" />
-                <Text className="text-gray-400 text-sm mt-2">No recent activity</Text>
-              </View>}
-            
-            {}
-            {recentActivities.length > 0 && <TouchableOpacity className="flex-row items-center justify-center p-3 bg-gray-50" activeOpacity={0.7}>
-                <Text className="text-pink-600 text-sm font-semibold mr-1">Load More</Text>
-                <Ionicons name="chevron-down" size={16} color="#eb278d" />
-              </TouchableOpacity>}
-          </View>
-        </View>
-
-        {}
-        <View className="px-5 py-4 mb-4">
-          <Text className="text-lg font-bold text-gray-900 mb-4">Service Status</Text>
-          
-          {servicesData.length === 0 ? <TouchableOpacity className="mt-4" activeOpacity={0.7}>
-              <LinearGradient colors={['#fce7f3', '#fdf2f8']} start={{
-            x: 0,
-            y: 0
-          }} end={{
-            x: 1,
-            y: 0
-          }} className="rounded-2xl p-4 border border-pink-200">
-                <View className="flex-row items-center justify-center">
-                  <Ionicons name="add-circle" size={24} color="#eb278d" />
-                  <Text className="text-pink-600 font-semibold ml-2">Add Your First Service</Text>
-                </View>
-                <Text className="text-gray-500 text-xs text-center mt-2">
-                  Start earning today by adding your services
+            {/* Escrow & Earned row */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 20 }}>
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 11, marginBottom: 3 }}>In Escrow</Text>
+                <Text style={{ color: WHITE, fontWeight: '700', fontSize: 15 }}>
+                  {showBalance ? fmt(wallet.escrow) : '₦ ••••'}
                 </Text>
-              </LinearGradient>
-            </TouchableOpacity> : <View className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-2xl p-4 border border-green-200">
-              <View className="flex-row items-center">
-                <View className="w-12 h-12 rounded-xl bg-green-100 items-center justify-center mr-3">
-                  <Ionicons name="checkmark-circle" size={24} color="#10b981" />
-                </View>
-                <View className="flex-1">
-                  <Text className="text-gray-900 font-semibold text-sm">Active Services</Text>
-                  <Text className="text-gray-600 text-xs mt-0.5">
-                    {servicesData.length} service{servicesData.length > 1 ? 's' : ''} available
-                  </Text>
-                </View>
-                <TouchableOpacity className="bg-green-500 px-4 py-2 rounded-full" activeOpacity={0.7}>
-                  <Text className="text-white text-xs font-semibold">Manage</Text>
-                </TouchableOpacity>
               </View>
-            </View>}
+              <View style={{ width: 1, height: 36, backgroundColor: 'rgba(255,255,255,0.2)', marginHorizontal: 16 }} />
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 11, marginBottom: 3 }}>Total Earned</Text>
+                <Text style={{ color: WHITE, fontWeight: '700', fontSize: 15 }}>
+                  {showBalance ? fmt(wallet.totalEarned) : '₦ ••••'}
+                </Text>
+              </View>
+            </View>
+
+            {/* Action buttons */}
+            <View style={{ flexDirection: 'row', gap: 12 }}>
+              <TouchableOpacity
+                onPress={() => setFundingVisible(true)}
+                activeOpacity={0.8}
+                style={{
+                  flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+                  borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.4)',
+                  borderRadius: 30, paddingVertical: 12, gap: 6,
+                }}
+              >
+                <Ionicons name="add" size={16} color={WHITE} />
+                <Text style={{ color: WHITE, fontSize: 13, fontWeight: '700' }}>Funds Wallet</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => {
+                  if (data?.vendorProfile?.kycStatus !== 'approved') { setKycVisible(true); return; }
+                  setWithdrawalVisible(true);
+                }}
+                activeOpacity={0.8}
+                style={{
+                  flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+                  backgroundColor: WHITE, borderRadius: 30, paddingVertical: 12, gap: 6,
+                  ...shadow(4),
+                }}
+              >
+                <Ionicons name="arrow-up" size={16} color={PINK} />
+                <Text style={{ color: PINK, fontSize: 13, fontWeight: '700' }}>Withdraw</Text>
+              </TouchableOpacity>
+            </View>
+          </LinearGradient>
+        </View>
+
+        {/* ── STATS ROW ───────────────────────────────────────────────────── */}
+        <View style={{ flexDirection: 'row', paddingHorizontal: 16, gap: 10, marginTop: 16 }}>
+          {[
+            { icon: 'calendar-clear', iconBg: '#E0F2FE', iconColor: '#0284C7', value: stats.totalBookings, label: 'Bookings' },
+            { icon: 'receipt', iconBg: '#D1FAE5', iconColor: '#059669', value: stats.totalOrders, label: 'Total Orders' },
+            { icon: 'star', iconBg: '#FEF9C3', iconColor: '#CA8A04', value: stats.averageRating.toFixed(1), label: 'Ratings' },
+          ].map((s, i) => (
+            <View key={i} style={[{
+              flex: 1, backgroundColor: WHITE, borderRadius: 16,
+              padding: 14, alignItems: 'center',
+            }, shadow(2)]}>
+              <View style={{
+                width: 40, height: 40, borderRadius: 12,
+                backgroundColor: s.iconBg, alignItems: 'center', justifyContent: 'center', marginBottom: 8,
+              }}>
+                <Ionicons name={s.icon as any} size={20} color={s.iconColor} />
+              </View>
+              <Text style={{ fontSize: 20, fontWeight: '800', color: '#1a1a1a', marginBottom: 2 }}>
+                {s.value}
+              </Text>
+              <Text style={{ fontSize: 11, color: '#9CA3AF', fontWeight: '500', textAlign: 'center' }}>{s.label}</Text>
+            </View>
+          ))}
+        </View>
+
+        {/* ── QUICK ACTIONS ───────────────────────────────────────────────── */}
+        <View style={{ paddingHorizontal: 16, marginTop: 24 }}>
+          <Text style={{ fontSize: 16, fontWeight: '800', color: '#1a1a1a', marginBottom: 14, letterSpacing: -0.3 }}>
+            Quick Action
+          </Text>
+          <View style={{ flexDirection: 'row', gap: 10 }}>
+            {[
+              { icon: 'calendar-number-outline', label: 'Bookings', bg: '#E0F2FE', color: '#0284C7', onPress: () => navigation.navigate('Bookings' as any) },
+              { icon: 'briefcase-outline', label: 'Add Service', bg: BG, color: PINK, onPress: () => navigation.navigate('Services' as any) },
+              { icon: 'bag-handle-outline', label: 'Products', bg: '#EDE9FE', color: '#7C3AED', onPress: () => navigation.navigate('MyProducts') },
+              { icon: 'analytics-outline', label: 'Analytics', bg: '#D1FAE5', color: '#059669', onPress: () => navigation.navigate('Analytics') },
+            ].map((a, i) => (
+              <TouchableOpacity
+                key={i}
+                onPress={a.onPress}
+                activeOpacity={0.8}
+                style={[{
+                  flex: 1, backgroundColor: WHITE, borderRadius: 16,
+                  paddingVertical: 14, alignItems: 'center', gap: 8,
+                }, shadow(2)]}
+              >
+                <View style={{ width: 38, height: 38, borderRadius: 11, backgroundColor: a.bg, alignItems: 'center', justifyContent: 'center' }}>
+                  <Ionicons name={a.icon as any} size={19} color={a.color} />
+                </View>
+                <Text style={{ fontSize: 10, fontWeight: '600', color: '#374151', textAlign: 'center' }}>{a.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+
+        {/* ── TODAY SCHEDULE ──────────────────────────────────────────────── */}
+        <View style={{ paddingHorizontal: 16, marginTop: 24 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+            <Text style={{ fontSize: 16, fontWeight: '800', color: '#1a1a1a', letterSpacing: -0.3 }}>
+              Today Schedule
+            </Text>
+            <TouchableOpacity onPress={() => navigation.navigate('Bookings' as any)} activeOpacity={0.75}>
+              <Text style={{ fontSize: 13, fontWeight: '700', color: PINK }}>See All</Text>
+            </TouchableOpacity>
+          </View>
+
+          {(data?.todaySchedule ?? []).length === 0 ? (
+            <View style={[{
+              backgroundColor: WHITE, borderRadius: 16, padding: 24,
+              alignItems: 'center',
+            }, shadow(2)]}>
+              <Ionicons name="calendar-outline" size={36} color="#D1D5DB" />
+              <Text style={{ color: '#9CA3AF', fontSize: 14, fontWeight: '500', marginTop: 10 }}>
+                No bookings today
+              </Text>
+            </View>
+          ) : (
+            <View style={[{ backgroundColor: WHITE, borderRadius: 16, overflow: 'hidden' }, shadow(2)]}>
+              {data!.todaySchedule.map((item, idx) => {
+                const badge = statusConfig[item.status] ?? statusConfig.pending;
+                const isLast = idx === data!.todaySchedule.length - 1;
+                const timeStr = item.scheduledTime
+                  ? (() => {
+                      const [h, m] = item.scheduledTime.split(':').map(Number);
+                      const ampm = h >= 12 ? 'PM' : 'AM';
+                      const hr = h % 12 || 12;
+                      return `${hr}:${String(m).padStart(2, '0')} ${ampm}`;
+                    })()
+                  : '';
+
+                return (
+                  <View key={item._id} style={{
+                    flexDirection: 'row', alignItems: 'center',
+                    paddingHorizontal: 16, paddingVertical: 14,
+                    borderBottomWidth: isLast ? 0 : 1, borderBottomColor: '#F9FAFB',
+                  }}>
+                    {/* Avatar */}
+                    {item.clientAvatar ? (
+                      <Image
+                        source={{ uri: item.clientAvatar }}
+                        style={{ width: 46, height: 46, borderRadius: 23, marginRight: 12 }}
+                      />
+                    ) : (
+                      <View style={{ marginRight: 12 }}>
+                        <AvatarPlaceholder name={item.clientName} size={46} />
+                      </View>
+                    )}
+
+                    {/* Info */}
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontSize: 14, fontWeight: '700', color: '#1a1a1a', marginBottom: 2 }}>
+                        {item.clientName}
+                      </Text>
+                      <Text style={{ fontSize: 12, color: '#6B7280', marginBottom: 2 }}>{item.serviceName}</Text>
+                      <Text style={{ fontSize: 11, color: '#9CA3AF' }}>
+                        Today{timeStr ? ` · ${timeStr}` : ''}
+                      </Text>
+                    </View>
+
+                    {/* Right: badge + price */}
+                    <View style={{ alignItems: 'flex-end', gap: 6 }}>
+                      <View style={{ backgroundColor: badge.bg, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 }}>
+                        <Text style={{ fontSize: 11, fontWeight: '600', color: badge.color }}>{badge.label}</Text>
+                      </View>
+                      <Text style={{ fontSize: 13, fontWeight: '700', color: '#1a1a1a' }}>
+                        {fmt(item.totalAmount)}
+                      </Text>
+                    </View>
+                  </View>
+                );
+              })}
+            </View>
+          )}
+        </View>
+
+        {/* ── ANALYTICS ───────────────────────────────────────────────────── */}
+        <View style={{ paddingHorizontal: 16, marginTop: 24 }}>
+          {/* Header + period tabs */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+            <Text style={{ fontSize: 16, fontWeight: '800', color: '#1a1a1a', letterSpacing: -0.3 }}>Analytics</Text>
+            <View style={{ flexDirection: 'row', backgroundColor: '#F3F4F6', borderRadius: 30, padding: 3 }}>
+              {(['today', 'week', 'month'] as Period[]).map(p => {
+                const active = period === p;
+                return (
+                  <TouchableOpacity
+                    key={p}
+                    onPress={() => changePeriod(p)}
+                    activeOpacity={0.8}
+                    style={{
+                      paddingHorizontal: 14, paddingVertical: 7, borderRadius: 28,
+                      backgroundColor: active ? PINK : 'transparent',
+                    }}
+                  >
+                    <Text style={{ fontSize: 12, fontWeight: '700', color: active ? WHITE : '#6B7280' }}>
+                      {p === 'today' ? 'Today' : p === 'week' ? 'Week' : 'Month'}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+
+          {/* overflow:hidden removed — it clips SVG labels on Android */}
+          <View style={[{ backgroundColor: WHITE, borderRadius: 16 }, shadow(2)]}>
+            {/* Metrics row */}
+            {periodLoading ? (
+              <View style={{ paddingVertical: 40, alignItems: 'center' }}>
+                <ActivityIndicator color={PINK} />
+              </View>
+            ) : analytics ? (
+              <>
+                <View style={{ flexDirection: 'row', paddingTop: 16, paddingBottom: 12 }}>
+                  {[
+                    { label: 'Earnings', value: fmt(analytics.earnings.value), change: analytics.earnings.change },
+                    { label: 'Bookings', value: analytics.bookings.value.toString(), change: analytics.bookings.change },
+                    { label: 'Orders', value: analytics.orders.value.toString(), change: analytics.orders.change },
+                  ].map((m, i) => (
+                    <View key={i} style={{ flex: 1, alignItems: 'center', paddingHorizontal: 8 }}>
+                      {i > 0 && (
+                        <View style={{ position: 'absolute', left: 0, top: '10%', height: '80%', width: 1, backgroundColor: '#F3F4F6' }} />
+                      )}
+                      <Text style={{ fontSize: 11, color: '#9CA3AF', fontWeight: '500', marginBottom: 4 }}>{m.label}</Text>
+                      <Text style={{ fontSize: 14, fontWeight: '800', color: '#1a1a1a', marginBottom: 3 }} numberOfLines={1} adjustsFontSizeToFit>
+                        {m.value}
+                      </Text>
+                      <Text style={{ fontSize: 11, fontWeight: '600', color: m.change >= 0 ? '#059669' : '#DC2626' }}>
+                        {m.change >= 0 ? '+' : ''}{m.change}%
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+
+                {/* Line chart */}
+                <View style={{ paddingHorizontal: CHART_H_PAD, paddingBottom: 12 }}>
+                  <LineChart
+                    data={{
+                      labels: chartData.map(c => c.label),
+                      datasets: [{ data: hasChartData ? chartValues : chartValues.map(() => 0), strokeWidth: 2 }],
+                    }}
+                    width={chartWidth}
+                    height={190}
+                    chartConfig={chartConfig}
+                    bezier
+                    withInnerLines={false}
+                    withOuterLines={false}
+                    fromZero
+                    segments={4}
+                    paddingRight={20}
+                    xLabelsOffset={4}
+                    formatYLabel={(val) => {
+                      const n = parseInt(val, 10);
+                      if (isNaN(n) || n === 0) return '0';
+                      return n >= 1000 ? `${(n / 1000).toFixed(0)}k` : `${n}`;
+                    }}
+                  />
+                </View>
+              </>
+            ) : null}
+          </View>
         </View>
       </ScrollView>
 
-      {}
-      <VendorSidebar visible={sidebarVisible} onClose={() => setSidebarVisible(false)} userName={vendorProfile?.businessName || 'Vendor'} userEmail="vendor@example.com" />
-    </SafeAreaView>;
+      {/* ── MODALS & SIDEBAR ──────────────────────────────────────────────── */}
+      <VendorSidebar
+        visible={sidebarVisible}
+        onClose={() => setSidebarVisible(false)}
+        userName={data?.businessName || 'Vendor'}
+        userEmail={data?.email || ''}
+        userAvatar={data?.avatar}
+      />
+      <WalletFundingModal
+        visible={fundingVisible}
+        onClose={() => setFundingVisible(false)}
+        onSuccess={() => fetchDashboard(period)}
+        currentBalance={wallet.balance}
+      />
+      <WithdrawalModal
+        visible={withdrawalVisible}
+        onClose={() => setWithdrawalVisible(false)}
+        onSuccess={() => fetchDashboard(period)}
+        currentBalance={wallet.balance}
+      />
+      <KycGateModal
+        visible={kycVisible}
+        action="withdrawal"
+        kycStatus={data?.vendorProfile?.kycStatus as any}
+        onClose={() => setKycVisible(false)}
+        onGoToKyc={() => { setKycVisible(false); navigation.navigate('VendorStoreSettings'); }}
+      />
+    </SafeAreaView>
+  );
 };
+
 export default VendorDashboardScreen;

@@ -1,340 +1,480 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, RefreshControl, Alert } from 'react-native';
+import React, { useEffect, useState, useCallback } from 'react';
+import {
+  View, Text, TouchableOpacity, ScrollView, Switch,
+  RefreshControl, ActivityIndicator, TextInput, Image,
+  StyleSheet,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
 import api, { handleAPIError, categoriesAPI, servicesAPI } from '@/api/api';
 import AddServiceModal from '@/components/AddServiceModal';
-import ServiceCard from '@/components/ServiceCard';
 import ConfirmationModal from '@/components/ConfirmationModal';
-import FilterModal, { FilterOptions } from '@/components/FilterModal';
+import { toast } from '@/components/ui/Toast';
+
+const PRIMARY = '#E04079';
+const BG = '#FCE4EC';
+const TEXT_DARK = '#1A1A2E';
+
+// ── Types ─────────────────────────────────────────────────────────────────────
 interface Service {
   _id: string;
   name: string;
   description: string;
   basePrice: number;
-  priceType: 'fixed' | 'variable';
+  priceType: 'fixed' | 'negotiable';
   currency: string;
   duration: number;
-  category: {
-    _id: string;
-    name: string;
-  };
+  category: { _id: string; name: string };
   images: string[];
-  serviceArea: {
-    type: string;
-    coordinates: number[];
-    radius: number;
-  };
   isActive: boolean;
+  approvalStatus: 'pending' | 'approved' | 'rejected';
+  approvalNotes?: string;
   rating?: number;
   reviewCount?: number;
+  metadata?: { bookings?: number };
 }
-const VendorServicesScreen = () => {
+
+type FilterTab = 'all' | 'available' | 'unavailable';
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+const formatDuration = (mins: number) => {
+  if (!mins) return '';
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  if (h > 0 && m > 0) return `${h} hr ${m} min`;
+  if (h > 0) return `${h} hr`;
+  return `${m} min`;
+};
+
+const formatPrice = (n: number) => `₦${n.toLocaleString()}`;
+
+// ── Service Card ──────────────────────────────────────────────────────────────
+interface CardProps {
+  service: Service;
+  onToggle: () => void;
+  onPress: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+  toggling: boolean;
+}
+
+const APPROVAL_CONFIG = {
+  pending:  { label: 'Pending Review', color: '#F59E0B', bg: '#FEF3C7', icon: 'time-outline'            } as const,
+  approved: { label: 'Approved',       color: '#16A34A', bg: '#DCFCE7', icon: 'checkmark-circle-outline'} as const,
+  rejected: { label: 'Rejected',       color: '#EF4444', bg: '#FEE2E2', icon: 'close-circle-outline'    } as const,
+};
+
+const ServiceRow: React.FC<CardProps> = ({ service, onToggle, onPress, onEdit, onDelete, toggling }) => {
+  const bookings  = service.metadata?.bookings ?? 0;
+  const thumb     = service.images?.[0];
+  const approval  = APPROVAL_CONFIG[service.approvalStatus ?? 'pending'];
+  const isApproved = service.approvalStatus === 'approved';
+
+  return (
+    <TouchableOpacity onPress={onPress} activeOpacity={0.75} style={styles.card}>
+      {/* Thumbnail */}
+      {thumb ? (
+        <Image source={{ uri: thumb }} style={styles.cardThumb} />
+      ) : (
+        <View style={[styles.cardThumb, styles.cardThumbPlaceholder]}>
+          <Ionicons name="cut-outline" size={24} color={PRIMARY} />
+        </View>
+      )}
+
+      {/* Info */}
+      <View style={styles.cardInfo}>
+        <Text style={styles.cardName} numberOfLines={1}>{service.name}</Text>
+        <Text style={styles.cardPrice}>{formatPrice(service.basePrice)}</Text>
+        <Text style={styles.cardMeta}>
+          {formatDuration(service.duration)}
+          {bookings > 0 ? ` · ${bookings} bookings` : ''}
+        </Text>
+
+        {/* Approval badge */}
+        <View style={[styles.approvalBadge, { backgroundColor: approval.bg }]}>
+          <Ionicons name={approval.icon} size={11} color={approval.color} />
+          <Text style={[styles.approvalText, { color: approval.color }]}>{approval.label}</Text>
+        </View>
+
+        {/* Rejection note */}
+        {service.approvalStatus === 'rejected' && service.approvalNotes ? (
+          <Text style={styles.rejectionNote} numberOfLines={2}>{service.approvalNotes}</Text>
+        ) : null}
+      </View>
+
+      {/* Actions column */}
+      <View style={styles.cardActions}>
+        {/* Toggle — only enabled when approved */}
+        {toggling ? (
+          <ActivityIndicator size="small" color={PRIMARY} />
+        ) : (
+          <Switch
+            value={isApproved && service.isActive}
+            onValueChange={isApproved
+              ? onToggle
+              : () => toast.info(
+                  service.approvalStatus === 'pending' ? 'Awaiting Approval' : 'Service Rejected',
+                  service.approvalStatus === 'pending'
+                    ? 'This service is under review. Toggling is available once approved.'
+                    : 'This service was rejected. Edit and resubmit for review.',
+                )
+            }
+            trackColor={{ false: '#D1D5DB', true: '#F9A8CA' }}
+            thumbColor={isApproved && service.isActive ? PRIMARY : '#fff'}
+            ios_backgroundColor="#D1D5DB"
+            style={{ opacity: isApproved ? 1 : 0.45 }}
+          />
+        )}
+
+        {/* Edit + Delete */}
+        <View style={styles.cardIconRow}>
+          <TouchableOpacity
+            onPress={onEdit}
+            hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+            style={styles.cardIconBtn}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="pencil-outline" size={16} color="#6B7280" />
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={onDelete}
+            hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+            style={[styles.cardIconBtn, styles.cardDeleteBtn]}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="trash-outline" size={16} color="#EF4444" />
+          </TouchableOpacity>
+        </View>
+      </View>
+    </TouchableOpacity>
+  );
+};
+
+// ── Main Screen ───────────────────────────────────────────────────────────────
+const VendorServicesScreen: React.FC = () => {
+  const { top, bottom } = useSafeAreaInsets();
+  const navigation = useNavigation<import('@react-navigation/native-stack').NativeStackNavigationProp<import('@/types/navigation.types').RootStackParamList>>();
+
   const [services, setServices] = useState<Service[]>([]);
-  const [filteredServices, setFilteredServices] = useState<Service[]>([]);
-  const [categories, setCategories] = useState<any[]>([]);
+  const [search, setSearch] = useState('');
+  const [activeTab, setActiveTab] = useState<FilterTab>('all');
+  const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [selectedService, setSelectedService] = useState<Service | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [showFilterModal, setShowFilterModal] = useState(false);
-  const [selectedService, setSelectedService] = useState<Service | null>(null);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [filters, setFilters] = useState<FilterOptions>({
-    searchName: '',
-    category: '',
-    minPrice: '',
-    maxPrice: '',
-    minDuration: '',
-    maxDuration: '',
-    status: 'all',
-    sortBy: 'name',
-    sortOrder: 'asc'
-  });
-  useEffect(() => {
-    loadServices();
-    loadCategories();
-  }, []);
-  useEffect(() => {
-    applyFilters();
-  }, [services, filters]);
+  const [categories, setCategories] = useState<any[]>([]);
+
+  useEffect(() => { loadServices(); loadCategories(); }, []);
+
   const loadServices = async () => {
-    console.log('🔵 [START] loadServices called');
     setLoading(true);
     try {
-      console.log('📤 Fetching services from API...');
-      const response = await api.get('/services/vendor/my-services');
-      console.log('📥 API Response:', response.data);
-      if (response.data.success) {
-        console.log('✅ Success response');
-        const servicesData = Array.isArray(response.data.data) ? response.data.data : response.data.data?.services || [];
-        console.log('📊 Services to set:', servicesData);
-        console.log('📊 Services count:', servicesData.length);
-        setServices(servicesData);
-        console.log('✅ Services state updated');
-      } else {
-        console.log('⚠️ Response not successful, setting empty array');
-        setServices([]);
-      }
-    } catch (error) {
-      console.error('❌ ERROR in loadServices:', error);
-      const apiError = handleAPIError(error);
-      Alert.alert('Error', apiError.message);
-      setServices([]);
+      const res = await api.get('/services/vendor/my-services');
+      const data = Array.isArray(res.data.data) ? res.data.data : res.data.data?.services || [];
+      setServices(data);
+    } catch (err) {
+      toast.error('Error', handleAPIError(err).message);
     } finally {
-      console.log('🔵 [END] loadServices');
       setLoading(false);
     }
   };
+
   const loadCategories = async () => {
     try {
-      const response = await categoriesAPI.getAll();
-      if (response.success) {
-        setCategories(response.data || []);
-      }
-    } catch (error) {
-      console.error('Error loading categories:', error);
-      setCategories([{
-        _id: '1',
-        name: 'Hair'
-      }, {
-        _id: '2',
-        name: 'Makeup'
-      }, {
-        _id: '3',
-        name: 'Nails'
-      }, {
-        _id: '4',
-        name: 'Spa'
-      }]);
+      const res = await categoriesAPI.getAll();
+      if (res.success) setCategories(res.data || []);
+    } catch {
+      setCategories([
+        { _id: '1', name: 'Hair' }, { _id: '2', name: 'Makeup' },
+        { _id: '3', name: 'Nails' }, { _id: '4', name: 'Spa' },
+      ]);
     }
   };
-  const applyFilters = () => {
-    console.log('🔵 [START] applyFilters called');
-    console.log('📊 Services:', services);
-    console.log('📊 Services type:', typeof services);
-    console.log('📊 Is array?:', Array.isArray(services));
-    console.log('🔍 Current filters:', filters);
-    try {
-      if (!services || !Array.isArray(services)) {
-        console.log('⚠️ Services is not an array, setting empty filtered services');
-        setFilteredServices([]);
-        return;
-      }
-      let filtered = [...services];
-      console.log('✅ Copied services array');
-      if (filters.searchName.trim()) {
-        console.log('🔍 Applying searchName filter:', filters.searchName);
-        filtered = filtered.filter(service => service.name.toLowerCase().includes(filters.searchName.toLowerCase()));
-        console.log('✅ After searchName filter:', filtered.length);
-      }
-      if (filters.category) {
-        console.log('🔍 Applying category filter:', filters.category);
-        filtered = filtered.filter(service => service.category._id === filters.category);
-        console.log('✅ After category filter:', filtered.length);
-      }
-      if (filters.minPrice) {
-        console.log('🔍 Applying minPrice filter:', filters.minPrice);
-        const minPrice = parseFloat(filters.minPrice);
-        filtered = filtered.filter(service => service.basePrice >= minPrice);
-        console.log('✅ After minPrice filter:', filtered.length);
-      }
-      if (filters.maxPrice) {
-        console.log('🔍 Applying maxPrice filter:', filters.maxPrice);
-        const maxPrice = parseFloat(filters.maxPrice);
-        filtered = filtered.filter(service => service.basePrice <= maxPrice);
-        console.log('✅ After maxPrice filter:', filtered.length);
-      }
-      if (filters.minDuration) {
-        console.log('🔍 Applying minDuration filter:', filters.minDuration);
-        const minDuration = parseFloat(filters.minDuration);
-        filtered = filtered.filter(service => service.duration >= minDuration);
-        console.log('✅ After minDuration filter:', filtered.length);
-      }
-      if (filters.maxDuration) {
-        console.log('🔍 Applying maxDuration filter:', filters.maxDuration);
-        const maxDuration = parseFloat(filters.maxDuration);
-        filtered = filtered.filter(service => service.duration <= maxDuration);
-        console.log('✅ After maxDuration filter:', filtered.length);
-      }
-      if (filters.status !== 'all') {
-        console.log('🔍 Applying status filter:', filters.status);
-        filtered = filtered.filter(service => filters.status === 'active' ? service.isActive : !service.isActive);
-        console.log('✅ After status filter:', filtered.length);
-      }
-      console.log('🔄 Sorting filtered services...');
-      filtered.sort((a, b) => {
-        let compareValue = 0;
-        switch (filters.sortBy) {
-          case 'name':
-            compareValue = a.name.localeCompare(b.name);
-            break;
-          case 'price':
-            compareValue = a.basePrice - b.basePrice;
-            break;
-          case 'duration':
-            compareValue = a.duration - b.duration;
-            break;
-          case 'rating':
-            compareValue = (a.rating || 0) - (b.rating || 0);
-            break;
-        }
-        return filters.sortOrder === 'asc' ? compareValue : -compareValue;
-      });
-      console.log('✅ Services sorted');
-      console.log('📊 Setting filtered services:', filtered.length);
-      setFilteredServices(filtered);
-      console.log('✅ Filtered services state updated');
-    } catch (error) {
-      console.error('❌❌❌ ERROR in applyFilters ❌❌❌');
-      console.error('Error:', error);
-      console.error('Error name:', (error as any)?.name);
-      console.error('Error message:', (error as any)?.message);
-      console.error('Error stack:', (error as any)?.stack);
-      setFilteredServices([]);
-    }
-    console.log('🔵 [END] applyFilters');
-  };
-  const handleApplyFilters = (newFilters: FilterOptions) => {
-    setFilters(newFilters);
-  };
-  const handleResetFilters = () => {
-    setFilters({
-      searchName: '',
-      category: '',
-      minPrice: '',
-      maxPrice: '',
-      minDuration: '',
-      maxDuration: '',
-      status: 'all',
-      sortBy: 'name',
-      sortOrder: 'asc'
-    });
-  };
-  const hasActiveFilters = () => {
-    return filters.searchName !== '' || filters.category !== '' || filters.minPrice !== '' || filters.maxPrice !== '' || filters.minDuration !== '' || filters.maxDuration !== '' || filters.status !== 'all' || filters.sortBy !== 'name' || filters.sortOrder !== 'asc';
-  };
+
   const onRefresh = async () => {
     setRefreshing(true);
     await loadServices();
     setRefreshing(false);
   };
+
+  const handleToggle = useCallback(async (service: Service) => {
+    setTogglingId(service._id);
+    // Optimistic update
+    setServices(prev => prev.map(s => s._id === service._id ? { ...s, isActive: !s.isActive } : s));
+    try {
+      await api.put(`/services/${service._id}`, { isActive: !service.isActive });
+    } catch (err) {
+      // Revert on failure
+      setServices(prev => prev.map(s => s._id === service._id ? { ...s, isActive: service.isActive } : s));
+      toast.error('Error', handleAPIError(err).message);
+    } finally {
+      setTogglingId(null);
+    }
+  }, []);
+
   const handleAddService = async (serviceData: any, images: any[]) => {
-    try {
-      const response = await servicesAPI.createService(serviceData, images);
-      if (response.success) {
-        Alert.alert('Success', 'Service created successfully');
-        await loadServices();
-        setShowAddModal(false);
-      }
-    } catch (error) {
-      const apiError = handleAPIError(error);
-      Alert.alert('Error', apiError.message);
-      throw error;
+    const res = await servicesAPI.createService(serviceData, images);
+    if (res.success) {
+      toast.success('Done!', 'Service added successfully');
+      await loadServices();
+      setShowAddModal(false);
     }
   };
-  const handleEditService = (service: Service) => {
-    setSelectedService(service);
-    setShowAddModal(true);
-  };
-  const handleUpdateService = async (serviceId: string, serviceData: any, images: any[]) => {
-    try {
-      const response = await servicesAPI.updateService(serviceId, serviceData, images);
-      if (response.success) {
-        Alert.alert('Success', 'Service updated successfully');
-        await loadServices();
-        setShowAddModal(false);
-        setSelectedService(null);
-      }
-    } catch (error) {
-      const apiError = handleAPIError(error);
-      Alert.alert('Error', apiError.message);
-      throw error;
+
+  const handleUpdateService = async (id: string, serviceData: any, images: any[]) => {
+    const res = await servicesAPI.updateService(id, serviceData, images);
+    if (res.success) {
+      toast.success('Done!', 'Service updated');
+      await loadServices();
+      setShowAddModal(false);
+      setSelectedService(null);
     }
   };
+
   const handleDeleteService = async () => {
     if (!selectedService) return;
     setLoading(true);
     try {
-      const response = await servicesAPI.deleteService(selectedService._id);
-      if (response.success) {
-        Alert.alert('Success', 'Service deleted successfully');
+      const res = await servicesAPI.deleteService(selectedService._id);
+      if (res.success) {
+        toast.success('Deleted', 'Service removed');
         await loadServices();
         setShowDeleteModal(false);
         setSelectedService(null);
       }
-    } catch (error) {
-      const apiError = handleAPIError(error);
-      Alert.alert('Error', apiError.message);
+    } catch (err) {
+      toast.error('Error', handleAPIError(err).message);
     } finally {
       setLoading(false);
     }
   };
-  const confirmDelete = (service: Service) => {
-    setSelectedService(service);
-    setShowDeleteModal(true);
-  };
-  return <SafeAreaView className="flex-1 bg-gray-50" edges={['top']}>
-      {}
-      <View className="px-5 py-4 flex-row justify-between items-center" style={{
-      backgroundColor: '#eb278d'
-    }}>
-        <Text className="text-2xl font-bold text-white">My Services</Text>
-        <TouchableOpacity className="w-10 h-10 justify-center items-center relative" onPress={() => setShowFilterModal(true)}>
-          <Ionicons name="filter" size={24} color="#FFFFFF" />
-          {hasActiveFilters() && <View className="absolute top-0 right-0 w-3 h-3 bg-yellow-400 rounded-full border-2 border-white" />}
+
+  // ── Filter ───────────────────────────────────────────────────────────────────
+  const displayed = services.filter(s => {
+    const matchesSearch = s.name.toLowerCase().includes(search.toLowerCase());
+    const matchesTab =
+      activeTab === 'all' ? true :
+      activeTab === 'available' ? s.isActive :
+      !s.isActive;
+    return matchesSearch && matchesTab;
+  });
+
+  const TABS: { key: FilterTab; label: string }[] = [
+    { key: 'all', label: 'All' },
+    { key: 'available', label: 'Available' },
+    { key: 'unavailable', label: 'Unavailable' },
+  ];
+
+  return (
+    <View style={[styles.root, { paddingTop: top }]}>
+
+      {/* ── Header ──────────────────────────────────────────────────────────── */}
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn} activeOpacity={0.7}>
+          <Ionicons name="arrow-back" size={20} color={PRIMARY} />
+        </TouchableOpacity>
+
+        <Text style={styles.headerTitle}>My Services</Text>
+
+        <TouchableOpacity
+          onPress={() => { setSelectedService(null); setShowAddModal(true); }}
+          style={styles.addBtn}
+          activeOpacity={0.85}
+        >
+          <Ionicons name="add" size={15} color="#fff" />
+          <Text style={styles.addBtnText}>Add Service</Text>
         </TouchableOpacity>
       </View>
 
-      <ScrollView className="flex-1" showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#eb278d']} />}>
-        {}
-        <TouchableOpacity className="flex-row items-center justify-center py-4 mx-5 mt-5 rounded-xl shadow-lg" style={{
-        backgroundColor: '#eb278d'
-      }} onPress={() => {
-        setSelectedService(null);
-        setShowAddModal(true);
-      }} activeOpacity={0.8}>
-          <Ionicons name="add-circle" size={24} color="#FFFFFF" />
-          <Text className="text-white text-base font-semibold ml-2">Add New Service</Text>
-        </TouchableOpacity>
+      {/* ── Search ──────────────────────────────────────────────────────────── */}
+      <View style={styles.searchWrap}>
+        <View style={styles.searchBar}>
+          <Ionicons name="search-outline" size={18} color="#9CA3AF" />
+          <TextInput
+            value={search}
+            onChangeText={setSearch}
+            placeholder="Search services..."
+            placeholderTextColor="#9CA3AF"
+            style={styles.searchInput}
+          />
+          {search.length > 0 && (
+            <TouchableOpacity onPress={() => setSearch('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Ionicons name="close-circle" size={18} color="#9CA3AF" />
+            </TouchableOpacity>
+          )}
+        </View>
+      </View>
 
-        {}
-        {loading && services.length === 0 ? <View className="items-center justify-center py-20">
-            <Text className="text-gray-500">Loading services...</Text>
-          </View> : filteredServices.length === 0 ? <View className="items-center justify-center py-20 px-10">
-            <Ionicons name="briefcase-outline" size={80} color="#ccc" />
-            <Text className="text-lg font-semibold text-gray-800 mt-4">
-              {services.length === 0 ? 'No services found' : 'No matching services'}
-            </Text>
-            <Text className="text-sm text-gray-500 text-center mt-2">
-              {services.length === 0 ? 'Start by adding your first service' : 'Try adjusting your filters'}
-            </Text>
-          </View> : <View className="p-5 pt-4 flex-row flex-wrap gap-3">
-            {filteredServices.map(service => <View key={service._id} className="w-[48%]">
-                <ServiceCard service={service} onEdit={() => handleEditService(service)} onDelete={() => confirmDelete(service)} />
-              </View>)}
-          </View>}
-      </ScrollView>
+      {/* ── Filter tabs ─────────────────────────────────────────────────────── */}
+      <View style={styles.tabRow}>
+        {TABS.map(tab => {
+          const active = activeTab === tab.key;
+          return (
+            <TouchableOpacity
+              key={tab.key}
+              onPress={() => setActiveTab(tab.key)}
+              style={[styles.tab, active && styles.tabActive]}
+              activeOpacity={0.75}
+            >
+              <Text style={[styles.tabText, active && styles.tabTextActive]}>{tab.label}</Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
 
-      {}
-      <AddServiceModal visible={showAddModal} service={selectedService} onClose={() => {
-      setShowAddModal(false);
-      setSelectedService(null);
-    }} onSave={(serviceData, images) => {
-      if (selectedService) {
-        handleUpdateService(selectedService._id, serviceData, images);
-      } else {
-        handleAddService(serviceData, images);
-      }
-    }} />
+      {/* ── List ────────────────────────────────────────────────────────────── */}
+      {loading && services.length === 0 ? (
+        <View style={styles.centered}>
+          <ActivityIndicator size="large" color={PRIMARY} />
+        </View>
+      ) : (
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: bottom + 32, paddingTop: 8 }}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={PRIMARY} colors={[PRIMARY]} />}
+        >
+          {displayed.length === 0 ? (
+            <View style={styles.empty}>
+              <Ionicons name="briefcase-outline" size={48} color={PRIMARY} />
+              <Text style={styles.emptyTitle}>
+                {services.length === 0 ? 'No services yet' : 'No results'}
+              </Text>
+              <Text style={styles.emptyBody}>
+                {services.length === 0
+                  ? 'Tap "Add Service" to create your first service'
+                  : 'Try a different search or filter'}
+              </Text>
+            </View>
+          ) : (
+            displayed.map((service, i) => (
+              <View key={service._id}>
+                <ServiceRow
+                  service={service}
+                  toggling={togglingId === service._id}
+                  onToggle={() => handleToggle(service)}
+                  onPress={() => navigation.navigate('VendorServiceDetail', { serviceId: service._id })}
+                  onEdit={() => { setSelectedService(service); setShowAddModal(true); }}
+                  onDelete={() => { setSelectedService(service); setShowDeleteModal(true); }}
+                />
+                {i < displayed.length - 1 && <View style={styles.divider} />}
+              </View>
+            ))
+          )}
+        </ScrollView>
+      )}
 
-      {}
-      <ConfirmationModal visible={showDeleteModal} title="Delete Service" message={`Are you sure you want to delete "${selectedService?.name}"? This action cannot be undone.`} icon="trash-outline" iconColor="#FF0000" confirmText="Delete" confirmColor="#FF0000" loading={loading} onConfirm={handleDeleteService} onCancel={() => {
-      setShowDeleteModal(false);
-      setSelectedService(null);
-    }} />
+      {/* ── Modals ──────────────────────────────────────────────────────────── */}
+      <AddServiceModal
+        visible={showAddModal}
+        service={selectedService}
+        onClose={() => { setShowAddModal(false); setSelectedService(null); }}
+        onSave={(data, imgs) =>
+          selectedService
+            ? handleUpdateService(selectedService._id, data, imgs)
+            : handleAddService(data, imgs)
+        }
+      />
 
-      {}
-      <FilterModal visible={showFilterModal} filters={filters} categories={categories} onClose={() => setShowFilterModal(false)} onApply={handleApplyFilters} onReset={handleResetFilters} />
-    </SafeAreaView>;
+      <ConfirmationModal
+        visible={showDeleteModal}
+        title="Delete Service"
+        message={`Delete "${selectedService?.name}"? This cannot be undone.`}
+        icon="trash-outline"
+        iconColor="#EF4444"
+        confirmText="Delete"
+        confirmColor="#EF4444"
+        loading={loading}
+        onConfirm={handleDeleteService}
+        onCancel={() => { setShowDeleteModal(false); setSelectedService(null); }}
+      />
+    </View>
+  );
 };
+
 export default VendorServicesScreen;
+
+// ── Styles ────────────────────────────────────────────────────────────────────
+const styles = StyleSheet.create({
+  root: { flex: 1, backgroundColor: BG },
+
+  // Header
+  header: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 16, paddingVertical: 12, backgroundColor: BG,
+  },
+  backBtn: {
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.08, shadowRadius: 4, elevation: 2,
+  },
+  headerTitle: {
+    flex: 1, textAlign: 'center', fontSize: 18, fontWeight: '800', color: TEXT_DARK,
+  },
+  addBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    backgroundColor: PRIMARY, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20,
+    shadowColor: PRIMARY, shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.3, shadowRadius: 6, elevation: 4,
+  },
+  addBtnText: { fontSize: 13, fontWeight: '700', color: '#fff' },
+
+  // Search
+  searchWrap: { paddingHorizontal: 16, paddingBottom: 12 },
+  searchBar: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    backgroundColor: '#fff', borderRadius: 14, paddingHorizontal: 14, paddingVertical: 10,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 4, elevation: 2,
+  },
+  searchInput: { flex: 1, fontSize: 14, color: TEXT_DARK, padding: 0 },
+
+  // Tabs
+  tabRow: { flexDirection: 'row', paddingHorizontal: 16, gap: 8, marginBottom: 12 },
+  tab: {
+    paddingHorizontal: 18, paddingVertical: 8, borderRadius: 20,
+    backgroundColor: '#fff', borderWidth: 1.5, borderColor: '#E5E7EB',
+  },
+  tabActive: { backgroundColor: PRIMARY, borderColor: PRIMARY },
+  tabText: { fontSize: 13, fontWeight: '600', color: '#6B7280' },
+  tabTextActive: { color: '#fff' },
+
+  // Cards
+  card: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: '#fff', borderRadius: 16, padding: 14,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2,
+  },
+  cardThumb: { width: 72, height: 72, borderRadius: 12 },
+  cardThumbPlaceholder: { backgroundColor: '#FEE2F0', alignItems: 'center', justifyContent: 'center' },
+  cardInfo: { flex: 1, marginLeft: 12, marginRight: 8 },
+  cardName: { fontSize: 14, fontWeight: '700', color: TEXT_DARK, marginBottom: 2 },
+  cardPrice: { fontSize: 14, fontWeight: '700', color: TEXT_DARK, marginBottom: 2 },
+  cardMeta: { fontSize: 12, color: '#6B7280', marginBottom: 5 },
+  cardStatusRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  cardStatusDot: { width: 7, height: 7, borderRadius: 4 },
+  cardStatusText: { fontSize: 12, fontWeight: '600' },
+  approvalBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    alignSelf: 'flex-start', borderRadius: 20,
+    paddingHorizontal: 8, paddingVertical: 3, marginTop: 5,
+  },
+  approvalText: { fontSize: 11, fontWeight: '700' },
+  rejectionNote: { fontSize: 11, color: '#EF4444', marginTop: 3, lineHeight: 15 },
+
+  cardActions: { alignItems: 'center', gap: 8, marginLeft: 8 },
+  cardIconRow: { flexDirection: 'row', gap: 6 },
+  cardIconBtn: {
+    width: 30, height: 30, borderRadius: 8,
+    backgroundColor: '#F3F4F6', alignItems: 'center', justifyContent: 'center',
+  },
+  cardDeleteBtn: { backgroundColor: '#FEE2E2' },
+
+  divider: { height: 8 },
+
+  // States
+  centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  empty: { alignItems: 'center', paddingTop: 60, paddingHorizontal: 32 },
+  emptyTitle: { fontSize: 18, fontWeight: '800', color: TEXT_DARK, marginTop: 16, marginBottom: 8 },
+  emptyBody: { fontSize: 13, color: '#6B7280', textAlign: 'center', lineHeight: 20 },
+});

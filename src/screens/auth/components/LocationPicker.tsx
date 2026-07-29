@@ -6,6 +6,9 @@ import * as Location from 'expo-location';
 interface LocationData {
   coordinates: number[];
   address: string;
+  city?: string;
+  state?: string;
+  country?: string;
 }
 interface LocationPickerProps {
   visible: boolean;
@@ -30,6 +33,7 @@ const LocationPicker: React.FC<LocationPickerProps> = ({
     longitude: 3.3792
   });
   const [address, setAddress] = useState('');
+  const [locationMeta, setLocationMeta] = useState({ city: '', state: '', country: '' });
   const [loadingLocation, setLoadingLocation] = useState(false);
   const [loadingAddress, setLoadingAddress] = useState(false);
   useEffect(() => {
@@ -98,6 +102,11 @@ const LocationPicker: React.FC<LocationPickerProps> = ({
         const loc = result[0];
         const formattedAddress = [loc.street, loc.city, loc.region, loc.country].filter(Boolean).join(', ');
         setAddress(formattedAddress || 'Unknown location');
+        setLocationMeta({
+          city: loc.city || loc.subregion || '',
+          state: loc.region || '',
+          country: loc.country || '',
+        });
       }
     } catch (error) {
       console.error('Error reverse geocoding:', error);
@@ -124,7 +133,10 @@ const LocationPicker: React.FC<LocationPickerProps> = ({
     }
     const locationData: LocationData = {
       coordinates: [markerPosition.longitude, markerPosition.latitude],
-      address
+      address,
+      city: locationMeta.city,
+      state: locationMeta.state,
+      country: locationMeta.country,
     };
     onSelectLocation(locationData);
     onClose();

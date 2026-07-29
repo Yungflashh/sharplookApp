@@ -1,21 +1,45 @@
 {
   "expo": {
-    "name": "sharpLook",
-    "slug": "sharpLook",
-    "version": "1.0.0",
-    "scheme": "sharpLook",
+    "name": "LookReal",
+    "slug": "LookReal",
+    "version": "2.3",
+    "scheme": "lookreal",
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "experiments": {
       "tsconfigPaths": true
     },
-    "plugins": [],
+    "plugins": [
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true,
+            "networkInspector": true
+          }
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#D73870",
+          "sounds": []
+        }
+      ],
+      [
+        "expo-tracking-transparency",
+        {
+          "userTrackingPermission": "We use your data to provide personalized beauty and wellness services, show you relevant product recommendations, and improve your experience with LookReal."
+        }
+      ]
+    ],
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/app-icon.jpg",
     "userInterfaceStyle": "light",
     "splash": {
-      "image": "./assets/splash.png",
+      "image": "./assets/app-icon.jpg",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
@@ -24,33 +48,107 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.sharplook.app",
+      "bundleIdentifier": "com.techtrove.sharplook",
+      "buildNumber": "24",
+      "associatedDomains": [
+        "applinks:lookreal.beauty"
+      ],
       "infoPlist": {
         "CFBundleURLTypes": [
           {
-            "CFBundleURLSchemes": ["sharpLook"]
+            "CFBundleURLSchemes": [
+              "lookreal"
+            ]
           }
-        ]
+        ],
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSUserTrackingUsageDescription": "We use your data to provide personalized beauty and wellness services, show you relevant product recommendations, and improve your experience with LookReal.",
+        "NSCameraUsageDescription": "LookReal needs camera access so you can take photos of beauty products to list them in your vendor store. For example, snap a picture of a skincare product you're selling to show it to potential buyers.",
+        "NSPhotoLibraryUsageDescription": "LookReal needs access to your photo library so you can select existing images of your beauty products for your vendor listings. For example, choose a product photo from your gallery to include in your store.",
+        "NSPhotoLibraryAddUsageDescription": "LookReal needs permission to save photos to your library so you can keep copies of product images and receipts. For example, save a photo of your purchase confirmation for your records.",
+        "NSMicrophoneUsageDescription": "LookReal needs microphone access for voice and video calls with vendors and clients, and to record video demonstrations of beauty products.",
+        "NSLocationWhenInUseUsageDescription": "LookReal needs your location to show you nearby beauty vendors and salons, and to calculate accurate shipping costs. For example, we'll display beauty stores within 10 miles of you and estimate delivery times for products."
       }
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
+        "foregroundImage": "./assets/app-icon.jpg",
         "backgroundColor": "#ffffff"
       },
-      "package": "com.sharplook.app",
+      "navigationBarColor": "#ffffff",
+      "navigationBarStyle": "dark-content",
+      "package": "com.inuud.sharplook",
+      "googleServicesFile": "./google-services.json",
+      "versionCode": 58,
       "intentFilters": [
         {
           "action": "VIEW",
           "autoVerify": true,
           "data": [
             {
-              "scheme": "sharpLook"
+              "scheme": "lookreal"
             }
           ],
-          "category": ["BROWSABLE", "DEFAULT"]
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
+        },
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "lookreal.beauty",
+              "pathPrefix": "/share"
+            }
+          ],
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
+        },
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "lookreal.beauty",
+              "pathPrefix": "/vendors"
+            }
+          ],
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
         }
+      ],
+      "permissions": [
+        "CAMERA",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "RECORD_AUDIO",
+        "MODIFY_AUDIO_SETTINGS",
+        "com.google.android.gms.permission.AD_ID"
       ]
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "enabled": true,
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0,
+      "url": "https://u.expo.dev/6a6fc629-797c-4054-b04c-aeccbc956c41"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "6a6fc629-797c-4054-b04c-aeccbc956c41"
+      }
     }
   }
 }

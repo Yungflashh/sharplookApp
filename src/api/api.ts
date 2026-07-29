@@ -1,9 +1,11 @@
 import axios, { AxiosInstance, AxiosError, InternalAxiosRequestConfig } from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-const API_BASE_URL = 'https://sharplook-be.onrender.com/api/v1';
+import { Platform } from 'react-native';
+// const API_BASE_URL = 'https://sharplook-backend-production.onrender.com/api/v1';
+const API_BASE_URL = 'http://192.168.1.86:5500/api/v1';
 const api: AxiosInstance = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 30000,
+  timeout: 60000,
   headers: {
     'Content-Type': 'application/json'
   }
@@ -13,41 +15,42 @@ api.interceptors.request.use(async (config: InternalAxiosRequestConfig) => {
   if (token && config.headers) {
     config.headers.Authorization = `Bearer ${token}`;
   }
-  console.log('🟢 API Request:', {
-    method: config.method?.toUpperCase(),
-    url: config.url,
-    baseURL: config.baseURL,
-    fullURL: `${config.baseURL}${config.url}`,
-    data: config.data,
-    headers: config.headers
-  });
+  
+  
+  
+  
+  
+  
+  
+  
   return config;
 }, (error: AxiosError) => {
   console.error('🔴 Request Interceptor Error:', error);
   return Promise.reject(error);
 });
 api.interceptors.response.use(response => {
-  console.log('✅ API Response:', {
-    status: response.status,
-    statusText: response.statusText,
-    url: response.config.url,
-    data: response.data
-  });
+  
+  
+  
+  
+  
+  
   return response;
 }, async (error: AxiosError) => {
-  console.error('🔴 API Error Interceptor:', {
-    message: error.message,
-    code: error.code,
-    url: error.config?.url,
-    method: error.config?.method,
-    status: error.response?.status,
-    statusText: error.response?.statusText,
-    responseData: error.response?.data,
-    requestData: error.config?.data
-  });
+  const _errData = error.response?.data as any;
+  console.error('🔴 API Error:', error.config?.method?.toUpperCase(), error.config?.url, error.response?.status, _errData?.error?.message || _errData?.message || error.message);
   const originalRequest = error.config as InternalAxiosRequestConfig & {
     _retry?: boolean;
+    _networkRetry?: boolean;
   };
+
+  // Auto-retry once on network errors (handles Render cold starts)
+  if (!error.response && !originalRequest._networkRetry && error.code !== 'ECONNABORTED') {
+    originalRequest._networkRetry = true;
+    console.log('🔄 Network error, retrying request:', originalRequest.url);
+    return api(originalRequest);
+  }
+
   if (error.response?.status === 401 && !originalRequest._retry) {
     originalRequest._retry = true;
     try {
@@ -74,25 +77,60 @@ api.interceptors.response.use(response => {
   return Promise.reject(error);
 });
 export const authAPI = {
-  login: async (email: string, password: string) => {
+ login: async (
+  email: string,
+  password: string,
+  fcmToken?: string,
+  deviceType?: 'ios' | 'android' | 'web',
+  deviceName?: string
+) => {
+  // Try axios first, fall back to fetch on network error (Android SSL compatibility)
+  try {
     const response = await api.post('/auth/login', {
       email,
-      password
+      password,
+      fcmToken,
+      deviceType,
+      deviceName,
     });
     return response.data;
-  },
+  } catch (axiosError: any) {
+    if (axiosError?.code === 'ERR_NETWORK' && Platform.OS === 'android') {
+      console.log('🔄 Axios failed on Android, trying fetch fallback...');
+      const fetchResponse = await fetch(`${API_BASE_URL}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password, fcmToken, deviceType, deviceName }),
+      });
+      const data = await fetchResponse.json();
+      if (!fetchResponse.ok) {
+        return { success: false, message: data?.message || 'Login failed' };
+      }
+      return data;
+    }
+    throw axiosError;
+  }
+},
   register: async (userData: {
-    firstName: string;
-    lastName: string;
-    email: string;
-    phone: string;
-    password: string;
-    isVendor?: boolean;
-    referralId?: string;
-  }) => {
-    const response = await api.post('/auth/register', userData);
-    return response.data;
-  },
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
+  password: string;
+  isVendor?: boolean;
+  referredBy?: string;
+  location?: {  
+    type: 'Point';
+    coordinates: [number, number];
+    address: string;
+    city: string;
+    state: string;
+    country: string;
+  };
+}) => {
+  const response = await api.post('/auth/register', userData);
+  return response.data;
+},
   logout: async () => {
     const response = await api.post('/auth/logout');
     return response.data;
@@ -114,6 +152,10 @@ export const authAPI = {
     const response = await api.post('/auth/verify-email', {
       token
     });
+    return response.data;
+  },
+  resendVerification: async (email: string) => {
+    const response = await api.post('/auth/resend-verification', { email });
     return response.data;
   },
   verifyPhone: async (code: string) => {
@@ -193,6 +235,19 @@ export const userAPI = {
     }
   },
 
+  uploadAvatarOnly: async (imageUri: string) => {
+    const formData = new FormData();
+    const filename = imageUri.split('/').pop() || 'avatar.jpg';
+    const match = /\.(\w+)$/.exec(filename);
+    const type = match ? `image/${match[1]}` : 'image/jpeg';
+    formData.append('image', { uri: imageUri, name: filename, type } as any);
+    const response = await api.post('/users/avatar', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 30000,
+    });
+    return response.data;
+  },
+
   updatePreferences: async (preferences: {
     notificationsEnabled?: boolean;
     emailNotifications?: boolean;
@@ -206,43 +261,320 @@ export const userAPI = {
     const response = await api.delete('/users/account');
     return response.data;
   },
+
+  
+  updateLocation: async (location: {
+    type: 'Point';
+    coordinates: [number, number];
+    address: string;
+    city: string;
+    state: string;
+    country: string;
+  }) => {
+    const response = await api.put('/users/location', { location });
+    return response.data;
+  },
+
+  
+  getNearbyVendors: async (params: {
+    latitude: number;
+    longitude: number;
+    maxDistance?: number;
+    vendorType?: string;
+    category?: string;
+    minRating?: number;
+  }) => {
+    const response = await api.get('/users/nearby-vendors', { params });
+    return response.data;
+  },
+
+  requestEmailChange: async (newEmail: string) => {
+    const response = await api.post('/users/request-email-change', { newEmail });
+    return response.data;
+  },
+
+  cancelEmailChange: async () => {
+    const response = await api.delete('/users/cancel-email-change');
+    return response.data;
+  },
+
+  getEmailChangeRequests: async () => {
+    const response = await api.get('/users/email-change-requests');
+    return response.data;
+  },
+
+  approveEmailChange: async (userId: string) => {
+    const response = await api.put(`/users/${userId}/approve-email-change`);
+    return response.data;
+  },
+
+  rejectEmailChange: async (userId: string, reason: string) => {
+    const response = await api.put(`/users/${userId}/reject-email-change`, { reason });
+    return response.data;
+  },
 };
+
+
+
+
+
+
+
+export const referralAPI = {
+
+    
+  validateReferralCode: (referralCode: string) =>
+    api.post('/referrals/validate', { referralCode }),
+
+
+  
+  applyReferralCode: async (referralCode: string) => {
+    const response = await api.post('/referrals/apply', { referralCode });
+    return response.data;
+  },
+
+  
+  getReferralStats: async () => {
+    const response = await api.get('/referrals/stats');
+    return response.data;
+  },
+
+  
+  getMyReferrals: async (params?: {
+    status?: string;
+    page?: number;
+    limit?: number;
+  }) => {
+    const response = await api.get('/referrals/my-referrals', { params });
+    return response.data;
+  },
+
+  
+  getReferralById: async (referralId: string) => {
+    const response = await api.get(`/referrals/${referralId}`);
+    return response.data;
+  },
+
+  
+  getLeaderboard: async (limit: number = 10) => {
+    const response = await api.get('/referrals/leaderboard', {
+      params: { limit }
+    });
+    return response.data;
+  },
+};
+
+
+
+
+
 export const vendorAPI = {
   setupProfile: async (setupData: {
     businessName: string;
     businessDescription: string;
-    serviceCategories: string[];
+    categories: string[];
+    primaryCategory?: string;
     vendorType: 'home_service' | 'in_shop' | 'both';
+    serviceRadius?: number;
     location: {
-      coordinates: number[];
+      type: 'Point';
+      coordinates: [number, number];
       address: string;
+      city: string;
+      state: string;
+      country: string;
     };
   }) => {
-    const response = await api.post('/vendors/setup', setupData);
+    const response = await api.put('/vendors/profile', setupData);
     return response.data;
   },
-  getProfile: async () => {
+ 
+  
+  getMyProfile: async () => {
     const response = await api.get('/vendors/profile');
     return response.data;
   },
-  updateProfile: async (vendorData: any) => {
-    const response = await api.put('/vendors/profile', vendorData);
+
+  
+  updateMyProfile: async (profileData: {
+    businessName?: string;
+    businessDescription?: string;
+    vendorType?: 'home_service' | 'in_shop' | 'both';
+    categories?: string[];
+    primaryCategory?: string;
+    location?: {
+      type: 'Point';
+      coordinates: [number, number];
+      address: string;
+      city: string;
+      state: string;
+      country: string;
+    };
+    serviceRadius?: number;
+    availabilitySchedule?: {
+      monday?: { isAvailable: boolean; from?: string; to?: string };
+      tuesday?: { isAvailable: boolean; from?: string; to?: string };
+      wednesday?: { isAvailable: boolean; from?: string; to?: string };
+      thursday?: { isAvailable: boolean; from?: string; to?: string };
+      friday?: { isAvailable: boolean; from?: string; to?: string };
+      saturday?: { isAvailable: boolean; from?: string; to?: string };
+      sunday?: { isAvailable: boolean; from?: string; to?: string };
+    };
+    documents?: {
+      idCard?: string;
+      businessLicense?: string;
+      certification?: string[];
+    };
+  }) => {
+    const response = await api.put('/vendors/profile', profileData);
     return response.data;
   },
-  updateAvailability: async (schedule: any) => {
-    const response = await api.put('/vendors/availability', schedule);
+
+  
+  uploadDocument: async (formData: FormData) => {
+    try {
+      const response = await api.post('/vendors/documents', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+        
+        timeout: 30000,
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Error uploading document:', error);
+      throw error;
+    }
+  },
+
+  
+  deleteDocument: async (documentType: 'idCard' | 'businessLicense' | 'certification', certificationIndex?: number) => {
+    try {
+      const response = await api.delete('/vendors/documents', {
+        data: {
+          documentType,
+          certificationIndex, 
+        },
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Error deleting document:', error);
+      throw error;
+    }
+  },
+
+
+
+  
+  updateMyAvailability: async (schedule: {
+    monday?: { isAvailable: boolean; from?: string; to?: string };
+    tuesday?: { isAvailable: boolean; from?: string; to?: string };
+    wednesday?: { isAvailable: boolean; from?: string; to?: string };
+    thursday?: { isAvailable: boolean; from?: string; to?: string };
+    friday?: { isAvailable: boolean; from?: string; to?: string };
+    saturday?: { isAvailable: boolean; from?: string; to?: string };
+    sunday?: { isAvailable: boolean; from?: string; to?: string };
+  }) => {
+    const response = await api.put('/vendors/availability', { schedule });
     return response.data;
   },
-  uploadDocument: async (documentData: FormData) => {
-    const response = await api.post('/vendors/documents', documentData, {
-      headers: {
-        'Content-Type': 'multipart/form-data'
-      }
+
+  
+  updateMyLocation: async (
+    location: {
+      type: 'Point';
+      coordinates: [number, number];
+      address: string;
+      city: string;
+      state: string;
+      country: string;
+    },
+    serviceRadius?: number
+  ) => {
+    const response = await api.put('/vendors/location', {
+      location,
+      serviceRadius,
     });
     return response.data;
   },
+
+  
+  uploadMyDocument: async (
+    documentType: 'idCard' | 'businessLicense' | 'certification',
+    documentUrl: string
+  ) => {
+    const response = await api.post('/vendors/documents', {
+      documentType,
+      documentUrl,
+    });
+    return response.data;
+  },
+
+  
+  checkMyProfileCompletion: async () => {
+    const response = await api.get('/vendors/profile/completion');
+    return response.data;
+  },
+
+  uploadCoverImage: async (uri: string) => {
+    const formData = new FormData();
+    const filename = uri.split('/').pop() || 'cover.jpg';
+    const match = /\.(\w+)$/.exec(filename);
+    const type = match ? `image/${match[1]}` : 'image/jpeg';
+    formData.append('image', { uri, name: filename, type } as any);
+    const response = await api.post('/vendors/cover-image', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 30000,
+    });
+    return response.data;
+  },
+
+  
+  uploadDocumentFile: async (
+    documentType: 'idCard' | 'businessLicense' | 'certification',
+    file: any
+  ) => {
+    try {
+      const token = await AsyncStorage.getItem('accessToken');
+      const filename = file.uri.split('/').pop() || 'document';
+      const match = /\.(\w+)$/.exec(filename);
+      const type = match ? `image/${match[1]}` : 'image/jpeg';
+
+      const formData = new FormData();
+      formData.append('documentType', documentType);
+      formData.append('file', {
+        uri: file.uri,
+        name: filename,
+        type: type,
+      } as any);
+
+      const response = await fetch(`${API_BASE_URL}/vendors/documents/upload`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+        body: formData,
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.message || 'Failed to upload document');
+      }
+
+      return result;
+    } catch (error) {
+      console.error('❌ Document upload error:', error);
+      throw error;
+    }
+  },
+
   getBookings: async () => {
     const response = await api.get('/vendors/bookings');
+    return response.data;
+  },
+  getStats: async () => {
+    const response = await api.get('/bookings/stats');
     return response.data;
   },
   getTopVendors: async () => {
@@ -321,13 +653,26 @@ export const disputeAPI = {
     bookingId: string;
     reason: string;
     description: string;
-    category: string;
-    evidence?: {
-      type: string;
-      content: string;
-    }[];
+    evidenceType?: string;
+    photos?: Array<{ uri: string; mimeType?: string; fileName?: string }>;
   }) => {
-    const response = await api.post('/disputes', disputeData);
+    const formData = new FormData();
+    formData.append('bookingId', disputeData.bookingId);
+    formData.append('reason', disputeData.reason);
+    formData.append('description', disputeData.description);
+    if (disputeData.evidenceType) {
+      formData.append('evidenceType', disputeData.evidenceType);
+    }
+    (disputeData.photos || []).forEach((photo, i) => {
+      formData.append('photos', {
+        uri: photo.uri,
+        type: photo.mimeType || 'image/jpeg',
+        name: photo.fileName || `photo_${i}.jpg`,
+      } as any);
+    });
+    const response = await api.post('/disputes', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
     return response.data;
   },
   getMyDisputes: async (params?: {
@@ -409,7 +754,8 @@ export const reviewAPI = {
     bookingId: string;
     rating: number;
     title?: string;
-    comment: string;
+    comment?: string;
+    recommend?: boolean;
     detailedRatings?: {
       quality?: number;
       punctuality?: number;
@@ -506,6 +852,19 @@ export const reviewAPI = {
   }
 };
 export const bookingAPI = {
+
+    previewPrice: async (data: {
+    serviceId: string;
+    serviceType: 'home' | 'shop';
+    location?: {
+      coordinates: [number, number]; // [longitude, latitude]
+    };
+  }) => {
+    const response = await api.post('/bookings/price-preview', data);
+    return response.data;
+  },
+
+  
   createBooking: async (bookingData: {
     service: string;
     scheduledDate: string;
@@ -560,6 +919,10 @@ export const bookingAPI = {
     });
     return response.data;
   },
+  rescheduleBooking: async (bookingId: string, newDate: string, newTime?: string) => {
+    const response = await api.post(`/bookings/${bookingId}/reschedule`, { newDate, newTime });
+    return response.data;
+  },
   updateBooking: async (bookingId: string, updates: {
     clientNotes?: string;
     vendorNotes?: string;
@@ -567,6 +930,16 @@ export const bookingAPI = {
     const response = await api.put(`/bookings/${bookingId}`, updates);
     return response.data;
   },
+
+  
+
+  
+  verifyPaystackPayment: async (reference: string) => {
+    const response = await api.get(`/bookings/payment/verify/${reference}`);
+    return response.data;
+  },
+
+
   getBookingStats: async (role: 'client' | 'vendor' = 'client') => {
     const response = await api.get('/bookings/stats', {
       params: {
@@ -575,26 +948,78 @@ export const bookingAPI = {
     });
     return response.data;
   },
-  createOffer: async (offerData: {
+   createOffer: async (offerData: {
+    title: string;
+    description: string;
     category: string;
-    serviceDescription: string;
-    preferredDate: string;
-    preferredTime?: string;
-    budgetRange: {
-      min: number;
-      max: number;
-    };
-    location: {
+    service?: string;
+    serviceType: 'home' | 'shop' | 'both';
+    proposedPrice: number;
+    location?: {
       address: string;
       city: string;
       state: string;
       coordinates: [number, number];
     };
-    images?: string[];
-    notes?: string;
-  }) => {
-    const response = await api.post('/bookings/offers', offerData);
-    return response.data;
+    preferredDate?: string;
+    preferredTime?: string;
+    flexibility?: 'flexible' | 'specific' | 'urgent';
+    expiresInDays?: number;
+  }, images?: any[]) => {
+    try {
+      const token = await AsyncStorage.getItem('accessToken');
+
+      if (!images || images.length === 0) {
+        const response = await api.post('/offers', offerData);
+        return response.data;
+      }
+
+      const formData = new FormData();
+      formData.append('title', offerData.title);
+      formData.append('description', offerData.description);
+      formData.append('category', offerData.category);
+      if (offerData.service) formData.append('service', offerData.service);
+      formData.append('serviceType', offerData.serviceType);
+      formData.append('proposedPrice', String(offerData.proposedPrice));
+      if (offerData.location) formData.append('location', JSON.stringify(offerData.location));
+      if (offerData.preferredDate) formData.append('preferredDate', offerData.preferredDate);
+      if (offerData.preferredTime) formData.append('preferredTime', offerData.preferredTime);
+      if (offerData.flexibility) formData.append('flexibility', offerData.flexibility);
+      if (offerData.expiresInDays) formData.append('expiresInDays', String(offerData.expiresInDays));
+
+      
+      for (let i = 0; i < images.length; i++) {
+        const image = images[i];
+        console.log(`📸 Adding image ${i + 1}:`, {
+          uri: image.uri,
+          type: image.type,
+          name: image.name
+        });
+        
+        if (image.uri) {
+          formData.append('images', {
+            uri: image.uri,
+            type: image.type || 'image/jpeg',
+            name: image.name || `offer_image_${i}.jpg`
+          } as any);
+        }
+      }
+
+      console.log('🚀 Sending fetch request to:', `${API_BASE_URL}/offers`);
+
+      
+      
+      const response = await fetch(`${API_BASE_URL}/offers`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` },
+        body: formData
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.message || 'Failed to create offer');
+      return result;
+    } catch (error) {
+      throw error;
+    }
   },
   getAvailableOffers: async (params?: {
     category?: string;
@@ -656,6 +1081,78 @@ export const bookingAPI = {
     return response.data;
   }
 };
+
+
+export const sharpPayAPI = {
+  
+  getBalance: async () => {
+    const response = await api.get('/sharppay/balance');
+    return response.data;
+  },
+
+  
+  initializeDeposit: async (amount: number, metadata?: any) => {
+    const response = await api.post('/sharppay/deposit/initialize', {
+      amount,
+      metadata,
+    });
+    return response.data;
+  },
+
+  
+  verifyDeposit: async (reference: string) => {
+    const response = await api.get(`/sharppay/deposit/verify/${reference}`);
+    return response.data;
+  },
+
+  
+  getTransactions: async (params?: {
+    type?: string;
+    status?: string;
+    startDate?: string;
+    endDate?: string;
+    page?: number;
+    limit?: number;
+  }) => {
+    const response = await api.get('/sharppay/transactions', { params });
+    return response.data;
+  },
+
+  
+  getStats: async () => {
+    const response = await api.get('/sharppay/stats');
+    return response.data;
+  },
+
+  
+  requestWithdrawal: async (withdrawalData: {
+    amount: number;
+    bankName: string;
+    accountNumber: string;
+    accountName: string;
+    pin: string;
+  }) => {
+    const response = await api.post('/sharppay/withdraw', withdrawalData);
+    return response.data;
+  },
+
+  
+  getMyWithdrawals: async (params?: {
+    page?: number;
+    limit?: number;
+  }) => {
+    const response = await api.get('/sharppay/withdrawals/my-withdrawals', { params });
+    return response.data;
+  },
+
+  
+  getWithdrawalById: async (withdrawalId: string) => {
+    const response = await api.get(`/sharppay/withdrawals/${withdrawalId}`);
+    return response.data;
+  },
+};
+
+
 export const paymentAPI = {
   initializePayment: async (paymentData: {
     bookingId: string;
@@ -680,13 +1177,30 @@ export const paymentAPI = {
       params
     });
     return response.data;
-  }
+  },
+
+  
+  
+  payOrderFromWallet: async (orderId: string) => {
+    const response = await api.post(`/payments/orders/${orderId}/wallet/pay`);
+    return response.data;
+  },
+
+  
+  canPayOrderFromWallet: async (orderId: string) => {
+    const response = await api.get(`/payments/orders/${orderId}/wallet/check`);
+    return response.data;
+  },
 };
+
 export const walletAPI = {
+  
   getBalance: async () => {
     const response = await api.get('/wallet/balance');
     return response.data;
   },
+
+  
   getTransactions: async (params?: {
     type?: string;
     status?: string;
@@ -695,70 +1209,145 @@ export const walletAPI = {
     page?: number;
     limit?: number;
   }) => {
-    const response = await api.get('/wallet/transactions', {
-      params
-    });
+    const response = await api.get('/wallet/transactions', { params });
     return response.data;
   },
+
+  
   getStats: async () => {
     const response = await api.get('/wallet/stats');
     return response.data;
   },
-  requestWithdrawal: async (withdrawalData: {
-    amount: number;
-    bankCode: string;
-    accountNumber: string;
-    accountName: string;
-    narration?: string;
-  }) => {
-    const response = await api.post('/wallet/withdraw', withdrawalData);
-    return response.data;
-  },
-  getMyWithdrawals: async (params?: {
-    page?: number;
-    limit?: number;
-  }) => {
-    const response = await api.get('/wallet/withdrawals/my-withdrawals', {
-      params
+
+  
+  
+  initializeWalletFunding: async (amount: number, metadata?: any) => {
+    const response = await api.post('/payments/wallet/fund/initialize', {
+      amount,
+      metadata,
     });
     return response.data;
   },
-  getWithdrawalById: async (withdrawalId: string) => {
-    const response = await api.get(`/wallet/withdrawals/${withdrawalId}`);
+
+  
+  verifyWalletFunding: async (reference: string) => {
+    const response = await api.get(`/payments/wallet/fund/verify/${reference}`);
     return response.data;
   },
+
+  
+  getFundingHistory: async (page: number = 1, limit: number = 20) => {
+    const response = await api.get('/payments/wallet/fund/history', {
+      params: { page, limit }
+    });
+    return response.data;
+  },
+
+  
+  
+  verifyBankAccount: async (data: { accountNumber: string; bankCode: string }) => {
+    const response = await api.post('/payments/wallet/verify-account', data);
+    return response.data;
+  },
+
+  
+  getBankList: async (country: string = 'nigeria') => {
+    const response = await api.get('/payments/wallet/banks', {
+      params: { country },
+    });
+    return response.data;
+  },
+
+  
+  
+  requestWithdrawal: async (withdrawalData: {
+    amount: number;
+    bankName: string;
+    bankCode: string; 
+    accountNumber: string;
+    accountName: string;
+    pin: string;
+  }) => {
+    const response = await api.post('/payments/wallet/withdraw', withdrawalData);
+    return response.data;
+  },
+
+  
+  getMyWithdrawals: async (page: number = 1, limit: number = 10) => {
+    const response = await api.get('/payment/withdrawals/my-withdrawals', {
+      params: { page, limit }
+    });
+    return response.data;
+  },
+
+  
+  getWithdrawalById: async (withdrawalId: string) => {
+    const response = await api.get(`/payment/withdrawals/${withdrawalId}`);
+    return response.data;
+  },
+
+  
+  
   setWithdrawalPin: async (pin: string, confirmPin: string) => {
-  const response = await api.post('/users/withdrawal-pin', {
-    pin,
-    confirmPin,
-  });
-  return response.data;
-},
+    const response = await api.post('/users/withdrawal-pin', {
+      pin,
+      confirmPin,
+    });
+    return response.data;
+  },
 
-verifyWithdrawalPin: async (pin: string) => {
-  const response = await api.post('/users/verify-withdrawal-pin', {
-    pin,
-  });
-  return response.data;
-},
+  
+  verifyWithdrawalPin: async (pin: string) => {
+    const response = await api.post('/users/verify-withdrawal-pin', {
+      pin,
+    });
+    return response.data;
+  },
 
-changeWithdrawalPin: async (
-  currentPin: string,
-  newPin: string,
-  confirmNewPin: string
-) => {
-  const response = await api.put('/users/withdrawal-pin', {
-    currentPin,
-    newPin,
-    confirmNewPin,
-  });
-  return response.data;
-},
+  
+  changeWithdrawalPin: async (
+    currentPin: string,
+    newPin: string,
+    confirmNewPin: string
+  ) => {
+    const response = await api.put('/users/withdrawal-pin', {
+      currentPin,
+      newPin,
+      confirmNewPin,
+    });
+    return response.data;
+  },
+};
+
+
+
+
+export const analyticsAPI = {
+  
+  getVendorAnalytics: async (params?: {
+    startDate?: string;
+    endDate?: string;
+  }) => {
+    const response = await api.get('/vendorAnalytics/vendor', { params });
+    return response.data;
+  },
+
+  
+  getVendorQuickStats: async () => {
+    const response = await api.get('/vendorAnalytics/vendor/quick-stats');
+    return response.data;
+  },
+
+  getDashboard: async (period: 'today' | 'week' | 'month' = 'week') => {
+    const response = await api.get('/vendorAnalytics/vendor/dashboard', { params: { period } });
+    return response.data;
+  },
 };
 
 
 
 export const messageAPI = {
+  
   
   getConversations: async (params?: {
     page?: number;
@@ -770,13 +1359,13 @@ export const messageAPI = {
 
   
   getOrCreateConversation: async (otherUserId: string) => {
-    const response = await api.get(`/messages/conversations/${otherUserId}`);
+    const response = await api.get(`/messages/conversations/with/${otherUserId}`);
     return response.data;
   },
 
   
   getConversationById: async (conversationId: string) => {
-    const response = await api.get(`/messages/conversation/${conversationId}`);
+    const response = await api.get(`/messages/conversations/${conversationId}`);
     return response.data;
   },
 
@@ -802,7 +1391,7 @@ export const messageAPI = {
     page?: number;
     limit?: number;
   }) => {
-    const response = await api.get(`/messages/${conversationId}`, { params });
+    const response = await api.get(`/messages/conversations/${conversationId}/messages`, { params });
     return response.data;
   },
 
@@ -814,7 +1403,7 @@ export const messageAPI = {
 
   
   markConversationAsRead: async (conversationId: string) => {
-    const response = await api.put(`/messages/conversation/${conversationId}/read`);
+    const response = await api.put(`/messages/conversations/${conversationId}/read`);
     return response.data;
   },
 
@@ -832,7 +1421,7 @@ export const messageAPI = {
 
   
   deleteConversation: async (conversationId: string) => {
-    const response = await api.delete(`/messages/conversation/${conversationId}`);
+    const response = await api.delete(`/messages/conversations/${conversationId}`);
     return response.data;
   },
 
@@ -857,15 +1446,33 @@ export const messageAPI = {
   uploadAttachment: async (file: any) => {
     try {
       const token = await AsyncStorage.getItem('accessToken');
-      const filename = file.uri.split('/').pop() || 'attachment';
+      const filename = file.name || file.uri.split('/').pop() || 'attachment';
       const match = /\.(\w+)$/.exec(filename);
-      const type = match ? `image/${match[1]}` : 'image/jpeg';
+      const ext = match ? match[1].toLowerCase() : '';
+
+      // Determine correct MIME type based on file extension or provided type
+      let mimeType = file.type || 'application/octet-stream';
+      if (ext && (!file.type || file.type === 'image' || file.type === 'audio' || file.type === 'video')) {
+        const mimeMap: Record<string, string> = {
+          jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif', webp: 'image/webp',
+          mp4: 'video/mp4', mov: 'video/quicktime', avi: 'video/x-msvideo',
+          m4a: 'audio/x-m4a', mp3: 'audio/mpeg', wav: 'audio/wav', aac: 'audio/aac', ogg: 'audio/ogg',
+          pdf: 'application/pdf', doc: 'application/msword',
+        };
+        mimeType = mimeMap[ext] || `application/octet-stream`;
+      }
+
+      // On iOS, ensure the URI is correct for FormData
+      let uri = file.uri;
+      if (Platform.OS === 'ios' && !uri.startsWith('file://') && !uri.startsWith('http')) {
+        uri = `file://${uri}`;
+      }
 
       const formData = new FormData();
       formData.append('file', {
-        uri: file.uri,
+        uri,
         name: filename,
-        type: type,
+        type: mimeType,
       } as any);
 
       const response = await fetch(`${API_BASE_URL}/messages/upload`, {
@@ -1093,6 +1700,10 @@ export const servicesAPI = {
   },
   getServiceById: async (serviceId: string) => {
     const response = await api.get(`/services/${serviceId}`);
+    return response.data;
+  },
+  trackView: async (serviceId: string) => {
+    const response = await api.post(`/services/${serviceId}/view`);
     return response.data;
   },
   deleteService: async (serviceId: string) => {
@@ -1426,7 +2037,45 @@ export const productAPI = {
 };
 
 
+export const subscriptionAPI = {
+  getMySubscription: async () => {
+    const response = await api.get('/subscriptions/my-subscription');
+    return response.data;
+  },
+
+  createSubscription: async (plan: 'in_shop' | 'home_service' | 'both') => {
+    const response = await api.post('/subscriptions', { plan });
+    return response.data;
+  },
+
+  cancelSubscription: async (subscriptionId: string) => {
+    const response = await api.put(`/subscriptions/${subscriptionId}/cancel`);
+    return response.data;
+  },
+
+  changePlan: async (subscriptionId: string, plan: 'in_shop' | 'home_service' | 'both') => {
+    const response = await api.put(`/subscriptions/${subscriptionId}/change-plan`, { plan });
+    return response.data;
+  },
+};
+
 export const orderAPI = {
+
+   
+  calculateDeliveryFee: async (
+    productId: string,
+    latitude: number,
+    longitude: number
+  ) => {
+    const response = await api.get('/orders/delivery-fee-preview', {
+      params: {
+        productId,
+        latitude,
+        longitude,
+      },
+    });
+    return response.data;
+  },
   
   createOrder: async (orderData: {
     items: Array<{
@@ -1453,6 +2102,25 @@ export const orderAPI = {
     const response = await api.post('/orders', orderData);
     return response.data;
   },
+
+  
+  initializeOrderPayment: async (paymentData: {
+    orderId: string;
+    metadata?: any;
+  }) => {
+    const response = await api.post(
+      `/payments/orders/${paymentData.orderId}/initialize`,
+      { metadata: paymentData.metadata }
+    );
+    return response.data;
+  },
+
+  
+  verifyOrderPayment: async (orderId: string, reference: string) => {
+    const response = await api.get(`/payments/orders/${orderId}/verify/${reference}`);
+    return response.data;
+  },
+
 
   
   getOrderById: async (orderId: string) => {
@@ -1534,6 +2202,54 @@ export const orderAPI = {
     endDate?: string;
   }) => {
     const response = await api.get('/orders', { params });
+    return response.data;
+  },
+
+  
+  
+  createDispute: async (disputeData: {
+    order: string;
+    product?: string;
+    reason: string;
+    description: string;
+  }) => {
+    const response = await api.post('/disputesProduct', disputeData);
+    return response.data;
+  },
+
+  
+  getMyDisputes: async (params?: {
+    page?: number;
+    limit?: number;
+    status?: string;
+    priority?: string;
+    reason?: string;
+    role?: 'customer' | 'seller';
+  }) => {
+    const response = await api.get('/disputesProduct/my-disputes', { params });
+    return response.data;
+  },
+
+  
+  getDisputeById: async (disputeId: string) => {
+    const response = await api.get(`/disputesProduct/${disputeId}`);
+    return response.data;
+  },
+
+  
+  addDisputeMessage: async (disputeId: string, message: string, attachments?: string[]) => {
+    const response = await api.post(`/disputesProduct/${disputeId}/messages`, {
+      message,
+      attachments,
+    });
+    return response.data;
+  },
+
+  
+  escalateDispute: async (disputeId: string, reason: string) => {
+    const response = await api.post(`/disputesProduct/${disputeId}/escalate`, {
+      reason,
+    });
     return response.data;
   },
 };
@@ -1675,8 +2391,9 @@ export const offerAPI = {
     description: string;
     category: string;
     service?: string;
+    serviceType: 'home' | 'shop' | 'both';
     proposedPrice: number;
-    location: {
+    location?: {
       address: string;
       city: string;
       state: string;
@@ -1698,8 +2415,9 @@ export const offerAPI = {
       formData.append('description', offerData.description);
       formData.append('category', offerData.category);
       if (offerData.service) formData.append('service', offerData.service);
+      formData.append('serviceType', offerData.serviceType);
       formData.append('proposedPrice', String(offerData.proposedPrice));
-      formData.append('location', JSON.stringify(offerData.location));
+      if (offerData.location) formData.append('location', JSON.stringify(offerData.location));
       if (offerData.preferredDate) formData.append('preferredDate', offerData.preferredDate);
       if (offerData.preferredTime) formData.append('preferredTime', offerData.preferredTime);
       if (offerData.flexibility) formData.append('flexibility', offerData.flexibility);
@@ -1718,7 +2436,6 @@ export const offerAPI = {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
-          'Content-Type': 'multipart/form-data'
         },
         body: formData
       });
@@ -1772,10 +2489,12 @@ export const offerAPI = {
     });
     return response.data;
   },
-  acceptResponse: async (offerId: string, responseId: string) => {
-    const response = await api.post(`/offers/${offerId}/responses/${responseId}/accept`);
-    return response.data;
-  },
+  acceptResponse: async (offerId: string, responseId: string, paymentMethod: 'wallet' | 'card') => {
+  const response = await api.post(`/offers/${offerId}/responses/${responseId}/accept`, {
+    paymentMethod  // ✅ Add this line
+  });
+  return response.data;
+},
   closeOffer: async (offerId: string) => {
     const response = await api.post(`/offers/${offerId}/close`);
     return response.data;
@@ -1810,11 +2529,11 @@ export const offerAPI = {
 };
 export const categoriesAPI = {
   getActiveCategories: async () => {
-    const response = await api.get('/categories');
+    const response = await api.get('/categories', { params: { limit: 100 } });
     return response.data;
   },
   getAll: async () => {
-    const response = await api.get('/categories');
+    const response = await api.get('/categories', { params: { limit: 100 } });
     return response.data;
   },
   getById: async (categoryId: string) => {
@@ -1923,55 +2642,59 @@ export const handleAPIError = (error: any): APIError => {
       status,
       data
     } = axiosError.response;
-    if (status === 400 && data?.errors) {
+    // Validation field errors live at data.errors or data.error.errors (express-validator array)
+    // Never use data.error.error — that's the raw Error instance and may contain stack traces
+    const rawErrors = data?.errors ?? data?.error?.errors;
+    if (Array.isArray(rawErrors) && rawErrors.length > 0) {
       const fieldErrors: Record<string, string> = {};
-      if (Array.isArray(data.errors)) {
-        data.errors.forEach((err: any) => {
-          if (err.field && err.message) {
-            fieldErrors[err.field] = err.message;
-          }
-        });
-      } else if (typeof data.errors === 'object') {
-        Object.keys(data.errors).forEach(field => {
-          fieldErrors[field] = data.errors[field];
-        });
-      }
+      rawErrors.forEach((err: any) => {
+        if (err.message) {
+          const key = err.field || err.param || 'general';
+          if (!fieldErrors[key]) fieldErrors[key] = err.message;
+        }
+      });
+      const fieldMessages = Object.values(fieldErrors);
+      const humanMessage = fieldMessages.length > 0
+        ? fieldMessages.join('. ')
+        : (data?.error?.message || data?.message || 'Please check your input and try again.');
       return {
-        message: data.message || 'Please check your input and try again.',
+        message: humanMessage,
         status,
         data,
         fieldErrors: Object.keys(fieldErrors).length > 0 ? fieldErrors : undefined,
         isValidationError: true
       };
     }
-    let message = data?.message || 'An error occurred';
+    // For all other errors use the backend's human-readable message
+    const backendMessage = data?.error?.message || data?.message;
+    let message: string;
     switch (status) {
       case 401:
-        message = data?.message || 'Invalid credentials. Please check your email and password.';
+        message = backendMessage || 'Invalid credentials. Please check your email and password.';
         break;
       case 403:
-        message = data?.message || 'Access denied. You do not have permission to perform this action.';
+        message = backendMessage || 'You don\'t have permission to do that.';
         break;
       case 404:
-        message = data?.message || 'Resource not found.';
+        message = backendMessage || 'That item could not be found.';
         break;
       case 409:
-        message = data?.message || 'This resource already exists.';
+        message = backendMessage || 'This already exists. Please try a different option.';
         break;
       case 422:
-        message = data?.message || 'Invalid data provided.';
+        message = backendMessage || 'Some information provided is invalid.';
         break;
       case 429:
-        message = 'Too many requests. Please try again later.';
+        message = 'Too many attempts. Please wait a moment and try again.';
         break;
       case 500:
-        message = 'Server error. Please try again later.';
+        message = 'Something went wrong on our end. Please try again shortly.';
         break;
       case 503:
-        message = 'Service temporarily unavailable. Please try again later.';
+        message = 'Service is temporarily unavailable. Please try again later.';
         break;
       default:
-        message = data?.message || 'An unexpected error occurred.';
+        message = backendMessage || 'Something went wrong. Please try again.';
     }
     return {
       message,
@@ -1984,4 +2707,11 @@ export const handleAPIError = (error: any): APIError => {
     status: 500
   };
 };
+export const appAPI = {
+  checkVersion: async () => {
+    const response = await api.get('/app/version');
+    return response.data;
+  },
+};
+
 export default api;

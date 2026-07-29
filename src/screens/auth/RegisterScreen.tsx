@@ -1,306 +1,384 @@
-import React, { useState } from 'react';
-import { View, TouchableOpacity, Text, Alert, Image, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import React, { useState, useCallback } from 'react';
+import {
+  View,
+  Text,
+  Image,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  Platform,
+  KeyboardAvoidingView,
+  TextInput,
+  Dimensions,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
+import { useNavigation, useRoute } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { AuthStackParamList } from '@/types/navigation.types';
+import { hasRead } from './registerReadState';
 import { authAPI, handleAPIError } from '@/api/api';
-import { Input, PasswordInput, Button, Checkbox, SocialLoginButton, PhoneInput, CountryCodePicker } from '@/components/ui/forms';
-type RegisterScreenNavigationProp = NativeStackNavigationProp<AuthStackParamList, 'Register'>;
+import { CountryCodePicker } from '@/components/ui/forms';
+
+const BG = '#FFF0F5';
+const PINK = '#E91E63';
+const BORDER = '#F8BBD0';
+const { width: SW } = Dimensions.get('window');
+
+type NavProp = NativeStackNavigationProp<AuthStackParamList, 'Register'>;
+
 const RegisterScreen = () => {
-  const navigation = useNavigation<RegisterScreenNavigationProp>();
-  const [firstName, setFirstName] = useState('');
-  const [lastName, setLastName] = useState('');
+  const navigation = useNavigation<NavProp>();
+  const route = useRoute();
+  const params = route.params as { isVendor?: boolean } | undefined;
+  const isVendor = params?.isVendor === true;
+
+  const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [referralId, setReferralId] = useState('');
-  const [agreeToTerms, setAgreeToTerms] = useState(false);
-  const [registerAsVendor, setRegisterAsVendor] = useState(false);
-  const [loading, setLoading] = useState(false);
   const [countryCode, setCountryCode] = useState('+234');
   const [showCountryPicker, setShowCountryPicker] = useState(false);
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [agreed, setAgreed] = useState(false);
+  const [hasReadTerms, setHasReadTerms] = useState(isVendor || hasRead('terms'));
+  const [hasReadPrivacy, setHasReadPrivacy] = useState(isVendor || hasRead('privacy'));
+  const [loading, setLoading] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string>>({});
   const [generalError, setGeneralError] = useState('');
-  const [errors, setErrors] = useState({
-    firstName: '',
-    lastName: '',
-    email: '',
-    phone: '',
-    password: '',
-    confirmPassword: '',
-    terms: ''
-  });
-  const validateForm = () => {
-    let valid = true;
-    const newErrors = {
-      firstName: '',
-      lastName: '',
-      email: '',
-      phone: '',
-      password: '',
-      confirmPassword: '',
-      terms: ''
-    };
-    if (!firstName.trim()) {
-      newErrors.firstName = 'First name is required';
-      valid = false;
-    }
-    if (!lastName.trim()) {
-      newErrors.lastName = 'Last name is required';
-      valid = false;
-    }
-    if (!email) {
-      newErrors.email = 'Email is required';
-      valid = false;
-    } else if (!/\S+@\S+\.\S+/.test(email)) {
-      newErrors.email = 'Email is invalid';
-      valid = false;
-    }
-    if (!phone.trim()) {
-      newErrors.phone = 'Phone number is required';
-      valid = false;
-    } else if (!/^[0-9]{10,15}$/.test(phone.replace(/[\s\-\(\)]/g, ''))) {
-      newErrors.phone = 'Phone number is invalid';
-      valid = false;
-    }
-    if (!password) {
-      newErrors.password = 'Password is required';
-      valid = false;
-    } else if (password.length < 6) {
-      newErrors.password = 'Password must be at least 6 characters';
-      valid = false;
-    }
-    if (!confirmPassword) {
-      newErrors.confirmPassword = 'Please confirm your password';
-      valid = false;
-    } else if (password !== confirmPassword) {
-      newErrors.confirmPassword = 'Passwords do not match';
-      valid = false;
-    }
-    if (!agreeToTerms) {
-      newErrors.terms = 'You must agree to the terms';
-      valid = false;
-    }
-    setErrors(newErrors);
-    return valid;
-  };
-  const handleVendorCheckboxPress = (checked: boolean) => {
-    if (checked) {
-      Alert.alert('Register as Vendor', 'Are you sure you want to register as a vendor? You will need to complete additional profile setup and provide business information.', [{
-        text: 'Cancel',
-        style: 'cancel',
-        onPress: () => {}
-      }, {
-        text: 'Yes, Continue',
-        onPress: () => {
-          setRegisterAsVendor(true);
-        }
-      }]);
-    } else {
-      setRegisterAsVendor(false);
-    }
-  };
-  const handleRegister = async () => {
+
+  useFocusEffect(
+    useCallback(() => {
+      if (hasRead('terms')) setHasReadTerms(true);
+      if (hasRead('privacy')) setHasReadPrivacy(true);
+    }, [])
+  );
+
+  const canToggleAgreed = hasReadTerms && hasReadPrivacy;
+
+  const passwordRules = [
+    { id: 'length', label: '8+ characters', test: (p: string) => p.length >= 8 },
+    { id: 'upper', label: '1 uppercase letter', test: (p: string) => /[A-Z]/.test(p) },
+    { id: 'number', label: '1 number', test: (p: string) => /[0-9]/.test(p) },
+  ];
+
+  const clearErr = (field: string) => {
+    setErrors(prev => ({ ...prev, [field]: '' }));
     setGeneralError('');
-    if (!validateForm()) {
-      return;
+  };
+
+  const validate = () => {
+    const e: Record<string, string> = {};
+    if (!fullName.trim()) e.fullName = 'Full name is required';
+    if (!email.trim() || !/\S+@\S+\.\S+/.test(email)) e.email = 'Valid email is required';
+    if (!phone.trim()) e.phone = 'Phone number is required';
+    if (!password || password.length < 8) {
+      e.password = 'Password must be at least 8 characters';
+    } else if (!/[A-Z]/.test(password)) {
+      e.password = 'Password must include at least one uppercase letter';
+    } else if (!/[0-9]/.test(password)) {
+      e.password = 'Password must include at least one number';
     }
+    if (!canToggleAgreed) e.agreed = 'Please read Terms & Privacy Policy first';
+    else if (!agreed) e.agreed = 'You must agree to the terms';
+    return e;
+  };
+
+  const handleSubmit = async () => {
+    const e = validate();
+    if (Object.keys(e).length) { setErrors(e); return; }
     setLoading(true);
+    setGeneralError('');
     try {
-      const registerData: any = {
-        firstName: firstName.trim(),
-        lastName: lastName.trim(),
+      const parts = fullName.trim().split(' ');
+      const firstName = parts[0];
+      const lastName = parts.slice(1).join(' ') || parts[0];
+      const response = await authAPI.register({
+        firstName, lastName,
         email: email.trim().toLowerCase(),
         phone: `${countryCode}${phone.trim()}`,
-        password: password,
-        confirmPassword: confirmPassword,
-        isVendor: registerAsVendor
-      };
-      if (referralId.trim()) {
-        registerData.referralId = referralId.trim();
-      }
-      console.log(registerData);
-      const response = await authAPI.register(registerData);
+        password, confirmPassword: password, isVendor,
+      } as any);
       if (response.success) {
-        if (registerAsVendor) {
-          Alert.alert('Success', 'Account created successfully! Please complete your vendor profile.', [{
-            text: 'OK',
-            onPress: () => navigation.navigate('VendorProfileSetup')
-          }]);
-        } else {
-          Alert.alert('Success', 'Account created successfully!', [{
-            text: 'OK',
-            onPress: () => navigation.navigate('Login')
-          }]);
+        navigation.navigate('VerifyOtp', { email: email.trim().toLowerCase(), isVendor, password });
+      } else {
+        setGeneralError(response.message || 'Registration failed. Please try again.');
+      }
+    } catch (err: any) {
+      const apiErr = handleAPIError(err);
+      if (apiErr.fieldErrors) {
+        const mapped: Record<string, string> = {};
+        const fe = apiErr.fieldErrors;
+        if (fe.firstName || fe.lastName) mapped.fullName = fe.firstName || fe.lastName;
+        if (fe.email) mapped.email = fe.email;
+        if (fe.phone) mapped.phone = fe.phone;
+        if (fe.password) mapped.password = fe.password;
+        setErrors(prev => ({ ...prev, ...mapped }));
+        if (Object.keys(mapped).length === 0) {
+          setGeneralError(apiErr.message || 'Please check your details and try again.');
         }
       } else {
-        setGeneralError(response.message || 'Unable to create account. Please try again.');
-      }
-    } catch (error: any) {
-      console.error('Registration error:', error);
-      const apiError = handleAPIError(error);
-      if (apiError.fieldErrors) {
-        const newErrors = {
-          ...errors
-        };
-        Object.keys(apiError.fieldErrors).forEach(field => {
-          if (field in newErrors) {
-            (newErrors as any)[field] = apiError.fieldErrors![field];
-          }
-        });
-        setErrors(newErrors);
-      }
-      if (apiError.isNetworkError) {
-        setGeneralError('Network error. Please check your internet connection and try again.');
-      } else {
-        setGeneralError(apiError.message || 'Registration failed. Please try again.');
+        setGeneralError(apiErr.message || 'Registration failed. Please try again.');
       }
     } finally {
       setLoading(false);
     }
   };
-  const handleLogin = () => {
-    navigation.navigate('Login');
-  };
-  return <View className="flex-1 bg-white">
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} className="flex-1">
-        <ScrollView contentContainerStyle={{
-        flexGrow: 1,
-        paddingHorizontal: 24,
-        paddingTop: 60,
-        paddingBottom: 40
-      }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-          {}
-          <View className="items-center mb-8">
-            <Image source={require('@/assets/logo.png')} className="w-28 h-16" resizeMode="contain" />
+
+  return (
+    <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+      <KeyboardAvoidingView style={styles.kav} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <ScrollView
+          contentContainerStyle={styles.scroll}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          bounces={false}
+        >
+          {/* Back */}
+          <TouchableOpacity style={styles.backBtn} onPress={() => navigation.navigate('ChooseRole')} activeOpacity={0.7}>
+            <View style={styles.backCircle}>
+              <Ionicons name="chevron-back" size={20} color={PINK} />
+            </View>
+          </TouchableOpacity>
+
+          {/* Logo */}
+          <View style={styles.logoWrap}>
+            <Image
+              source={require('../../../assets/lookrealMainLogo.png')}
+              style={styles.logoImg}
+              resizeMode="contain"
+            />
           </View>
 
-          {}
-          <View className="mb-6">
-            <Text className="text-3xl font-bold text-center text-black mb-2">
-              Create Your Account
+          <Text style={styles.title}>{isVendor ? 'Vendor Registration' : 'Create Account'}</Text>
+          <Text style={styles.subtitle}>Please fill your details below</Text>
+
+          {generalError ? (
+            <View style={styles.errorBanner}>
+              <Ionicons name="alert-circle" size={16} color="#DC2626" />
+              <Text style={styles.bannerText}>{generalError}</Text>
+            </View>
+          ) : null}
+
+          {/* Full Name */}
+          <Text style={styles.label}>Full Name</Text>
+          <View style={[styles.inputRow, errors.fullName && styles.inputErr]}>
+            <Ionicons name="person-outline" size={18} color={PINK} style={styles.icon} />
+            <TextInput
+              style={styles.textInput}
+              placeholder="Clara Sarah"
+              placeholderTextColor="#ccc"
+              value={fullName}
+              onChangeText={v => { setFullName(v); clearErr('fullName'); }}
+              editable={!loading}
+            />
+          </View>
+          {errors.fullName ? <Text style={styles.errText}>{errors.fullName}</Text> : null}
+
+          {/* Email */}
+          <Text style={styles.label}>Email</Text>
+          <View style={[styles.inputRow, errors.email && styles.inputErr]}>
+            <Ionicons name="mail-outline" size={18} color={PINK} style={styles.icon} />
+            <TextInput
+              style={styles.textInput}
+              placeholder="you@example.com"
+              placeholderTextColor="#ccc"
+              keyboardType="email-address"
+              autoCapitalize="none"
+              value={email}
+              onChangeText={v => { setEmail(v); clearErr('email'); }}
+              editable={!loading}
+            />
+          </View>
+          {errors.email ? <Text style={styles.errText}>{errors.email}</Text> : null}
+
+          {/* Phone */}
+          <Text style={styles.label}>Phone Number</Text>
+          <View style={[styles.inputRow, errors.phone && styles.inputErr]}>
+            <TouchableOpacity style={styles.ccBtn} onPress={() => setShowCountryPicker(true)} activeOpacity={0.7}>
+              <Text style={styles.ccText}>{countryCode}</Text>
+              <Ionicons name="chevron-down" size={14} color={PINK} />
+            </TouchableOpacity>
+            <View style={styles.divider} />
+            <TextInput
+              style={[styles.textInput, { flex: 1 }]}
+              placeholder="9019622107"
+              placeholderTextColor="#ccc"
+              keyboardType="phone-pad"
+              value={phone}
+              onChangeText={v => { setPhone(v); clearErr('phone'); }}
+              editable={!loading}
+            />
+          </View>
+          {errors.phone ? <Text style={styles.errText}>{errors.phone}</Text> : null}
+
+          {/* Password */}
+          <Text style={styles.label}>Password</Text>
+          <View style={[styles.inputRow, errors.password && styles.inputErr]}>
+            <Ionicons name="lock-closed-outline" size={18} color={PINK} style={styles.icon} />
+            <TextInput
+              style={styles.textInput}
+              placeholder="••••••••"
+              placeholderTextColor="#ccc"
+              secureTextEntry={!showPassword}
+              value={password}
+              onChangeText={v => { setPassword(v); clearErr('password'); }}
+              editable={!loading}
+            />
+            <TouchableOpacity onPress={() => setShowPassword(p => !p)} style={styles.eyeBtn}>
+              <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={20} color="#bbb" />
+            </TouchableOpacity>
+          </View>
+          {errors.password ? <Text style={styles.errText}>{errors.password}</Text> : null}
+          {password.length > 0 && !errors.password && (
+            <View style={styles.pwdRules}>
+              {passwordRules.map(rule => (
+                <View key={rule.id} style={styles.pwdRule}>
+                  <Ionicons
+                    name={rule.test(password) ? 'checkmark-circle' : 'ellipse-outline'}
+                    size={13}
+                    color={rule.test(password) ? '#059669' : '#bbb'}
+                  />
+                  <Text style={[styles.pwdRuleText, rule.test(password) && styles.pwdRulePass]}>
+                    {rule.label}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          )}
+
+          {/* Terms */}
+          <View style={styles.termsRow}>
+            <TouchableOpacity
+              onPress={() => {
+                if (!canToggleAgreed) {
+                  setErrors(prev => ({ ...prev, agreed: 'Please read both documents first' }));
+                  return;
+                }
+                setAgreed(a => !a);
+                setErrors(prev => ({ ...prev, agreed: '' }));
+              }}
+              activeOpacity={canToggleAgreed ? 0.7 : 1}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <View style={[styles.checkbox, agreed && styles.checkboxOn, !canToggleAgreed && styles.checkboxLocked]}>
+                {agreed
+                  ? <Ionicons name="checkmark" size={13} color="white" />
+                  : !canToggleAgreed
+                  ? <Ionicons name="lock-closed" size={10} color="#ccc" />
+                  : null}
+              </View>
+            </TouchableOpacity>
+            <Text style={styles.termsText}>
+              {'I agree to the '}
+              <Text
+                style={[styles.termsLink, hasReadTerms && styles.termsLinkRead]}
+                onPress={() => navigation.navigate('TermsPrivacyAuthScreen', { type: 'terms' })}
+              >
+                Terms & Condition{hasReadTerms ? ' ✓' : ''}
+              </Text>
+              {' and '}
+              <Text
+                style={[styles.termsLink, hasReadPrivacy && styles.termsLinkRead]}
+                onPress={() => navigation.navigate('TermsPrivacyAuthScreen', { type: 'privacy' })}
+              >
+                Privacy Policy{hasReadPrivacy ? ' ✓' : ''}
+              </Text>
             </Text>
-            <Text className="text-base text-center text-gray-700">
-              Please fill the details below
-            </Text>
           </View>
+          {!canToggleAgreed && !errors.agreed
+            ? <Text style={styles.hintText}>Tap each link above to read, then tick to agree</Text>
+            : null}
+          {errors.agreed ? <Text style={styles.errText}>{errors.agreed}</Text> : null}
 
-          {}
-          {generalError ? <View className="bg-red-50 border border-red-200 rounded-xl p-4 mb-6 flex-row items-start">
-              <Ionicons name="alert-circle" size={20} color="#DC2626" style={{
-            marginRight: 8,
-            marginTop: 2
-          }} />
-              <Text className="text-red-600 text-sm flex-1">{generalError}</Text>
-            </View> : null}
+          {/* Submit */}
+          <TouchableOpacity
+            style={[styles.submitBtn, loading && { opacity: 0.7 }]}
+            onPress={handleSubmit}
+            disabled={loading}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.submitText}>{loading ? 'Please wait...' : 'Continue'}</Text>
+            {!loading && <Ionicons name="chevron-forward" size={18} color="white" />}
+          </TouchableOpacity>
 
-          {}
-          <View className="flex-row gap-3">
-            <Input containerClassName="flex-1 mb-0" label="First Name" placeholder="" value={firstName} onChangeText={text => {
-            setFirstName(text);
-            setErrors({
-              ...errors,
-              firstName: ''
-            });
-            setGeneralError('');
-          }} error={errors.firstName} editable={!loading} />
-
-            <Input containerClassName="flex-1 mb-0" label="Last Name" placeholder="" value={lastName} onChangeText={text => {
-            setLastName(text);
-            setErrors({
-              ...errors,
-              lastName: ''
-            });
-            setGeneralError('');
-          }} error={errors.lastName} editable={!loading} />
-          </View>
-
-          {}
-          <Input label="Enter E-mail Address" placeholder="" value={email} onChangeText={text => {
-          setEmail(text);
-          setErrors({
-            ...errors,
-            email: ''
-          });
-          setGeneralError('');
-        }} error={errors.email} autoCapitalize="none" keyboardType="email-address" editable={!loading} />
-
-          {}
-          <PhoneInput label="Enter Phone Number" placeholder="8123456789" value={phone} onChangeText={text => {
-          setPhone(text);
-          setErrors({
-            ...errors,
-            phone: ''
-          });
-          setGeneralError('');
-        }} error={errors.phone} editable={!loading} countryCode={countryCode} onCountryCodePress={() => setShowCountryPicker(true)} />
-
-          {}
-          <PasswordInput label="Password" placeholder="" value={password} onChangeText={text => {
-          setPassword(text);
-          setErrors({
-            ...errors,
-            password: ''
-          });
-          setGeneralError('');
-        }} error={errors.password} editable={!loading} />
-
-          {}
-          <PasswordInput label="Confirm Password" placeholder="" value={confirmPassword} onChangeText={text => {
-          setConfirmPassword(text);
-          setErrors({
-            ...errors,
-            confirmPassword: ''
-          });
-          setGeneralError('');
-        }} error={errors.confirmPassword} editable={!loading} />
-
-          {}
-          <Input label="Referral Code (optional)" placeholder="" value={referralId} onChangeText={setReferralId} editable={!loading} />
-
-          {}
-          <View className="mb-6">
-            <Checkbox checked={agreeToTerms} onChange={setAgreeToTerms} disabled={loading} error={errors.terms} label={<Text className="text-sm text-gray-700 flex-1">
-                  By signing up, you agree to our{' '}
-                  <Text className="text-pink-500 font-semibold">Privacy Policy</Text> and{' '}
-                  <Text className="text-pink-500 font-semibold">Terms of Use</Text>
-                </Text>} containerClassName="mb-3" />
-
-            <Checkbox checked={registerAsVendor} onChange={handleVendorCheckboxPress} disabled={loading} label="Register as Vendor" />
-          </View>
-
-          {}
-          <Button onPress={handleRegister} loading={loading} disabled={loading} containerClassName="mb-6">
-            Create Account
-          </Button>
-
-          {}
-          <View className="flex-row items-center mb-6">
-            <View className="flex-1 h-px bg-pink-200" />
-            <Text className="px-4 text-sm text-gray-700">or sign up with</Text>
-            <View className="flex-1 h-px bg-pink-200" />
-          </View>
-
-          {}
-          <View className="flex-row justify-center items-center gap-4 mb-8">
-            <SocialLoginButton platform="google" size="lg" />
-            <SocialLoginButton platform="facebook" size="lg" />
-            <SocialLoginButton platform="apple" size="lg" />
-          </View>
-
-          {}
-          <View className="flex-row justify-center items-center">
-            <Text className="text-base text-gray-700">Already have an account? </Text>
-            <TouchableOpacity onPress={handleLogin} disabled={loading} activeOpacity={0.7}>
-              <Text className="text-base text-pink-600 font-bold">Login</Text>
+          <View style={styles.loginRow}>
+            <Text style={styles.loginText}>Already have an account? </Text>
+            <TouchableOpacity onPress={() => navigation.navigate('Login')} disabled={loading} activeOpacity={0.7}>
+              <Text style={styles.loginLink}>Log In</Text>
             </TouchableOpacity>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
 
-      {}
-      <CountryCodePicker visible={showCountryPicker} onClose={() => setShowCountryPicker(false)} onSelect={setCountryCode} selectedCode={countryCode} />
-    </View>;
+      <CountryCodePicker
+        visible={showCountryPicker}
+        onClose={() => setShowCountryPicker(false)}
+        onSelect={(code: string) => { setCountryCode(code); setShowCountryPicker(false); }}
+        selectedCode={countryCode}
+      />
+    </SafeAreaView>
+  );
 };
+
+const styles = StyleSheet.create({
+  safe: { flex: 1, backgroundColor: BG },
+  kav: { flex: 1 },
+  scroll: { flexGrow: 1, paddingHorizontal: SW * 0.06, paddingVertical: 16 },
+  backBtn: { marginBottom: 12 },
+  backCircle: {
+    width: 40, height: 40, borderRadius: 20, backgroundColor: 'white',
+    justifyContent: 'center', alignItems: 'center', elevation: 2,
+  },
+  logoWrap: { alignItems: 'center', marginBottom: 16 },
+  logoImg: { width: SW * 0.65, height: 96 },
+  title: { fontSize: 24, fontWeight: '700', color: '#1a1a1a', textAlign: 'center', marginBottom: 6 },
+  subtitle: { fontSize: 14, color: '#888', textAlign: 'center', marginBottom: 20 },
+  label: { fontSize: 14, fontWeight: '500', color: '#1a1a1a', marginBottom: 8, marginTop: 14 },
+  inputRow: {
+    flexDirection: 'row', alignItems: 'center', backgroundColor: 'white',
+    borderRadius: 12, borderWidth: 1.5, borderColor: BORDER,
+    paddingHorizontal: 14, height: 52,
+  },
+  inputErr: { borderColor: '#E53E3E' },
+  icon: { marginRight: 10 },
+  textInput: { flex: 1, fontSize: 15, color: '#1a1a1a' },
+  eyeBtn: { paddingLeft: 8 },
+  ccBtn: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  ccText: { fontSize: 15, color: '#1a1a1a', fontWeight: '500' },
+  divider: { width: 1, height: 22, backgroundColor: BORDER, marginHorizontal: 10 },
+  errText: { fontSize: 12, color: '#E53E3E', marginTop: 4 },
+  termsRow: { flexDirection: 'row', alignItems: 'center', marginTop: 20, gap: 10 },
+  checkbox: {
+    width: 20, height: 20, borderRadius: 4, borderWidth: 1.5, borderColor: PINK,
+    justifyContent: 'center', alignItems: 'center', flexShrink: 0,
+  },
+  checkboxOn: { backgroundColor: PINK, borderColor: PINK },
+  checkboxLocked: { borderColor: '#ddd', backgroundColor: '#f9f9f9' },
+  termsText: { flex: 1, fontSize: 13, color: '#555', lineHeight: 20 },
+  termsLink: { color: PINK, fontWeight: '600', textDecorationLine: 'underline' },
+  termsLinkRead: { color: '#059669' },
+  hintText: { fontSize: 12, color: '#aaa', marginTop: 6, marginLeft: 30 },
+  submitBtn: {
+    backgroundColor: PINK, borderRadius: 30, paddingVertical: 16, marginTop: 28,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    elevation: 4,
+  },
+  submitText: { color: 'white', fontSize: 16, fontWeight: '600' },
+  loginRow: { flexDirection: 'row', justifyContent: 'center', marginTop: 24 },
+  loginText: { fontSize: 14, color: '#888' },
+  loginLink: { fontSize: 14, color: PINK, fontWeight: '600' },
+  errorBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: '#FEF2F2', borderWidth: 1, borderColor: '#FECACA',
+    borderRadius: 10, padding: 12, marginBottom: 12,
+  },
+  bannerText: { fontSize: 13, flex: 1, color: '#374151' },
+  pwdRules: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 6 },
+  pwdRule: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  pwdRuleText: { fontSize: 12, color: '#bbb' },
+  pwdRulePass: { color: '#059669' },
+});
+
 export default RegisterScreen;

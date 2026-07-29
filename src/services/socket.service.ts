@@ -1,36 +1,63 @@
 import { io, Socket } from 'socket.io-client';
 import { getStoredToken } from '@/utils/authHelper';
 
-const SOCKET_URL = 'https://sharplook-be.onrender.com';
+// const SOCKET_URL='https://sharplook-backend-production.onrender.com';
+const SOCKET_URL = 'http://192.168.1.86:5500';
 
 class SocketService {
   private socket: Socket | null = null;
   private isConnected: boolean = false;
+  private isConnecting: boolean = false;
+  private connectionCallbacks: Array<() => void> = [];
+  private pendingListeners: Array<{ event: string; callback: (data: any) => void }> = [];
+  private activeListeners: Array<{ event: string; originalCallback: (data: any) => void; wrappedCallback: (data: any) => void }> = [];
 
   
   async connect(): Promise<void> {
     try {
       if (this.socket?.connected) {
-        console.log('🔌 Socket already connected');
+        console.log('🔌 Socket already connected, socket ID:', this.socket.id);
+        console.log('📌 Firing', this.connectionCallbacks.length, 'callbacks (already connected)');
+        this.connectionCallbacks.forEach(cb => cb());
+        return;
+      }
+
+      if (this.isConnecting) {
+        console.log('⏳ Socket connection already in progress, skipping duplicate call');
         return;
       }
 
       const token = await getStoredToken();
-      
+
       if (!token) {
         console.error('❌ No auth token found for socket connection');
         return;
       }
 
+      // Disconnect old socket if it exists (prevents duplicate connections)
+      if (this.socket) {
+        console.log('🔌 Cleaning up old socket before reconnecting');
+        this.socket.removeAllListeners();
+        this.socket.disconnect();
+        this.socket = null;
+        // Move active listeners to pending so they get re-attached on the new socket
+        for (const listener of this.activeListeners) {
+          this.pendingListeners.push({ event: listener.event, callback: listener.wrappedCallback });
+        }
+      }
+
+      this.isConnecting = true;
       console.log('🔵 Connecting to Socket.IO server...');
       console.log('   URL:', SOCKET_URL);
 
       this.socket = io(SOCKET_URL, {
         auth: { token },
-        transports: ['websocket', 'polling'],
+        transports: ['polling', 'websocket'],
         reconnection: true,
-        reconnectionAttempts: 5,
+        reconnectionAttempts: Infinity,
         reconnectionDelay: 1000,
+        reconnectionDelayMax: 10000,
+        upgrade: true,
       });
 
       this.setupEventListeners();
@@ -43,11 +70,28 @@ class SocketService {
   private setupEventListeners(): void {
     if (!this.socket) return;
 
-    
+
     this.socket.on('connect', () => {
       this.isConnected = true;
+      this.isConnecting = false;
       console.log('✅ Socket connected successfully');
       console.log('   Socket ID:', this.socket?.id);
+
+      // Replay any listeners that were queued before socket was ready
+      if (this.pendingListeners.length > 0) {
+        console.log('🔄 Replaying', this.pendingListeners.length, 'pending listeners');
+        for (const { event, callback } of this.pendingListeners) {
+          if (this.socket) {
+            this.socket.on(event, callback);
+            console.log('   ✅ Replayed listener for:', event);
+          }
+        }
+        this.pendingListeners = [];
+      }
+
+
+      console.log('📌 Socket connect event: firing', this.connectionCallbacks.length, 'connection callbacks');
+      this.connectionCallbacks.forEach(cb => cb());
     });
 
     this.socket.on('disconnect', (reason) => {
@@ -56,6 +100,7 @@ class SocketService {
     });
 
     this.socket.on('connect_error', (error) => {
+      this.isConnecting = false;
       console.error('❌ Socket connection error:', error.message);
     });
 
@@ -70,12 +115,26 @@ class SocketService {
   }
 
   
+  onConnected(callback: () => void): void {
+    this.connectionCallbacks.push(callback);
+    console.log('📌 onConnected registered. isConnected:', this.isConnected, 'total callbacks:', this.connectionCallbacks.length);
+
+    if (this.isConnected) {
+      console.log('📌 Socket already connected, firing callback immediately');
+      callback();
+    }
+  }
+
+  
   disconnect(): void {
     if (this.socket) {
       console.log('🔴 Disconnecting socket...');
       this.socket.disconnect();
       this.socket = null;
       this.isConnected = false;
+      this.isConnecting = false;
+      this.activeListeners = [];
+      this.pendingListeners = [];
     }
   }
 
@@ -86,6 +145,175 @@ class SocketService {
     return connected;
   }
 
+  
+  
+  
+
+  
+  onWalletFunded(callback: (data: {
+    reference: string;
+    amount: number;
+    newBalance: number;
+    message: string;
+    timestamp: string;
+  }) => void): void {
+    if (!this.socket) {
+      console.error('❌ Cannot listen for wallet:funded - socket not initialized');
+      return;
+    }
+
+    console.log('👂 Setting up listener for: wallet:funded');
+    this.socket.on('wallet:funded', (data) => {
+      console.log('💰 RECEIVED wallet:funded:', JSON.stringify(data, null, 2));
+      callback(data);
+    });
+  }
+
+  
+  onWalletFundingFailed(callback: (data: {
+    reference: string;
+    reason: string;
+    message: string;
+    timestamp: string;
+  }) => void): void {
+    if (!this.socket) {
+      console.error('❌ Cannot listen for wallet:funding:failed - socket not initialized');
+      return;
+    }
+
+    console.log('👂 Setting up listener for: wallet:funding:failed');
+    this.socket.on('wallet:funding:failed', (data) => {
+      console.log('❌ RECEIVED wallet:funding:failed:', JSON.stringify(data, null, 2));
+      callback(data);
+    });
+  }
+
+  
+  onWithdrawalSuccess(callback: (data: {
+    reference: string;
+    amount: number;
+    newBalance: number;
+    bankName: string;
+    accountNumber: string;
+    message: string;
+    timestamp: string;
+  }) => void): void {
+    if (!this.socket) {
+      console.error('❌ Cannot listen for withdrawal:success - socket not initialized');
+      return;
+    }
+
+    console.log('👂 Setting up listener for: withdrawal:success');
+    this.socket.on('withdrawal:success', (data) => {
+      console.log('💸 RECEIVED withdrawal:success:', JSON.stringify(data, null, 2));
+      callback(data);
+    });
+  }
+
+  
+  onWithdrawalFailed(callback: (data: {
+    reference: string;
+    reason: string;
+    refundedAmount?: number;
+    newBalance?: number;
+    message: string;
+    timestamp: string;
+  }) => void): void {
+    if (!this.socket) {
+      console.error('❌ Cannot listen for withdrawal:failed - socket not initialized');
+      return;
+    }
+
+    console.log('👂 Setting up listener for: withdrawal:failed');
+    this.socket.on('withdrawal:failed', (data) => {
+      console.log('❌ RECEIVED withdrawal:failed:', JSON.stringify(data, null, 2));
+      callback(data);
+    });
+  }
+
+  
+  onPaymentSuccess(callback: (data: {
+    reference: string;
+    bookingId?: string;
+    amount?: number;
+    message: string;
+    timestamp: string;
+  }) => void): void {
+    if (!this.socket) {
+      console.error('❌ Cannot listen for payment:success - socket not initialized');
+      return;
+    }
+
+    console.log('👂 Setting up listener for: payment:success');
+    this.socket.on('payment:success', (data) => {
+      console.log('💳 RECEIVED payment:success:', JSON.stringify(data, null, 2));
+      callback(data);
+    });
+  }
+
+  
+  onPaymentFailed(callback: (data: {
+    reference: string;
+    bookingId?: string;
+    reason?: string;
+    message: string;
+    timestamp: string;
+  }) => void): void {
+    if (!this.socket) {
+      console.error('❌ Cannot listen for payment:failed - socket not initialized');
+      return;
+    }
+
+    console.log('👂 Setting up listener for: payment:failed');
+    this.socket.on('payment:failed', (data) => {
+      console.log('❌ RECEIVED payment:failed:', JSON.stringify(data, null, 2));
+      callback(data);
+    });
+  }
+
+  
+  onOrderPaymentSuccess(callback: (data: {
+    reference: string;
+    orderId?: string;
+    orderNumber?: string;
+    amount?: number;
+    message: string;
+    timestamp: string;
+  }) => void): void {
+    if (!this.socket) {
+      console.error('❌ Cannot listen for order:payment:success - socket not initialized');
+      return;
+    }
+
+    console.log('👂 Setting up listener for: order:payment:success');
+    this.socket.on('order:payment:success', (data) => {
+      console.log('🛒 RECEIVED order:payment:success:', JSON.stringify(data, null, 2));
+      callback(data);
+    });
+  }
+
+  
+  onOrderPaymentFailed(callback: (data: {
+    reference: string;
+    orderId?: string;
+    reason?: string;
+    message: string;
+    timestamp: string;
+  }) => void): void {
+    if (!this.socket) {
+      console.error('❌ Cannot listen for order:payment:failed - socket not initialized');
+      return;
+    }
+
+    console.log('👂 Setting up listener for: order:payment:failed');
+    this.socket.on('order:payment:failed', (data) => {
+      console.log('❌ RECEIVED order:payment:failed:', JSON.stringify(data, null, 2));
+      callback(data);
+    });
+  }
+
+  
+  
   
 
   
@@ -124,6 +352,8 @@ class SocketService {
     });
   }
 
+  
+  
   
 
   
@@ -216,6 +446,8 @@ class SocketService {
   }
 
   
+  
+  
 
   
   startTyping(conversationId: string): void {
@@ -268,6 +500,8 @@ class SocketService {
   }
 
   
+  
+  
 
   
   requestUserStatus(userIds: string[]): void {
@@ -309,6 +543,8 @@ class SocketService {
   }
 
   
+  
+  
 
   
   addReaction(messageId: string, emoji: string): void {
@@ -347,6 +583,8 @@ class SocketService {
   }
 
   
+  
+  
 
   
   deleteMessage(messageId: string): void {
@@ -374,9 +612,49 @@ class SocketService {
   }
 
   
+  
+  
 
   
+  onSessionStarted(callback: (data: {
+    bookingId: string;
+    sessionStartedAt: string;
+    message?: string;
+  }) => void): void {
+    const events = ['booking:session:started', 'booking:updated', 'session:started'];
+    events.forEach(ev => {
+      if (this.socket) {
+        this.socket.on(ev, (data: any) => {
+          if (data?.status === 'in_progress' || ev === 'booking:session:started' || ev === 'session:started') {
+            console.log(`📥 RECEIVED ${ev}:`, JSON.stringify(data, null, 2));
+            callback({ bookingId: data.bookingId || data._id, sessionStartedAt: data.sessionStartedAt, message: data.message });
+          }
+        });
+      }
+    });
+  }
+
+  onBookingStatusUpdated(callback: (data: {
+    bookingId: string;
+    status: string;
+    sessionStartedAt?: string;
+    message?: string;
+  }) => void): void {
+    if (!this.socket) return;
+    this.socket.on('booking:updated', (data) => {
+      console.log('📥 RECEIVED booking:updated:', JSON.stringify(data, null, 2));
+      callback(data);
+    });
+    this.socket.on('booking:status:updated', (data) => {
+      console.log('📥 RECEIVED booking:status:updated:', JSON.stringify(data, null, 2));
+      callback(data);
+    });
+  }
+
   removeListener(event: string): void {
+    // Remove from active tracking
+    this.activeListeners = this.activeListeners.filter(l => l.event !== event);
+
     if (!this.socket) {
       console.warn('⚠️ Cannot remove listener - socket not initialized');
       return;
@@ -404,16 +682,39 @@ class SocketService {
 
   
   on(event: string, callback: (data: any) => void): void {
+    const wrappedCallback = (data: any) => {
+      console.log('📥 RECEIVED custom event:', event);
+      callback(data);
+    };
+
+    // Track so we can re-attach after reconnect
+    this.activeListeners.push({ event, originalCallback: callback, wrappedCallback });
+
     if (!this.socket) {
-      console.error('❌ Cannot listen - socket not initialized');
+      console.log('⏳ Socket not ready, queuing listener for:', event);
+      this.pendingListeners.push({ event, callback: wrappedCallback });
       return;
     }
 
-    console.log('👂 Setting up listener for custom event:', event);
-    this.socket.on(event, (data) => {
-      console.log('📥 RECEIVED custom event:', event, JSON.stringify(data, null, 2));
+    console.log('👂 Setting up listener for custom event:', event, '| Socket ID:', this.socket.id);
+    this.socket.on(event, wrappedCallback);
+  }
+
+  onKycStatusChanged(callback: (data: {
+    kycStatus: 'approved' | 'rejected';
+    rejectionReason?: string;
+    message: string;
+  }) => void): () => void {
+    const handler = (data: any) => {
+      console.log('🛡️ RECEIVED kyc:status:changed:', data);
       callback(data);
-    });
+    };
+    if (this.socket) {
+      this.socket.on('kyc:status:changed', handler);
+    } else {
+      this.pendingListeners.push({ event: 'kyc:status:changed', callback: handler });
+    }
+    return () => { this.socket?.off('kyc:status:changed', handler); };
   }
 }
 

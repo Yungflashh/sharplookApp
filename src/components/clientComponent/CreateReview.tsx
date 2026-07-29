@@ -1,255 +1,294 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, TextInput, Alert, ActivityIndicator } from 'react-native';
+import {
+  View, Text, TextInput, TouchableOpacity, ScrollView,
+  Image, ActivityIndicator, StatusBar,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '@/types/navigation.types';
 import { reviewAPI, handleAPIError } from '@/api/api';
-type CreateReviewNavigationProp = NativeStackNavigationProp<RootStackParamList, 'CreateReview'>;
-type CreateReviewRouteProp = RouteProp<RootStackParamList, 'CreateReview'>;
+import { toast } from '@/components/ui/Toast';
+
+const PRIMARY = '#E04079';
+const BG      = '#FCE4EC';
+const WHITE   = '#FFFFFF';
+const TEXT    = '#1A1A2E';
+const GRAY    = '#6B7280';
+const MUTED   = '#9CA3AF';
+
+type NavProp   = NativeStackNavigationProp<RootStackParamList, 'CreateReview'>;
+type RoutePropType = RouteProp<RootStackParamList, 'CreateReview'>;
+
+const formatCompletedDate = (iso?: string): string => {
+  if (!iso) return '';
+  return new Date(iso).toLocaleDateString('en-US', {
+    weekday: 'short', month: 'short', day: 'numeric', year: 'numeric',
+  });
+};
+
 const CreateReviewScreen: React.FC = () => {
-  const navigation = useNavigation<CreateReviewNavigationProp>();
-  const route = useRoute<CreateReviewRouteProp>();
-  const {
-    bookingId,
-    vendorName,
-    serviceName
-  } = route.params;
-  const [loading, setLoading] = useState(false);
-  const [rating, setRating] = useState(0);
-  const [title, setTitle] = useState('');
-  const [comment, setComment] = useState('');
-  const [qualityRating, setQualityRating] = useState(0);
-  const [punctualityRating, setPunctualityRating] = useState(0);
-  const [communicationRating, setCommunicationRating] = useState(0);
-  const [valueRating, setValueRating] = useState(0);
-  const handleSubmitReview = async () => {
+  const navigation = useNavigation<NavProp>();
+  const route      = useRoute<RoutePropType>();
+  const insets     = useSafeAreaInsets();
+
+  const { bookingId, vendorName, serviceName, vendorImage, vendorRole, completedAt } = route.params;
+
+  const [rating,    setRating]    = useState(0);
+  const [comment,   setComment]   = useState('');
+  const [recommend, setRecommend] = useState<'yes' | 'no' | null>(null);
+  const [loading,   setLoading]   = useState(false);
+
+  const handleSubmit = async () => {
     if (rating === 0) {
-      Alert.alert('Error', 'Please select a rating');
-      return;
-    }
-    if (!comment || comment.trim().length < 10) {
-      Alert.alert('Error', 'Please write a review (minimum 10 characters)');
+      toast.error('Rating required', 'Please select a star rating');
       return;
     }
     try {
       setLoading(true);
-      const reviewData = {
+      const res = await reviewAPI.createReview({
         bookingId,
         rating,
-        title: title.trim() || undefined,
-        comment: comment.trim(),
-        detailedRatings: {
-          quality: qualityRating || undefined,
-          punctuality: punctualityRating || undefined,
-          communication: communicationRating || undefined,
-          value: valueRating || undefined
-        }
-      };
-      const response = await reviewAPI.createReview(reviewData);
-      if (response.success) {
-        Alert.alert('Review Submitted', 'Thank you for your feedback!', [{
-          text: 'OK',
-          onPress: () => navigation.goBack()
-        }]);
+        comment: comment.trim() || undefined,
+        recommend: recommend === 'yes' ? true : recommend === 'no' ? false : undefined,
+      });
+      if (res.success) {
+        toast.success('Review Submitted', 'Thank you for your feedback!');
+        navigation.goBack();
       }
-    } catch (error) {
-      const apiError = handleAPIError(error);
-      Alert.alert('Error', apiError.message || 'Failed to submit review');
+    } catch (err) {
+      const e = handleAPIError(err);
+      toast.error('Error', e.message || 'Failed to submit review');
     } finally {
       setLoading(false);
     }
   };
-  const renderStars = (currentRating: number, onPress: (rating: number) => void, size: number = 40) => {
-    return <View className="flex-row gap-2">
-        {[1, 2, 3, 4, 5].map(star => <TouchableOpacity key={star} onPress={() => onPress(star)} activeOpacity={0.7}>
-            <Ionicons name={star <= currentRating ? 'star' : 'star-outline'} size={size} color={star <= currentRating ? '#fbbf24' : '#d1d5db'} />
-          </TouchableOpacity>)}
-      </View>;
-  };
-  const getRatingText = (rating: number) => {
-    switch (rating) {
-      case 1:
-        return 'Poor';
-      case 2:
-        return 'Fair';
-      case 3:
-        return 'Good';
-      case 4:
-        return 'Very Good';
-      case 5:
-        return 'Excellent';
-      default:
-        return 'Tap to rate';
-    }
-  };
-  return <SafeAreaView className="flex-1 bg-gray-50">
-      {}
-      <View className="bg-white px-5 py-4 border-b border-gray-100">
-        <View className="flex-row items-center justify-between">
-          <TouchableOpacity onPress={() => navigation.goBack()} className="w-10 h-10 rounded-full bg-gray-100 items-center justify-center">
-            <Ionicons name="close" size={24} color="#374151" />
-          </TouchableOpacity>
 
-          <Text className="text-lg font-bold text-gray-900">Write a Review</Text>
+  const completedLabel = formatCompletedDate(completedAt);
 
-          <View className="w-10" />
-        </View>
+  return (
+    <View style={{ flex: 1, backgroundColor: BG }}>
+      <StatusBar barStyle="dark-content" backgroundColor={BG} />
+
+      {/* ── Header ── */}
+      <View style={{
+        paddingTop: insets.top + 10, paddingHorizontal: 16, paddingBottom: 14,
+        flexDirection: 'row', alignItems: 'center', gap: 12,
+      }}>
+        <TouchableOpacity
+          onPress={() => navigation.goBack()} activeOpacity={0.75}
+          style={{
+            width: 36, height: 36, borderRadius: 18, backgroundColor: WHITE,
+            alignItems: 'center', justifyContent: 'center',
+            shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 4,
+            shadowOffset: { width: 0, height: 2 }, elevation: 2,
+          }}>
+          <Ionicons name="arrow-back" size={19} color={TEXT} />
+        </TouchableOpacity>
+        <Text style={{ fontSize: 20, fontWeight: '800', color: TEXT, letterSpacing: -0.4 }}>
+          Leave a review
+        </Text>
       </View>
 
-      <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
-        <View className="px-5 py-6">
-          {}
-          <View className="bg-white rounded-2xl p-4 mb-6">
-            <Text className="text-sm text-gray-600 mb-1">Service</Text>
-            <Text className="text-lg font-bold text-gray-900 mb-3">
-              {serviceName}
-            </Text>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: insets.bottom + 110 }}>
 
-            <Text className="text-sm text-gray-600 mb-1">Vendor</Text>
-            <Text className="text-base font-semibold text-gray-900">
-              {vendorName}
-            </Text>
-          </View>
-
-          {}
-          <View className="bg-white rounded-2xl p-4 mb-4">
-            <Text className="text-base font-bold text-gray-900 mb-3">
-              Overall Rating <Text className="text-red-500">*</Text>
-            </Text>
-
-            <View className="items-center py-4">
-              {renderStars(rating, setRating, 48)}
-
-              <Text className={`text-lg font-semibold mt-3 ${rating > 0 ? 'text-gray-900' : 'text-gray-400'}`}>
-                {getRatingText(rating)}
-              </Text>
+        {/* ── Vendor card ── */}
+        <View style={{
+          backgroundColor: WHITE, borderRadius: 18, padding: 14, marginBottom: 20,
+          shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 8,
+          shadowOffset: { width: 0, height: 2 }, elevation: 3,
+        }}>
+          <View style={{ flexDirection: 'row', gap: 12 }}>
+            {/* Service / vendor image */}
+            <View style={{
+              width: 68, height: 68, borderRadius: 14, overflow: 'hidden', backgroundColor: BG,
+            }}>
+              {vendorImage
+                ? <Image source={{ uri: vendorImage }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
+                : <LinearGradient colors={[PRIMARY, '#FF6BA8']} style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+                    <Ionicons name="sparkles" size={26} color={WHITE} />
+                  </LinearGradient>
+              }
             </View>
-          </View>
 
-          {}
-          <View className="bg-white rounded-2xl p-4 mb-4">
-            <Text className="text-base font-bold text-gray-900 mb-4">
-              Detailed Ratings (Optional)
-            </Text>
-
-            {}
-            <View className="mb-4">
-              <View className="flex-row items-center justify-between mb-2">
-                <Text className="text-sm font-semibold text-gray-700">
-                  Quality of Service
-                </Text>
-                <Text className="text-sm text-gray-600">
-                  {qualityRating > 0 ? `${qualityRating}/5` : '-'}
-                </Text>
+            <View style={{ flex: 1, gap: 4, justifyContent: 'center' }}>
+              {/* Vendor name + verified tick */}
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                <Text style={{ fontSize: 15, fontWeight: '800', color: TEXT }}>{vendorName}</Text>
+                <Ionicons name="checkmark-circle" size={15} color={PRIMARY} />
               </View>
-              {renderStars(qualityRating, setQualityRating, 28)}
-            </View>
 
-            {}
-            <View className="mb-4">
-              <View className="flex-row items-center justify-between mb-2">
-                <Text className="text-sm font-semibold text-gray-700">
-                  Punctuality
+              {/* Role / service type */}
+              {(vendorRole || serviceName) && (
+                <Text style={{ fontSize: 12, color: GRAY, fontWeight: '500' }}>
+                  {vendorRole || serviceName}
                 </Text>
-                <Text className="text-sm text-gray-600">
-                  {punctualityRating > 0 ? `${punctualityRating}/5` : '-'}
-                </Text>
+              )}
+
+              {/* Completed date */}
+              {completedLabel ? (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 2 }}>
+                  <Ionicons name="checkmark-done-circle" size={13} color="#16A34A" />
+                  <Text style={{ fontSize: 12, color: '#16A34A', fontWeight: '600' }}>
+                    Completed {completedLabel}
+                  </Text>
+                </View>
+              ) : null}
+            </View>
+          </View>
+        </View>
+
+        {/* ── Star rating ── */}
+        <View style={{
+          backgroundColor: WHITE, borderRadius: 18, padding: 20, marginBottom: 16,
+          alignItems: 'center',
+          shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 6,
+          shadowOffset: { width: 0, height: 1 }, elevation: 2,
+        }}>
+          <Text style={{ fontSize: 16, fontWeight: '800', color: TEXT, marginBottom: 4 }}>
+            How would you rate this service?
+          </Text>
+          <Text style={{ fontSize: 12, color: MUTED, marginBottom: 18 }}>
+            Tap a star to select your rating
+          </Text>
+
+          <View style={{ flexDirection: 'row', gap: 10 }}>
+            {[1, 2, 3, 4, 5].map(s => (
+              <TouchableOpacity key={s} onPress={() => setRating(s)} activeOpacity={0.7}>
+                <Ionicons
+                  name={s <= rating ? 'star' : 'star-outline'}
+                  size={40}
+                  color={s <= rating ? '#FBBF24' : '#D1D5DB'}
+                />
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          {rating > 0 && (
+            <Text style={{ fontSize: 13, fontWeight: '700', color: PRIMARY, marginTop: 10 }}>
+              {['', 'Poor', 'Fair', 'Good', 'Very Good', 'Excellent'][rating]}
+            </Text>
+          )}
+        </View>
+
+        {/* ── Share experience ── */}
+        <View style={{
+          backgroundColor: WHITE, borderRadius: 18, padding: 16, marginBottom: 16,
+          shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 6,
+          shadowOffset: { width: 0, height: 1 }, elevation: 2,
+        }}>
+          <Text style={{ fontSize: 15, fontWeight: '800', color: TEXT, marginBottom: 3 }}>
+            Share your experience
+          </Text>
+          <Text style={{ fontSize: 12, color: MUTED, marginBottom: 14 }}>
+            What did you love? What could be better? (optional)
+          </Text>
+
+          <View style={{
+            borderWidth: 1.5, borderColor: '#F3F4F6', borderRadius: 14,
+            backgroundColor: '#FAFAFA', padding: 12,
+          }}>
+            <TextInput
+              value={comment}
+              onChangeText={t => setComment(t.slice(0, 200))}
+              placeholder="Write something about your experience..."
+              placeholderTextColor={MUTED}
+              multiline
+              numberOfLines={4}
+              textAlignVertical="top"
+              style={{ fontSize: 14, color: TEXT, minHeight: 90 }}
+            />
+          </View>
+          <Text style={{ fontSize: 11, color: MUTED, textAlign: 'right', marginTop: 6 }}>
+            {comment.length}/200
+          </Text>
+        </View>
+
+        {/* ── Recommend ── */}
+        <View style={{
+          backgroundColor: WHITE, borderRadius: 18, padding: 16, marginBottom: 10,
+          shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 6,
+          shadowOffset: { width: 0, height: 1 }, elevation: 2,
+        }}>
+          <Text style={{ fontSize: 15, fontWeight: '800', color: TEXT, marginBottom: 16 }}>
+            Would you recommend this vendor?
+          </Text>
+
+          {([
+            { value: 'yes', label: 'Yes, I would recommend' },
+            { value: 'no',  label: "No, I wouldn't recommend" },
+          ] as const).map(opt => (
+            <TouchableOpacity
+              key={opt.value}
+              onPress={() => setRecommend(opt.value)}
+              activeOpacity={0.7}
+              style={{
+                flexDirection: 'row', alignItems: 'center', gap: 14,
+                paddingVertical: 13, paddingHorizontal: 4,
+                borderBottomWidth: opt.value === 'yes' ? 1 : 0,
+                borderBottomColor: '#F3F4F6',
+              }}>
+              <View style={{
+                width: 22, height: 22, borderRadius: 11,
+                borderWidth: 2, borderColor: recommend === opt.value ? PRIMARY : '#D1D5DB',
+                alignItems: 'center', justifyContent: 'center',
+              }}>
+                {recommend === opt.value && (
+                  <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: PRIMARY }} />
+                )}
               </View>
-              {renderStars(punctualityRating, setPunctualityRating, 28)}
-            </View>
-
-            {}
-            <View className="mb-4">
-              <View className="flex-row items-center justify-between mb-2">
-                <Text className="text-sm font-semibold text-gray-700">
-                  Communication
-                </Text>
-                <Text className="text-sm text-gray-600">
-                  {communicationRating > 0 ? `${communicationRating}/5` : '-'}
-                </Text>
-              </View>
-              {renderStars(communicationRating, setCommunicationRating, 28)}
-            </View>
-
-            {}
-            <View>
-              <View className="flex-row items-center justify-between mb-2">
-                <Text className="text-sm font-semibold text-gray-700">
-                  Value for Money
-                </Text>
-                <Text className="text-sm text-gray-600">
-                  {valueRating > 0 ? `${valueRating}/5` : '-'}
-                </Text>
-              </View>
-              {renderStars(valueRating, setValueRating, 28)}
-            </View>
-          </View>
-
-          {}
-          <View className="bg-white rounded-2xl p-4 mb-4">
-            <Text className="text-base font-bold text-gray-900 mb-3">
-              Review Title (Optional)
-            </Text>
-
-            <TextInput className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-gray-900" placeholder="Summarize your experience..." placeholderTextColor="#9ca3af" value={title} onChangeText={setTitle} maxLength={100} />
-
-            <Text className="text-xs text-gray-500 mt-2">
-              {title.length}/100 characters
-            </Text>
-          </View>
-
-          {}
-          <View className="bg-white rounded-2xl p-4 mb-4">
-            <Text className="text-base font-bold text-gray-900 mb-3">
-              Your Review <Text className="text-red-500">*</Text>
-            </Text>
-
-            <TextInput className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-4 text-gray-900" placeholder="Share your experience with this service..." placeholderTextColor="#9ca3af" value={comment} onChangeText={setComment} multiline numberOfLines={6} textAlignVertical="top" style={{
-            minHeight: 150
-          }} maxLength={1000} />
-
-            <Text className="text-xs text-gray-500 mt-2">
-              {comment.length}/1000 characters (minimum 10)
-            </Text>
-          </View>
-
-          {}
-          <View className="bg-blue-50 rounded-2xl p-4 mb-6">
-            <View className="flex-row items-start mb-2">
-              <Ionicons name="information-circle" size={20} color="#2563eb" />
-              <Text className="text-sm font-semibold text-blue-900 ml-2">
-                Review Guidelines
+              <Text style={{
+                fontSize: 14, color: TEXT,
+                fontWeight: recommend === opt.value ? '700' : '400',
+              }}>
+                {opt.label}
               </Text>
-            </View>
-
-            <View className="ml-7 gap-2">
-              <Text className="text-xs text-blue-700">
-                • Be honest and constructive in your feedback
-              </Text>
-              <Text className="text-xs text-blue-700">
-                • Focus on your experience with the service
-              </Text>
-              <Text className="text-xs text-blue-700">
-                • Avoid offensive language or personal attacks
-              </Text>
-              <Text className="text-xs text-blue-700">
-                • Reviews help others make informed decisions
-              </Text>
-            </View>
-          </View>
+            </TouchableOpacity>
+          ))}
         </View>
       </ScrollView>
 
-      {}
-      <View className="bg-white px-5 py-4 border-t border-gray-100">
-        <TouchableOpacity onPress={handleSubmitReview} disabled={loading || rating === 0 || comment.length < 10} className={`py-4 rounded-xl ${loading || rating === 0 || comment.length < 10 ? 'bg-gray-300' : 'bg-pink-600'}`} activeOpacity={0.7}>
-          {loading ? <ActivityIndicator size="small" color="#fff" /> : <Text className="text-white text-center font-bold text-base">
-              Submit Review
-            </Text>}
+      {/* ── Submit button ── */}
+      <View style={{
+        position: 'absolute', bottom: 0, left: 0, right: 0,
+        backgroundColor: WHITE,
+        paddingHorizontal: 16,
+        paddingTop: 12,
+        paddingBottom: Math.max(insets.bottom, 16) + 4,
+        borderTopWidth: 1, borderTopColor: '#F3F4F6',
+      }}>
+        <TouchableOpacity
+          onPress={handleSubmit}
+          disabled={rating === 0 || loading}
+          activeOpacity={0.85}
+          style={{
+            backgroundColor: rating === 0 ? '#F3F4F6' : PRIMARY,
+            borderRadius: 14, paddingVertical: 15,
+            alignItems: 'center', justifyContent: 'center',
+            flexDirection: 'row', gap: 8,
+          }}>
+          {loading
+            ? <ActivityIndicator color={WHITE} />
+            : <>
+                <Text style={{
+                  fontSize: 15, fontWeight: '700',
+                  color: rating === 0 ? MUTED : WHITE,
+                }}>
+                  Submit Review
+                </Text>
+                {rating > 0 && (
+                  <Ionicons name="chevron-forward" size={16} color={WHITE} />
+                )}
+              </>
+          }
         </TouchableOpacity>
       </View>
-    </SafeAreaView>;
+    </View>
+  );
 };
+
 export default CreateReviewScreen;
