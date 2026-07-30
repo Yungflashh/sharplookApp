@@ -4,6 +4,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { VendorTabParamList } from '@/types/navigation.types';
+
 import VendorDashboardScreen from '@/screens/vendor/VendorDashboardScreen';
 import VendorProfileScreen from '@/screens/vendor/VendoreProfileScreen';
 import VendorBooking from '@/screens/vendor/VendorBookingScreen';

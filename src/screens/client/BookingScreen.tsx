@@ -69,7 +69,17 @@ interface Booking {
   totalAmount: number;
   status: string;
   paymentStatus: string;
+  paymentExpiresAt?: string;
   createdAt: string;
+  location?: { address?: string; city?: string; state?: string };
+  serviceType?: 'home_service' | 'in_shop';
+  vendorStartConfirmed?: boolean;
+  clientStartConfirmed?: boolean;
+  sessionStartedAt?: string;
+  clientMarkedComplete?: boolean;
+  hasReview?: boolean;
+  hasDispute?: boolean;
+  disputeId?: string;
 }
 
 // ─── Status config ────────────────────────────────────────────────────────────
@@ -910,6 +920,20 @@ const BookingsScreen: React.FC = () => {
           </View>
         )}
       </ScrollView>
+
+      <StartSessionModal
+        visible={startModal.visible}
+        vendorName={startModal.vendorName}
+        loading={actionLoading === startModal.bookingId}
+        onConfirm={confirmStartSession}
+        onCancel={() => setStartModal({ visible: false, bookingId: '', vendorName: '' })}
+      />
+      <MarkDoneModal
+        visible={markDoneModal.visible}
+        loading={actionLoading === markDoneModal.bookingId}
+        onConfirm={confirmMarkDone}
+        onCancel={() => setMarkDoneModal({ visible: false, bookingId: '' })}
+      />
     </SafeAreaView>
   );
 };

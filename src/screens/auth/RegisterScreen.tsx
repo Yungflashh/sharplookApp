@@ -29,14 +29,15 @@ const RegisterScreen = () => {
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [referralId, setReferralId] = useState('');
-  const [agreeToTerms, setAgreeToTerms] = useState(false);
-  const [registerAsVendor, setRegisterAsVendor] = useState(false);
-  const [loading, setLoading] = useState(false);
   const [countryCode, setCountryCode] = useState('+234');
   const [showCountryPicker, setShowCountryPicker] = useState(false);
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [agreed, setAgreed] = useState(false);
+  const [hasReadTerms, setHasReadTerms] = useState(isVendor || hasRead('terms'));
+  const [hasReadPrivacy, setHasReadPrivacy] = useState(isVendor || hasRead('privacy'));
+  const [loading, setLoading] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string>>({});
   const [generalError, setGeneralError] = useState('');
   const [hearAboutUs, setHearAboutUs] = useState('');
   const [showHearAboutUsDropdown, setShowHearAboutUsDropdown] = useState(false);
@@ -313,9 +314,11 @@ const validateReferralCode = async (code: string) => {
     setLoading(true);
 
     try {
-      const registerData: any = {
-        firstName: firstName.trim(),
-        lastName: lastName.trim(),
+      const parts = fullName.trim().split(' ');
+      const firstName = parts[0];
+      const lastName = parts.slice(1).join(' ') || parts[0];
+      const response = await authAPI.register({
+        firstName, lastName,
         email: email.trim().toLowerCase(),
         phone: `${countryCode}${phone.trim()}`,
         password: password,
@@ -415,6 +418,10 @@ const validateReferralCode = async (code: string) => {
               Please fill the details below
             </Text>
           </View>
+          {!canToggleAgreed && !errors.agreed
+            ? <Text style={styles.hintText}>Tap each link above to read, then tick to agree</Text>
+            : null}
+          {errors.agreed ? <Text style={styles.errText}>{errors.agreed}</Text> : null}
 
           {/* General Error Message */}
           {generalError ? (

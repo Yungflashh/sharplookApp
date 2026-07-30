@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View, Text, TouchableOpacity, ScrollView, ActivityIndicator,
   RefreshControl, TextInput, Platform, Modal,
   KeyboardAvoidingView, Keyboard, StatusBar,
 } from 'react-native';
+import socketService from '@/services/socket.service';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';

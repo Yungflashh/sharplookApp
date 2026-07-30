@@ -9,6 +9,32 @@ import { ToastProvider } from '@/components/ui/Toast';
 
 import './global.css';
 
+async function checkForOTAUpdate() {
+  // expo-updates only works in production builds, not in Expo Go / dev mode
+  if (__DEV__) return;
+  try {
+    const update = await Updates.checkForUpdateAsync();
+    if (!update.isAvailable) return;
+
+    await Updates.fetchUpdateAsync();
+
+    Alert.alert(
+      'Update Ready',
+      'A new version of LookReal has been downloaded. Restart now to apply it.',
+      [
+        { text: 'Later', style: 'cancel' },
+        {
+          text: 'Restart Now',
+          onPress: () => Updates.reloadAsync(),
+        },
+      ],
+      { cancelable: false }
+    );
+  } catch {
+    // Silent fail — never surface update errors to the user
+  }
+}
+
 export default function App() {
   const [isReady, setIsReady] = useState(false);
 

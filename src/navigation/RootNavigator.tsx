@@ -3,8 +3,11 @@ import { View, ActivityIndicator, StyleSheet, AppState } from 'react-native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { checkAuthStatus, checkOnboardingStatus, checkInactivityAndLogout, updateLastActive } from '@/utils/authHelper';
 import AuthNavigator from '@/navigation/AuthNavigator';
+import VendorProfileSetup from '@/screens/auth/VendorProfileSetup';
 import MessageScreen from '@/screens/vendor/MessageScreen';
 import MainNavigator from '@/navigation/MainNavigator';
+import SplashScreen from '@/screens/splash/SplashScreen';
+import OnboardingScreen from '@/screens/splash/OnboardingScreen';
 import ChatScreen from '../components/clientComponent/ChatScreen';
 import CartScreen from '../components/clientComponent/CartScreen';
 
@@ -162,12 +165,19 @@ const RootNavigator = () => {
         console.log('🔄 Auth state changed:', authStatus.isAuthenticated);
         setIsAuthenticated(authStatus.isAuthenticated);
         setIsVendor(authStatus.isVendor);
+        if (authStatus.isAuthenticated && authStatus.isVendor) {
+          const user = (authStatus as any).user;
+          if (!user?.vendorProfile?.businessName) {
+            setNeedsVendorSetup(true);
+          }
+        }
       }
     }, 1000);
     return () => clearInterval(interval);
   }, [isAuthenticated]);
 
   const initializeApp = async () => {
+    const splashStart = Date.now();
     try {
       // ── CRITICAL PATH: resolve auth as fast as possible ──────────────────
       // checkAuthStatus reads from AsyncStorage — no network needed, very fast
@@ -186,6 +196,14 @@ const RootNavigator = () => {
 
       setIsAuthenticated(authStatus.isAuthenticated);
       setIsVendor(authStatus.isVendor);
+
+      if (authStatus.isAuthenticated && authStatus.isVendor) {
+        const user = (authStatus as any).user;
+        if (!user?.vendorProfile?.businessName) {
+          setNeedsVendorSetup(true);
+        }
+      }
+
       console.log('🔐 Auth status:', {
         isAuthenticated: authStatus.isAuthenticated,
         isVendor: authStatus.isVendor,

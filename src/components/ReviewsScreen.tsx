@@ -138,8 +138,8 @@ const ReviewsScreen: React.FC = () => {
             {review.reviewer.avatar ? <Image source={{
             uri: review.reviewer.avatar
           }} className="w-12 h-12 rounded-full" /> : <Text className="text-lg font-bold text-pink-600">
-                {review.reviewer.firstName.charAt(0)}
-                {review.reviewer.lastName.charAt(0)}
+                {(review.reviewer?.firstName || '?').charAt(0)}
+                {(review.reviewer?.lastName || '').charAt(0)}
               </Text>}
           </View>
 

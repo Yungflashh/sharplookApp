@@ -12,6 +12,8 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
+import { useNavigation, useRoute } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { AuthStackParamList } from '@/types/navigation.types';
 import { loginUser } from '@/utils/authHelper';
 import { Input, PasswordInput, Button, SocialLoginButton } from '@/components/ui/forms';
@@ -19,9 +21,14 @@ import { Input, PasswordInput, Button, SocialLoginButton } from '@/components/ui
 type LoginScreenNavigationProp = NativeStackNavigationProp<AuthStackParamList, 'Login'>;
 
 const LoginScreen = () => {
-  const navigation = useNavigation<LoginScreenNavigationProp>();
+  const navigation = useNavigation<NavProp>();
+  const route = useRoute();
+  const params = route.params as { message?: string } | undefined;
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
   const [loading, setLoading] = useState(false);
   const [generalError, setGeneralError] = useState('');
   const [errors, setErrors] = useState({
@@ -97,10 +104,10 @@ const LoginScreen = () => {
             email: 'Please check your email address',
           }));
         }
+        setErrors({ general: msg });
       }
-    } catch (error) {
-      console.error('Login error:', error);
-      setGeneralError('An unexpected error occurred. Please try again.');
+    } catch {
+      setErrors({ general: 'An unexpected error occurred. Please try again.' });
     } finally {
       if (shouldResetLoading) {
         setLoading(false);

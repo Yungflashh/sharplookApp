@@ -11,7 +11,7 @@ import {
 import { toast } from '@/components/ui/Toast';
 import ConfirmationModal from '@/components/ConfirmationModal';
 import { Ionicons } from '@expo/vector-icons';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -34,16 +34,23 @@ const CreateBookingScreen: React.FC = () => {
   // Steps: 1 = Date/Time, 2 = Location, 3 = Payment Method, 4 = Review & Confirm
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
-  const [scheduledDate, setScheduledDate] = useState(new Date());
-  const [scheduledTime, setScheduledTime] = useState('');
-  const [showDatePicker, setShowDatePicker] = useState(false);
-  const [showTimePicker, setShowTimePicker] = useState(false);
-  const [locationType, setLocationType] = useState<'home' | 'shop'>('home');
+
+  // Step 1
+  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  const [selectedTime, setSelectedTime] = useState('');
+  const [calMonth, setCalMonth] = useState(new Date());
+
+  // Step 2
+  const [locationType, setLocationType] = useState<'home' | 'shop'>(
+    vendor.vendorProfile.vendorType === 'in_shop' ? 'shop' : 'home'
+  );
   const [address, setAddress] = useState('');
   const [city, setCity] = useState('');
-  const [state, setState] = useState('');
+  const [stateVal, setStateVal] = useState('');
   const [coordinates, setCoordinates] = useState<[number, number]>([0, 0]);
-  const [clientNotes, setClientNotes] = useState('');
+  const [locationLoading, setLocationLoading] = useState(false);
+
+  // Step 3
   const [servicePrice, setServicePrice] = useState(service.basePrice || 0);
   const [distanceCharge, setDistanceCharge] = useState(0);
   const [totalAmount, setTotalAmount] = useState(service.basePrice || 0);
@@ -428,9 +435,23 @@ const CreateBookingScreen: React.FC = () => {
             <Ionicons name="arrow-back" size={24} color="#1f2937" />
           </TouchableOpacity>
 
-          <Text className="text-lg font-bold text-gray-900">Book Service</Text>
+  const fp = (p: number) => `₦${p.toLocaleString()}`;
+  const vp = vendor.vendorProfile;
 
-          <View className="w-10" />
+  // ── Wallet verifying overlay ───────────────────────────────────────────────
+  if (walletVerifying) {
+    return (
+      <View style={{ flex: 1, backgroundColor: '#FFF0F6', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24, paddingTop: insets.top, paddingBottom: insets.bottom }}>
+        <View style={{ width: 200, height: 200, alignItems: 'center', justifyContent: 'center', marginBottom: 28 }}>
+          <Ionicons name="sparkles" size={18} color={PINK} style={{ position: 'absolute', top: 4, left: 12 }} />
+          <Ionicons name="sparkles" size={12} color={PINK} style={{ position: 'absolute', top: 0, right: 18 }} />
+          <Ionicons name="heart" size={12} color={PINK} style={{ position: 'absolute', bottom: 8, left: 22 }} />
+          <Ionicons name="heart" size={10} color={PINK} style={{ position: 'absolute', bottom: 6, right: 22 }} />
+          <View style={{ width: 160, height: 160, borderRadius: 80, backgroundColor: 'rgba(224,64,121,0.08)', alignItems: 'center', justifyContent: 'center' }}>
+            <View style={{ width: 114, height: 114, borderRadius: 57, backgroundColor: 'rgba(224,64,121,0.13)', alignItems: 'center', justifyContent: 'center' }}>
+              <ActivityIndicator size="large" color={PINK} />
+            </View>
+          </View>
         </View>
 
         {/* Progress Bar - Now 4 steps */}
@@ -450,6 +471,79 @@ const CreateBookingScreen: React.FC = () => {
           {step === 3 && 'Payment Method'}
           {step === 4 && 'Review & Pay'}
         </Text>
+        <View style={{ width: '100%', backgroundColor: WHITE, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: '#FFE4EF', marginBottom: 16 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <Ionicons name="wallet-outline" size={22} color={PINK} />
+            <View style={{ marginLeft: 12, flex: 1 }}>
+              <Text style={{ fontSize: 13, fontWeight: '700', color: TEXT, marginBottom: 3 }}>LookReal Pay</Text>
+              <Text style={{ fontSize: 15, fontWeight: '700', color: PINK }}>{fp(totalAmount)}</Text>
+            </View>
+          </View>
+        </View>
+        <View style={{ width: '100%', backgroundColor: WHITE, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: '#FFE4EF' }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+            <Ionicons name="lock-closed" size={13} color={PINK} />
+            <Text style={{ fontSize: 14, fontWeight: '700', color: PINK, marginLeft: 6 }}>What happens next?</Text>
+          </View>
+          <Text style={{ fontSize: 13, color: MUTED, lineHeight: 20 }}>
+            Funds will be held securely in escrow and released to the vendor once both parties confirm the service is complete.
+          </Text>
+        </View>
+      </View>
+    );
+  }
+
+  // ── Wallet payment confirmed overlay ──────────────────────────────────────
+  if (walletPaid) {
+    return (
+      <View style={{ flex: 1, backgroundColor: WHITE, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32, paddingTop: insets.top, paddingBottom: insets.bottom }}>
+        <View style={{ position: 'absolute', top: '15%', width: 260, height: 260, borderRadius: 130, backgroundColor: '#F0FDF4' }} />
+        <View style={{ alignItems: 'center', width: '100%' }}>
+          <View style={{
+            width: 100, height: 100, borderRadius: 50, backgroundColor: '#10b981',
+            alignItems: 'center', justifyContent: 'center', marginBottom: 24,
+            elevation: 8, shadowColor: '#10b981', shadowOffset: { width: 0, height: 8 },
+            shadowOpacity: 0.3, shadowRadius: 16,
+          }}>
+            <Ionicons name="checkmark" size={52} color={WHITE} />
+          </View>
+          <Text style={{ fontSize: 26, fontWeight: '800', color: TEXT, marginBottom: 6, letterSpacing: -0.5 }}>Payment Confirmed!</Text>
+          <Text style={{ fontSize: 36, fontWeight: '800', color: PINK, letterSpacing: -1, marginBottom: 12 }}>{fp(paidAmount)}</Text>
+          <Text style={{ fontSize: 14, color: MUTED, textAlign: 'center', lineHeight: 20, marginBottom: 20 }}>
+            Your booking has been confirmed and the vendor notified.
+          </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#F0FDF4', borderRadius: 20, paddingHorizontal: 14, paddingVertical: 8, borderWidth: 1, borderColor: '#BBF7D0', marginBottom: 28 }}>
+            <Ionicons name="shield-checkmark" size={16} color="#10b981" />
+            <Text style={{ fontSize: 13, fontWeight: '600', color: '#166534' }}>Payment held securely in escrow</Text>
+          </View>
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 24 }}>
+            <ActivityIndicator size="small" color={PINK} style={{ marginRight: 8 }} />
+            <Text style={{ fontSize: 14, color: MUTED, fontWeight: '500' }}>Redirecting to your booking...</Text>
+          </View>
+          <TouchableOpacity
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1.5, borderColor: PINK, borderRadius: 12, paddingHorizontal: 20, paddingVertical: 12 }}
+            onPress={() => { if (paidBookingId) navigation.replace('BookingDetail', { bookingId: paidBookingId }); }}
+            activeOpacity={0.85}
+          >
+            <Text style={{ fontSize: 14, fontWeight: '700', color: PINK }}>View Booking Now</Text>
+            <Ionicons name="arrow-forward" size={16} color={PINK} />
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+
+  return (
+    <View style={{ flex: 1, backgroundColor: BG }}>
+      {/* ── HEADER ─────────────────────────────────────────────────────────── */}
+      <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
+        <TouchableOpacity onPress={handleBack} activeOpacity={0.8} style={styles.backBtn}>
+          <Ionicons name="arrow-back" size={18} color={PINK} />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>
+          {step === 4 ? 'Payment Method' : 'Book Appointment'}
+        </Text>
+        <View style={{ width: 36 }} />
       </View>
 
       {/* Content */}
@@ -465,10 +559,8 @@ const CreateBookingScreen: React.FC = () => {
                   <Ionicons name="time-outline" size={16} color="#6b7280" />
                   <Text className="text-sm text-gray-600 ml-1">{service.duration} min</Text>
                 </View>
-                <Text className="text-lg font-bold text-pink-600">
-                  {formatPrice(service.basePrice)}
-                </Text>
               </View>
+              <Text style={styles.servicePrice}>{fp(service.basePrice)}+</Text>
             </View>
 
             {/* Date Picker */}
@@ -1004,6 +1096,10 @@ const CreateBookingScreen: React.FC = () => {
                   <Text className="text-gray-600">Service Fee</Text>
                   <Text className="text-gray-900 font-semibold">{formatPrice(servicePrice)}</Text>
                 </View>
+              </View>
+            )}
+          </>
+        )}
 
                 {distanceCharge > 0 && (
                   <View className="flex-row items-center justify-between">
@@ -1022,6 +1118,46 @@ const CreateBookingScreen: React.FC = () => {
                     </Text>
                   </View>
                 </View>
+              ))}
+            </View>
+
+            {/* Price Breakdown */}
+            <View style={[styles.card, { marginTop: 14 }]}>
+              <Text style={styles.cardTitle}>Price Breakdown</Text>
+              {priceLoading
+                ? <ActivityIndicator color={PINK} style={{ marginTop: 14 }} />
+                : (
+                  <>
+                    <View style={[styles.detailRow, { borderBottomWidth: 1, borderBottomColor: BORDER }]}>
+                      <Text style={styles.detailLabel}>Service fee</Text>
+                      <Text style={styles.detailValue}>{fp(servicePrice)}</Text>
+                    </View>
+                    {distanceCharge > 0 && (
+                      <View style={[styles.detailRow, { borderBottomWidth: 1, borderBottomColor: BORDER }]}>
+                        <Text style={styles.detailLabel}>Distance charge</Text>
+                        <Text style={styles.detailValue}>{fp(distanceCharge)}</Text>
+                      </View>
+                    )}
+                    <View style={styles.detailRow}>
+                      <Text style={styles.detailLabel}>Total</Text>
+                      <Text style={[styles.detailValue, { color: PINK, fontSize: 17, fontWeight: '800' }]}>
+                        {fp(totalAmount)}
+                      </Text>
+                    </View>
+                  </>
+                )
+              }
+            </View>
+
+            {/* Cancellation Policy */}
+            <View style={styles.cancelCard}>
+              <Ionicons name="information-circle" size={20} color="#F59E0B" style={{ marginTop: 1 }} />
+              <View style={{ flex: 1, marginLeft: 10 }}>
+                <Text style={styles.cancelTitle}>Cancellation Policy</Text>
+                <Text style={styles.cancelBody}>
+                  - Free cancellation up to 59 minutes before your appointment{'\n'}
+                  - 20% fee applies for cancellations within 59 minutes
+                </Text>
               </View>
             </View>
 

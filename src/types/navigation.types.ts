@@ -38,6 +38,7 @@ export type RootStackParamList = {
       vendorProfile: {
         businessName: string;
         vendorType: string;
+        profileImage?: string;
         location?: {
           address: string;
           city: string;
@@ -51,7 +52,7 @@ export type RootStackParamList = {
     bookingId: string;
   };
   Payment: {
-    bookingId: string;
+    bookingId?: string;  // Not available for card payments (booking created post-webhook)
     amount: number;
      authorizationUrl?: string;  // NEW: Pre-generated URL from booking creation
   reference?: string; 
@@ -60,6 +61,9 @@ export type RootStackParamList = {
     bookingId: string;
     vendorName: string;
     serviceName: string;
+    vendorImage?: string;
+    vendorRole?: string;
+    completedAt?: string;
   };
   Reviews: undefined;
   VendorMyResponses: undefined;
@@ -91,6 +95,67 @@ export type RootStackParamList = {
   Disputes: undefined;
   CreateDispute: {
     bookingId: string;
+    role: 'client' | 'vendor';
+  };
+  OngoingCall: {
+    callId?: string;
+    callType: 'voice' | 'video';
+    isOutgoing: boolean;
+    offer?: any; 
+    otherUser: {
+      _id: string;
+      firstName: string;
+      lastName: string;
+      avatar?: string;
+    };
+  };
+  IncomingCall: {
+    call: {
+      _id: string;
+      receiver: string;
+      status: string;
+    };
+    caller: {
+      _id: string;
+      firstName: string;
+      lastName: string;
+      avatar?: string;
+    };
+    callType: 'voice' | 'video';
+    offer?: any; 
+  };
+  SharedContent: {
+    type: 'vendor' | 'product';
+    id: string;
+  };
+  Referrals: undefined;
+  ReferralLeaderboard: undefined;
+  ApplyReferralCode: undefined;
+  ReferralDetail: undefined;
+  WalletPayment: {
+    amount: number;
+    reference: string;
+    authorizationUrl: string;
+    paymentType?: 'wallet_funding' | 'tier_upgrade';
+  };
+  ChangeWithdrawalPin: undefined;
+  Subsriptions: undefined;
+  UpgradeTier: undefined;
+  DisputeOrderDetail: undefined;
+  TermsPrivacy: undefined;
+  Transactions: undefined;
+  VendorServiceDetail: {
+    serviceId: string;
+  };
+  Reschedule: {
+    bookingId: string;
+    scheduledDate: string;
+    scheduledTime?: string;
+    vendorName: string;
+    serviceName: string;
+    serviceImage?: string;
+    serviceType?: string;
+    location?: { address: string; city: string; state: string };
   };
   OngoingCall: {
     callId?: string;
@@ -147,6 +212,7 @@ export type AuthStackParamList = {
     VerifyOtp: { email: string };  // Make sure this exists
 
   VendorProfileSetup: undefined;
+  TermsPrivacyAuthScreen: { type: 'terms' | 'privacy' };
 };
 export type ClientTabParamList = {
   Home: undefined;

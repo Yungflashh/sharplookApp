@@ -616,6 +616,41 @@ class SocketService {
   
 
   
+  onSessionStarted(callback: (data: {
+    bookingId: string;
+    sessionStartedAt: string;
+    message?: string;
+  }) => void): void {
+    const events = ['booking:session:started', 'booking:updated', 'session:started'];
+    events.forEach(ev => {
+      if (this.socket) {
+        this.socket.on(ev, (data: any) => {
+          if (data?.status === 'in_progress' || ev === 'booking:session:started' || ev === 'session:started') {
+            console.log(`📥 RECEIVED ${ev}:`, JSON.stringify(data, null, 2));
+            callback({ bookingId: data.bookingId || data._id, sessionStartedAt: data.sessionStartedAt, message: data.message });
+          }
+        });
+      }
+    });
+  }
+
+  onBookingStatusUpdated(callback: (data: {
+    bookingId: string;
+    status: string;
+    sessionStartedAt?: string;
+    message?: string;
+  }) => void): void {
+    if (!this.socket) return;
+    this.socket.on('booking:updated', (data) => {
+      console.log('📥 RECEIVED booking:updated:', JSON.stringify(data, null, 2));
+      callback(data);
+    });
+    this.socket.on('booking:status:updated', (data) => {
+      console.log('📥 RECEIVED booking:status:updated:', JSON.stringify(data, null, 2));
+      callback(data);
+    });
+  }
+
   removeListener(event: string): void {
     // Remove from active tracking
     this.activeListeners = this.activeListeners.filter(l => l.event !== event);

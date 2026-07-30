@@ -37,16 +37,8 @@ api.interceptors.response.use(response => {
   
   return response;
 }, async (error: AxiosError) => {
-  console.error('🔴 API Error Interceptor:', {
-    message: error.message,
-    code: error.code,
-    url: error.config?.url,
-    method: error.config?.method,
-    status: error.response?.status,
-    statusText: error.response?.statusText,
-    responseData: error.response?.data,
-    requestData: error.config?.data
-  });
+  const _errData = error.response?.data as any;
+  console.error('🔴 API Error:', error.config?.method?.toUpperCase(), error.config?.url, error.response?.status, _errData?.error?.message || _errData?.message || error.message);
   const originalRequest = error.config as InternalAxiosRequestConfig & {
     _retry?: boolean;
     _networkRetry?: boolean;
@@ -162,6 +154,10 @@ export const authAPI = {
     });
     return response.data;
   },
+  resendVerification: async (email: string) => {
+    const response = await api.post('/auth/resend-verification', { email });
+    return response.data;
+  },
   verifyPhone: async (code: string) => {
     const response = await api.post('/auth/verify-phone', {
       code
@@ -237,6 +233,19 @@ export const userAPI = {
       console.error('❌ Avatar upload error:', error);
       throw error;
     }
+  },
+
+  uploadAvatarOnly: async (imageUri: string) => {
+    const formData = new FormData();
+    const filename = imageUri.split('/').pop() || 'avatar.jpg';
+    const match = /\.(\w+)$/.exec(filename);
+    const type = match ? `image/${match[1]}` : 'image/jpeg';
+    formData.append('image', { uri: imageUri, name: filename, type } as any);
+    const response = await api.post('/users/avatar', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 30000,
+    });
+    return response.data;
   },
 
   updatePreferences: async (preferences: {
@@ -338,14 +347,20 @@ export const vendorAPI = {
   setupProfile: async (setupData: {
     businessName: string;
     businessDescription: string;
-    serviceCategories: string[];
+    categories: string[];
+    primaryCategory?: string;
     vendorType: 'home_service' | 'in_shop' | 'both';
+    serviceRadius?: number;
     location: {
-      coordinates: number[];
+      type: 'Point';
+      coordinates: [number, number];
       address: string;
+      city: string;
+      state: string;
+      country: string;
     };
   }) => {
-    const response = await api.post('/vendors/setup', setupData);
+    const response = await api.put('/vendors/profile', setupData);
     return response.data;
   },
  
@@ -599,13 +614,26 @@ export const disputeAPI = {
     bookingId: string;
     reason: string;
     description: string;
-    category: string;
-    evidence?: {
-      type: string;
-      content: string;
-    }[];
+    evidenceType?: string;
+    photos?: Array<{ uri: string; mimeType?: string; fileName?: string }>;
   }) => {
-    const response = await api.post('/disputes', disputeData);
+    const formData = new FormData();
+    formData.append('bookingId', disputeData.bookingId);
+    formData.append('reason', disputeData.reason);
+    formData.append('description', disputeData.description);
+    if (disputeData.evidenceType) {
+      formData.append('evidenceType', disputeData.evidenceType);
+    }
+    (disputeData.photos || []).forEach((photo, i) => {
+      formData.append('photos', {
+        uri: photo.uri,
+        type: photo.mimeType || 'image/jpeg',
+        name: photo.fileName || `photo_${i}.jpg`,
+      } as any);
+    });
+    const response = await api.post('/disputes', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
     return response.data;
   },
   getMyDisputes: async (params?: {
@@ -687,7 +715,8 @@ export const reviewAPI = {
     bookingId: string;
     rating: number;
     title?: string;
-    comment: string;
+    comment?: string;
+    recommend?: boolean;
     detailedRatings?: {
       quality?: number;
       punctuality?: number;
@@ -849,6 +878,10 @@ export const bookingAPI = {
     const response = await api.post(`/bookings/${bookingId}/cancel`, {
       reason
     });
+    return response.data;
+  },
+  rescheduleBooking: async (bookingId: string, newDate: string, newTime?: string) => {
+    const response = await api.post(`/bookings/${bookingId}/reschedule`, { newDate, newTime });
     return response.data;
   },
   updateBooking: async (bookingId: string, updates: {
@@ -1644,6 +1677,10 @@ export const servicesAPI = {
   },
   getServiceById: async (serviceId: string) => {
     const response = await api.get(`/services/${serviceId}`);
+    return response.data;
+  },
+  trackView: async (serviceId: string) => {
+    const response = await api.post(`/services/${serviceId}/view`);
     return response.data;
   },
   deleteService: async (serviceId: string) => {
@@ -2582,55 +2619,59 @@ export const handleAPIError = (error: any): APIError => {
       status,
       data
     } = axiosError.response;
-    if (status === 400 && data?.errors) {
+    // Validation field errors live at data.errors or data.error.errors (express-validator array)
+    // Never use data.error.error — that's the raw Error instance and may contain stack traces
+    const rawErrors = data?.errors ?? data?.error?.errors;
+    if (Array.isArray(rawErrors) && rawErrors.length > 0) {
       const fieldErrors: Record<string, string> = {};
-      if (Array.isArray(data.errors)) {
-        data.errors.forEach((err: any) => {
-          if (err.field && err.message) {
-            fieldErrors[err.field] = err.message;
-          }
-        });
-      } else if (typeof data.errors === 'object') {
-        Object.keys(data.errors).forEach(field => {
-          fieldErrors[field] = data.errors[field];
-        });
-      }
+      rawErrors.forEach((err: any) => {
+        if (err.message) {
+          const key = err.field || err.param || 'general';
+          if (!fieldErrors[key]) fieldErrors[key] = err.message;
+        }
+      });
+      const fieldMessages = Object.values(fieldErrors);
+      const humanMessage = fieldMessages.length > 0
+        ? fieldMessages.join('. ')
+        : (data?.error?.message || data?.message || 'Please check your input and try again.');
       return {
-        message: data.message || 'Please check your input and try again.',
+        message: humanMessage,
         status,
         data,
         fieldErrors: Object.keys(fieldErrors).length > 0 ? fieldErrors : undefined,
         isValidationError: true
       };
     }
-    let message = data?.message || 'An error occurred';
+    // For all other errors use the backend's human-readable message
+    const backendMessage = data?.error?.message || data?.message;
+    let message: string;
     switch (status) {
       case 401:
-        message = data?.message || 'Invalid credentials. Please check your email and password.';
+        message = backendMessage || 'Invalid credentials. Please check your email and password.';
         break;
       case 403:
-        message = data?.message || 'Access denied. You do not have permission to perform this action.';
+        message = backendMessage || 'You don\'t have permission to do that.';
         break;
       case 404:
-        message = data?.message || 'Resource not found.';
+        message = backendMessage || 'That item could not be found.';
         break;
       case 409:
-        message = data?.message || 'This resource already exists.';
+        message = backendMessage || 'This already exists. Please try a different option.';
         break;
       case 422:
-        message = data?.message || 'Invalid data provided.';
+        message = backendMessage || 'Some information provided is invalid.';
         break;
       case 429:
-        message = 'Too many requests. Please try again later.';
+        message = 'Too many attempts. Please wait a moment and try again.';
         break;
       case 500:
-        message = 'Server error. Please try again later.';
+        message = 'Something went wrong on our end. Please try again shortly.';
         break;
       case 503:
-        message = 'Service temporarily unavailable. Please try again later.';
+        message = 'Service is temporarily unavailable. Please try again later.';
         break;
       default:
-        message = data?.message || 'An unexpected error occurred.';
+        message = backendMessage || 'Something went wrong. Please try again.';
     }
     return {
       message,

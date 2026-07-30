@@ -9,7 +9,6 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
 import api, { handleAPIError, categoriesAPI, servicesAPI } from '@/api/api';
 import AddServiceModal from '@/components/AddServiceModal';
-import ServiceCard from '@/components/ServiceCard';
 import ConfirmationModal from '@/components/ConfirmationModal';
 import FilterModal, { FilterOptions } from '@/components/FilterModal';
 import { toast } from '@/components/ui/Toast';

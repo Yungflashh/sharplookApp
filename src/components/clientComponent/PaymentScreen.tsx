@@ -3,7 +3,7 @@ import { View, Text, TouchableOpacity, ActivityIndicator, Platform } from 'react
 import { toast } from '@/components/ui/Toast';
 import ConfirmationModal from '@/components/ConfirmationModal';
 import { Ionicons } from '@expo/vector-icons';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -390,10 +390,19 @@ const PaymentScreen: React.FC = () => {
           >
             <Ionicons name="close" size={24} color="#1f2937" />
           </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
 
           <Text className="text-lg font-bold text-gray-900">Complete Payment</Text>
 
-          <View className="w-10" />
+          {/* Concentric circles */}
+          <View style={styles.shieldOuter}>
+            <View style={styles.shieldInner}>
+              <Ionicons name="shield-checkmark" size={52} color={PINK} />
+            </View>
+          </View>
         </View>
 
         {/* Amount Display */}
@@ -518,6 +527,21 @@ const PaymentScreen: React.FC = () => {
             Secured by <Text className="font-bold">Paystack</Text>
           </Text>
         </View>
+      ) : (
+        <View style={styles.center}>
+          <Ionicons name="alert-circle-outline" size={64} color="#d1d5db" />
+          <Text style={styles.noUrlText}>Payment URL not available</Text>
+          <TouchableOpacity style={styles.goBackBtn} onPress={() => navigation.goBack()}>
+            <Text style={styles.goBackText}>Go Back</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* ── Footer ───────────────────────────────────────────────────── */}
+      <View style={[styles.footer, { paddingBottom: insets.bottom || 12 }]}>
+        <Ionicons name="lock-closed" size={12} color={GREEN} />
+        <Text style={styles.footerText}>  256-bit SSL  ·  Secured by </Text>
+        <Text style={[styles.footerText, { fontWeight: '700' }]}>Paystack</Text>
       </View>
 
       <ConfirmationModal

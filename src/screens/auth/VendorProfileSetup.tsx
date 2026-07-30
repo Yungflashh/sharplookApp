@@ -31,7 +31,6 @@ const VendorProfileSetup = () => {
   
   const [businessName, setBusinessName] = useState('');
   const [businessDescription, setBusinessDescription] = useState('');
-  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [vendorType, setVendorType] = useState<VendorType>('home_service');
   const [location, setLocation] = useState<{
     coordinates: number[];
@@ -138,8 +137,18 @@ const VendorProfileSetup = () => {
     setLoadingCategories(true);
     try {
       const response = await categoriesAPI.getAll();
-      if (response.success && response.data) {
-        setCategories(response.data);
+      if (response.success && response.data) setCategories(response.data);
+    } catch { /* silent */ } finally { setLoadingCategories(false); }
+  };
+
+  const getCurrentLocation = async () => {
+    setLocationLoading(true);
+    clearErr('location');
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        toast.info('Permission Required', 'Please enable location permissions in settings.');
+        return;
       }
     } catch (error) {
       console.error('Error fetching categories:', error);
@@ -197,10 +206,11 @@ const VendorProfileSetup = () => {
 
     setLoading(true);
     try {
-      const setupData = {
+      const setupData: any = {
         businessName: businessName.trim(),
         businessDescription: businessDescription.trim(),
-        serviceCategories: selectedCategories,
+        categories: [selectedCategory],
+        primaryCategory: selectedCategory,
         vendorType,
         location: location!,
       };
@@ -212,10 +222,9 @@ const VendorProfileSetup = () => {
         console.log('Vendor profile setup complete');
         // Navigate to appropriate screen
       } else {
-        setGeneralError(response.message || 'Failed to create vendor profile');
+        toast.error('Setup Failed', response.message || 'Failed to create vendor profile');
       }
     } catch (error: any) {
-      console.error('Vendor setup error:', error);
       const apiError = handleAPIError(error);
 
       if (apiError.fieldErrors) {
@@ -231,11 +240,9 @@ const VendorProfileSetup = () => {
       if (apiError.isNetworkError) {
         setGeneralError('Network error. Please check your internet connection.');
       } else {
-        setGeneralError(apiError.message || 'Failed to setup vendor profile');
+        toast.error('Error', apiError.message || 'Failed to setup vendor profile');
       }
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   };
 
   const toggleCategory = (categoryId: string) => {

@@ -509,7 +509,6 @@ const VendorDashboardScreen: React.FC = () => {
                 );
               })}
             </View>
-          </View>
 
           {/* 2-column stat cards */}
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>

@@ -1,70 +1,179 @@
-import React, { useState } from 'react';
-import { Modal, View, Text, TouchableOpacity, ScrollView, TextInput } from 'react-native';
+import React, { useState, useMemo } from 'react';
+import {
+  Modal,
+  View,
+  Text,
+  TouchableOpacity,
+  TextInput,
+  FlatList,
+  StyleSheet,
+  StatusBar,
+  SafeAreaView,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COUNTRIES } from './countryData';
+
+const PINK = '#E91E63';
+
 interface CountryCodePickerProps {
   visible: boolean;
   onClose: () => void;
   onSelect: (code: string) => void;
   selectedCode: string;
 }
+
 const CountryCodePicker: React.FC<CountryCodePickerProps> = ({
   visible,
   onClose,
   onSelect,
-  selectedCode
+  selectedCode,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
+
+  const filteredCountries = useMemo(() => {
+    const q = searchQuery.toLowerCase().trim();
+    if (!q) return COUNTRIES;
+    return COUNTRIES.filter(
+      c => c.name.toLowerCase().includes(q) || c.code.includes(q)
+    );
+  }, [searchQuery]);
+
   const handleSelect = (code: string) => {
     onSelect(code);
     onClose();
     setSearchQuery('');
   };
-  const filteredCountries = COUNTRIES.filter(country => country.name.toLowerCase().includes(searchQuery.toLowerCase()) || country.code.includes(searchQuery));
-  return <Modal visible={visible} animationType="slide" transparent={false} onRequestClose={onClose} statusBarTranslucent={true}>
-      <View className="flex-1 bg-white pt-12">
-        {}
-        <View className="px-6 py-4 border-b border-gray-200">
-          <View className="flex-row items-center justify-between mb-4">
-            <Text className="text-xl font-bold text-gray-900">
-              Select Country Code
-            </Text>
-            <TouchableOpacity onPress={onClose} activeOpacity={0.7}>
-              <Ionicons name="close" size={28} color="#000" />
-            </TouchableOpacity>
-          </View>
 
-          {}
-          <View className="relative">
-            <Ionicons name="search" size={20} color="#9CA3AF" style={{
-            position: 'absolute',
-            left: 16,
-            top: 14,
-            zIndex: 10
-          }} />
-            <TextInput className="w-full pl-12 pr-4 py-3.5 rounded-xl border border-gray-200 bg-gray-50 text-black text-base" placeholder="Search country..." placeholderTextColor="#9CA3AF" value={searchQuery} onChangeText={setSearchQuery} />
-          </View>
+  const handleClose = () => {
+    onClose();
+    setSearchQuery('');
+  };
+
+  return (
+    <Modal
+      visible={visible}
+      animationType="slide"
+      transparent={false}
+      onRequestClose={handleClose}
+      statusBarTranslucent
+    >
+      <StatusBar barStyle="dark-content" backgroundColor="white" />
+      <SafeAreaView style={styles.safe}>
+        {/* Header */}
+        <View style={styles.header}>
+          <Text style={styles.headerTitle}>Select Country</Text>
+          <TouchableOpacity onPress={handleClose} activeOpacity={0.7} style={styles.closeBtn}>
+            <Ionicons name="close" size={24} color="#1a1a1a" />
+          </TouchableOpacity>
         </View>
 
-        {}
-        <ScrollView className="flex-1" keyboardShouldPersistTaps="handled">
-          {filteredCountries.length > 0 ? filteredCountries.map((country, index) => <TouchableOpacity key={`${country.code}-${country.name}-${index}`} onPress={() => handleSelect(country.code)} activeOpacity={0.7} className={`flex-row items-center px-6 py-4 border-b border-gray-100 ${selectedCode === country.code ? 'bg-pink-50' : ''}`}>
-                <Text className="text-3xl mr-3">{country.flag}</Text>
-                <View className="flex-1">
-                  <Text className="text-base font-medium text-gray-900">
-                    {country.name}
-                  </Text>
-                </View>
-                <Text className="text-base font-semibold text-gray-700 mr-3">
-                  {country.code}
+        {/* Search */}
+        <View style={styles.searchWrap}>
+          <Ionicons name="search" size={18} color="#9CA3AF" style={styles.searchIcon} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search by name or code..."
+            placeholderTextColor="#9CA3AF"
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            autoCorrect={false}
+            returnKeyType="search"
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchQuery('')} activeOpacity={0.7}>
+              <Ionicons name="close-circle" size={18} color="#9CA3AF" />
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {/* List */}
+        <FlatList
+          data={filteredCountries}
+          keyExtractor={(item, index) => `${item.code}-${item.name}-${index}`}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+          initialNumToRender={20}
+          maxToRenderPerBatch={30}
+          windowSize={10}
+          renderItem={({ item }) => {
+            const isSelected = selectedCode === item.code && item.name === COUNTRIES.find(c => c.code === selectedCode && c.name === item.name)?.name;
+            return (
+              <TouchableOpacity
+                style={[styles.row, isSelected && styles.rowSelected]}
+                onPress={() => handleSelect(item.code)}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.flag}>{item.flag}</Text>
+                <Text style={styles.countryName} numberOfLines={1}>
+                  {item.name}
                 </Text>
-                {selectedCode === country.code && <Ionicons name="checkmark-circle" size={24} color="#ec4899" />}
-              </TouchableOpacity>) : <View className="items-center justify-center py-12">
-              <Ionicons name="search" size={48} color="#D1D5DB" />
-              <Text className="text-gray-500 text-base mt-4">No countries found</Text>
-            </View>}
-        </ScrollView>
-      </View>
-    </Modal>;
+                <Text style={[styles.dialCode, isSelected && styles.dialCodeSelected]}>
+                  {item.code}
+                </Text>
+                {isSelected && (
+                  <Ionicons name="checkmark-circle" size={20} color={PINK} style={styles.check} />
+                )}
+              </TouchableOpacity>
+            );
+          }}
+          ListEmptyComponent={() => (
+            <View style={styles.empty}>
+              <Ionicons name="search" size={40} color="#D1D5DB" />
+              <Text style={styles.emptyText}>No countries found</Text>
+            </View>
+          )}
+        />
+      </SafeAreaView>
+    </Modal>
+  );
 };
+
+const styles = StyleSheet.create({
+  safe: { flex: 1, backgroundColor: 'white' },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  headerTitle: { fontSize: 18, fontWeight: '700', color: '#1a1a1a' },
+  closeBtn: {
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: '#F3F4F6',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  searchWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    margin: 16,
+    paddingHorizontal: 14,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    height: 48,
+  },
+  searchIcon: { marginRight: 10 },
+  searchInput: { flex: 1, fontSize: 15, color: '#1a1a1a' },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F9FAFB',
+  },
+  rowSelected: { backgroundColor: '#FFF0F5' },
+  flag: { fontSize: 26, marginRight: 14, width: 36 },
+  countryName: { flex: 1, fontSize: 15, color: '#1a1a1a', fontWeight: '400' },
+  dialCode: { fontSize: 14, color: '#6B7280', fontWeight: '500', marginRight: 6 },
+  dialCodeSelected: { color: PINK },
+  check: { marginLeft: 4 },
+  empty: { alignItems: 'center', paddingVertical: 48 },
+  emptyText: { marginTop: 12, fontSize: 14, color: '#9CA3AF' },
+});
+
 export default CountryCodePicker;

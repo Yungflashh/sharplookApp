@@ -4,6 +4,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { ClientTabParamList } from '@/types/navigation.types';
+
 import ClientDashboardScreen from '@/screens/client/ClientDashboardScreen';
 import ClientProfileScreen from '@/screens/client/ClientProfileScreen';
 import BookingsScreen from '@/screens/client/BookingScreen';
