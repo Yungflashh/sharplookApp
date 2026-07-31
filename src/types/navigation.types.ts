@@ -20,6 +20,7 @@ export type RootStackParamList = {
   };
   ChatList: undefined;
   AllVendors: undefined;
+  Search: undefined;
   VendorDetail: {
     vendorId: string;
   };

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
+  TextInput,
   TouchableOpacity,
   FlatList,
   Image,
@@ -11,14 +12,16 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '@/types/navigation.types';
 import { messageAPI, handleAPIError } from '@/api/api';
 import { getStoredUser } from '@/utils/authHelper';
 
-type ChatListNavigationProp = NativeStackNavigationProp<RootStackParamList, 'Chat'>;
+type ChatListNavigationProp = NativeStackNavigationProp<RootStackParamList, 'ChatList'>;
+
+const PRIMARY = '#eb278d';
+const PRIMARY_SOFT = '#FCE4EC';
 
 interface Conversation {
   _id: string;
@@ -28,6 +31,7 @@ interface Conversation {
     lastName: string;
     avatar?: string;
     isOnline?: boolean;
+    isVerified?: boolean;
     lastSeen?: string;
   }>;
   lastMessage?: {
@@ -54,6 +58,8 @@ const ChatListScreen: React.FC = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [totalUnreadCount, setTotalUnreadCount] = useState(0);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filter, setFilter] = useState<'all' | 'unread'>('all');
 
   useEffect(() => {
     loadCurrentUser();
@@ -239,8 +245,15 @@ const ChatListScreen: React.FC = () => {
     return (
       <TouchableOpacity
         onPress={() => handleConversationPress(item)}
-        className="bg-white px-5 py-4 border-b border-gray-100"
+        className="bg-white mx-5 mb-3 rounded-2xl p-3"
         activeOpacity={0.7}
+        style={{
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 1 },
+          shadowOpacity: 0.05,
+          shadowRadius: 3,
+          elevation: 2,
+        }}
       >
         <View className="flex-row items-center">
           {}
@@ -249,7 +262,7 @@ const ChatListScreen: React.FC = () => {
               className="w-14 h-14 rounded-full bg-gray-200 items-center justify-center overflow-hidden"
               style={{
                 borderWidth: hasUnread ? 2 : 0,
-                borderColor: hasUnread ? '#eb278d' : 'transparent',
+                borderColor: hasUnread ? PRIMARY : 'transparent',
               }}
             >
               {otherUser.avatar ? (
@@ -264,28 +277,35 @@ const ChatListScreen: React.FC = () => {
             </View>
 
             {}
-            {otherUser.isOnline && (
-              <View className="absolute bottom-0 right-0 w-4 h-4 bg-green-500 rounded-full border-2 border-white" />
-            )}
+            <View
+              className="absolute bottom-0 right-0 w-3.5 h-3.5 rounded-full border-2 border-white"
+              style={{ backgroundColor: otherUser.isOnline ? '#22c55e' : '#d1d5db' }}
+            />
           </View>
 
           {}
           <View className="flex-1">
             <View className="flex-row items-center justify-between mb-1">
-              <Text
-                className={`text-base ${
-                  hasUnread ? 'font-bold text-gray-900' : 'font-semibold text-gray-800'
-                }`}
-                numberOfLines={1}
-              >
-                {otherUser.firstName} {otherUser.lastName}
-              </Text>
+              <View className="flex-row items-center flex-1 mr-2">
+                <Text
+                  className={`text-base ${
+                    hasUnread ? 'font-bold text-gray-900' : 'font-semibold text-gray-800'
+                  }`}
+                  numberOfLines={1}
+                >
+                  {otherUser.firstName} {otherUser.lastName}
+                </Text>
+                {otherUser.isVerified && (
+                  <Ionicons name="checkmark-circle" size={14} color={PRIMARY} style={{ marginLeft: 4 }} />
+                )}
+              </View>
 
               {item.lastMessage && (
                 <Text
                   className={`text-xs ${
-                    hasUnread ? 'text-pink-600 font-bold' : 'text-gray-500'
+                    hasUnread ? 'font-bold' : 'text-gray-500'
                   }`}
+                  style={hasUnread ? { color: PRIMARY } : undefined}
                 >
                   {formatTime(item.lastMessage.sentAt)}
                 </Text>
@@ -304,7 +324,10 @@ const ChatListScreen: React.FC = () => {
 
               {}
               {hasUnread && (
-                <View className="ml-2 min-w-[22px] h-[22px] bg-pink-500 rounded-full items-center justify-center px-1.5">
+                <View
+                  className="ml-2 min-w-[22px] h-[22px] rounded-full items-center justify-center px-1.5"
+                  style={{ backgroundColor: PRIMARY }}
+                >
                   <Text className="text-white text-xs font-bold">
                     {userUnreadCount > 99 ? '99+' : userUnreadCount}
                   </Text>
@@ -317,11 +340,30 @@ const ChatListScreen: React.FC = () => {
     );
   };
 
+  const filteredConversations = conversations.filter((conv) => {
+    const otherUser = getOtherParticipant(conv);
+    if (!otherUser) return false;
+
+    if (filter === 'unread') {
+      const unread = conv.unreadCount?.[currentUserId || ''] || 0;
+      if (unread === 0) return false;
+    }
+
+    if (searchQuery.trim()) {
+      const q = searchQuery.trim().toLowerCase();
+      const name = `${otherUser.firstName} ${otherUser.lastName}`.toLowerCase();
+      const preview = formatMessagePreview(conv).toLowerCase();
+      if (!name.includes(q) && !preview.includes(q)) return false;
+    }
+
+    return true;
+  });
+
   if (loading) {
     return (
-      <SafeAreaView className="flex-1 bg-white">
+      <SafeAreaView style={{ flex: 1, backgroundColor: PRIMARY_SOFT }}>
         <View className="flex-1 items-center justify-center">
-          <ActivityIndicator size="large" color="#eb278d" />
+          <ActivityIndicator size="large" color={PRIMARY} />
           <Text className="text-gray-500 text-sm mt-4">Loading chats...</Text>
         </View>
       </SafeAreaView>
@@ -329,50 +371,119 @@ const ChatListScreen: React.FC = () => {
   }
 
   return (
-    <SafeAreaView className="flex-1 bg-gray-50" edges={['top']}>
-      {}
-      <LinearGradient
-        colors={['#eb278d', '#f472b6']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-      >
-        <View className="px-5 py-4 flex-row items-center justify-between">
-          <View className="flex-1">
-            <Text className="text-2xl font-bold text-white">Messages</Text>
-            {totalUnreadCount > 0 && (
-              <Text className="text-sm text-white/80 mt-0.5">
-                {totalUnreadCount} unread {totalUnreadCount === 1 ? 'message' : 'messages'}
-              </Text>
-            )}
-          </View>
-
+    <SafeAreaView style={{ flex: 1, backgroundColor: PRIMARY_SOFT }} edges={['top']}>
+      <View className="px-5 pt-4 pb-3">
+        <View className="flex-row items-center mb-4">
           <TouchableOpacity
             onPress={() => navigation.goBack()}
-            className="w-10 h-10 rounded-full bg-white/20 items-center justify-center"
+            className="w-10 h-10 rounded-full bg-white items-center justify-center mr-3"
             activeOpacity={0.7}
           >
-            <Ionicons name="close" size={24} color="#fff" />
+            <Ionicons name="chevron-back" size={20} color={PRIMARY} />
+          </TouchableOpacity>
+          <Text className="text-xl font-bold text-gray-900">Messages</Text>
+        </View>
+
+        {}
+        <View
+          className="flex-row items-center bg-white rounded-2xl px-4 py-3 mb-3"
+          style={{
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 1 },
+            shadowOpacity: 0.05,
+            shadowRadius: 4,
+            elevation: 2,
+          }}
+        >
+          <Ionicons name="search" size={20} color="#9ca3af" />
+          <TextInput
+            className="flex-1 ml-2 text-sm text-gray-900"
+            placeholder="Search Message"
+            placeholderTextColor="#9ca3af"
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchQuery('')}>
+              <Ionicons name="close-circle" size={20} color="#9ca3af" />
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {}
+        <View className="flex-row" style={{ gap: 8 }}>
+          <TouchableOpacity
+            onPress={() => setFilter('all')}
+            activeOpacity={0.8}
+            className="px-5 py-2 rounded-full"
+            style={{
+              backgroundColor: filter === 'all' ? PRIMARY : '#fff',
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 1 },
+              shadowOpacity: 0.05,
+              shadowRadius: 3,
+              elevation: 1,
+            }}
+          >
+            <Text
+              className="text-sm font-semibold"
+              style={{ color: filter === 'all' ? '#fff' : '#374151' }}
+            >
+              All
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() => setFilter('unread')}
+            activeOpacity={0.8}
+            className="flex-row items-center px-5 py-2 rounded-full"
+            style={{
+              gap: 6,
+              backgroundColor: filter === 'unread' ? PRIMARY : '#fff',
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 1 },
+              shadowOpacity: 0.05,
+              shadowRadius: 3,
+              elevation: 1,
+            }}
+          >
+            <Text
+              className="text-sm font-semibold"
+              style={{ color: filter === 'unread' ? '#fff' : '#374151' }}
+            >
+              Unread
+            </Text>
+            {totalUnreadCount > 0 && (
+              <View
+                className="min-w-[18px] h-[18px] rounded-full items-center justify-center px-1"
+                style={{ backgroundColor: filter === 'unread' ? 'rgba(255,255,255,0.3)' : PRIMARY }}
+              >
+                <Text className="text-white text-[10px] font-bold">
+                  {totalUnreadCount > 99 ? '99+' : totalUnreadCount}
+                </Text>
+              </View>
+            )}
           </TouchableOpacity>
         </View>
-      </LinearGradient>
+      </View>
 
       {}
       <FlatList
-        data={conversations}
+        data={filteredConversations}
         renderItem={renderConversationItem}
         keyExtractor={(item) => item._id}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            tintColor="#eb278d"
-            colors={['#eb278d']}
+            tintColor={PRIMARY}
+            colors={[PRIMARY]}
           />
         }
         ListEmptyComponent={
           <View className="flex-1 items-center justify-center py-20 px-8">
             <View
-              className="w-24 h-24 rounded-full bg-gray-100 items-center justify-center mb-4"
+              className="w-24 h-24 rounded-full bg-white items-center justify-center mb-4"
               style={{
                 shadowColor: '#000',
                 shadowOffset: { width: 0, height: 2 },
@@ -381,17 +492,24 @@ const ChatListScreen: React.FC = () => {
                 elevation: 2,
               }}
             >
-              <Ionicons name="chatbubbles-outline" size={48} color="#d1d5db" />
+              <Ionicons name="chatbubbles-outline" size={48} color="#d1a3bb" />
             </View>
-            <Text className="text-gray-900 font-bold text-lg mb-2">No messages yet</Text>
+            <Text className="text-gray-900 font-bold text-lg mb-2">
+              {searchQuery.trim() ? 'No matches found' : filter === 'unread' ? "You're all caught up!" : 'No messages yet'}
+            </Text>
             <Text className="text-gray-500 text-center text-sm leading-5">
-              Start a conversation by messaging a vendor from their profile
+              {searchQuery.trim()
+                ? 'Try a different name or keyword'
+                : filter === 'unread'
+                ? 'No unread conversations right now'
+                : 'Start a conversation by messaging a vendor from their profile'}
             </Text>
           </View>
         }
         contentContainerStyle={{
           flexGrow: 1,
-          backgroundColor: '#fff',
+          paddingTop: 4,
+          paddingBottom: 20,
         }}
       />
     </SafeAreaView>

@@ -102,6 +102,9 @@ const ChatDetailScreen: React.FC = () => {
   const [isOtherUserOnline, setIsOtherUserOnline] = useState(false);
   const [otherUserActivity, setOtherUserActivity] = useState<UserActivity>('offline');
   const [inputHeight, setInputHeight]             = useState(44);
+  const [showChatMenu, setShowChatMenu]           = useState(false);
+  const [showChatSearch, setShowChatSearch]       = useState(false);
+  const [chatSearchQuery, setChatSearchQuery]     = useState('');
 
   // Audio
   const [playingAudioId, setPlayingAudioId]       = useState<string | null>(null);
@@ -238,7 +241,20 @@ const ChatDetailScreen: React.FC = () => {
 
   // ── Init ──────────────────────────────────────────────────────────────────
   useEffect(() => { loadCurrentUser(); requestPermissions(); }, []);
-  useEffect(() => { if (currentUserId) initializeConversation(); }, [currentUserId]);
+
+  // Navigation reuses this screen instance when switching between chats (all
+  // call sites use `navigate`, not `push`), so reset per-conversation state
+  // whenever the target user changes — otherwise the previous chat's messages
+  // and scroll position stick around until the new ones happen to load over them.
+  useEffect(() => {
+    hasScrolledOnLoad.current = false;
+    setMessages([]);
+    setConversationId(null);
+    setPage(1);
+    setHasMore(true);
+  }, [otherUserId]);
+
+  useEffect(() => { if (currentUserId) initializeConversation(); }, [currentUserId, otherUserId]);
 
   useEffect(() => {
     if (messages.length > 0 && !loading && !hasScrolledOnLoad.current) {
@@ -333,6 +349,37 @@ const ChatDetailScreen: React.FC = () => {
     } catch (error) {
       toast.error('Error', 'Failed to initiate call. Please try again.');
     }
+  };
+
+  // ── Header menu actions ───────────────────────────────────────────────────
+  const handleViewProfile = () => {
+    setShowChatMenu(false);
+    navigation.navigate('VendorDetail', { vendorId: otherUserId });
+  };
+
+  const handleOpenChatSearch = () => {
+    setShowChatMenu(false);
+    setChatSearchQuery('');
+    setShowChatSearch(true);
+  };
+
+  const handleBlockUser = () => {
+    setShowChatMenu(false);
+    toast.info('Coming Soon', 'Blocking users isn’t available yet.');
+  };
+
+  const handleReportUser = () => {
+    setShowChatMenu(false);
+    toast.info('Coming Soon', 'Reporting users isn’t available yet.');
+  };
+
+  const chatSearchResults = chatSearchQuery.trim()
+    ? messages.filter((m) => m.text?.toLowerCase().includes(chatSearchQuery.trim().toLowerCase()))
+    : [];
+
+  const handleJumpToSearchResult = (messageId: string) => {
+    setShowChatSearch(false);
+    setTimeout(() => scrollToMessage(messageId), 300);
   };
 
   // ── Typing ────────────────────────────────────────────────────────────────
@@ -590,6 +637,22 @@ const ChatDetailScreen: React.FC = () => {
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   };
 
+  const isSameDay = (a: string, b: string) => {
+    const d1 = new Date(a);
+    const d2 = new Date(b);
+    return d1.toDateString() === d2.toDateString();
+  };
+
+  const formatDateSeparator = (dateString: string) => {
+    const date = new Date(dateString);
+    const today = new Date();
+    const yesterday = new Date();
+    yesterday.setDate(today.getDate() - 1);
+    if (date.toDateString() === today.toDateString()) return 'Today';
+    if (date.toDateString() === yesterday.toDateString()) return 'Yesterday';
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: date.getFullYear() !== today.getFullYear() ? 'numeric' : undefined });
+  };
+
   // ── Status indicator ──────────────────────────────────────────────────────
   const renderUserStatus = () => {
     switch (otherUserActivity) {
@@ -597,34 +660,34 @@ const ChatDetailScreen: React.FC = () => {
         return (
           <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
             {[0, 1, 2].map((i) => (
-              <View key={i} style={{ width: 4, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.85)', marginRight: 2, opacity: 1 - i * 0.2 }} />
+              <View key={i} style={{ width: 4, height: 4, borderRadius: 2, backgroundColor: BRAND.primary, marginRight: 2, opacity: 1 - i * 0.2 }} />
             ))}
-            <Text style={{ color: 'rgba(255,255,255,0.9)', fontSize: 11, fontWeight: '500', marginLeft: 2 }}>typing…</Text>
+            <Text style={{ color: BRAND.primary, fontSize: 11, fontWeight: '500', marginLeft: 2 }}>typing…</Text>
           </View>
         );
       case 'recording':
         return (
           <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
-            <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#F87171', marginRight: 5 }} />
-            <Text style={{ color: 'rgba(255,255,255,0.9)', fontSize: 11, fontWeight: '500' }}>recording…</Text>
+            <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#EF4444', marginRight: 5 }} />
+            <Text style={{ color: '#EF4444', fontSize: 11, fontWeight: '500' }}>recording…</Text>
           </View>
         );
       case 'uploading':
         return (
           <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
-            <ActivityIndicator size="small" color="rgba(255,255,255,0.9)" style={{ marginRight: 5, transform: [{ scale: 0.7 }] }} />
-            <Text style={{ color: 'rgba(255,255,255,0.9)', fontSize: 11, fontWeight: '500' }}>sending…</Text>
+            <ActivityIndicator size="small" color={BRAND.primary} style={{ marginRight: 5, transform: [{ scale: 0.7 }] }} />
+            <Text style={{ color: BRAND.primary, fontSize: 11, fontWeight: '500' }}>sending…</Text>
           </View>
         );
       case 'online':
         return (
           <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
-            <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#34D399', marginRight: 5 }} />
-            <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 11, fontWeight: '500' }}>Active now</Text>
+            <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#22c55e', marginRight: 5 }} />
+            <Text style={{ color: BRAND.textSecondary, fontSize: 11, fontWeight: '500' }}>online</Text>
           </View>
         );
       default:
-        return <Text style={{ color: 'rgba(255,255,255,0.65)', fontSize: 11, marginTop: 2 }}>Offline</Text>;
+        return <Text style={{ color: BRAND.textMuted, fontSize: 11, marginTop: 2 }}>Offline</Text>;
     }
   };
 
@@ -649,7 +712,7 @@ const ChatDetailScreen: React.FC = () => {
   // ─────────────────────────────────────────────────────────────────────────
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: BRAND.chatBg }} edges={['top', 'bottom']}>
-      <StatusBar barStyle="light-content" backgroundColor={BRAND.primary} />
+      <StatusBar barStyle="dark-content" backgroundColor={BRAND.primarySoft} />
 
       <KeyboardAvoidingView
         style={{ flex: 1 }}
@@ -657,18 +720,12 @@ const ChatDetailScreen: React.FC = () => {
         keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
       >
         {/* ── HEADER ─────────────────────────────────────────────────────── */}
-        <LinearGradient
-          colors={[BRAND.primary, BRAND.primaryDark]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 0 }}
+        <View
           style={{
+            backgroundColor: BRAND.primarySoft,
             paddingHorizontal: 12,
             paddingTop: 8,
             paddingBottom: 12,
-            ...Platform.select({
-              ios: { shadowColor: BRAND.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8 },
-              android: { elevation: 8 },
-            }),
           }}
         >
           <View style={{ flexDirection: 'row', alignItems: 'center' }}>
@@ -677,13 +734,13 @@ const ChatDetailScreen: React.FC = () => {
               onPress={() => navigation.goBack()}
               activeOpacity={0.75}
               style={{
-                width: 38, height: 38, borderRadius: 12,
-                backgroundColor: 'rgba(255,255,255,0.18)',
+                width: 38, height: 38, borderRadius: 19,
+                backgroundColor: BRAND.surface,
                 alignItems: 'center', justifyContent: 'center',
                 marginRight: 10,
               }}
             >
-              <Ionicons name="arrow-back" size={20} color="#fff" />
+              <Ionicons name="chevron-back" size={20} color={BRAND.primary} />
             </TouchableOpacity>
 
             {/* Avatar + name */}
@@ -692,88 +749,99 @@ const ChatDetailScreen: React.FC = () => {
                 <View
                   style={{
                     width: 42, height: 42, borderRadius: 21,
-                    backgroundColor: 'rgba(255,255,255,0.25)',
+                    backgroundColor: BRAND.primaryMuted,
                     alignItems: 'center', justifyContent: 'center',
                     overflow: 'hidden',
-                    borderWidth: 2, borderColor: 'rgba(255,255,255,0.4)',
                   }}
                 >
                   {avatarUri ? (
                     <Image source={{ uri: avatarUri }} style={{ width: 42, height: 42 }} resizeMode="cover" />
                   ) : (
-                    <Text style={{ fontSize: 16, fontWeight: '700', color: '#fff' }}>
+                    <Text style={{ fontSize: 16, fontWeight: '700', color: BRAND.primary }}>
                       {displayName.charAt(0).toUpperCase()}
                     </Text>
                   )}
                 </View>
-                {isOtherUserOnline && (
-                  <View
-                    style={{
-                      position: 'absolute', bottom: 1, right: 1,
-                      width: 11, height: 11, borderRadius: 6,
-                      backgroundColor: '#34D399',
-                      borderWidth: 2, borderColor: BRAND.primary,
-                    }}
-                  />
-                )}
+                <View
+                  style={{
+                    position: 'absolute', bottom: 1, right: 1,
+                    width: 11, height: 11, borderRadius: 6,
+                    backgroundColor: isOtherUserOnline ? '#22c55e' : '#d1d5db',
+                    borderWidth: 2, borderColor: BRAND.primarySoft,
+                  }}
+                />
               </View>
 
               <View style={{ flex: 1 }}>
-                <Text style={{ color: '#fff', fontSize: 16, fontWeight: '700', letterSpacing: -0.2 }} numberOfLines={1}>
+                <Text style={{ color: BRAND.textPrimary, fontSize: 16, fontWeight: '700', letterSpacing: -0.2 }} numberOfLines={1}>
                   {displayName}
                 </Text>
                 {renderUserStatus()}
               </View>
             </TouchableOpacity>
 
-            {/* Call buttons — temporarily disabled, will be re-enabled in future */}
-            {/* <View style={{ flexDirection: 'row', gap: 8 }}>
+            {/* Actions */}
+            <View style={{ flexDirection: 'row', gap: 8 }}>
               <TouchableOpacity
                 onPress={() => handleCall('voice')}
                 activeOpacity={0.75}
                 style={{
-                  width: 38, height: 38, borderRadius: 12,
-                  backgroundColor: 'rgba(255,255,255,0.18)',
+                  width: 38, height: 38, borderRadius: 19,
+                  backgroundColor: BRAND.primary,
                   alignItems: 'center', justifyContent: 'center',
                 }}
               >
-                <Ionicons name="call-outline" size={18} color="#fff" />
+                <Ionicons name="call" size={17} color="#fff" />
               </TouchableOpacity>
 
               <TouchableOpacity
-                onPress={() => handleCall('video')}
+                onPress={() => setShowChatMenu(true)}
                 activeOpacity={0.75}
                 style={{
-                  width: 38, height: 38, borderRadius: 12,
-                  backgroundColor: 'rgba(255,255,255,0.18)',
+                  width: 38, height: 38, borderRadius: 19,
+                  backgroundColor: BRAND.primary,
                   alignItems: 'center', justifyContent: 'center',
                 }}
               >
-                <Ionicons name="videocam-outline" size={18} color="#fff" />
+                <Ionicons name="ellipsis-vertical" size={17} color="#fff" />
               </TouchableOpacity>
-            </View> */}
+            </View>
           </View>
-        </LinearGradient>
+        </View>
 
         {/* ── MESSAGES ───────────────────────────────────────────────────── */}
         <FlatList
           ref={flatListRef}
           data={messages}
-          renderItem={({ item }) => (
-            <SwipeableMessage
-              message={item}
-              isMyMessage={item.sender._id === currentUserId}
-              isHighlighted={item._id === highlightedMessageId}
-              onReply={() => setReplyingTo(item)}
-              onScrollToReply={scrollToMessage}
-              otherUser={otherUser}
-              formatMessageTime={formatMessageTime}
-              playingAudioId={playingAudioId}
-              audioProgress={audioProgress}
-              audioDurations={audioDurations}
-              onPlayAudio={playAudio}
-            />
-          )}
+          renderItem={({ item, index }) => {
+            const showDateSeparator = index === 0 || !isSameDay(item.createdAt, messages[index - 1].createdAt);
+            return (
+              <>
+                {showDateSeparator && (
+                  <View style={{ alignItems: 'center', marginVertical: 10 }}>
+                    <View style={{ backgroundColor: BRAND.primaryMuted, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 5 }}>
+                      <Text style={{ fontSize: 11, fontWeight: '700', color: BRAND.primaryDark }}>
+                        {formatDateSeparator(item.createdAt)}
+                      </Text>
+                    </View>
+                  </View>
+                )}
+                <SwipeableMessage
+                  message={item}
+                  isMyMessage={item.sender._id === currentUserId}
+                  isHighlighted={item._id === highlightedMessageId}
+                  onReply={() => setReplyingTo(item)}
+                  onScrollToReply={scrollToMessage}
+                  otherUser={otherUser}
+                  formatMessageTime={formatMessageTime}
+                  playingAudioId={playingAudioId}
+                  audioProgress={audioProgress}
+                  audioDurations={audioDurations}
+                  onPlayAudio={playAudio}
+                />
+              </>
+            );
+          }}
           keyExtractor={(item) => item._id}
           contentContainerStyle={{ paddingVertical: 12, paddingHorizontal: 8, paddingBottom: 8, flexGrow: 1 }}
           onEndReached={handleLoadMore}
@@ -920,47 +988,37 @@ const ChatDetailScreen: React.FC = () => {
             }),
           }}
         >
-          <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 8 }}>
-            {/* Attachment button */}
-            <TouchableOpacity
-              onPress={() => setShowAttachmentMenu(true)}
-              activeOpacity={0.75}
-              style={{
-                width: 40, height: 40, borderRadius: 20,
-                backgroundColor: BRAND.surfaceAlt,
-                borderWidth: 1, borderColor: BRAND.border,
-                alignItems: 'center', justifyContent: 'center',
-                marginBottom: 2,
-              }}
-            >
-              <Ionicons name="add" size={22} color={BRAND.textSecondary} />
-            </TouchableOpacity>
-
-            {/* Text input */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            {/* Pill: attach + input + mic */}
             <View
               style={{
                 flex: 1,
+                flexDirection: 'row',
+                alignItems: 'center',
                 backgroundColor: BRAND.surfaceAlt,
-                borderRadius: 22,
+                borderRadius: 24,
                 borderWidth: 1.5,
                 borderColor: BRAND.border,
-                paddingHorizontal: 16,
-                paddingTop: Platform.OS === 'ios' ? 10 : 8,
-                paddingBottom: Platform.OS === 'ios' ? 10 : 8,
-                minHeight: 44,
-                justifyContent: 'center',
+                paddingLeft: 10,
+                paddingRight: 10,
+                minHeight: 46,
               }}
             >
+              <TouchableOpacity onPress={() => setShowAttachmentMenu(true)} activeOpacity={0.7} style={{ marginRight: 6 }}>
+                <Ionicons name="add-circle-outline" size={24} color={BRAND.textMuted} />
+              </TouchableOpacity>
+
               <TextInput
                 value={inputText}
                 onChangeText={handleTextChange}
-                placeholder="Message…"
+                placeholder="Type a message..."
                 placeholderTextColor={BRAND.textMuted}
                 style={{
+                  flex: 1,
                   fontSize: 15,
                   color: BRAND.textPrimary,
                   maxHeight: 110,
-                  paddingVertical: 0,
+                  paddingVertical: Platform.OS === 'ios' ? 10 : 6,
                   textAlignVertical: 'center',
                 }}
                 multiline
@@ -969,55 +1027,51 @@ const ChatDetailScreen: React.FC = () => {
                 blurOnSubmit={false}
                 onFocus={() => setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), Platform.OS === 'ios' ? 300 : 400)}
               />
+
+              {!(inputText.trim() || selectedMedia) && (
+                <TouchableOpacity onPress={startRecording} activeOpacity={0.7} style={{ marginLeft: 6 }}>
+                  <Ionicons name="mic-outline" size={21} color={BRAND.textMuted} />
+                </TouchableOpacity>
+              )}
             </View>
 
-            {/* Send / mic */}
-            {inputText.trim() || selectedMedia ? (
-              <TouchableOpacity
-                onPress={() => {
-                  if (selectedMedia) handleSendMessage(selectedMedia.uri, selectedMedia.mimeType || selectedMedia.type || 'image');
-                  else handleSendMessage();
+            {/* Camera shortcut */}
+            <TouchableOpacity
+              onPress={handleTakePhoto}
+              activeOpacity={0.85}
+              style={{
+                width: 44, height: 44, borderRadius: 22,
+                backgroundColor: BRAND.primaryLight,
+                alignItems: 'center', justifyContent: 'center',
+              }}
+            >
+              <Ionicons name="camera" size={19} color="#fff" />
+            </TouchableOpacity>
+
+            {/* Send */}
+            <TouchableOpacity
+              onPress={() => {
+                if (selectedMedia) handleSendMessage(selectedMedia.uri, selectedMedia.mimeType || selectedMedia.type || 'image');
+                else handleSendMessage();
+              }}
+              activeOpacity={0.85}
+              style={{ borderRadius: 22, overflow: 'hidden' }}
+            >
+              <LinearGradient
+                colors={[BRAND.primary, BRAND.primaryDark]}
+                start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                style={{
+                  width: 44, height: 44, borderRadius: 22,
+                  alignItems: 'center', justifyContent: 'center',
+                  ...Platform.select({
+                    ios: { shadowColor: BRAND.primary, shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.4, shadowRadius: 6 },
+                    android: { elevation: 4 },
+                  }),
                 }}
-                activeOpacity={0.85}
-                style={{ marginBottom: 2, borderRadius: 20, overflow: 'hidden' }}
               >
-                <LinearGradient
-                  colors={[BRAND.primary, BRAND.primaryDark]}
-                  start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-                  style={{
-                    width: 40, height: 40, borderRadius: 20,
-                    alignItems: 'center', justifyContent: 'center',
-                    ...Platform.select({
-                      ios: { shadowColor: BRAND.primary, shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.4, shadowRadius: 6 },
-                      android: { elevation: 4 },
-                    }),
-                  }}
-                >
-                  <Ionicons name="send" size={16} color="#fff" style={{ marginLeft: 2 }} />
-                </LinearGradient>
-              </TouchableOpacity>
-            ) : (
-              <TouchableOpacity
-                onPress={startRecording}
-                activeOpacity={0.85}
-                style={{ marginBottom: 2 }}
-              >
-                <LinearGradient
-                  colors={[BRAND.primary, BRAND.primaryDark]}
-                  start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-                  style={{
-                    width: 40, height: 40, borderRadius: 20,
-                    alignItems: 'center', justifyContent: 'center',
-                    ...Platform.select({
-                      ios: { shadowColor: BRAND.primary, shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.4, shadowRadius: 6 },
-                      android: { elevation: 4 },
-                    }),
-                  }}
-                >
-                  <Ionicons name="mic" size={18} color="#fff" />
-                </LinearGradient>
-              </TouchableOpacity>
-            )}
+                <Ionicons name="send" size={17} color="#fff" style={{ marginLeft: 2 }} />
+              </LinearGradient>
+            </TouchableOpacity>
           </View>
         </View>
       </KeyboardAvoidingView>
@@ -1031,6 +1085,131 @@ const ChatDetailScreen: React.FC = () => {
         onPickVideo={handlePickVideo}
         onPickDocument={handlePickDocument}
       />
+
+      {/* ── HEADER DROPDOWN MENU ─────────────────────────────────────────── */}
+      <Modal visible={showChatMenu} transparent animationType="fade" onRequestClose={() => setShowChatMenu(false)}>
+        <TouchableOpacity
+          style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.15)' }}
+          activeOpacity={1}
+          onPress={() => setShowChatMenu(false)}
+        >
+          <View
+            style={{
+              position: 'absolute',
+              top: insets.top + 58,
+              right: 12,
+              width: 190,
+              backgroundColor: BRAND.surface,
+              borderRadius: 16,
+              paddingVertical: 6,
+              ...Platform.select({
+                ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 12 },
+                android: { elevation: 8 },
+              }),
+            }}
+          >
+            {[
+              { key: 'profile', label: 'View Profile', icon: 'person-outline', onPress: handleViewProfile },
+              { key: 'search', label: 'Search', icon: 'search-outline', onPress: handleOpenChatSearch },
+              { key: 'block', label: 'Block', icon: 'ban-outline', onPress: handleBlockUser },
+              { key: 'report', label: 'Report', icon: 'flag-outline', onPress: handleReportUser, danger: true },
+            ].map((item, idx) => (
+              <TouchableOpacity
+                key={item.key}
+                onPress={item.onPress}
+                activeOpacity={0.7}
+                style={{
+                  flexDirection: 'row', alignItems: 'center',
+                  paddingHorizontal: 16, paddingVertical: 12,
+                  borderTopWidth: idx === 0 ? 0 : 1, borderTopColor: BRAND.border,
+                }}
+              >
+                <Ionicons
+                  name={item.icon as any}
+                  size={17}
+                  color={item.danger ? '#EF4444' : BRAND.textPrimary}
+                  style={{ marginRight: 10 }}
+                />
+                <Text style={{ fontSize: 14, fontWeight: '600', color: item.danger ? '#EF4444' : BRAND.textPrimary }}>
+                  {item.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* ── IN-CHAT SEARCH MODAL ─────────────────────────────────────────── */}
+      <Modal visible={showChatSearch} transparent animationType="slide" onRequestClose={() => setShowChatSearch(false)}>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.3)', justifyContent: 'flex-end' }}>
+          <View
+            style={{
+              backgroundColor: BRAND.surface,
+              borderTopLeftRadius: 20, borderTopRightRadius: 20,
+              paddingTop: 14, paddingHorizontal: 16,
+              paddingBottom: insets.bottom + 16,
+              maxHeight: '75%',
+            }}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
+              <Text style={{ flex: 1, fontSize: 16, fontWeight: '700', color: BRAND.textPrimary }}>Search in chat</Text>
+              <TouchableOpacity onPress={() => setShowChatSearch(false)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <Ionicons name="close" size={22} color={BRAND.textMuted} />
+              </TouchableOpacity>
+            </View>
+
+            <View
+              style={{
+                flexDirection: 'row', alignItems: 'center',
+                backgroundColor: BRAND.surfaceAlt, borderRadius: 12,
+                paddingHorizontal: 12, paddingVertical: 10, marginBottom: 8,
+              }}
+            >
+              <Ionicons name="search" size={18} color={BRAND.textMuted} />
+              <TextInput
+                style={{ flex: 1, marginLeft: 8, fontSize: 14, color: BRAND.textPrimary }}
+                placeholder="Search messages"
+                placeholderTextColor={BRAND.textMuted}
+                value={chatSearchQuery}
+                onChangeText={setChatSearchQuery}
+                autoFocus
+              />
+              {chatSearchQuery.length > 0 && (
+                <TouchableOpacity onPress={() => setChatSearchQuery('')}>
+                  <Ionicons name="close-circle" size={18} color={BRAND.textMuted} />
+                </TouchableOpacity>
+              )}
+            </View>
+
+            <FlatList
+              data={chatSearchResults}
+              keyExtractor={(item) => item._id}
+              keyboardShouldPersistTaps="handled"
+              ListEmptyComponent={
+                chatSearchQuery.trim() ? (
+                  <Text style={{ textAlign: 'center', color: BRAND.textMuted, fontSize: 13, paddingVertical: 24 }}>
+                    No messages found
+                  </Text>
+                ) : null
+              }
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  onPress={() => handleJumpToSearchResult(item._id)}
+                  activeOpacity={0.7}
+                  style={{ paddingVertical: 10, borderTopWidth: 1, borderTopColor: BRAND.border }}
+                >
+                  <Text style={{ fontSize: 12, fontWeight: '600', color: BRAND.primary, marginBottom: 2 }}>
+                    {item.sender._id === currentUserId ? 'You' : displayName} · {formatMessageTime(item.createdAt)}
+                  </Text>
+                  <Text style={{ fontSize: 14, color: BRAND.textPrimary }} numberOfLines={2}>
+                    {item.text}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            />
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };

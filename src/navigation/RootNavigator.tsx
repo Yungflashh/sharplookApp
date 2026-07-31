@@ -12,6 +12,7 @@ import ChatScreen from '../components/clientComponent/ChatScreen';
 import CartScreen from '../components/clientComponent/CartScreen';
 
 import AllVendorsScreen from '@/screens/client/AllVendorsScreen';
+import SearchScreen from '@/screens/client/SearchScreen';
 import VendorDetailScreen from '@/screens/client/VendorDetailsScreen';
 import type { RootStackParamList } from '@/types/navigation.types';
 import CreateBookingScreen from '@/components/clientComponent/CreateBooking';
@@ -337,6 +338,7 @@ const RootNavigator = () => {
           <Stack.Screen name="Cart" component={CartScreen} />
           
           <Stack.Screen name="AllVendors" component={AllVendorsScreen} options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="Search" component={SearchScreen} options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="VendorDetail" component={VendorDetailScreen} options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="CreateBooking" component={CreateBookingScreen} options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="BookingDetail" component={BookingDetailScreen} options={{ animation: 'slide_from_right' }} />

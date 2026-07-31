@@ -80,12 +80,10 @@ const ClientDashboardScreen: React.FC = () => {
   const [filteredVendors, setFilteredVendors] = useState<FormattedVendor[]>([]);
   const [sponsoredProducts, setSponsoredProducts] = useState<Product[]>([]);
   const [favoriteVendors, setFavoriteVendors] = useState<Set<string>>(new Set());
-  const [recommendedServices, setRecommendedServices] = useState<any[]>([]);
   const [cartItemsCount, setCartItemsCount] = useState<number>(0);
   const [unreadNotificationCount, setUnreadNotificationCount] = useState<number>(0);
   const [unreadMessagesCount, setUnreadMessagesCount] = useState<number>(0);
   const [hasActiveFilters, setHasActiveFilters] = useState<boolean>(false);
-  const [searchLoading, setSearchLoading] = useState<boolean>(false);
   const [filters, setFilters] = useState({
     searchName: '',
     category: '',
@@ -432,145 +430,6 @@ const ClientDashboardScreen: React.FC = () => {
     }
   };
 
-  const searchServices = async (query: string) => {
-    try {
-      if (!query.trim()) {
-        setRecommendedServices([]);
-        setSearchLoading(false);
-        return;
-      }
-      
-      setSearchLoading(true);
-      
-      // Try to use the search endpoint, if it fails, fall back to getAllServices with search param
-      try {
-        const response = await servicesAPI.searchServices({
-          query: query.trim(),
-        });
-        
-        console.log('Search services response:', response);
-        
-        if (response.success) {
-          let servicesData = response.data;
-          
-          if (servicesData && !Array.isArray(servicesData)) {
-            servicesData = servicesData.services || servicesData.data || [];
-          }
-          
-          if (!Array.isArray(servicesData)) {
-            console.log('Services data is not an array:', servicesData);
-            setRecommendedServices([]);
-            setSearchLoading(false);
-            return;
-          }
-          
-          console.log('✅ Found services:', servicesData.length);
-          setRecommendedServices(servicesData);
-        } else {
-          console.log('Search services unsuccessful:', response);
-          setRecommendedServices([]);
-        }
-      } catch (searchError: any) {
-        console.log('Search endpoint failed, trying alternative approach:', searchError);
-        
-        // Fallback: Use getAllServices or getMyServices with search parameter
-        try {
-          const response = await servicesAPI.getAllServices({
-            search: query.trim(),
-            limit: 20,
-          });
-          
-          console.log('Fallback search response:', response);
-          
-          if (response.success) {
-            let servicesData = response.data;
-            
-            if (servicesData && !Array.isArray(servicesData)) {
-              servicesData = servicesData.services || servicesData.data || [];
-            }
-            
-            if (Array.isArray(servicesData)) {
-              console.log('✅ Found services via fallback:', servicesData.length);
-              setRecommendedServices(servicesData);
-            } else {
-              setRecommendedServices([]);
-            }
-          } else {
-            setRecommendedServices([]);
-          }
-        } catch (fallbackError) {
-          console.error('Fallback search also failed:', fallbackError);
-          setRecommendedServices([]);
-        }
-      }
-    } catch (error) {
-      const apiError = handleAPIError(error);
-      console.error('Service search error:', apiError);
-      setRecommendedServices([]);
-    } finally {
-      setSearchLoading(false);
-    }
-  };
-
-  const searchVendors = async (query: string) => {
-    try {
-      if (!query.trim()) {
-        setRecommendedServices([]);
-        setSearchLoading(false);
-        return;
-      }
-
-      setSearchLoading(true);
-
-      // Search both services/vendors API and also filter local vendors
-      const [serviceSearchRes] = await Promise.all([
-        servicesAPI.searchServices({ query: query.trim() }).catch(() => ({ success: false, data: [] })),
-      ]);
-
-      let vendorsFromSearch: any[] = [];
-
-      if (serviceSearchRes.success) {
-        let vendorsData = serviceSearchRes.data;
-        if (vendorsData && !Array.isArray(vendorsData)) {
-          vendorsData = vendorsData.vendors || vendorsData.data || [];
-        }
-        if (Array.isArray(vendorsData)) {
-          vendorsFromSearch = vendorsData;
-        }
-      }
-
-      // Also filter locally loaded vendors by search query
-      const q = query.trim().toLowerCase();
-      const localMatches = allVendors.filter(v =>
-        v.businessName.toLowerCase().includes(q) ||
-        v.service?.toLowerCase().includes(q) ||
-        v.vendorType?.toLowerCase().includes(q)
-      );
-
-      // Merge results, avoiding duplicates
-      const seenIds = new Set(vendorsFromSearch.map((v: any) => v._id));
-      const localUnique = localMatches.filter(v => !seenIds.has(v.id)).map(v => ({
-        _id: v.id,
-        businessName: v.businessName,
-        avatar: v.image,
-        rating: v.rating,
-        totalReviews: v.reviews,
-        isVerified: v.isVerified,
-        vendorType: v.vendorType,
-        services: [],
-      }));
-
-      const combined = [...vendorsFromSearch, ...localUnique];
-      console.log('✅ Search results:', combined.length, '(API:', vendorsFromSearch.length, '+ local:', localUnique.length, ')');
-      setRecommendedServices(combined);
-    } catch (error) {
-      const apiError = handleAPIError(error);
-      console.error('Vendor search error:', apiError);
-      setRecommendedServices([]);
-    } finally {
-      setSearchLoading(false);
-    }
-  };
 
   const fetchDashboardData = async () => {
     try {
@@ -635,19 +494,6 @@ const ClientDashboardScreen: React.FC = () => {
       }),
     ]).start();
   }, []);
-
-  useEffect(() => {
-    const delayDebounce = setTimeout(() => {
-      if (searchQuery.trim()) {
-        searchVendors(searchQuery);
-      } else {
-        setRecommendedServices([]);
-        setSearchLoading(false);
-      }
-    }, 500);
-    
-    return () => clearTimeout(delayDebounce);
-  }, [searchQuery]);
 
   const handleCategorySelect = async (categoryId: string) => {
     console.log('📂 Category selected:', categoryId);
@@ -779,25 +625,25 @@ const ClientDashboardScreen: React.FC = () => {
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-gray-50" edges={['top']}>
+    <SafeAreaView className="flex-1 bg-[#FCE4EC]" edges={['top']}>
       {/* Header */}
-      <View className="bg-white px-5 pt-4 pb-3">
+      <View className="px-5 pt-4 pb-3">
         <View className="flex-row items-center justify-between mb-4">
           <View className="flex-1">
             <Text className="text-2xl font-bold text-gray-900">
-              Hello {getUserDisplayName()}
+              Hello, {getUserDisplayName()} 👋
             </Text>
-            <Text className="text-sm text-gray-500 mt-0.5">Welcome to LookReal</Text>
+            <Text className="text-sm text-gray-500 mt-0.5">what are you looking for today?</Text>
           </View>
 
-          <View className="flex-row items-center gap-3">
+          <View className="flex-row items-center gap-2">
             {/* Notifications */}
             <TouchableOpacity
-              className="relative w-11 h-11 items-center justify-center"
+              className="relative w-11 h-11 rounded-full bg-pink-100 items-center justify-center"
               activeOpacity={0.7}
               onPress={() => navigation.navigate('Notifications' as never)}
             >
-              <Ionicons name="notifications-outline" size={24} color="#eb278d" />
+              <Ionicons name="notifications-outline" size={21} color="#eb278d" />
               {unreadNotificationCount > 0 && (
                 <View
                   className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] bg-pink-500 rounded-full items-center justify-center px-1"
@@ -817,12 +663,12 @@ const ClientDashboardScreen: React.FC = () => {
             </TouchableOpacity>
 
             {/* Messages */}
-          <TouchableOpacity 
-  className="relative w-10 h-10 items-center justify-center" 
-  activeOpacity={0.7} 
+          <TouchableOpacity
+  className="relative w-11 h-11 rounded-full bg-pink-100 items-center justify-center"
+  activeOpacity={0.7}
   onPress={() => navigation.navigate('ChatList')}
 >
-  <Ionicons name="chatbubble-ellipses-outline" size={24} color="#eb278d" />
+  <Ionicons name="chatbubble-ellipses-outline" size={21} color="#eb278d" />
   {unreadMessagesCount > 0 && (
     <View
       className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] bg-pink-500 rounded-full items-center justify-center px-1"
@@ -843,32 +689,32 @@ const ClientDashboardScreen: React.FC = () => {
 
             {/* Menu */}
             <TouchableOpacity
-              className="w-11 h-11 items-center justify-center"
+              className="w-11 h-11 rounded-full bg-pink-100 items-center justify-center"
               activeOpacity={0.7}
               onPress={() => setSidebarVisible(true)}
             >
-              <Ionicons name="menu" size={28} color="#eb278d" />
+              <Ionicons name="menu" size={22} color="#eb278d" />
             </TouchableOpacity>
           </View>
         </View>
 
-        {/* Search Bar */}
+        {/* Search Bar — tapping opens the dedicated Search screen */}
         <View className="flex-row items-center gap-3">
-          <View className="flex-1 flex-row items-center bg-gray-100 rounded-2xl px-4 py-3">
-            <Ionicons name="search" size={20} color="#374151" />
-            <TextInput
-              className="flex-1 ml-2 text-sm text-gray-900"
-              placeholder="Search services or vendors"
-              placeholderTextColor="#9ca3af"
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-            />
-            {searchQuery.length > 0 && (
-              <TouchableOpacity onPress={() => setSearchQuery('')}>
-                <Ionicons name="close-circle" size={20} color="#9ca3af" />
-              </TouchableOpacity>
-            )}
-          </View>
+          <TouchableOpacity
+            className="flex-1 flex-row items-center bg-white rounded-2xl px-4 py-3"
+            activeOpacity={0.8}
+            onPress={() => navigation.navigate('Search')}
+            style={{
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 1 },
+              shadowOpacity: 0.05,
+              shadowRadius: 4,
+              elevation: 2,
+            }}
+          >
+            <Ionicons name="search" size={20} color="#9ca3af" />
+            <Text className="flex-1 ml-2 text-sm text-gray-400">Search services or professionals</Text>
+          </TouchableOpacity>
 
           <TouchableOpacity
             className="w-12 h-12 rounded-2xl bg-pink-500 items-center justify-center relative"
@@ -903,190 +749,109 @@ const ClientDashboardScreen: React.FC = () => {
           />
         }
       >
-        {/* Search Results */}
-        {searchQuery.trim().length > 0 && (
-          <View className="px-5 py-6">
-            <View className="flex-row items-center justify-between mb-4">
-              <Text className="text-lg font-bold text-gray-900">
-                Search Results
-              </Text>
-              {searchQuery.trim() && (
-                <TouchableOpacity
-                  onPress={() => setSearchQuery('')}
-                  className="flex-row items-center"
-                  activeOpacity={0.7}
-                >
-                  <Text className="text-sm text-pink-600 font-semibold mr-1">Clear</Text>
-                  <Ionicons name="close-circle" size={16} color="#eb278d" />
-                </TouchableOpacity>
-              )}
-            </View>
-
-            {searchLoading ? (
-              <View className="bg-white rounded-2xl p-8 items-center justify-center min-h-[200px]">
-                <ActivityIndicator size="large" color="#eb278d" />
-                <Text className="text-gray-500 text-sm font-medium mt-4">Searching...</Text>
-              </View>
-            ) : recommendedServices.length > 0 ? (
-              <View style={{ gap: 16 }}>
-                {recommendedServices.map((vendor, index) => (
+        {/* Hero Banner */}
+        {!searchQuery.trim() && (
+          <View className="px-5 pt-1 pb-2">
+            <LinearGradient
+              colors={['#F8057A', '#E91E63']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={{ borderRadius: 24, padding: 20, overflow: 'hidden' }}
+            >
+              <View className="flex-row items-center">
+                <View className="flex-1 pr-3">
+                  <Text className="text-white text-xl font-bold leading-6">
+                    Glow with{'\n'}confidence
+                  </Text>
+                  <Text className="text-white text-xs mt-2 mb-4" style={{ opacity: 0.9 }} numberOfLines={2}>
+                    Discover trusted beauty professionals near you
+                  </Text>
                   <TouchableOpacity
-                    key={vendor._id || index}
-                    className="bg-white rounded-2xl p-4"
-                    activeOpacity={0.7}
-                    onPress={() => {
-                      if (vendor._id) {
-                        navigation.navigate('VendorDetail', { vendorId: vendor._id });
-                      }
-                    }}
-                    style={{
-                      shadowColor: '#000',
-                      shadowOffset: { width: 0, height: 2 },
-                      shadowOpacity: 0.1,
-                      shadowRadius: 8,
-                      elevation: 3,
-                    }}
+                    className="bg-white self-start rounded-full px-5 py-2.5"
+                    activeOpacity={0.85}
+                    onPress={() => navigation.navigate('AllVendors')}
                   >
-                    {/* Vendor Header */}
-                    <View className="flex-row items-center mb-3">
-                      <View className="w-14 h-14 rounded-full bg-pink-100 items-center justify-center mr-3 overflow-hidden">
-                        {vendor.avatar ? (
-                          <Image
-                            source={{ uri: vendor.avatar }}
-                            className="w-full h-full"
-                            resizeMode="cover"
-                          />
-                        ) : (
-                          <Ionicons name="person" size={24} color="#eb278d" />
-                        )}
-                      </View>
-                      <View className="flex-1">
-                        <View className="flex-row items-center mb-1">
-                          <Text className="text-base font-bold text-gray-900 mr-2">
-                            {vendor.businessName}
-                          </Text>
-                          {vendor.isVerified && (
-                            <View className="w-4 h-4 rounded-full bg-blue-500 items-center justify-center">
-                              <Ionicons name="checkmark" size={10} color="#fff" />
-                            </View>
-                          )}
-                        </View>
-                        <View className="flex-row items-center">
-                          <Ionicons name="star" size={12} color="#fbbf24" />
-                          <Text className="text-xs text-gray-600 ml-1">
-                            {vendor.rating?.toFixed(1) || '0.0'}
-                          </Text>
-                          <Text className="text-xs text-gray-400 ml-1">
-                            ({vendor.totalReviews || 0} reviews)
-                          </Text>
-                        </View>
-                      </View>
-                      <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
-                    </View>
-
-                    {/* Services */}
-                    {vendor.services && vendor.services.length > 0 && (
-                      <View className="border-t border-gray-100 pt-3">
-                        <Text className="text-xs text-gray-500 font-semibold mb-2">
-                          Services ({vendor.services.length})
-                        </Text>
-                        <ScrollView
-                          horizontal
-                          showsHorizontalScrollIndicator={false}
-                          contentContainerStyle={{ gap: 8 }}
-                        >
-                          {vendor.services.slice(0, 3).map((service: any, idx: number) => (
-                            <View
-                              key={service._id || idx}
-                              className="bg-gray-50 rounded-lg p-2 min-w-[120px]"
-                            >
-                              <Text className="text-xs font-semibold text-gray-900 mb-1" numberOfLines={1}>
-                                {service.name}
-                              </Text>
-                              <Text className="text-xs font-bold text-pink-600">
-                                ₦{service.basePrice?.toLocaleString() || '0'}
-                              </Text>
-                            </View>
-                          ))}
-                          {vendor.services.length > 3 && (
-                            <View className="bg-pink-50 rounded-lg p-2 min-w-[80px] items-center justify-center">
-                              <Text className="text-xs font-bold text-pink-600">
-                                +{vendor.services.length - 3} more
-                              </Text>
-                            </View>
-                          )}
-                        </ScrollView>
-                      </View>
-                    )}
+                    <Text className="text-pink-600 text-xs font-bold">Book Now</Text>
                   </TouchableOpacity>
-                ))}
-              </View>
-            ) : (
-              <View className="bg-white rounded-2xl p-8 items-center justify-center min-h-[200px]">
-                <View className="w-24 h-24 rounded-full bg-gray-100 items-center justify-center mb-4">
-                  <Ionicons name="search-outline" size={48} color="#d1d5db" />
                 </View>
-                <Text className="text-gray-900 text-base font-semibold mb-2">No results found</Text>
-                <Text className="text-gray-400 text-sm text-center">
-                  Try searching with different keywords
-                </Text>
+                <View
+                  className="w-24 h-24 rounded-full items-center justify-center"
+                  style={{ backgroundColor: 'rgba(255,255,255,0.15)' }}
+                >
+                  <Ionicons name="sparkles" size={40} color="#fff" />
+                </View>
               </View>
-            )}
+            </LinearGradient>
+            <View className="flex-row justify-center items-center mt-3" style={{ gap: 6 }}>
+              <View className="h-1.5 rounded-full bg-pink-500" style={{ width: 18 }} />
+              <View className="h-1.5 w-1.5 rounded-full bg-pink-200" />
+              <View className="h-1.5 w-1.5 rounded-full bg-pink-200" />
+            </View>
           </View>
         )}
+
 
         {/* Categories - Only show when not searching */}
         {!searchQuery.trim() && (
           <Animated.View
-            className="px-5 py-6"
+            className="px-5 pt-4 pb-2"
             style={{
               opacity: fadeAnim,
               transform: [{ translateY: slideAnim }],
             }}
           >
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={{ gap: 12 }}
-            >
-              {categories.map((category, index) => (
+            <View className="flex-row items-center justify-between mb-4">
+              <Text className="text-lg font-bold text-gray-900">Categories</Text>
+              <TouchableOpacity
+                className="flex-row items-center"
+                activeOpacity={0.7}
+                onPress={() => setFilterModalVisible(true)}
+              >
+                <Text className="text-sm text-pink-600 font-semibold">See All</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View className="flex-row justify-between">
+              {categories.slice(0, 4).map((category) => (
                 <TouchableOpacity
                   key={category.id}
                   className="items-center"
-                  style={{ width: 70 }}
+                  style={{ width: 62 }}
                   activeOpacity={0.7}
                   onPress={() => handleCategorySelect(category.id)}
                 >
                   <View
-                    className={`w-14 h-14 rounded-full items-center justify-center mb-2 ${
-                      selectedCategory === category.id ? 'bg-pink-100' : 'bg-white'
+                    className={`w-14 h-14 rounded-full items-center justify-center mb-1.5 ${
+                      selectedCategory === category.id ? 'bg-pink-500' : 'bg-pink-50'
                     }`}
-                    style={{
-                      borderWidth: 2,
-                      borderColor: selectedCategory === category.id ? '#eb278d' : '#f472b6',
-                      shadowColor: '#000',
-                      shadowOffset: { width: 0, height: 2 },
-                      shadowOpacity: 0.1,
-                      shadowRadius: 4,
-                      elevation: 3,
-                    }}
                   >
                     <Ionicons
                       name={category.icon as any}
-                      size={26}
-                      color={selectedCategory === category.id ? '#eb278d' : '#374151'}
+                      size={24}
+                      color={selectedCategory === category.id ? '#fff' : '#eb278d'}
                     />
                   </View>
                   <Text
-                    className="text-[10px] text-gray-700 text-center font-medium leading-3"
-                    numberOfLines={3}
-                    style={{ width: 70 }}
+                    className="text-[11px] text-gray-700 text-center font-medium"
+                    numberOfLines={2}
                   >
                     {category.label}
                   </Text>
                 </TouchableOpacity>
               ))}
-            </ScrollView>
+
+              <TouchableOpacity
+                className="items-center"
+                style={{ width: 62 }}
+                activeOpacity={0.7}
+                onPress={() => setFilterModalVisible(true)}
+              >
+                <View className="w-14 h-14 rounded-full items-center justify-center mb-1.5 bg-pink-50">
+                  <Ionicons name="grid-outline" size={24} color="#eb278d" />
+                </View>
+                <Text className="text-[11px] text-gray-700 text-center font-medium">More</Text>
+              </TouchableOpacity>
+            </View>
           </Animated.View>
         )}
 
@@ -1195,8 +960,9 @@ const ClientDashboardScreen: React.FC = () => {
                 topVendors.map((vendor, index) => (
                   <Animated.View
                     key={vendor.id}
-                    className="mr-4"
                     style={{
+                      width: SCREEN_WIDTH * 0.42,
+                      marginRight: 14,
                       opacity: fadeAnim,
                       transform: [
                         {
@@ -1208,22 +974,76 @@ const ClientDashboardScreen: React.FC = () => {
                       ],
                     }}
                   >
-                    <VendorCard
-                      vendor={{
-                        id: vendor.id,
-                        businessName: vendor.businessName,
-                        image: vendor.image,
-                        service: vendor.service,
-                        rating: vendor.rating,
-                        reviews: vendor.reviews,
-                        isVerified: vendor.isVerified,
-                        vendorType: vendor.vendorType,
-                      }}
-                      width={SCREEN_WIDTH * 0.45}
-                      onPress={() => handleVendorPress(vendor.id)}
-                      onFavoritePress={() => handleFavoriteToggle(vendor.id)}
-                      isFavorite={favoriteVendors.has(vendor.id)}
-                    />
+                    <TouchableOpacity activeOpacity={0.9} onPress={() => handleVendorPress(vendor.id)}>
+                      <View style={{ borderRadius: 20, overflow: 'hidden', height: 190, backgroundColor: '#f3f4f6' }}>
+                        {vendor.image ? (
+                          <Image source={{ uri: vendor.image }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
+                        ) : (
+                          <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+                            <Text style={{ fontSize: 32, fontWeight: '700', color: '#9ca3af' }}>
+                              {vendor.businessName?.charAt(0)?.toUpperCase() || 'V'}
+                            </Text>
+                          </View>
+                        )}
+
+                        {vendor.isVerified && (
+                          <View
+                            style={{
+                              position: 'absolute', top: 10, left: 10,
+                              flexDirection: 'row', alignItems: 'center',
+                              backgroundColor: '#eb278d', borderRadius: 999,
+                              paddingHorizontal: 9, paddingVertical: 4,
+                            }}
+                          >
+                            <Ionicons name="checkmark-circle" size={12} color="#fff" />
+                            <Text style={{ color: '#fff', fontSize: 9, fontWeight: '700', marginLeft: 3 }}>VERIFIED</Text>
+                          </View>
+                        )}
+
+                        <TouchableOpacity
+                          onPress={() => handleFavoriteToggle(vendor.id)}
+                          style={{
+                            position: 'absolute', top: 10, right: 10,
+                            width: 30, height: 30, borderRadius: 15,
+                            backgroundColor: 'rgba(255,255,255,0.95)',
+                            alignItems: 'center', justifyContent: 'center',
+                          }}
+                        >
+                          <Ionicons
+                            name={favoriteVendors.has(vendor.id) ? 'heart' : 'heart-outline'}
+                            size={16}
+                            color="#eb278d"
+                          />
+                        </TouchableOpacity>
+
+                        <View
+                          style={{
+                            position: 'absolute', bottom: 10, left: 10,
+                            width: 34, height: 34, borderRadius: 17,
+                            borderWidth: 2, borderColor: '#fff',
+                            overflow: 'hidden', backgroundColor: '#fce7f3',
+                          }}
+                        >
+                          {vendor.image ? (
+                            <Image source={{ uri: vendor.image }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
+                          ) : (
+                            <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+                              <Ionicons name="person" size={16} color="#eb278d" />
+                            </View>
+                          )}
+                        </View>
+                      </View>
+
+                      <Text numberOfLines={1} style={{ marginTop: 8, fontSize: 13, fontWeight: '700', color: '#111827' }}>
+                        {vendor.businessName}
+                      </Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
+                        <Ionicons name="star" size={12} color="#fbbf24" />
+                        <Text style={{ fontSize: 11, color: '#6b7280', marginLeft: 3 }}>
+                          {vendor.rating?.toFixed(1) || '0.0'} ({vendor.reviews || 0})
+                        </Text>
+                      </View>
+                    </TouchableOpacity>
                   </Animated.View>
                 ))
               ) : (
