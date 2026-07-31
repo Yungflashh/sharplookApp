@@ -12,7 +12,7 @@ import {
 import { toast } from '@/components/ui/Toast';
 import ConfirmationModal from '@/components/ConfirmationModal';
 import { Ionicons } from '@expo/vector-icons';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useSafeAreaInsets, SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -424,155 +424,6 @@ const BookingDetailScreen: React.FC = () => {
     return null;
   };
 
-  const renderActionButtons = () => {
-    if (!booking) return null;
-    const status = booking.status.toLowerCase();
-    const ps = booking.paymentStatus;
-
-    if (status === 'cancelled') {
-      return (
-        <View style={[styles.statusBanner, { backgroundColor: '#FEF2F2', borderColor: '#FECACA' }]}>
-          <View style={[styles.statusBannerIcon, { backgroundColor: '#FEE2E2' }]}>
-            <Ionicons name="close-circle" size={22} color="#DC2626" />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.statusBannerTitle, { color: '#991B1B' }]}>Booking Cancelled</Text>
-            {booking.cancellationReason && (
-              <Text style={[styles.statusBannerSub, { color: '#B91C1C' }]}>{booking.cancellationReason}</Text>
-            )}
-          </View>
-        </View>
-      );
-    }
-
-    if (ps === 'pending') {
-      const timeRemaining = getTimeUntilExpiry();
-      const expired = timeRemaining === 'Expired';
-      return (
-        <View style={[styles.statusBanner, { backgroundColor: '#FFF7ED', borderColor: '#FED7AA' }]}>
-          <View style={[styles.statusBannerIcon, { backgroundColor: '#FFEDD5' }]}>
-            <Ionicons name="time" size={22} color="#EA580C" />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.statusBannerTitle, { color: '#9A3412' }]}>Payment Pending</Text>
-            <Text style={[styles.statusBannerSub, { color: '#C2410C' }]}>
-              Complete your payment on Paystack to confirm this booking.
-            </Text>
-          </View>
-          {timeRemaining && (
-            <View style={[styles.expiryPill, { backgroundColor: expired ? '#FEE2E2' : '#FFEDD5' }]}>
-              <Ionicons name={expired ? 'close-circle' : 'hourglass'} size={12} color={expired ? '#DC2626' : '#92400E'} />
-              <Text style={[styles.expiryText, { color: expired ? '#DC2626' : '#92400E' }]}>
-                {expired ? 'Expired' : timeRemaining}
-              </Text>
-            </View>
-          )}
-        </View>
-      );
-    }
-
-    if (status === 'in_progress') {
-      return (
-        <View style={[styles.statusBanner, { backgroundColor: '#FAF5FF', borderColor: '#DDD6FE' }]}>
-          <View style={[styles.statusBannerIcon, { backgroundColor: '#EDE9FE' }]}>
-            <Ionicons name="play-circle" size={22} color="#7C3AED" />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.statusBannerTitle, { color: '#4C1D95' }]}>Session In Progress</Text>
-            <Text style={[styles.statusBannerSub, { color: '#6D28D9' }]}>Your service session is currently active.</Text>
-          </View>
-        </View>
-      );
-    }
-
-    if (status === 'completed') {
-      return (
-        <View style={[styles.statusBanner, { backgroundColor: '#F0FDF4', borderColor: '#BBF7D0' }]}>
-          <View style={[styles.statusBannerIcon, { backgroundColor: '#DCFCE7' }]}>
-            <Ionicons name="checkmark-circle" size={22} color="#16A34A" />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.statusBannerTitle, { color: '#14532D' }]}>Service Completed</Text>
-            {booking.paymentReference && (
-              <Text style={[styles.statusBannerSub, { color: '#15803D' }]}>
-                Ref: {booking.paymentReference.slice(-8).toUpperCase()}
-              </Text>
-            )}
-          </View>
-        </View>
-      );
-    }
-
-    // accepted + escrowed → Booking Confirmed
-    if (['accepted', 'pending'].includes(status) && (ps === 'escrowed' || ps === 'released')) {
-      return (
-        <View style={[styles.statusBanner, { backgroundColor: '#F0FDF4', borderColor: '#BBF7D0' }]}>
-          <View style={[styles.statusBannerIcon, { backgroundColor: '#DCFCE7' }]}>
-            <Ionicons name="checkmark-circle" size={22} color="#16A34A" />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.statusBannerTitle, { color: '#14532D' }]}>Booking Confirmed</Text>
-            <Text style={[styles.statusBannerSub, { color: '#15803D' }]}>
-              Payment received
-              {booking.paymentReference ? ` · Ref: ${booking.paymentReference.slice(-6).toUpperCase()}` : ''}
-            </Text>
-          </View>
-        </View>
-      );
-    }
-
-    return null;
-  };
-
-  // ── Refund Info ───────────────────────────────────────────────────────────────
-
-  const renderRefundInfo = () => {
-    if (!booking) return null;
-    if (booking.paymentStatus === 'refunded') {
-      return (
-        <View style={[styles.statusBanner, { backgroundColor: '#EEF2FF', borderColor: '#C7D2FE' }]}>
-          <View style={[styles.statusBannerIcon, { backgroundColor: '#E0E7FF' }]}>
-            <Ionicons name="refresh-circle" size={22} color="#4338CA" />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.statusBannerTitle, { color: '#312E81' }]}>Full Refund Processed</Text>
-            <Text style={[styles.statusBannerSub, { color: '#4338CA' }]}>
-              {formatPrice(booking.totalAmount)} returned to your wallet.
-            </Text>
-          </View>
-        </View>
-      );
-    }
-    if (booking.paymentStatus === 'partially_refunded' && booking.cancellationPenalty) {
-      const refund = booking.totalAmount - booking.cancellationPenalty;
-      return (
-        <View style={[styles.statusBanner, { backgroundColor: '#FFF7ED', borderColor: '#FED7AA', flexDirection: 'column', alignItems: 'stretch' }]}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-            <View style={[styles.statusBannerIcon, { backgroundColor: '#FFEDD5' }]}>
-              <Ionicons name="alert-circle" size={22} color="#EA580C" />
-            </View>
-            <Text style={[styles.statusBannerTitle, { color: '#9A3412' }]}>Partial Refund</Text>
-          </View>
-          <View style={{ gap: 6, marginTop: 12 }}>
-            <View style={styles.refundRow}>
-              <Text style={styles.refundLabel}>Original amount</Text>
-              <Text style={styles.refundValue}>{formatPrice(booking.totalAmount)}</Text>
-            </View>
-            <View style={styles.refundRow}>
-              <Text style={[styles.refundLabel, { color: '#DC2626' }]}>Penalty (20%)</Text>
-              <Text style={[styles.refundValue, { color: '#DC2626' }]}>-{formatPrice(booking.cancellationPenalty)}</Text>
-            </View>
-            <View style={[styles.refundRow, { paddingTop: 8, borderTopWidth: 1, borderTopColor: '#FED7AA', marginTop: 4 }]}>
-              <Text style={[styles.refundLabel, { color: '#15803D', fontWeight: '700' }]}>Refunded</Text>
-              <Text style={[styles.refundValue, { color: '#15803D', fontWeight: '700' }]}>{formatPrice(refund)}</Text>
-            </View>
-          </View>
-        </View>
-      );
-    }
-    return null;
-  };
-
   // ── Session Progress ──────────────────────────────────────────────────────────
 
   const renderSessionProgress = () => {
@@ -712,7 +563,6 @@ const BookingDetailScreen: React.FC = () => {
   const paymentInfo = getPaymentInfo(booking.paymentStatus);
   const otherParty = getOtherParty();
   const serviceInfo = getServiceInfo();
-  const otherParty = getOtherParty();
   const heroImage = serviceInfo?.images?.[0] || booking.vendor?.avatar;
 
   const displayAvatar = otherParty?.data?.avatar;
@@ -752,6 +602,7 @@ const BookingDetailScreen: React.FC = () => {
             </View>
           )}
         </View>
+      </LinearGradient>
 
       {/* ── Content ─────────────────────────────────────────────────────── */}
       <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
@@ -935,7 +786,7 @@ const BookingDetailScreen: React.FC = () => {
         )}
 
         {/* Action Buttons */}
-        {renderActionButtons()}
+        {renderSessionProgress()}
 
       </ScrollView>
 

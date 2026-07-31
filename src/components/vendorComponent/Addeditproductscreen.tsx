@@ -227,6 +227,7 @@ const AddEditProductScreen: React.FC = () => {
   const [images, setImages] = useState<ProductImage[]>([]);
   const [existingImages, setExistingImages] = useState<string[]>([]);
   const [confirmModal, setConfirmModal] = useState({ visible: false, title: '', message: '', onConfirm: () => {} });
+  const submittingRef = useRef(false);
 
   useEffect(() => {
     fetchCategories();
@@ -341,6 +342,7 @@ const AddEditProductScreen: React.FC = () => {
   const handleSave = async () => {
     if (submittingRef.current) return;
     if (!validateForm()) return;
+    submittingRef.current = true;
     try {
       setLoading(true);
       const token = await AsyncStorage.getItem('accessToken');
@@ -569,16 +571,6 @@ const AddEditProductScreen: React.FC = () => {
                 );
               })}
             </ScrollView>
-          )}
-        </View>
-
-        {/* ── Basic Info ──────────────────────────────────────────────── */}
-        <View style={styles.card}>
-          <View style={styles.sectionHeaderRow}>
-            <View style={[styles.sectionIconWrap, { backgroundColor: '#F0F9FF' }]}>
-              <Ionicons name="create-outline" size={15} color="#3B82F6" />
-            </View>
-            <Text style={styles.sectionTitle}>Basic Information</Text>
           </View>
 
           {/* Brand */}

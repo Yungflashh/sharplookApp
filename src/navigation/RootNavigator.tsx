@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { View, ActivityIndicator, StyleSheet, AppState } from 'react-native';
+import { AppState } from 'react-native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { checkAuthStatus, checkOnboardingStatus, checkInactivityAndLogout, updateLastActive } from '@/utils/authHelper';
+import { checkAuthStatus, checkOnboardingStatus, checkInactivityAndLogout, updateLastActive, logoutUser } from '@/utils/authHelper';
 import AuthNavigator from '@/navigation/AuthNavigator';
 import VendorProfileSetup from '@/screens/auth/VendorProfileSetup';
 import MessageScreen from '@/screens/vendor/MessageScreen';
@@ -89,8 +89,11 @@ const isVersionBelow = (current: string, minimum: string): boolean => {
 
 const RootNavigator = () => {
   const [isLoading, setIsLoading] = useState(true);
+  const [needsOnboarding, setNeedsOnboarding] = useState(false);
+  const [onboardingVendorIntent, setOnboardingVendorIntent] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isVendor, setIsVendor] = useState(false);
+  const [needsVendorSetup, setNeedsVendorSetup] = useState(false);
   const [updateInfo, setUpdateInfo] = useState<{
     visible: boolean;
     latestVersion: string;
@@ -165,12 +168,10 @@ const RootNavigator = () => {
         console.log('🔄 Auth state changed:', authStatus.isAuthenticated);
         setIsAuthenticated(authStatus.isAuthenticated);
         setIsVendor(authStatus.isVendor);
-        if (authStatus.isAuthenticated && authStatus.isVendor) {
-          const user = (authStatus as any).user;
-          if (!user?.vendorProfile?.businessName) {
-            setNeedsVendorSetup(true);
-          }
-        }
+        const user = (authStatus as any).user;
+        setNeedsVendorSetup(
+          !!(authStatus.isAuthenticated && authStatus.isVendor && !user?.vendorProfile?.businessName)
+        );
       }
     }, 1000);
     return () => clearInterval(interval);
@@ -180,8 +181,12 @@ const RootNavigator = () => {
     const splashStart = Date.now();
     try {
       // ── CRITICAL PATH: resolve auth as fast as possible ──────────────────
-      // checkAuthStatus reads from AsyncStorage — no network needed, very fast
-      const authStatus = await checkAuthStatus();
+      // checkAuthStatus / checkOnboardingStatus read from AsyncStorage — no network needed, very fast
+      const [authStatus, onboardingComplete] = await Promise.all([
+        checkAuthStatus(),
+        checkOnboardingStatus(),
+      ]);
+      setNeedsOnboarding(!onboardingComplete);
 
       // If authenticated, check 3-day inactivity before allowing access
       if (authStatus.isAuthenticated) {
@@ -197,12 +202,10 @@ const RootNavigator = () => {
       setIsAuthenticated(authStatus.isAuthenticated);
       setIsVendor(authStatus.isVendor);
 
-      if (authStatus.isAuthenticated && authStatus.isVendor) {
-        const user = (authStatus as any).user;
-        if (!user?.vendorProfile?.businessName) {
-          setNeedsVendorSetup(true);
-        }
-      }
+      const user = (authStatus as any).user;
+      setNeedsVendorSetup(
+        !!(authStatus.isAuthenticated && authStatus.isVendor && !user?.vendorProfile?.businessName)
+      );
 
       console.log('🔐 Auth status:', {
         isAuthenticated: authStatus.isAuthenticated,
@@ -276,10 +279,31 @@ const RootNavigator = () => {
   };
 
   if (isLoading) {
+    return <SplashScreen />;
+  }
+
+  if (needsOnboarding) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#E91E63" />
-      </View>
+      <OnboardingScreen
+        onComplete={(isVendorIntent) => {
+          setOnboardingVendorIntent(!!isVendorIntent);
+          setNeedsOnboarding(false);
+        }}
+      />
+    );
+  }
+
+  if (needsVendorSetup) {
+    return (
+      <VendorProfileSetup
+        onComplete={() => setNeedsVendorSetup(false)}
+        onLogout={async () => {
+          await logoutUser();
+          setIsAuthenticated(false);
+          setIsVendor(false);
+          setNeedsVendorSetup(false);
+        }}
+      />
     );
   }
 
@@ -294,10 +318,11 @@ const RootNavigator = () => {
     />
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       {!isAuthenticated ? (
-        <Stack.Screen 
-          name="Auth" 
-          component={AuthNavigator} 
-          options={{ animationTypeForReplace: 'pop' }} 
+        <Stack.Screen
+          name="Auth"
+          component={AuthNavigator}
+          options={{ animationTypeForReplace: 'pop' }}
+          initialParams={onboardingVendorIntent ? { screen: 'Register', params: { asVendor: true } } : undefined}
         />
       ) : (
         <>
@@ -443,14 +468,5 @@ const RootNavigator = () => {
     </>
   );
 };
-
-const styles = StyleSheet.create({
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF'
-  }
-});
 
 export default RootNavigator;

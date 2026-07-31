@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, TextInput, ActivityIndicator, Image } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, TextInput, ActivityIndicator, Image, StyleSheet, Platform, Modal } from 'react-native';
 import { toast } from '@/components/ui/Toast';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -8,7 +8,6 @@ import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
 import { getStoredUser, updateStoredUser } from '@/utils/authHelper';
 import { userAPI, handleAPIError } from '@/api/api';
-import { toast } from '@/components/ui/Toast';
 
 const PRIMARY   = '#E04079';
 const BG        = '#FCE4EC';
@@ -150,12 +149,7 @@ const PersonalInformationScreen: React.FC = () => {
       } else {
         throw new Error(response.message || 'Upload failed');
       }
-
-      toast.success('Success', 'Profile picture updated successfully');
-    } else {
-      throw new Error(response.message || 'Failed to upload image');
-    }
-  } catch (error) {
+    } catch (error) {
     console.error('❌ Upload error:', error);
     const apiError = handleAPIError(error);
     toast.error('Error', apiError.message);

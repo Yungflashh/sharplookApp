@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, TextInput, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, TextInput, ActivityIndicator, Dimensions, StyleSheet, StatusBar } from 'react-native';
 import { toast } from '@/components/ui/Toast';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -8,7 +8,6 @@ import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '@/types/navigation.types';
 import { disputeAPI, handleAPIError } from '@/api/api';
-import { toast } from '@/components/ui/Toast';
 
 type Nav = NativeStackNavigationProp<RootStackParamList, 'CreateDispute'>;
 type RouteP = RouteProp<RootStackParamList, 'CreateDispute'>;
@@ -77,8 +76,8 @@ const ActionRow: React.FC<{
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 const CreateDisputeScreen: React.FC = () => {
-  const navigation = useNavigation<CreateDisputeNavigationProp>();
-  const route = useRoute<CreateDisputeRouteProp>();
+  const navigation = useNavigation<Nav>();
+  const route = useRoute<RouteP>();
   const {
     bookingId
   } = route.params;
@@ -101,13 +100,12 @@ const CreateDisputeScreen: React.FC = () => {
     }
     try {
       setLoading(true);
-      const res = await disputeAPI.createDispute({
+      const response = await disputeAPI.createDispute({
         bookingId,
         category: selectedCategory,
         reason: selectedReason,
         description: description.trim()
-      };
-      const response = await disputeAPI.createDispute(disputeData);
+      });
       if (response.success) {
         toast.success('Dispute Created', 'Your dispute has been submitted. Our team will review it shortly.');
         navigation.goBack();

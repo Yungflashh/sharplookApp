@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,21 +7,34 @@ import {
   KeyboardAvoidingView,
   Platform,
   TouchableOpacity,
+  TextInput,
+  ActivityIndicator,
   Dimensions,
+  StyleSheet,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { Ionicons } from '@expo/vector-icons';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { Ionicons } from '@expo/vector-icons';
 import { AuthStackParamList } from '@/types/navigation.types';
 import { loginUser } from '@/utils/authHelper';
-import { Input, PasswordInput, Button, SocialLoginButton } from '@/components/ui/forms';
+import { Checkbox } from '@/components/ui/forms';
 
 type LoginScreenNavigationProp = NativeStackNavigationProp<AuthStackParamList, 'Login'>;
 
+const PRIMARY = '#E04079';
+const BG      = '#FCE4EC';
+const WHITE   = '#FFFFFF';
+const TEXT    = '#1A1A2E';
+const GRAY    = '#6B7280';
+const MUTED   = '#9CA3AF';
+const BORDER  = '#F3E6EC';
+
+const REMEMBERED_EMAIL_KEY = 'rememberedEmail';
+
 const LoginScreen = () => {
-  const navigation = useNavigation<NavProp>();
+  const navigation = useNavigation<LoginScreenNavigationProp>();
   const route = useRoute();
   const params = route.params as { message?: string } | undefined;
 
@@ -39,6 +52,15 @@ const LoginScreen = () => {
   // Check if device is a tablet (iPad)
   const { width } = Dimensions.get('window');
   const isTablet = width >= 768;
+
+  useEffect(() => {
+    AsyncStorage.getItem(REMEMBERED_EMAIL_KEY).then((saved) => {
+      if (saved) {
+        setEmail(saved);
+        setRememberMe(true);
+      }
+    });
+  }, []);
 
   const validateForm = () => {
     let valid = true;
@@ -74,6 +96,12 @@ const LoginScreen = () => {
       return;
     }
 
+    if (rememberMe) {
+      await AsyncStorage.setItem(REMEMBERED_EMAIL_KEY, email);
+    } else {
+      await AsyncStorage.removeItem(REMEMBERED_EMAIL_KEY);
+    }
+
     setLoading(true);
     let shouldResetLoading = true;
 
@@ -95,19 +123,18 @@ const LoginScreen = () => {
           navigation.navigate('VerifyOtp', { email });
           return; // Exit early, don't show error
         }
-        
+
         setGeneralError(errorMessage);
-        
+
         if (errorMessage.toLowerCase().includes('email') && !errorMessage.toLowerCase().includes('verify')) {
           setErrors((prev) => ({
             ...prev,
             email: 'Please check your email address',
           }));
         }
-        setErrors({ general: msg });
       }
     } catch {
-      setErrors({ general: 'An unexpected error occurred. Please try again.' });
+      setGeneralError('An unexpected error occurred. Please try again.');
     } finally {
       if (shouldResetLoading) {
         setLoading(false);
@@ -124,132 +151,212 @@ const LoginScreen = () => {
   };
 
   return (
-    <View className="flex-1 bg-white">
+    <SafeAreaView style={styles.screen} edges={['top', 'bottom']}>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        className="flex-1"
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+        style={{ flex: 1 }}
       >
         <ScrollView
           contentContainerStyle={{
             flexGrow: 1,
             paddingHorizontal: isTablet ? 80 : 24,
-            paddingTop: isTablet ? 80 : 60,
-            paddingBottom: 40,
+            paddingTop: 12,
+            paddingBottom: 32,
             justifyContent: 'center',
           }}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
           bounces={false}
         >
-          {/* Content Container - Centered on iPad */}
           <View style={{ maxWidth: isTablet ? 500 : undefined, alignSelf: 'center', width: '100%' }}>
             {/* Logo */}
-            <View className="items-center mb-10">
+            <View style={styles.logoWrap}>
               <Image
-                source={require('@/assets/app-icon.jpg')}
-                className="w-32 h-20"
-                resizeMode="contain"
+                source={require('@/assets/app-icon.png')}
+                style={styles.logo}
+                resizeMode="cover"
               />
             </View>
 
             {/* Header */}
-            <View className="mb-8">
-              <Text className="text-3xl font-bold text-center text-black mb-2">
-                Welcome Back
-              </Text>
-              <Text className="text-base text-center text-gray-700">
-                Sign in to continue your journey
-              </Text>
+            <View style={styles.header}>
+              <Text style={styles.title}>Welcome Back</Text>
+              <Text style={styles.subtitle}>Sign in to continue</Text>
             </View>
+
+            {/* Info message (e.g. passed after registration) */}
+            {params?.message ? (
+              <View style={styles.infoBanner}>
+                <Ionicons name="information-circle" size={20} color="#3182CE" style={{ marginRight: 8, marginTop: 1 }} />
+                <Text style={styles.infoBannerText}>{params.message}</Text>
+              </View>
+            ) : null}
 
             {/* General Error */}
             {generalError ? (
-              <View className="bg-red-50 border border-red-200 rounded-xl p-4 mb-6 flex-row items-start">
+              <View style={styles.errorBanner}>
                 <Ionicons
                   name="alert-circle"
                   size={20}
                   color="#DC2626"
-                  style={{ marginRight: 8, marginTop: 2 }}
+                  style={{ marginRight: 8, marginTop: 1 }}
                 />
-                <Text className="text-red-600 text-sm flex-1">{generalError}</Text>
+                <Text style={styles.errorBannerText}>{generalError}</Text>
               </View>
             ) : null}
 
-            {/* Email Input */}
-            <Input
-              label="Enter E-mail Address"
-              placeholder=""
-              value={email}
-              onChangeText={(text) => {
-                setEmail(text);
-                setErrors({ ...errors, email: '' });
-                setGeneralError('');
-              }}
-              error={errors.email}
-              autoCapitalize="none"
-              keyboardType="email-address"
-              editable={!loading}
-              textContentType="emailAddress"
-              autoComplete="email"
-            />
+            {/* Email */}
+            <View style={styles.fieldWrap}>
+              <Text style={styles.fieldLabel}>Email</Text>
+              <View style={[styles.inputRow, errors.email ? styles.inputRowError : null]}>
+                <Ionicons name="mail-outline" size={18} color={MUTED} style={styles.inputIcon} />
+                <TextInput
+                  style={styles.input}
+                  placeholder="example@gmail.com"
+                  placeholderTextColor={MUTED}
+                  value={email}
+                  onChangeText={(text) => {
+                    setEmail(text);
+                    setErrors((prev) => ({ ...prev, email: '' }));
+                    setGeneralError('');
+                  }}
+                  autoCapitalize="none"
+                  keyboardType="email-address"
+                  editable={!loading}
+                  textContentType="emailAddress"
+                  autoComplete="email"
+                />
+              </View>
+              {errors.email ? <Text style={styles.fieldError}>{errors.email}</Text> : null}
+            </View>
 
-            {/* Password Input */}
-            <PasswordInput
-              label="Password"
-              placeholder=""
-              value={password}
-              onChangeText={(text) => {
-                setPassword(text);
-                setErrors({ ...errors, password: '' });
-                setGeneralError('');
-              }}
-              error={errors.password}
-              editable={!loading}
-              containerClassName="mb-2"
-              textContentType="password"
-              autoComplete="password"
-            />
+            {/* Password */}
+            <View style={styles.fieldWrap}>
+              <Text style={styles.fieldLabel}>Password</Text>
+              <View style={[styles.inputRow, errors.password ? styles.inputRowError : null]}>
+                <Ionicons name="lock-closed-outline" size={18} color={MUTED} style={styles.inputIcon} />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Password"
+                  placeholderTextColor={MUTED}
+                  value={password}
+                  onChangeText={(text) => {
+                    setPassword(text);
+                    setErrors((prev) => ({ ...prev, password: '' }));
+                    setGeneralError('');
+                  }}
+                  secureTextEntry={!showPassword}
+                  editable={!loading}
+                  textContentType="password"
+                  autoComplete="password"
+                />
+                <TouchableOpacity
+                  onPress={() => setShowPassword((v) => !v)}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Ionicons name={showPassword ? 'eye-outline' : 'eye-off-outline'} size={19} color={PRIMARY} />
+                </TouchableOpacity>
+              </View>
+              {errors.password ? <Text style={styles.fieldError}>{errors.password}</Text> : null}
+            </View>
 
-            {/* Forgot Password */}
-            <View className="flex-row justify-end mb-6">
-              <TouchableOpacity
-                onPress={handleForgotPassword}
-                disabled={loading}
-                activeOpacity={0.7}
-              >
-                <Text className="text-sm text-pink-600 font-semibold">
-                  Forgot Password?
-                </Text>
+            {/* Remember me + Forgot password */}
+            <View style={styles.rowBetween}>
+              <View style={styles.rememberRow}>
+                <Checkbox checked={rememberMe} onChange={setRememberMe} size="sm" />
+                <TouchableOpacity onPress={() => setRememberMe((v) => !v)} activeOpacity={0.7}>
+                  <Text style={styles.rememberText}>Remember me</Text>
+                </TouchableOpacity>
+              </View>
+              <TouchableOpacity onPress={handleForgotPassword} disabled={loading} activeOpacity={0.7}>
+                <Text style={styles.forgotLink}>Forget Password?</Text>
               </TouchableOpacity>
             </View>
 
             {/* Login Button */}
-            <Button
+            <TouchableOpacity
+              style={[styles.loginBtn, loading && styles.loginBtnDisabled]}
               onPress={handleLogin}
-              loading={loading}
               disabled={loading}
-              containerClassName="mb-6"
+              activeOpacity={0.88}
             >
-              Login
-            </Button>
+              {loading ? (
+                <ActivityIndicator color={WHITE} />
+              ) : (
+                <>
+                  <Text style={styles.loginBtnText}>Log In</Text>
+                  <Ionicons name="chevron-forward" size={18} color={WHITE} style={{ marginLeft: 6 }} />
+                </>
+              )}
+            </TouchableOpacity>
 
-            {/* Register Link */}
-            <View className="flex-row justify-center items-center">
-              <Text className="text-base text-gray-700">Don`t have an account? </Text>
-              <TouchableOpacity
-                onPress={handleRegister}
-                disabled={loading}
-                activeOpacity={0.7}
-              >
-                <Text className="text-base text-pink-600 font-bold">Register Now</Text>
+            {/* Sign Up */}
+            <View style={styles.footerRow}>
+              <Text style={styles.footerText}>Don't have any account? </Text>
+              <TouchableOpacity onPress={handleRegister} disabled={loading} activeOpacity={0.7}>
+                <Text style={styles.footerLink}>Sign Up</Text>
               </TouchableOpacity>
             </View>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
-    </View>
+    </SafeAreaView>
   );
 };
+
+const styles = StyleSheet.create({
+  screen: { flex: 1, backgroundColor: BG },
+  logoWrap: { alignItems: 'center', marginTop: 16, marginBottom: 20 },
+  logo: { width: 92, height: 92, borderRadius: 22 },
+  header: { alignItems: 'center', marginBottom: 22 },
+  title: { fontSize: 24, fontWeight: '800', color: '#111827' },
+  subtitle: { fontSize: 14, color: GRAY, marginTop: 4 },
+  infoBanner: {
+    backgroundColor: '#EBF8FF', borderWidth: 1, borderColor: '#BEE3F8',
+    borderRadius: 14, padding: 14, marginBottom: 16,
+    flexDirection: 'row', alignItems: 'flex-start',
+  },
+  infoBannerText: { color: '#2C5282', fontSize: 13, flex: 1 },
+  errorBanner: {
+    backgroundColor: '#FEF2F2', borderWidth: 1, borderColor: '#FECACA',
+    borderRadius: 14, padding: 14, marginBottom: 16,
+    flexDirection: 'row', alignItems: 'flex-start',
+  },
+  errorBannerText: { color: '#DC2626', fontSize: 13, flex: 1 },
+  fieldWrap: { marginBottom: 16 },
+  fieldLabel: { fontSize: 13, fontWeight: '700', color: '#111827', marginBottom: 7 },
+  inputRow: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: WHITE, borderRadius: 14,
+    borderWidth: 1.5, borderColor: BORDER,
+    paddingHorizontal: 14, height: 52,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04, shadowRadius: 4, elevation: 1,
+  },
+  inputRowError: { borderColor: PRIMARY },
+  inputIcon: { marginRight: 10 },
+  input: { flex: 1, fontSize: 14, color: TEXT, height: '100%', padding: 0 },
+  fieldError: { color: PRIMARY, fontSize: 12, marginTop: 5, marginLeft: 2 },
+  rowBetween: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    marginTop: 2, marginBottom: 22,
+  },
+  rememberRow: { flexDirection: 'row', alignItems: 'center' },
+  rememberText: { fontSize: 13, color: '#374151' },
+  forgotLink: { color: PRIMARY, fontSize: 13, fontWeight: '600', textDecorationLine: 'underline' },
+  loginBtn: {
+    backgroundColor: PRIMARY, borderRadius: 999, height: 54,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    shadowColor: PRIMARY, shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3, shadowRadius: 8, elevation: 4,
+  },
+  loginBtnDisabled: { opacity: 0.7 },
+  loginBtnText: { color: WHITE, fontSize: 16, fontWeight: '700' },
+  footerRow: {
+    flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: 28,
+  },
+  footerText: { fontSize: 14, color: GRAY },
+  footerLink: { fontSize: 14, color: PRIMARY, fontWeight: '700' },
+});
 
 export default LoginScreen;

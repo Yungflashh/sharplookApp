@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, TextInput, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, TextInput, ActivityIndicator, StatusBar, Image } from 'react-native';
 import { toast } from '@/components/ui/Toast';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -8,7 +8,6 @@ import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '@/types/navigation.types';
 import { reviewAPI, handleAPIError } from '@/api/api';
-import { toast } from '@/components/ui/Toast';
 
 const PRIMARY = '#E04079';
 const BG      = '#FCE4EC';
@@ -50,19 +49,12 @@ const CreateReviewScreen: React.FC = () => {
     }
     try {
       setLoading(true);
-      const res = await reviewAPI.createReview({
+      const response = await reviewAPI.createReview({
         bookingId,
         rating,
-        title: title.trim() || undefined,
         comment: comment.trim(),
-        detailedRatings: {
-          quality: qualityRating || undefined,
-          punctuality: punctualityRating || undefined,
-          communication: communicationRating || undefined,
-          value: valueRating || undefined
-        }
-      };
-      const response = await reviewAPI.createReview(reviewData);
+        recommend: recommend === 'yes' ? true : recommend === 'no' ? false : undefined,
+      });
       if (response.success) {
         toast.success('Review Submitted', 'Thank you for your feedback!');
         navigation.goBack();

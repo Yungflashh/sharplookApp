@@ -1,16 +1,33 @@
 import React, { useState } from 'react';
-import { View, TouchableOpacity, Text, ScrollView, KeyboardAvoidingView, Platform, SafeAreaView } from 'react-native';
+import {
+  View, TouchableOpacity, Text, ScrollView, KeyboardAvoidingView,
+  Platform, TextInput, ActivityIndicator, StyleSheet,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
+import { AuthStackParamList } from '@/types/navigation.types';
 import { authAPI, handleAPIError } from '@/api/api';
-import { Input, Button } from '@/components/ui/forms';
+
+type NavProp = NativeStackNavigationProp<AuthStackParamList, 'ForgotPassword'>;
+
+const PRIMARY = '#E04079';
+const BG      = '#FCE4EC';
+const WHITE   = '#FFFFFF';
+const TEXT    = '#1A1A2E';
+const GRAY    = '#6B7280';
+const MUTED   = '#9CA3AF';
+const BORDER  = '#F3E6EC';
+
 const ForgotPasswordScreen = () => {
-  const navigation = useNavigation();
+  const navigation = useNavigation<NavProp>();
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [generalError, setGeneralError] = useState('');
-  const [successMessage, setSuccessMessage] = useState('');
+  const [codeSent, setCodeSent] = useState(false);
+
   const validateEmail = () => {
     if (!email) {
       setError('Email is required');
@@ -22,116 +39,174 @@ const ForgotPasswordScreen = () => {
     }
     return true;
   };
-  const handleSubmit = async () => {
+
+  const handleGetCode = async () => {
     setGeneralError('');
-    setSuccessMessage('');
     if (!validateEmail()) return;
     setLoading(true);
     try {
       const response = await authAPI.forgotPassword(email.trim().toLowerCase());
       if (response.success) {
-        setSuccessMessage('Password reset code has been sent to your email. Please check your inbox.');
-        setTimeout(() => {
-          navigation.navigate('Auth', {
-            screen: 'Verification',
-            params: {
-              email: email.trim().toLowerCase()
-            }
-          });
-        }, 2000);
+        setCodeSent(true);
       } else {
         setGeneralError(response.message || 'Failed to send reset code. Please try again.');
       }
     } catch (error: any) {
-      console.error('Forgot password error:', error);
       const apiError = handleAPIError(error);
       if (apiError.fieldErrors?.email) {
         setError(apiError.fieldErrors.email);
       }
-      if (apiError.isNetworkError) {
-        setGeneralError('Network error. Please check your internet connection and try again.');
-      } else {
-        setGeneralError(apiError.message || 'An error occurred. Please try again.');
-      }
+      setGeneralError(apiError.isNetworkError
+        ? 'Network error. Please check your internet connection and try again.'
+        : (apiError.message || 'An error occurred. Please try again.'));
     } finally {
       setLoading(false);
     }
   };
-  return <SafeAreaView className="flex-1 bg-white">
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} className="flex-1">
-        <ScrollView contentContainerStyle={{
-        flexGrow: 1,
-        paddingHorizontal: 24,
-        paddingTop: 10,
-        paddingBottom: 40
-      }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-          {}
-          <View className="flex-row items-center mb-10">
-            <TouchableOpacity onPress={() => navigation.goBack()} className="mr-4 bg-white p-2 rounded-full" activeOpacity={0.7}>
-              <Ionicons name="chevron-back" size={24} color="#000" />
-            </TouchableOpacity>
-            <Text className="text-xl font-bold text-black">Forgot password</Text>
+
+  const handleContinue = () => {
+    navigation.navigate('VerifyResetCode', { email: email.trim().toLowerCase() });
+  };
+
+  return (
+    <SafeAreaView style={styles.screen} edges={['top', 'bottom']}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
+        <ScrollView
+          contentContainerStyle={{ flexGrow: 1, paddingHorizontal: 24, paddingTop: 8, paddingBottom: 32, justifyContent: 'center' }}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn} activeOpacity={0.75}>
+            <Ionicons name="chevron-back" size={20} color={PRIMARY} />
+          </TouchableOpacity>
+
+          <View style={styles.iconWrap}>
+            <Ionicons name="lock-closed" size={38} color={PRIMARY} />
           </View>
 
-          {}
-          <View className="items-center mb-8">
-            <View className="bg-white p-6 rounded-full mb-4">
-              <Ionicons name="lock-closed" size={48} color="#ec4899" />
+          <View style={styles.header}>
+            <Text style={styles.title}>Reset Your Password</Text>
+            <Text style={styles.subtitle}>Please fill your email address below we will send you a code</Text>
+          </View>
+
+          {generalError ? (
+            <View style={styles.errorBanner}>
+              <Ionicons name="alert-circle" size={20} color="#DC2626" style={{ marginRight: 8, marginTop: 1 }} />
+              <Text style={styles.errorBannerText}>{generalError}</Text>
             </View>
-            <Text className="text-2xl font-bold text-black mb-2 text-center">
-              Reset Your Password
-            </Text>
-            <Text className="text-base text-gray-700 text-center px-4">
-              Please fill your email address below
-            </Text>
-            <Text className="text-sm text-gray-600 text-center px-4 mt-1">
-              We will send you a code to reset your password
-            </Text>
+          ) : null}
+
+          <View style={styles.fieldWrap}>
+            <Text style={styles.fieldLabel}>Email</Text>
+            <View style={[styles.inputRow, error ? styles.inputRowError : null]}>
+              <Ionicons name="mail-outline" size={18} color={MUTED} style={styles.inputIcon} />
+              <TextInput
+                style={styles.input}
+                placeholder="example@gmail.com"
+                placeholderTextColor={MUTED}
+                value={email}
+                onChangeText={(text) => {
+                  setEmail(text);
+                  setError('');
+                  setGeneralError('');
+                  setCodeSent(false);
+                }}
+                autoCapitalize="none"
+                keyboardType="email-address"
+                editable={!loading}
+                textContentType="emailAddress"
+                autoComplete="email"
+              />
+            </View>
+            {error ? <Text style={styles.fieldError}>{error}</Text> : null}
           </View>
 
-          {}
-          {successMessage ? <View className="bg-green-50 border border-green-200 rounded-xl p-4 mb-6 flex-row items-start">
-              <Ionicons name="checkmark-circle" size={20} color="#16A34A" style={{
-            marginRight: 8,
-            marginTop: 2
-          }} />
-              <Text className="text-green-600 text-sm flex-1">{successMessage}</Text>
-            </View> : null}
+          {codeSent ? (
+            <View style={styles.successBanner}>
+              <Ionicons name="checkmark-circle" size={18} color="#16A34A" style={{ marginRight: 6 }} />
+              <Text style={styles.successBannerText}>Reset code sent successful</Text>
+            </View>
+          ) : null}
 
-          {}
-          {generalError ? <View className="bg-red-50 border border-red-200 rounded-xl p-4 mb-6 flex-row items-start">
-              <Ionicons name="alert-circle" size={20} color="#DC2626" style={{
-            marginRight: 8,
-            marginTop: 2
-          }} />
-              <Text className="text-red-600 text-sm flex-1">{generalError}</Text>
-            </View> : null}
+          <TouchableOpacity
+            style={[styles.actionBtn, loading && styles.actionBtnDisabled]}
+            onPress={codeSent ? handleContinue : handleGetCode}
+            disabled={loading}
+            activeOpacity={0.88}
+          >
+            {loading ? (
+              <ActivityIndicator color={WHITE} />
+            ) : (
+              <>
+                <Text style={styles.actionBtnText}>{codeSent ? 'Continue' : 'Get Code'}</Text>
+                <Ionicons name="chevron-forward" size={18} color={WHITE} style={{ marginLeft: 6 }} />
+              </>
+            )}
+          </TouchableOpacity>
 
-          {}
-          <Input label="Enter E-mail Address" placeholder="" value={email} onChangeText={text => {
-          setEmail(text);
-          setError('');
-          setGeneralError('');
-          setSuccessMessage('');
-        }} error={error} autoCapitalize="none" keyboardType="email-address" editable={!loading} />
-
-          {}
-          <View className="flex-1" />
-
-          {}
-          <Button onPress={handleSubmit} loading={loading} disabled={loading} containerClassName="mb-6">
-            Submit
-          </Button>
-
-          {}
-          <View className="flex-row justify-center items-center mb-4">
-            <Text className="text-base text-gray-700">Remember your password? </Text>
+          <View style={styles.footerRow}>
+            <Text style={styles.footerText}>Remember your password? </Text>
             <TouchableOpacity onPress={() => navigation.goBack()} disabled={loading} activeOpacity={0.7}>
-              <Text className="text-base text-pink-600 font-bold">Sign in</Text>
+              <Text style={styles.footerLink}>Sign In</Text>
             </TouchableOpacity>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
-    </SafeAreaView>;
+    </SafeAreaView>
+  );
 };
+
+const styles = StyleSheet.create({
+  screen: { flex: 1, backgroundColor: BG },
+  backBtn: {
+    width: 38, height: 38, borderRadius: 19,
+    backgroundColor: '#FCE4EC', alignItems: 'center', justifyContent: 'center',
+    position: 'absolute', top: 8, left: 24,
+  },
+  iconWrap: {
+    width: 88, height: 88, borderRadius: 44, backgroundColor: WHITE,
+    alignItems: 'center', justifyContent: 'center', alignSelf: 'center', marginBottom: 20,
+  },
+  header: { alignItems: 'center', marginBottom: 24 },
+  title: { fontSize: 22, fontWeight: '800', color: '#111827' },
+  subtitle: { fontSize: 13, color: GRAY, marginTop: 6, textAlign: 'center', paddingHorizontal: 12 },
+  errorBanner: {
+    backgroundColor: '#FEF2F2', borderWidth: 1, borderColor: '#FECACA',
+    borderRadius: 14, padding: 14, marginBottom: 16,
+    flexDirection: 'row', alignItems: 'flex-start',
+  },
+  errorBannerText: { color: '#DC2626', fontSize: 13, flex: 1 },
+  fieldWrap: { marginBottom: 8 },
+  fieldLabel: { fontSize: 13, fontWeight: '700', color: '#111827', marginBottom: 7 },
+  inputRow: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: WHITE, borderRadius: 14,
+    borderWidth: 1.5, borderColor: BORDER,
+    paddingHorizontal: 14, height: 52,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04, shadowRadius: 4, elevation: 1,
+  },
+  inputRowError: { borderColor: PRIMARY },
+  inputIcon: { marginRight: 10 },
+  input: { flex: 1, fontSize: 14, color: TEXT, height: '100%', padding: 0 },
+  fieldError: { color: PRIMARY, fontSize: 12, marginTop: 5, marginLeft: 2 },
+  successBanner: {
+    flexDirection: 'row', alignItems: 'center', marginTop: 12, marginBottom: 8,
+  },
+  successBannerText: { color: '#16A34A', fontSize: 13, fontWeight: '600' },
+  actionBtn: {
+    backgroundColor: PRIMARY, borderRadius: 999, height: 54, marginTop: 20,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    shadowColor: PRIMARY, shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3, shadowRadius: 8, elevation: 4,
+  },
+  actionBtnDisabled: { opacity: 0.7 },
+  actionBtnText: { color: WHITE, fontSize: 16, fontWeight: '700' },
+  footerRow: {
+    flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: 20,
+  },
+  footerText: { fontSize: 14, color: GRAY },
+  footerLink: { fontSize: 14, color: PRIMARY, fontWeight: '700' },
+});
+
 export default ForgotPasswordScreen;

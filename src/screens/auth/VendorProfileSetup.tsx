@@ -12,9 +12,9 @@ import {
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import * as Location from 'expo-location';
 import { vendorAPI, categoriesAPI, handleAPIError } from '@/api/api';
 import { toast } from '@/components/ui/Toast';
+import LocationPicker from './components/LocationPicker';
 
 type VendorType = 'home_service' | 'in_shop' | 'both';
 
@@ -26,7 +26,12 @@ interface Category {
   icon?: string;
 }
 
-const VendorProfileSetup = () => {
+interface Props {
+  onComplete?: () => void;
+  onLogout?: () => void;
+}
+
+const VendorProfileSetup = ({ onComplete, onLogout }: Props = {}) => {
   const navigation = useNavigation();
   
   const [businessName, setBusinessName] = useState('');
@@ -43,9 +48,9 @@ const VendorProfileSetup = () => {
   const [loading, setLoading] = useState(false);
   const [loadingCategories, setLoadingCategories] = useState(false);
   const [categories, setCategories] = useState<Category[]>([]);
-  const [locationLoading, setLocationLoading] = useState(false);
-  const [locationPermissionGranted, setLocationPermissionGranted] = useState(false);
-  
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+  const [showLocationPicker, setShowLocationPicker] = useState(false);
+
   const [generalError, setGeneralError] = useState('');
   const [errors, setErrors] = useState({
     businessName: '',
@@ -58,79 +63,17 @@ const VendorProfileSetup = () => {
 
   useEffect(() => {
     fetchCategories();
-    checkLocationPermission();
   }, []);
 
-  const checkLocationPermission = async () => {
-    try {
-      const { status } = await Location.getForegroundPermissionsAsync();
-      setLocationPermissionGranted(status === 'granted');
-    } catch (error) {
-      console.error('Error checking location permission:', error);
-    }
-  };
-
-  const requestLocationPermission = async () => {
-    try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      setLocationPermissionGranted(status === 'granted');
-      return status === 'granted';
-    } catch (error) {
-      console.error('Error requesting location permission:', error);
-      return false;
-    }
-  };
-
-  const getCurrentLocation = async () => {
-    setLocationLoading(true);
+  const handleLocationSelected = (loc: { coordinates: number[]; address: string; city?: string; state?: string; country?: string }) => {
+    setLocation({
+      coordinates: loc.coordinates,
+      address: loc.address,
+      city: loc.city || '',
+      state: loc.state || '',
+      country: loc.country || '',
+    });
     setErrors({ ...errors, location: '' });
-
-    try {
-      if (!locationPermissionGranted) {
-        const granted = await requestLocationPermission();
-        if (!granted) {
-          toast.info('Location Permission Required', 'Please enable location permissions in your device settings to use this feature.');
-          setLocationLoading(false);
-          return;
-        }
-      }
-
-      const position = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.High,
-      });
-
-      const { latitude, longitude } = position.coords;
-
-      const geocode = await Location.reverseGeocodeAsync({
-        latitude,
-        longitude,
-      });
-
-      if (geocode && geocode.length > 0) {
-        const addressData = geocode[0];
-
-        const locationData = {
-          coordinates: [longitude, latitude],
-          address:
-            `${addressData.street || ''} ${addressData.streetNumber || ''}`.trim() ||
-            'Address not available',
-          city: addressData.city || addressData.subregion || 'Unknown City',
-          state: addressData.region || 'Unknown State',
-          country: addressData.country || 'Nigeria',
-        };
-
-        setLocation(locationData);
-        toast.success('Success', 'Location captured successfully!');
-      } else {
-        throw new Error('Unable to get address details');
-      }
-    } catch (error: any) {
-      console.error('Location error:', error);
-      setErrors({ ...errors, location: 'Failed to get location. Please try again.' });
-      toast.error('Location Error', 'Unable to get your location. Please ensure location services are enabled and try again.');
-    } finally {
-      setLocationLoading(false);
-    }
   };
 
   const fetchCategories = async () => {
@@ -139,24 +82,6 @@ const VendorProfileSetup = () => {
       const response = await categoriesAPI.getAll();
       if (response.success && response.data) setCategories(response.data);
     } catch { /* silent */ } finally { setLoadingCategories(false); }
-  };
-
-  const getCurrentLocation = async () => {
-    setLocationLoading(true);
-    clearErr('location');
-    try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        toast.info('Permission Required', 'Please enable location permissions in settings.');
-        return;
-      }
-    } catch (error) {
-      console.error('Error fetching categories:', error);
-      const apiError = handleAPIError(error);
-      toast.error('Error', apiError.message || 'Failed to load categories');
-    } finally {
-      setLoadingCategories(false);
-    }
   };
 
   const validateForm = () => {
@@ -209,8 +134,8 @@ const VendorProfileSetup = () => {
       const setupData: any = {
         businessName: businessName.trim(),
         businessDescription: businessDescription.trim(),
-        categories: [selectedCategory],
-        primaryCategory: selectedCategory,
+        categories: selectedCategories,
+        primaryCategory: selectedCategories[0],
         vendorType,
         location: location!,
       };
@@ -219,8 +144,11 @@ const VendorProfileSetup = () => {
 
       if (response.success) {
         toast.success('Success', 'Vendor profile created successfully!');
-        console.log('Vendor profile setup complete');
-        // Navigate to appropriate screen
+        if (onComplete) {
+          onComplete();
+        } else {
+          (navigation as any).navigate('Login');
+        }
       } else {
         toast.error('Setup Failed', response.message || 'Failed to create vendor profile');
       }
@@ -266,10 +194,10 @@ const VendorProfileSetup = () => {
       <View className="bg-white border-b border-gray-200">
         <View className="flex-row items-center justify-between px-5 py-4">
           <TouchableOpacity
-            onPress={() => navigation.goBack()}
+            onPress={() => (onLogout ? onLogout() : navigation.goBack())}
             className="w-10 h-10 items-center justify-center"
           >
-            <Ionicons name="chevron-back" size={28} color="#1f2937" />
+            <Ionicons name={onLogout ? 'log-out-outline' : 'chevron-back'} size={26} color="#1f2937" />
           </TouchableOpacity>
           <Text className="text-lg font-semibold text-gray-900">Vendor Profile Setup</Text>
           <View className="w-10" />
@@ -558,10 +486,10 @@ const VendorProfileSetup = () => {
               {expandedSection === 'location' && (
                 <View className="pt-3 border-t border-gray-100">
                   {location ? (
-                    <View className="bg-green-50 border border-green-200 rounded-xl p-4 mb-2">
+                    <View className="bg-white border border-pink-200 rounded-xl p-4 mb-2">
                       <View className="flex-row items-center mb-3">
-                        <Ionicons name="location" size={20} color="#059669" />
-                        <Text className="text-green-700 font-semibold ml-2">Location Added</Text>
+                        <Ionicons name="checkmark-circle" size={20} color="#ec4899" />
+                        <Text className="text-gray-900 font-semibold ml-2">Location Added</Text>
                       </View>
                       <Text className="text-gray-500 text-xs mb-1">Address</Text>
                       <TextInput
@@ -594,39 +522,28 @@ const VendorProfileSetup = () => {
                         </View>
                       </View>
                       <TouchableOpacity
-                        onPress={() => setLocation(null)}
+                        onPress={() => setShowLocationPicker(true)}
                         className="mt-3"
                         activeOpacity={0.7}
                       >
-                        <Text className="text-red-600 text-sm font-semibold">
-                          Change Location
+                        <Text className="text-pink-600 text-sm font-semibold">
+                          Adjust on Map
                         </Text>
                       </TouchableOpacity>
                     </View>
                   ) : (
                     <TouchableOpacity
-                      onPress={getCurrentLocation}
-                      disabled={locationLoading || loading}
+                      onPress={() => setShowLocationPicker(true)}
+                      disabled={loading}
                       className={`bg-pink-50 border border-pink-200 rounded-xl p-4 flex-row items-center justify-center ${
-                        locationLoading || loading ? 'opacity-50' : ''
+                        loading ? 'opacity-50' : ''
                       }`}
                       activeOpacity={0.7}
                     >
-                      {locationLoading ? (
-                        <>
-                          <ActivityIndicator size="small" color="#EC4899" />
-                          <Text className="text-pink-600 font-semibold ml-3">
-                            Getting Location...
-                          </Text>
-                        </>
-                      ) : (
-                        <>
-                          <Ionicons name="location-outline" size={20} color="#EC4899" />
-                          <Text className="text-pink-600 font-semibold ml-2">
-                            Add Current Location
-                          </Text>
-                        </>
-                      )}
+                      <Ionicons name="map-outline" size={20} color="#EC4899" />
+                      <Text className="text-pink-600 font-semibold ml-2">
+                        Pick Location on Map
+                      </Text>
                     </TouchableOpacity>
                   )}
                   {errors.location ? (
@@ -656,6 +573,14 @@ const VendorProfileSetup = () => {
           )}
         </TouchableOpacity>
       </View>
+
+      {/* Live Map Location Picker */}
+      <LocationPicker
+        visible={showLocationPicker}
+        onClose={() => setShowLocationPicker(false)}
+        onSelectLocation={handleLocationSelected}
+        currentLocation={location}
+      />
     </SafeAreaView>
   );
 };

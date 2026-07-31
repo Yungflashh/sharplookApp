@@ -206,13 +206,15 @@ export type RootStackParamList = {
 };
 export type AuthStackParamList = {
   Login: { message?: string } | undefined;
-  Register: undefined;
+  Register: { asVendor?: boolean } | undefined;
   ForgotPassword: undefined;
+  VerifyResetCode: { email: string };
+  ChangePassword: { email: string; code: string };
+  ResetPasswordSuccess: undefined;
   VendorLogin: undefined;
     VerifyOtp: { email: string };  // Make sure this exists
 
-  VendorProfileSetup: undefined;
-  TermsPrivacyAuthScreen: { type: 'terms' | 'privacy' };
+  TermsPrivacyAuthScreen: { type: 'terms' | 'privacy'; onAccept?: () => void };
 };
 export type ClientTabParamList = {
   Home: undefined;

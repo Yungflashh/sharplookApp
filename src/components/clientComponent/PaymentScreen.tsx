@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, ActivityIndicator, Platform } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { toast } from '@/components/ui/Toast';
 import ConfirmationModal from '@/components/ConfirmationModal';
 import { Ionicons } from '@expo/vector-icons';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -384,25 +384,13 @@ const PaymentScreen: React.FC = () => {
       {/* Header */}
       <View className="bg-white px-5 py-4 border-b border-gray-100">
         <View className="flex-row items-center justify-between">
+          <Text className="text-lg font-bold text-gray-900">Complete Payment</Text>
           <TouchableOpacity
             onPress={handleCancel}
             className="w-10 h-10 rounded-full bg-gray-100 items-center justify-center"
           >
             <Ionicons name="close" size={24} color="#1f2937" />
           </TouchableOpacity>
-        </View>
-      </View>
-    );
-  }
-
-          <Text className="text-lg font-bold text-gray-900">Complete Payment</Text>
-
-          {/* Concentric circles */}
-          <View style={styles.shieldOuter}>
-            <View style={styles.shieldInner}>
-              <Ionicons name="shield-checkmark" size={52} color={PINK} />
-            </View>
-          </View>
         </View>
 
         {/* Amount Display */}
@@ -527,21 +515,6 @@ const PaymentScreen: React.FC = () => {
             Secured by <Text className="font-bold">Paystack</Text>
           </Text>
         </View>
-      ) : (
-        <View style={styles.center}>
-          <Ionicons name="alert-circle-outline" size={64} color="#d1d5db" />
-          <Text style={styles.noUrlText}>Payment URL not available</Text>
-          <TouchableOpacity style={styles.goBackBtn} onPress={() => navigation.goBack()}>
-            <Text style={styles.goBackText}>Go Back</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {/* ── Footer ───────────────────────────────────────────────────── */}
-      <View style={[styles.footer, { paddingBottom: insets.bottom || 12 }]}>
-        <Ionicons name="lock-closed" size={12} color={GREEN} />
-        <Text style={styles.footerText}>  256-bit SSL  ·  Secured by </Text>
-        <Text style={[styles.footerText, { fontWeight: '700' }]}>Paystack</Text>
       </View>
 
       <ConfirmationModal

@@ -7,6 +7,7 @@ import {
   TextInput,
   ActivityIndicator,
   Platform,
+  StyleSheet,
 } from 'react-native';
 import { toast } from '@/components/ui/Toast';
 import ConfirmationModal from '@/components/ConfirmationModal';
@@ -21,6 +22,13 @@ import { RootStackParamList } from '@/types/navigation.types';
 import { bookingAPI, handleAPIError, sharpPayAPI } from '@/api/api';
 import { getStoredUser } from '@/utils/authHelper';
 
+const PINK = '#eb278d';
+const WHITE = '#FFFFFF';
+const TEXT = '#1A1A2E';
+const MUTED = '#9CA3AF';
+const BG = '#FFF0F5';
+const BORDER = '#F3E6EC';
+
 type CreateBookingNavigationProp = NativeStackNavigationProp<RootStackParamList, 'CreateBooking'>;
 type CreateBookingRouteProp = RouteProp<RootStackParamList, 'CreateBooking'>;
 
@@ -29,6 +37,7 @@ type PaymentMethod = 'wallet' | 'card';
 const CreateBookingScreen: React.FC = () => {
   const navigation = useNavigation<CreateBookingNavigationProp>();
   const route = useRoute<CreateBookingRouteProp>();
+  const insets = useSafeAreaInsets();
   const { service, vendor } = route.params;
 
   // Steps: 1 = Date/Time, 2 = Location, 3 = Payment Method, 4 = Review & Confirm
@@ -36,9 +45,10 @@ const CreateBookingScreen: React.FC = () => {
   const [loading, setLoading] = useState(false);
 
   // Step 1
-  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
-  const [selectedTime, setSelectedTime] = useState('');
-  const [calMonth, setCalMonth] = useState(new Date());
+  const [scheduledDate, setScheduledDate] = useState(new Date());
+  const [scheduledTime, setScheduledTime] = useState('');
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showTimePicker, setShowTimePicker] = useState(false);
 
   // Step 2
   const [locationType, setLocationType] = useState<'home' | 'shop'>(
@@ -46,9 +56,8 @@ const CreateBookingScreen: React.FC = () => {
   );
   const [address, setAddress] = useState('');
   const [city, setCity] = useState('');
-  const [stateVal, setStateVal] = useState('');
+  const [state, setState] = useState('');
   const [coordinates, setCoordinates] = useState<[number, number]>([0, 0]);
-  const [locationLoading, setLocationLoading] = useState(false);
 
   // Step 3
   const [servicePrice, setServicePrice] = useState(service.basePrice || 0);
@@ -59,6 +68,10 @@ const CreateBookingScreen: React.FC = () => {
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('wallet');
   const [walletBalance, setWalletBalance] = useState(0);
   const [walletLoading, setWalletLoading] = useState(true);
+  const [walletVerifying, setWalletVerifying] = useState(false);
+  const [walletPaid, setWalletPaid] = useState(false);
+  const [paidAmount, setPaidAmount] = useState(0);
+  const [paidBookingId, setPaidBookingId] = useState<string | null>(null);
 
   // Price Preview
   const [priceLoading, setPriceLoading] = useState(false);
@@ -69,6 +82,9 @@ const CreateBookingScreen: React.FC = () => {
   const [locationError, setLocationError] = useState('');
   const [confirmModal, setConfirmModal] = useState({ visible: false, title: '', message: '', onConfirm: () => {} });
   const [locationPermissionGranted, setLocationPermissionGranted] = useState(false);
+
+  // Notes
+  const [clientNotes, setClientNotes] = useState('');
 
   const isHomeServiceAvailable =
     vendor.vendorProfile.vendorType === 'home_service' ||
@@ -317,6 +333,9 @@ const CreateBookingScreen: React.FC = () => {
   const handleCreateBooking = async () => {
     try {
       setLoading(true);
+      if (paymentMethod === 'wallet') {
+        setWalletVerifying(true);
+      }
 
       if (service.isActive === false) {
         toast.error('Service Unavailable', 'This service is currently not available. Please choose another service or contact the vendor.');
@@ -382,11 +401,11 @@ const CreateBookingScreen: React.FC = () => {
           console.error('❌ Card payment selected but no authorizationUrl in response!');
           toast.error('Payment Error', 'Failed to initialize card payment. Please try again or use wallet.');
         } else {
-          // Wallet payment - booking is already paid!
-          toast.success('Booking Confirmed!', `Your booking has been created and payment of ₦${actualAmount.toLocaleString()} was successful!${backendDistanceCharge > 0 ? `\n\n(Includes ₦${backendDistanceCharge.toLocaleString()} distance charge)` : ''}\n\nThe vendor will be notified and can accept your booking.`);
-          navigation.navigate('BookingDetail', {
-            bookingId: response.data.booking._id,
-          });
+          // Wallet payment - booking is already paid! Show the confirmation overlay.
+          setWalletVerifying(false);
+          setPaidAmount(actualAmount);
+          setPaidBookingId(response.data.booking._id);
+          setWalletPaid(true);
         }
       }
     } catch (error: any) {
@@ -405,6 +424,7 @@ const CreateBookingScreen: React.FC = () => {
       toast.error('Booking Error', errorMessage);
     } finally {
       setLoading(false);
+      setWalletVerifying(false);
     }
   };
 
@@ -423,20 +443,7 @@ const CreateBookingScreen: React.FC = () => {
 
   const canPayWithWallet = walletBalance >= totalAmount;
 
-  return (
-    <SafeAreaView className="flex-1 bg-gray-50">
-      {/* Header */}
-      <View className="bg-white px-5 py-4 border-b border-gray-100">
-        <View className="flex-row items-center justify-between">
-          <TouchableOpacity
-            onPress={handleBack}
-            className="w-10 h-10 rounded-full bg-gray-100 items-center justify-center"
-          >
-            <Ionicons name="arrow-back" size={24} color="#1f2937" />
-          </TouchableOpacity>
-
   const fp = (p: number) => `₦${p.toLocaleString()}`;
-  const vp = vendor.vendorProfile;
 
   // ── Wallet verifying overlay ───────────────────────────────────────────────
   if (walletVerifying) {
@@ -1088,40 +1095,6 @@ const CreateBookingScreen: React.FC = () => {
             </View>
 
             {/* Price Breakdown */}
-            <View className="bg-white rounded-2xl p-5 mb-4">
-              <Text className="text-lg font-bold text-gray-900 mb-4">Price Breakdown</Text>
-
-              <View className="gap-3">
-                <View className="flex-row items-center justify-between">
-                  <Text className="text-gray-600">Service Fee</Text>
-                  <Text className="text-gray-900 font-semibold">{formatPrice(servicePrice)}</Text>
-                </View>
-              </View>
-            )}
-          </>
-        )}
-
-                {distanceCharge > 0 && (
-                  <View className="flex-row items-center justify-between">
-                    <Text className="text-gray-600">Distance Charge</Text>
-                    <Text className="text-gray-900 font-semibold">
-                      {formatPrice(distanceCharge)}
-                    </Text>
-                  </View>
-                )}
-
-                <View className="border-t border-gray-200 pt-3 mt-2">
-                  <View className="flex-row items-center justify-between">
-                    <Text className="text-lg font-bold text-gray-900">Total</Text>
-                    <Text className="text-xl font-bold text-pink-600">
-                      {formatPrice(totalAmount)}
-                    </Text>
-                  </View>
-                </View>
-              ))}
-            </View>
-
-            {/* Price Breakdown */}
             <View style={[styles.card, { marginTop: 14 }]}>
               <Text style={styles.cardTitle}>Price Breakdown</Text>
               {priceLoading
@@ -1247,8 +1220,89 @@ const CreateBookingScreen: React.FC = () => {
         onConfirm={() => { confirmModal.onConfirm(); setConfirmModal(prev => ({...prev, visible: false})); }}
         onCancel={() => setConfirmModal(prev => ({...prev, visible: false}))}
       />
-    </SafeAreaView>
+    </View>
   );
 };
+
+const styles = StyleSheet.create({
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingBottom: 12,
+    backgroundColor: WHITE,
+    borderBottomWidth: 1,
+    borderBottomColor: BORDER,
+  },
+  backBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#FFF0F6',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: TEXT,
+  },
+  servicePrice: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: PINK,
+    marginTop: 8,
+  },
+  card: {
+    backgroundColor: WHITE,
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: BORDER,
+  },
+  cardTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: TEXT,
+    marginBottom: 10,
+  },
+  detailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 10,
+  },
+  detailLabel: {
+    fontSize: 14,
+    color: MUTED,
+  },
+  detailValue: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: TEXT,
+  },
+  cancelCard: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: '#FFFBEB',
+    borderRadius: 16,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+    marginTop: 14,
+  },
+  cancelTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#92400E',
+    marginBottom: 4,
+  },
+  cancelBody: {
+    fontSize: 13,
+    color: '#B45309',
+    lineHeight: 19,
+  },
+});
 
 export default CreateBookingScreen;

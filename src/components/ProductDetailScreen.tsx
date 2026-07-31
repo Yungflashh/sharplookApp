@@ -293,25 +293,6 @@ const ProductDetailScreen: React.FC = () => {
             )}
           </View>
 
-          {/* Seller Info */}
-          <TouchableOpacity
-            onPress={() => navigation.navigate('VendorDetail', { vendorId: product.seller._id })}
-            className="bg-gray-50 p-4 rounded-2xl mb-6"
-          >
-            <Text className="text-gray-900 text-base font-bold mb-3">Sold by:</Text>
-            <View className="flex-row items-center">
-              {product.seller.avatar ? (
-                <Image
-                  source={{ uri: product.seller.avatar }}
-                  className="w-12 h-12 rounded-full"
-                />
-              ) : (
-                <View className="w-12 h-12 rounded-full bg-pink-100 items-center justify-center">
-                  <Ionicons name="person" size={24} color="#eb278d" />
-                </View>
-              )}
-            </View>
-          )}
         </View>
 
         {/* ── Product Status Card ──────────────────────────────────────── */}

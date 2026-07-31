@@ -5,7 +5,9 @@ import LoginScreen from '@/screens/auth/LoginScreen';
 import ChooseRoleScreen from '@/screens/auth/ChooseRoleScreen';
 import RegisterScreen from '@/screens/auth/RegisterScreen';
 import ForgotPasswordScreen from '@/screens/auth/ForgotPasswordScreen';
-import VendorProfileSetup from '@/screens/auth/VendorProfileSetup';
+import VerifyResetCode from '@/screens/auth/VerifyResetCode';
+import ChangePassword from '@/screens/auth/ChangePassword';
+import ResetPasswordSuccess from '@/screens/auth/ResetPasswordSuccess';
 import VerifyOtpScreen from '@/screens/auth/VerifyOtp';
 import TermsPrivacyAuthScreen from '@/screens/auth/components/TermsPrivacyAuthScreen';
 
@@ -27,7 +29,9 @@ const AuthNavigator = () => {
       <Stack.Screen name="Register" component={RegisterScreen} />
       <Stack.Screen name="VerifyOtp" component={VerifyOtpScreen} />
       <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
-      <Stack.Screen name="VendorProfileSetup" component={VendorProfileSetup} />
+      <Stack.Screen name="VerifyResetCode" component={VerifyResetCode} />
+      <Stack.Screen name="ChangePassword" component={ChangePassword} />
+      <Stack.Screen name="ResetPasswordSuccess" component={ResetPasswordSuccess} />
       <Stack.Screen name="TermsPrivacyAuthScreen" component={TermsPrivacyAuthScreen} />
     </Stack.Navigator>
   );

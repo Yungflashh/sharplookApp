@@ -307,84 +307,6 @@ const AllVendorsScreen: React.FC = () => {
       return next;
     });
   };
-  const handleApplyFilters = (newFilters: any) => {
-    setFilters(newFilters);
-    setSortBy(newFilters.sortBy || 'rating');
-    setSortOrder(newFilters.sortOrder || 'desc');
-    setSelectedCategory(newFilters.category || '');
-    setCurrentPage(1);
-  };
-  const handleResetFilters = () => {
-    setFilters({
-      searchName: '',
-      category: '',
-      minPrice: '',
-      maxPrice: '',
-      minDuration: '',
-      maxDuration: '',
-      status: 'all',
-      sortBy: 'rating',
-      sortOrder: 'desc'
-    });
-    setSearchQuery('');
-    setSelectedCategory('');
-    setSortBy('rating');
-    setSortOrder('desc');
-    setCurrentPage(1);
-  };
-  const renderVendorItem = ({
-    item,
-    index
-  }: {
-    item: FormattedVendor;
-    index: number;
-  }) => {
-    const cardWidth = (SCREEN_WIDTH - 48) / 2;
-    return <View className="px-1.5 mb-3" style={{
-      width: (SCREEN_WIDTH - 16) / 2
-    }}>
-        <VendorCard vendor={{
-        id: item.id,
-        businessName: item.businessName,
-        image: item.image,
-        service: item.service,
-        rating: item.rating,
-        reviews: item.reviews,
-        isVerified: item.isVerified,
-        vendorType: item.vendorType
-      }} width={cardWidth} onPress={() => handleVendorPress(item.id)} onFavoritePress={() => handleFavoriteToggle(item.id)} isFavorite={favoriteVendors.has(item.id)} showFavorite />
-      </View>;
-  };
-  const renderFooter = () => {
-    if (!loadingMore) return null;
-    return <View className="py-4">
-        <ActivityIndicator size="small" color="#eb278d" />
-      </View>;
-  };
-  const renderEmptyState = () => <View className="flex-1 items-center justify-center py-20">
-      <Ionicons name="people-outline" size={64} color="#d1d5db" />
-      <Text className="text-gray-400 text-lg font-semibold mt-4">No vendors found</Text>
-      <Text className="text-gray-300 text-sm mt-2">Try adjusting your filters</Text>
-      <TouchableOpacity className="mt-6 bg-pink-500 px-6 py-3 rounded-xl" onPress={handleResetFilters}>
-        <Text className="text-white font-semibold">Clear Filters</Text>
-      </TouchableOpacity>
-    </View>;
-  return <SafeAreaView className="flex-1 bg-gray-50" edges={['top']}>
-      {}
-      <View className="bg-white px-5 py-4 border-b border-gray-100">
-        <View className="flex-row items-center justify-between mb-4">
-          <View className="flex-row items-center flex-1">
-            <TouchableOpacity className="mr-3" onPress={() => navigation.goBack()} activeOpacity={0.7}>
-              <Ionicons name="arrow-back" size={24} color="#1f2937" />
-            </TouchableOpacity>
-            <View className="flex-1">
-              <Text className="text-xl font-bold text-gray-900">All Vendors</Text>
-              <Text className="text-xs text-gray-500 mt-0.5">
-                {filteredVendors.length} vendor{filteredVendors.length !== 1 ? 's' : ''} available
-              </Text>
-            </View>
-          </View>
-
   const currentSortLabel = SORT_OPTIONS.find(o => o.key === sortBy)?.label ?? 'Top Rated';
 
   const renderItem = ({ item }: { item: FormattedVendor }) => (
@@ -444,17 +366,6 @@ const AllVendorsScreen: React.FC = () => {
           })}
         </View>
       </View>
-
-      {}
-      {loading ? <View className="flex-1 items-center justify-center">
-          <ActivityIndicator size="large" color="#eb278d" />
-          <Text className="text-gray-400 text-sm mt-4">Loading vendors...</Text>
-        </View> : <FlatList data={filteredVendors} renderItem={renderVendorItem} keyExtractor={item => item.id} numColumns={2} contentContainerStyle={{
-      paddingVertical: 16,
-      paddingHorizontal: 8
-    }} columnWrapperStyle={{
-      justifyContent: 'space-between'
-    }} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#eb278d" colors={['#eb278d']} />} onEndReached={loadMore} onEndReachedThreshold={0.5} ListFooterComponent={renderFooter} ListEmptyComponent={renderEmptyState} showsVerticalScrollIndicator={false} />}
 
       {/* List */}
       {loading ? (
