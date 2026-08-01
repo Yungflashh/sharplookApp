@@ -24,7 +24,6 @@ export interface RawVendorData {
     serviceCategories?: string[];
     categories?: any[];
     totalServices?: number;
-    totalReviews?: number;
     portfolioImages?: string[];
     location?: {
       address?: string;
@@ -56,6 +55,7 @@ export interface FormattedVendor {
   serviceCategories?: string[];
   totalServices?: number;
   startingPrice?: number;
+  coordinates?: [number, number]; // [longitude, latitude] — MongoDB GeoJSON order
   location?: {
     address?: string;
     city?: string;
@@ -97,6 +97,7 @@ export const parseVendor = (rawVendor: RawVendorData): FormattedVendor => {
     totalServices: vendorProfile.totalServices,
     portfolioImages: vendorProfile.portfolioImages || (rawVendor as any).portfolioImages || [],
     startingPrice: (vendorProfile as any).startingPrice || (rawVendor as any).startingPrice,
+    coordinates: vendorProfile.location?.coordinates as [number, number] | undefined,
     location: vendorProfile.location ? {
       address: vendorProfile.location.address,
       city: vendorProfile.location.city,

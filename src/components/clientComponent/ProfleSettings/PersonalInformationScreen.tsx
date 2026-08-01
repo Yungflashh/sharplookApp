@@ -4,7 +4,7 @@ import {
   ActivityIndicator, Image, StyleSheet, Platform, Modal,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
@@ -62,6 +62,7 @@ const Field: React.FC<{
 
 const PersonalInformationScreen: React.FC = () => {
   const navigation = useNavigation();
+  const { top, bottom } = useSafeAreaInsets();
   const [loading, setLoading]               = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
   const [uploadingImage, setUploadingImage] = useState(false);
@@ -288,18 +289,18 @@ const PersonalInformationScreen: React.FC = () => {
 
   if (initialLoading) {
     return (
-      <SafeAreaView style={{ flex: 1, backgroundColor: WHITE }} edges={['top']}>
+      <View style={{ flex: 1, backgroundColor: WHITE, paddingTop: top }}>
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
           <ActivityIndicator size="large" color={PRIMARY} />
         </View>
-      </SafeAreaView>
+      </View>
     );
   }
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: WHITE }} edges={['top']}>
+    <View style={{ flex: 1, backgroundColor: WHITE }}>
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: top + 12 }]}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn} activeOpacity={0.8}>
           <Ionicons name="arrow-back" size={18} color={PRIMARY} />
         </TouchableOpacity>
@@ -310,7 +311,7 @@ const PersonalInformationScreen: React.FC = () => {
       <ScrollView
         style={{ backgroundColor: BG }}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scroll}
+        contentContainerStyle={[styles.scroll, { paddingBottom: bottom + 32 }]}
         keyboardShouldPersistTaps="handled"
       >
         {/* Avatar */}
@@ -465,7 +466,7 @@ const PersonalInformationScreen: React.FC = () => {
           </View>
         </View>
       </Modal>
-    </SafeAreaView>
+    </View>
   );
 };
 
@@ -482,7 +483,7 @@ const styles = StyleSheet.create({
   },
   headerTitle: { fontSize: 18, fontWeight: '800', color: TEXT_DARK },
 
-  scroll: { paddingBottom: 32 },
+  scroll: { paddingHorizontal: 0 },
 
   // Avatar
   avatarSection: { alignItems: 'center', paddingVertical: 28 },

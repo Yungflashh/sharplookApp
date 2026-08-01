@@ -221,7 +221,7 @@ export const registerUser = async (userData: {
 export const logoutUser = async (): Promise<AuthResult> => {
   try {
     await authAPI.logout();
-    await AsyncStorage.multiRemove(['accessToken', 'refreshToken', 'userData', 'isAuthenticated']);
+    await AsyncStorage.multiRemove(['accessToken', 'refreshToken', 'userData', 'isAuthenticated', 'emailVerificationPending']);
 
     return {
       success: true
@@ -230,7 +230,7 @@ export const logoutUser = async (): Promise<AuthResult> => {
     console.error('❌ Logout Error:', error);
 
     // Clear local storage even if API fails
-    await AsyncStorage.multiRemove(['accessToken', 'refreshToken', 'userData', 'isAuthenticated']);
+    await AsyncStorage.multiRemove(['accessToken', 'refreshToken', 'userData', 'isAuthenticated', 'emailVerificationPending']);
 
     const apiError = handleAPIError(error);
     console.error('❌ Logout API Error:', {
@@ -246,6 +246,31 @@ export const logoutUser = async (): Promise<AuthResult> => {
 };
 
 /**
+ * Save tokens after registration but gate app entry behind email verification.
+ * RootNavigator stays on Auth stack until confirmEmailVerification() is called.
+ */
+export const saveRegistrationAuth = async (
+  accessToken: string,
+  refreshToken: string,
+  user: User
+): Promise<void> => {
+  await AsyncStorage.multiSet([
+    ['accessToken', accessToken],
+    ['refreshToken', refreshToken],
+    ['userData', JSON.stringify(user)],
+    ['emailVerificationPending', 'true'],
+  ]);
+};
+
+/**
+ * Called after OTP is confirmed — lifts the pending gate so RootNavigator
+ * switches to Main on its next poll cycle.
+ */
+export const confirmEmailVerification = async (): Promise<void> => {
+  await AsyncStorage.removeItem('emailVerificationPending');
+};
+
+/**
  * Check authentication status
  */
 export const checkAuthStatus = async (): Promise<{
@@ -254,11 +279,14 @@ export const checkAuthStatus = async (): Promise<{
   user: User | null;
 }> => {
   try {
-    const accessToken = await AsyncStorage.getItem('accessToken');
-    const userData = await AsyncStorage.getItem('userData');
+    const [accessToken, userData, pendingVerification] = await AsyncStorage.multiGet([
+      'accessToken',
+      'userData',
+      'emailVerificationPending',
+    ]);
 
-    if (accessToken && userData) {
-      const user: User = JSON.parse(userData);
+    if (accessToken[1] && userData[1] && !pendingVerification[1]) {
+      const user: User = JSON.parse(userData[1]);
       return {
         isAuthenticated: true,
         isVendor: user.isVendor || false,
@@ -304,6 +332,7 @@ export const completeOnboarding = async (): Promise<{
  * Check onboarding status
  */
 export const checkOnboardingStatus = async (): Promise<boolean> => {
+  if (__DEV__) return false; // always show onboarding during development
   try {
     const status = await AsyncStorage.getItem('onboardingComplete');
     return status === 'true';

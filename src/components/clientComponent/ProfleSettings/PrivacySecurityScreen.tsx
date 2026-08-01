@@ -1,43 +1,54 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, Switch, ActivityIndicator, Platform } from 'react-native';
-import { toast } from '@/components/ui/Toast';
-import ConfirmationModal from '@/components/ConfirmationModal';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  Switch,
+  ActivityIndicator,
+  StatusBar,
+  Platform,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import * as LocalAuthentication from 'expo-local-authentication';
 import { userAPI, handleAPIError } from '@/api/api';
-import ConfirmPasswordModal from '@/components/ConfirmPasswordModal';
+import { toast } from '@/components/ui/Toast';
+import ConfirmationModal from '@/components/ConfirmationModal';
+
+const PINK   = '#E04079';
+const PINK_S = '#FFF0F7';
+const TEXT1  = '#111827';
+const TEXT2  = '#6B7280';
+const TEXT3  = '#9CA3AF';
+const BORDER = '#F3F4F6';
+const BG     = '#F8F9FA';
+const WHITE  = '#FFFFFF';
 
 const PrivacySecurityScreen: React.FC = () => {
   const navigation = useNavigation();
-  const [biometricsEnabled, setBiometricsEnabled] = useState(false);
+  const insets = useSafeAreaInsets();
+
+  const [biometricsEnabled, setBiometricsEnabled]     = useState(false);
   const [biometricsAvailable, setBiometricsAvailable] = useState(false);
-  const [biometricsType, setBiometricsType] = useState<string>('');
-  const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
-  const [showPasswordModal, setShowPasswordModal] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [preferencesLoading, setPreferencesLoading] = useState(true);
-  const [hasWithdrawalPin, setHasWithdrawalPin] = useState(false);
-  const [confirmModal, setConfirmModal] = useState({ visible: false, title: '', message: '', confirmText: 'Confirm', onConfirm: () => {} });
+  const [biometricsType, setBiometricsType]           = useState<string>('');
+  const [loading, setLoading]                         = useState(false);
+  const [preferencesLoading, setPreferencesLoading]   = useState(true);
+  const [hasWithdrawalPin, setHasWithdrawalPin]       = useState(false);
+  const [confirmModal, setConfirmModal] = useState({
+    visible: false, title: '', message: '', confirmText: 'Confirm', onConfirm: () => {},
+  });
 
-  useEffect(() => {
-    checkBiometrics();
-    loadUserPreferences();
-  }, []);
+  useEffect(() => { checkBiometrics(); loadUserPreferences(); }, []);
 
-  
-  useFocusEffect(
-    React.useCallback(() => {
-      loadUserPreferences();
-    }, [])
-  );
+  useFocusEffect(React.useCallback(() => { loadUserPreferences(); }, []));
 
   const checkBiometrics = async () => {
     try {
       const compatible = await LocalAuthentication.hasHardwareAsync();
       setBiometricsAvailable(compatible);
-
       if (compatible) {
         const types = await LocalAuthentication.supportedAuthenticationTypesAsync();
         if (types.includes(LocalAuthentication.AuthenticationType.FACIAL_RECOGNITION)) {
@@ -47,41 +58,23 @@ const PrivacySecurityScreen: React.FC = () => {
         } else if (types.includes(LocalAuthentication.AuthenticationType.IRIS)) {
           setBiometricsType('Iris');
         }
-
-        const enrolled = await LocalAuthentication.isEnrolledAsync();
-        if (!enrolled) {
-          console.log('No biometrics enrolled on device');
-        }
       }
-    } catch (error) {
-      console.error('Error checking biometrics:', error);
-    }
+    } catch {}
   };
 
   const loadUserPreferences = async () => {
     setPreferencesLoading(true);
     try {
       const response = await userAPI.getProfile();
-      console.log('🔍 Profile response:', JSON.stringify(response, null, 2));
-
       const userData = response.data?.data?.user || response.data?.user;
-      if (userData && userData.preferences) {
-        console.log('✅ User preferences loaded:', userData.preferences);
+      if (userData?.preferences) {
         setBiometricsEnabled(userData.preferences.fingerprintEnabled || false);
       }
-
-      
-      if (userData && userData.hasWithdrawalPin !== undefined) {
-        console.log('📌 hasWithdrawalPin from backend:', userData.hasWithdrawalPin);
+      if (userData?.hasWithdrawalPin !== undefined) {
         setHasWithdrawalPin(userData.hasWithdrawalPin);
-      } else {
-        console.log('⚠️ hasWithdrawalPin not found in user data');
       }
-    } catch (error) {
-      console.error('❌ Error loading preferences:', error);
-    } finally {
-      setPreferencesLoading(false);
-    }
+    } catch {}
+    finally { setPreferencesLoading(false); }
   };
 
   const handleBiometricsToggle = async () => {
@@ -89,7 +82,6 @@ const PrivacySecurityScreen: React.FC = () => {
       toast.info('Not Available', 'Biometric authentication is not available on this device');
       return;
     }
-
     if (!biometricsEnabled) {
       try {
         const enrolled = await LocalAuthentication.isEnrolledAsync();
@@ -98,36 +90,23 @@ const PrivacySecurityScreen: React.FC = () => {
             visible: true,
             title: 'Setup Required',
             message: `Please set up ${biometricsType || 'biometric authentication'} in your device settings first.`,
-            confirmText: 'Open Settings',
-            onConfirm: () => {
-
-              if (Platform.OS === 'ios') {
-
-              }
-            },
+            confirmText: 'OK',
+            onConfirm: () => {},
           });
           return;
         }
-
         const result = await LocalAuthentication.authenticateAsync({
           promptMessage: `Enable ${biometricsType || 'biometric'} authentication`,
           cancelLabel: 'Cancel',
-          disableDeviceFallback: true,  // ✅ Force Face ID/biometric only, no PIN fallback
-          fallbackLabel: '',  // Hide fallback option
+          disableDeviceFallback: true,
+          fallbackLabel: '',
         });
-
         if (result.success) {
           await updateBiometricPreference(true);
         } else {
-          toast.error(
-            'Authentication Failed',
-            result.error === 'user_cancel'
-              ? 'Authentication was cancelled'
-              : 'Could not verify your identity'
-          );
+          toast.error('Authentication Failed', result.error === 'user_cancel' ? 'Authentication was cancelled' : 'Could not verify your identity');
         }
-      } catch (error) {
-        console.error('Biometric auth error:', error);
+      } catch {
         toast.error('Error', 'Failed to enable biometric authentication');
       }
     } else {
@@ -144,245 +123,137 @@ const PrivacySecurityScreen: React.FC = () => {
   const updateBiometricPreference = async (enabled: boolean) => {
     setLoading(true);
     try {
-      await userAPI.updatePreferences({
-        fingerprintEnabled: enabled,
-      });
+      await userAPI.updatePreferences({ fingerprintEnabled: enabled });
       setBiometricsEnabled(enabled);
-      toast.success(
-        'Success',
-        `Biometric authentication ${enabled ? 'enabled' : 'disabled'} successfully`
-      );
+      toast.success('Success', `Biometric authentication ${enabled ? 'enabled' : 'disabled'} successfully`);
     } catch (error) {
       const apiError = handleAPIError(error);
       toast.error('Error', apiError.message);
       setBiometricsEnabled(!enabled);
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   };
 
   const handleNavigateToSetPin = () => {
-    console.log('🔍 handleNavigateToSetPin called');
-    console.log('📌 hasWithdrawalPin:', hasWithdrawalPin);
-    
-    
     if (hasWithdrawalPin) {
-      console.log('✅ User has PIN, showing alert to change');
-      
       setConfirmModal({
         visible: true,
         title: 'PIN Already Set',
         message: 'You already have a withdrawal PIN. Would you like to change it?',
         confirmText: 'Change PIN',
-        onConfirm: () => {
-          console.log('🔄 Navigating to ChangeWithdrawalPin');
-          try {
-            navigation.navigate('ChangeWithdrawalPin' as never);
-          } catch (error) {
-            console.error('❌ Navigation error:', error);
-            toast.error('Navigation Error', 'Could not navigate to Change PIN screen. Make sure "ChangeWithdrawalPin" is registered in your navigation stack.');
-          }
-        },
+        onConfirm: () => navigation.navigate('ChangeWithdrawalPin' as never),
       });
     } else {
-      console.log('⚠️ User has NO PIN, navigating to SetWithdrawalPin');
-      
-      try {
-        navigation.navigate('SetWithdrawalPin' as never);
-      } catch (error) {
-        console.error('❌ Navigation error:', error);
-        toast.error('Navigation Error', 'Could not navigate to Set PIN screen. Make sure "SetWithdrawalPin" is registered in your navigation stack.');
-      }
+      navigation.navigate('SetWithdrawalPin' as never);
     }
   };
 
-  const getBiometricTitle = () => {
-    if (!biometricsAvailable) return 'Biometric Authentication';
-    return biometricsType ? `${biometricsType} Authentication` : 'Biometric Authentication';
-  };
-
-  const getBiometricSubtitle = () => {
-    if (!biometricsAvailable) return 'Not available on this device';
-    return `Use ${biometricsType || 'biometrics'} to login quickly and securely`;
-  };
-
-  
-  const securityOptions = [
-    {
-      icon: 'finger-print',
-      title: getBiometricTitle(),
-      subtitle: getBiometricSubtitle(),
-      type: 'switch',
-      value: biometricsEnabled,
-      disabled: !biometricsAvailable || loading || preferencesLoading,
-      onToggle: handleBiometricsToggle,
-    },
-   
-    {
-      icon: 'lock-closed',
-      title: 'Change Password',
-      subtitle: 'Update your account password',
-      type: 'button',
-      disabled: loading,
-      onPress: () => setShowPasswordModal(true),
-    },
-    {
-      icon: 'keypad',
-      title: hasWithdrawalPin ? 'Change Withdrawal PIN' : 'Set Withdrawal PIN',
-      subtitle: hasWithdrawalPin 
-        ? 'Update your wallet security PIN'
-        : 'Secure your wallet transactions',
-      type: 'button',
-      disabled: loading,
-      onPress: handleNavigateToSetPin,
-    },
-  ];
+  const biometricTitle    = biometricsAvailable && biometricsType ? `${biometricsType} Authentication` : 'Biometric Authentication';
+  const biometricSubtitle = biometricsAvailable
+    ? `Use ${biometricsType || 'biometrics'} to log in quickly and securely`
+    : 'Not available on this device';
+  const infoNote = biometricsAvailable
+    ? `${biometricsType || 'Biometric'} authentication provides quick and secure access to your account.`
+    : 'Enable two-factor authentication for maximum account protection.';
 
   return (
-    <SafeAreaView className="flex-1 bg-gray-50" edges={['top']}>
-      {}
-      <View className="bg-white px-5 py-4 border-b border-gray-100">
-        <View className="flex-row items-center justify-between">
-          <TouchableOpacity
-            onPress={() => navigation.goBack()}
-            className="w-10 h-10 items-center justify-center"
-          >
-            <Ionicons name="arrow-back" size={24} color="#1f2937" />
+    <View style={{ flex: 1, backgroundColor: BG }}>
+      <StatusBar barStyle="dark-content" backgroundColor={WHITE} />
+
+      {/* Header */}
+      <View style={{ backgroundColor: WHITE, paddingTop: insets.top }}>
+        <View style={s.header}>
+          <TouchableOpacity onPress={() => navigation.goBack()} activeOpacity={0.8} style={s.backBtn}>
+            <Ionicons name="chevron-back" size={22} color={PINK} />
           </TouchableOpacity>
-          <Text className="text-lg font-semibold text-gray-900">
-            Privacy & Security
-          </Text>
-          <View className="w-10" />
+          <Text style={s.headerTitle}>Privacy & Security</Text>
+          <View style={{ width: 38 }} />
         </View>
       </View>
 
       <ScrollView
-        className="flex-1"
+        style={{ flex: 1 }}
+        contentContainerStyle={{ paddingBottom: 32 + insets.bottom, paddingTop: 8 }}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: 20 }}
       >
         {preferencesLoading ? (
-          <View className="flex-1 items-center justify-center py-20">
-            <ActivityIndicator size="large" color="#eb278d" />
-            <Text className="text-gray-500 mt-2">Loading settings...</Text>
+          <View style={{ alignItems: 'center', paddingTop: 80 }}>
+            <ActivityIndicator size="large" color={PINK} />
+            <Text style={{ fontSize: 13, color: TEXT2, marginTop: 12 }}>Loading settings…</Text>
           </View>
         ) : (
           <>
-            {}
-            <View className="px-5 pt-5">
-              <Text className="text-[13px] font-semibold text-gray-500 uppercase tracking-wider mb-2 ml-1">
-                Security Settings
-              </Text>
-              <View className="bg-white rounded-2xl overflow-hidden shadow-sm">
-                {securityOptions.map((option, index) => (
-                  <TouchableOpacity
-                    key={index}
-                    activeOpacity={option.type === 'switch' ? 1 : 0.6}
-                    disabled={option.disabled || option.type === 'switch'}
-                    onPress={option.type === 'button' ? option.onPress : undefined}
-                    className={`flex-row items-center p-4 ${
-                      index !== securityOptions.length - 1
-                        ? 'border-b border-gray-100'
-                        : ''
-                    } ${option.disabled ? 'opacity-50' : ''}`}
-                  >
-                    <View className="w-11 h-11 rounded-xl bg-pink-50 items-center justify-center mr-3">
-                      <Ionicons name={option.icon as any} size={22} color="#eb278d" />
-                    </View>
-                    <View className="flex-1">
-                      <Text className="text-[15px] font-semibold text-gray-800 mb-0.5">
-                        {option.title}
-                      </Text>
-                      <Text className="text-xs text-gray-500">
-                        {option.subtitle}
-                      </Text>
-                    </View>
-                    {option.type === 'switch' ? (
-                      loading && !option.disabled ? (
-                        <ActivityIndicator size="small" color="#eb278d" />
-                      ) : (
-                        <Switch
-                          value={option.value}
-                          onValueChange={option.onToggle}
-                          disabled={option.disabled}
-                          trackColor={{ false: '#d1d5db', true: '#fbb6ce' }}
-                          thumbColor={option.value ? '#eb278d' : '#f3f4f6'}
-                        />
-                      )
-                    ) : (
-                      <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
-                    )}
-                  </TouchableOpacity>
-                ))}
+            {/* Security section */}
+            <View style={{ paddingHorizontal: 16, marginTop: 16, marginBottom: 24 }}>
+              <Text style={s.sectionLabel}>Security Settings</Text>
+              <View style={s.card}>
+
+                {/* Biometrics */}
+                <View style={[s.row, s.rowBorder]}>
+                  <View style={[s.iconWrap, { backgroundColor: PINK_S }]}>
+                    <Ionicons name="finger-print" size={22} color={PINK} />
+                  </View>
+                  <View style={s.rowBody}>
+                    <Text style={s.rowTitle}>{biometricTitle}</Text>
+                    <Text style={s.rowSub}>{biometricSubtitle}</Text>
+                  </View>
+                  {loading ? (
+                    <ActivityIndicator size="small" color={PINK} />
+                  ) : (
+                    <Switch
+                      value={biometricsEnabled}
+                      onValueChange={handleBiometricsToggle}
+                      disabled={!biometricsAvailable || loading}
+                      trackColor={{ false: BORDER, true: '#FBBDE3' }}
+                      thumbColor={biometricsEnabled ? PINK : '#F3F4F6'}
+                    />
+                  )}
+                </View>
+
+                {/* Change Password */}
+                <TouchableOpacity
+                  style={[s.row, s.rowBorder]}
+                  onPress={() => navigation.navigate('ChangePassword' as never)}
+                  activeOpacity={0.7}
+                  disabled={loading}
+                >
+                  <View style={[s.iconWrap, { backgroundColor: '#EFF6FF' }]}>
+                    <Ionicons name="lock-closed" size={20} color="#3B82F6" />
+                  </View>
+                  <View style={s.rowBody}>
+                    <Text style={s.rowTitle}>Change Password</Text>
+                    <Text style={s.rowSub}>Update your account password</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={18} color={TEXT3} />
+                </TouchableOpacity>
+
+                {/* Withdrawal PIN */}
+                <TouchableOpacity
+                  style={s.row}
+                  onPress={handleNavigateToSetPin}
+                  activeOpacity={0.7}
+                  disabled={loading}
+                >
+                  <View style={[s.iconWrap, { backgroundColor: '#FFFBEB' }]}>
+                    <Ionicons name="keypad" size={20} color="#F59E0B" />
+                  </View>
+                  <View style={s.rowBody}>
+                    <Text style={s.rowTitle}>{hasWithdrawalPin ? 'Change Withdrawal PIN' : 'Set Withdrawal PIN'}</Text>
+                    <Text style={s.rowSub}>{hasWithdrawalPin ? 'Update your wallet security PIN' : 'Secure your wallet transactions'}</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={18} color={TEXT3} />
+                </TouchableOpacity>
+
               </View>
             </View>
 
-            {}
-            {/* <View className="px-5 pt-5">
-              <Text className="text-[13px] font-semibold text-gray-500 uppercase tracking-wider mb-2 ml-1">
-                Privacy
-              </Text>
-              <View className="bg-white rounded-2xl overflow-hidden shadow-sm">
-                <TouchableOpacity 
-                  className="flex-row items-center p-4 border-b border-gray-100"
-                  activeOpacity={0.6}
-                >
-                  <View className="w-11 h-11 rounded-xl bg-pink-50 items-center justify-center mr-3">
-                    <Ionicons name="eye-off" size={22} color="#eb278d" />
-                  </View>
-                  <View className="flex-1">
-                    <Text className="text-[15px] font-semibold text-gray-800 mb-0.5">
-                      Data & Privacy
-                    </Text>
-                    <Text className="text-xs text-gray-500">
-                      Manage your data and privacy settings
-                    </Text>
-                  </View>
-                  <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
-                </TouchableOpacity>
-
-                <TouchableOpacity 
-                  className="flex-row items-center p-4"
-                  activeOpacity={0.6}
-                >
-                  <View className="w-11 h-11 rounded-xl bg-pink-50 items-center justify-center mr-3">
-                    <Ionicons name="download" size={22} color="#eb278d" />
-                  </View>
-                  <View className="flex-1">
-                    <Text className="text-[15px] font-semibold text-gray-800 mb-0.5">
-                      Download My Data
-                    </Text>
-                    <Text className="text-xs text-gray-500">
-                      Request a copy of your information
-                    </Text>
-                  </View>
-                  <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
-                </TouchableOpacity>
-              </View>
-            </View> */}
-
-            {}
-            <View className="mx-5 mt-5 bg-blue-50 rounded-xl px-4 py-3 flex-row">
-              <Ionicons name="information-circle" size={20} color="#3b82f6" />
-              <Text className="flex-1 ml-2 text-xs text-blue-600 leading-5">
-                {biometricsAvailable
-                  ? `${biometricsType} authentication provides quick and secure access to your account.`
-                  : 'Enable two-factor authentication for maximum protection.'}
-              </Text>
+            {/* Info note */}
+            <View style={s.infoBox}>
+              <Ionicons name="information-circle-outline" size={18} color={PINK} />
+              <Text style={s.infoText}>{infoNote}</Text>
             </View>
           </>
         )}
       </ScrollView>
-
-      {}
-      <ConfirmPasswordModal
-        visible={showPasswordModal}
-        onClose={() => setShowPasswordModal(false)}
-        onSuccess={() => {
-          setShowPasswordModal(false);
-          toast.success('Success', 'Password changed successfully');
-        }}
-      />
 
       <ConfirmationModal
         visible={confirmModal.visible}
@@ -391,12 +262,50 @@ const PrivacySecurityScreen: React.FC = () => {
         confirmText={confirmModal.confirmText}
         onConfirm={() => {
           confirmModal.onConfirm();
-          setConfirmModal(prev => ({...prev, visible: false}));
+          setConfirmModal(prev => ({ ...prev, visible: false }));
         }}
-        onCancel={() => setConfirmModal(prev => ({...prev, visible: false}))}
+        onCancel={() => setConfirmModal(prev => ({ ...prev, visible: false }))}
       />
-    </SafeAreaView>
+    </View>
   );
 };
+
+const s = StyleSheet.create({
+  header: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 16, paddingVertical: 12,
+    borderBottomWidth: 1, borderBottomColor: BORDER,
+  },
+  backBtn: {
+    width: 38, height: 38, borderRadius: 19,
+    backgroundColor: PINK_S, alignItems: 'center', justifyContent: 'center',
+  },
+  headerTitle: { fontSize: 18, fontWeight: '700', color: TEXT1 },
+
+  sectionLabel: {
+    fontSize: 12, fontWeight: '700', color: TEXT2,
+    textTransform: 'uppercase', letterSpacing: 0.7, marginBottom: 10,
+  },
+
+  card: {
+    backgroundColor: WHITE, borderRadius: 18,
+    overflow: 'hidden', borderWidth: 1, borderColor: BORDER,
+    ...Platform.select({ android: { elevation: 2 }, ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8 } }),
+  },
+
+  row: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, gap: 12 },
+  rowBorder: { borderBottomWidth: 1, borderBottomColor: BORDER },
+  iconWrap: { width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  rowBody: { flex: 1 },
+  rowTitle: { fontSize: 15, fontWeight: '600', color: TEXT1, marginBottom: 2 },
+  rowSub: { fontSize: 12, color: TEXT2 },
+
+  infoBox: {
+    flexDirection: 'row', alignItems: 'flex-start', gap: 10,
+    backgroundColor: PINK_S, borderRadius: 14,
+    marginHorizontal: 16, padding: 14,
+  },
+  infoText: { flex: 1, fontSize: 12, color: PINK, lineHeight: 18, fontWeight: '500' },
+});
 
 export default PrivacySecurityScreen;
