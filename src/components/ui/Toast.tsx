@@ -1,5 +1,8 @@
 import React, { createContext, useContext, useState, useCallback, useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, Animated, TouchableOpacity, Dimensions, Platform, StatusBar } from 'react-native';
+import {
+  View, Text, StyleSheet, Animated, TouchableOpacity,
+  Dimensions, Platform, StatusBar, Modal,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 type ToastType = 'success' | 'error' | 'info' | 'warning';
@@ -18,44 +21,71 @@ interface ToastContextType {
 
 const ToastContext = createContext<ToastContextType | null>(null);
 
-const TOAST_CONFIG: Record<ToastType, { icon: keyof typeof Ionicons.glyphMap; bg: string; accent: string }> = {
-  success: { icon: 'checkmark-circle', bg: '#F0FFF4', accent: '#38A169' },
-  error: { icon: 'close-circle', bg: '#FFF5F5', accent: '#E53E3E' },
-  info: { icon: 'information-circle', bg: '#EBF8FF', accent: '#3182CE' },
-  warning: { icon: 'warning', bg: '#FFFFF0', accent: '#D69E2E' },
+const CONFIG: Record<ToastType, { icon: keyof typeof Ionicons.glyphMap; color: string }> = {
+  success: { icon: 'checkmark-circle', color: '#22C55E' },
+  error:   { icon: 'close-circle',     color: '#EF4444' },
+  warning: { icon: 'warning',          color: '#F59E0B' },
+  info:    { icon: 'information-circle', color: '#60A5FA' },
 };
 
-const ToastItem: React.FC<{ toast: ToastMessage; onDismiss: (id: number) => void }> = ({ toast, onDismiss }) => {
-  const translateY = useRef(new Animated.Value(-100)).current;
-  const opacity = useRef(new Animated.Value(0)).current;
-  const config = TOAST_CONFIG[toast.type];
+const { width: SW } = Dimensions.get('window');
+const MAX_W = SW * 0.82;
+
+const ToastItem: React.FC<{ toast: ToastMessage; onDismiss: (id: number) => void }> = ({
+  toast,
+  onDismiss,
+}) => {
+  const cfg       = CONFIG[toast.type];
+  const dur       = toast.duration ?? 3200;
+  const translateY = useRef(new Animated.Value(-110)).current;
+  const opacity    = useRef(new Animated.Value(0)).current;
+  const dismissed  = useRef(false);
 
   useEffect(() => {
+    // Drop in with bounce
     Animated.parallel([
-      Animated.spring(translateY, { toValue: 0, useNativeDriver: true, tension: 80, friction: 10 }),
-      Animated.timing(opacity, { toValue: 1, duration: 200, useNativeDriver: true }),
+      Animated.spring(translateY, {
+        toValue: 0,
+        damping: 13,
+        stiffness: 280,
+        useNativeDriver: true,
+      }),
+      Animated.timing(opacity, {
+        toValue: 1,
+        duration: 120,
+        useNativeDriver: true,
+      }),
     ]).start();
 
-    const timer = setTimeout(() => dismiss(), toast.duration || 3000);
+    const timer = setTimeout(dismiss, dur);
     return () => clearTimeout(timer);
   }, []);
 
   const dismiss = () => {
+    if (dismissed.current) return;
+    dismissed.current = true;
     Animated.parallel([
-      Animated.timing(translateY, { toValue: -100, duration: 200, useNativeDriver: true }),
-      Animated.timing(opacity, { toValue: 0, duration: 200, useNativeDriver: true }),
+      Animated.timing(translateY, { toValue: -110, duration: 200, useNativeDriver: true }),
+      Animated.timing(opacity,    { toValue: 0,    duration: 180, useNativeDriver: true }),
     ]).start(() => onDismiss(toast.id));
   };
 
   return (
-    <Animated.View style={[styles.toast, { backgroundColor: config.bg, borderLeftColor: config.accent, transform: [{ translateY }], opacity }]}>
-      <Ionicons name={config.icon} size={22} color={config.accent} style={styles.toastIcon} />
-      <View style={styles.toastText}>
-        <Text style={[styles.toastTitle, { color: config.accent }]} numberOfLines={1}>{toast.title}</Text>
-        {toast.message ? <Text style={styles.toastMessage} numberOfLines={2}>{toast.message}</Text> : null}
-      </View>
-      <TouchableOpacity onPress={dismiss} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-        <Ionicons name="close" size={18} color="#999" />
+    <Animated.View style={[st.bubble, { transform: [{ translateY }], opacity }]}>
+      <TouchableOpacity
+        onPress={dismiss}
+        activeOpacity={0.85}
+        style={st.inner}
+      >
+        <View style={[st.dot, { backgroundColor: cfg.color }]}>
+          <Ionicons name={cfg.icon} size={16} color="#fff" />
+        </View>
+        <View style={st.textWrap}>
+          <Text style={st.title} numberOfLines={1}>{toast.title}</Text>
+          {toast.message ? (
+            <Text style={st.msg} numberOfLines={2}>{toast.message}</Text>
+          ) : null}
+        </View>
       </TouchableOpacity>
     </Animated.View>
   );
@@ -64,10 +94,14 @@ const ToastItem: React.FC<{ toast: ToastMessage; onDismiss: (id: number) => void
 let _globalShowToast: ToastContextType['showToast'] | null = null;
 
 export const toast = {
-  success: (title: string, message?: string) => _globalShowToast?.('success', title, message),
-  error: (title: string, message?: string) => _globalShowToast?.('error', title, message),
-  info: (title: string, message?: string) => _globalShowToast?.('info', title, message),
-  warning: (title: string, message?: string) => _globalShowToast?.('warning', title, message),
+  success: (title: string, message?: string, duration?: number) =>
+    _globalShowToast?.('success', title, message, duration),
+  error: (title: string, message?: string, duration?: number) =>
+    _globalShowToast?.('error', title, message, duration),
+  info: (title: string, message?: string, duration?: number) =>
+    _globalShowToast?.('info', title, message, duration),
+  warning: (title: string, message?: string, duration?: number) =>
+    _globalShowToast?.('warning', title, message, duration),
 };
 
 export const useToast = () => {
@@ -78,13 +112,18 @@ export const useToast = () => {
 
 export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
-  const idRef = useRef(0);
-  const topOffset = Platform.OS === 'android' ? (StatusBar.currentHeight || 24) + 8 : 54;
+  const idRef     = useRef(0);
+  const topOffset = Platform.OS === 'android'
+    ? (StatusBar.currentHeight ?? 24) + 12
+    : 58;
 
-  const showToast = useCallback((type: ToastType, title: string, message?: string, duration?: number) => {
-    const id = ++idRef.current;
-    setToasts(prev => [...prev.slice(-2), { id, type, title, message, duration }]);
-  }, []);
+  const showToast = useCallback(
+    (type: ToastType, title: string, message?: string, duration?: number) => {
+      const id = ++idRef.current;
+      setToasts(prev => [...prev.slice(-1), { id, type, title, message, duration }]);
+    },
+    []
+  );
 
   useEffect(() => {
     _globalShowToast = showToast;
@@ -98,54 +137,82 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   return (
     <ToastContext.Provider value={{ showToast }}>
       {children}
-      <View style={[styles.container, { top: topOffset }]} pointerEvents="box-none">
-        {toasts.map(t => <ToastItem key={t.id} toast={t} onDismiss={dismissToast} />)}
-      </View>
+      <Modal
+        visible={toasts.length > 0}
+        transparent
+        animationType="none"
+        statusBarTranslucent
+        onRequestClose={() => {}}
+      >
+        <View style={[st.container, { top: topOffset }]} pointerEvents="box-none">
+          {toasts.map(t => (
+            <ToastItem key={t.id} toast={t} onDismiss={dismissToast} />
+          ))}
+        </View>
+      </Modal>
     </ToastContext.Provider>
   );
 };
 
-const { width } = Dimensions.get('window');
-
-const styles = StyleSheet.create({
+const st = StyleSheet.create({
   container: {
     position: 'absolute',
-    left: 16,
-    right: 16,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
     zIndex: 9999,
     elevation: 9999,
-    alignItems: 'center',
   },
-  toast: {
+
+  bubble: {
+    alignSelf: 'center',
+    maxWidth: MAX_W,
+    minWidth: 180,
+    backgroundColor: '#FFF5F9',
+    borderRadius: 30,
+    borderWidth: 1,
+    borderColor: 'rgba(224,64,121,0.12)',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#E04079',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.15,
+        shadowRadius: 12,
+      },
+      android: { elevation: 8 },
+    }),
+  },
+
+  inner: {
     flexDirection: 'row',
     alignItems: 'center',
-    width: width - 32,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderRadius: 12,
-    borderLeftWidth: 4,
-    marginBottom: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 5,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    gap: 10,
   },
-  toastIcon: {
-    marginRight: 12,
+
+  dot: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
   },
-  toastText: {
-    flex: 1,
-    marginRight: 8,
+
+  textWrap: {
+    flexShrink: 1,
   },
-  toastTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  toastMessage: {
+  title: {
     fontSize: 13,
-    color: '#555',
-    marginTop: 2,
-    lineHeight: 18,
+    fontWeight: '700',
+    color: '#1A1A2E',
+    letterSpacing: 0.1,
+  },
+  msg: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginTop: 1,
+    lineHeight: 17,
   },
 });

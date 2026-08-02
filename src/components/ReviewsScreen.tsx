@@ -1,342 +1,391 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, ActivityIndicator, RefreshControl, Image } from 'react-native';
-import { toast } from '@/components/ui/Toast';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  ActivityIndicator,
+  RefreshControl,
+  Image,
+  StatusBar,
+  Platform,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '@/types/navigation.types';
 import { reviewAPI, handleAPIError } from '@/api/api';
-type ReviewsNavigationProp = NativeStackNavigationProp<RootStackParamList, 'Reviews'>;
-type ReviewsRouteProp = RouteProp<RootStackParamList, 'Reviews'>;
+import { getStoredUser } from '@/utils/authHelper';
+import { toast } from '@/components/ui/Toast';
+
+const PINK   = '#E04079';
+const PINK_S = '#FFF0F7';
+const PINK_M = '#FCDCE9';
+const TEXT1  = '#111827';
+const TEXT2  = '#6B7280';
+const TEXT3  = '#9CA3AF';
+const BORDER = '#F3F4F6';
+const BG     = '#F8F9FA';
+const WHITE  = '#FFFFFF';
+const GOLD   = '#FBBF24';
+
+type ReviewsNav   = NativeStackNavigationProp<RootStackParamList, 'Reviews'>;
+type ReviewsRoute = RouteProp<RootStackParamList, 'Reviews'>;
+
 interface Review {
   _id: string;
-  reviewer: {
-    _id: string;
-    firstName: string;
-    lastName: string;
-    avatar?: string;
-  };
+  reviewer: { _id: string; firstName: string; lastName: string; avatar?: string };
   rating: number;
   title?: string;
   comment: string;
-  detailedRatings?: {
-    quality?: number;
-    punctuality?: number;
-    communication?: number;
-    value?: number;
-  };
+  detailedRatings?: { quality?: number; punctuality?: number; communication?: number; value?: number };
   images?: string[];
-  response?: {
-    comment: string;
-    respondedAt: string;
-  };
+  response?: { comment: string; respondedAt: string };
   createdAt: string;
   helpfulCount: number;
   notHelpfulCount: number;
+  isVerifiedBooking?: boolean;
 }
+
+const fmtDate = (d: string) =>
+  new Date(d).toLocaleDateString('en-US', { day: 'numeric', month: 'long', year: 'numeric' });
+
+const Stars = ({ rating, size = 16 }: { rating: number; size?: number }) => (
+  <View style={{ flexDirection: 'row', gap: 2 }}>
+    {[1, 2, 3, 4, 5].map(s => (
+      <Ionicons key={s} name={s <= Math.round(rating) ? 'star' : 'star-outline'} size={size} color={s <= Math.round(rating) ? GOLD : BORDER} />
+    ))}
+  </View>
+);
+
 const ReviewsScreen: React.FC = () => {
-  const navigation = useNavigation<ReviewsNavigationProp>();
-  const route = useRoute<ReviewsRouteProp>();
-  const {
-    userId,
-    serviceId,
-    type = 'vendor'
-  } = route.params;
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [reviews, setReviews] = useState<Review[]>([]);
-  const [stats, setStats] = useState<any>(null);
+  const navigation = useNavigation<ReviewsNav>();
+  const route      = useRoute<ReviewsRoute>();
+  const insets     = useSafeAreaInsets();
+
+  const params = route.params ?? {};
+  const { userId: paramUserId, serviceId, type = 'vendor' } = params;
+
+  const [resolvedUserId, setResolvedUserId] = useState<string | undefined>(paramUserId);
+  const [loading, setLoading]               = useState(true);
+  const [refreshing, setRefreshing]         = useState(false);
+  const [reviews, setReviews]               = useState<Review[]>([]);
+  const [stats, setStats]                   = useState<any>(null);
   const [selectedRating, setSelectedRating] = useState<number | null>(null);
-  const [page, setPage] = useState(1);
-  const [hasMore, setHasMore] = useState(true);
-  const fetchReviews = async (pageNum: number = 1, append: boolean = false) => {
+  const [page, setPage]                     = useState(1);
+  const [hasMore, setHasMore]               = useState(true);
+
+  useEffect(() => {
+    if (!paramUserId) {
+      getStoredUser().then(u => { if (u?._id) setResolvedUserId(u._id); });
+    }
+  }, [paramUserId]);
+
+  const fetchReviews = async (pageNum = 1, append = false) => {
     try {
       if (pageNum === 1) setLoading(true);
-      const params = {
-        page: pageNum,
-        limit: 20,
-        rating: selectedRating || undefined
-      };
+      const qp = { page: pageNum, limit: 20, rating: selectedRating || undefined };
       let response;
       if (type === 'service' && serviceId) {
-        response = await reviewAPI.getServiceReviews(serviceId, params);
-      } else if (userId) {
-        response = await reviewAPI.getReviewsForUser(userId, params);
+        response = await reviewAPI.getServiceReviews(serviceId, qp);
+      } else if (resolvedUserId) {
+        response = await reviewAPI.getReviewsForUser(resolvedUserId, qp);
       }
-      console.log('Reviews response:', response);
       if (response?.success) {
-        const newReviews = Array.isArray(response.data) ? response.data : response.data.reviews || [];
-        if (append) {
-          setReviews(prev => [...prev, ...newReviews]);
-        } else {
-          setReviews(newReviews);
-        }
-        const hasNext = response.meta?.pagination?.hasNextPage ?? newReviews.length === 20;
-        setHasMore(hasNext);
+        const items: Review[] = Array.isArray(response.data) ? response.data : (response.data?.reviews || []);
+        setReviews(prev => append ? [...prev, ...items] : items);
+        setHasMore(response.meta?.pagination?.hasNextPage ?? items.length === 20);
         setPage(pageNum);
       }
     } catch (error) {
-      const apiError = handleAPIError(error);
-      console.error('Reviews fetch error:', apiError);
-      toast.error('Error', apiError.message || 'Failed to load reviews');
+      const e = handleAPIError(error);
+      toast.error('Error', e.message || 'Failed to load reviews');
     } finally {
       setLoading(false);
     }
   };
+
   const fetchStats = async () => {
-    if (!userId) return;
+    if (!resolvedUserId) return;
     try {
-      const response = await reviewAPI.getReviewStats(userId);
-      if (response.success) {
-        setStats(response.data.stats || response.data);
-      }
-    } catch (error) {
-      console.error('Stats fetch error:', error);
-    }
+      const r = await reviewAPI.getReviewStats(resolvedUserId);
+      if (r.success) setStats(r.data?.stats || r.data);
+    } catch {}
   };
+
   useEffect(() => {
-    fetchReviews();
-    if (userId) fetchStats();
-  }, [selectedRating]);
+    if (resolvedUserId || serviceId) {
+      fetchReviews();
+      if (resolvedUserId) fetchStats();
+    }
+  }, [selectedRating, resolvedUserId]);
+
   const onRefresh = () => {
     setRefreshing(true);
     Promise.all([fetchReviews(1, false), fetchStats()]).finally(() => setRefreshing(false));
   };
-  const loadMore = () => {
-    if (!loading && hasMore) {
-      fetchReviews(page + 1, true);
-    }
-  };
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric'
-    });
-  };
-  const renderStars = (rating: number, size: number = 16) => {
-    return <View className="flex-row gap-1">
-        {[1, 2, 3, 4, 5].map(star => <Ionicons key={star} name={star <= rating ? 'star' : 'star-outline'} size={size} color={star <= rating ? '#fbbf24' : '#d1d5db'} />)}
-      </View>;
-  };
-  const renderReviewCard = (review: Review) => <View key={review._id} className="bg-white rounded-2xl p-4 mb-4 shadow-sm" style={{
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 1
-    },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 2
-  }}>
-      {}
-      <View className="flex-row items-start justify-between mb-3">
-        <View className="flex-row items-center flex-1">
-          <View className="w-12 h-12 rounded-full bg-pink-100 items-center justify-center mr-3">
-            {review.reviewer.avatar ? <Image source={{
-            uri: review.reviewer.avatar
-          }} className="w-12 h-12 rounded-full" /> : <Text className="text-lg font-bold text-pink-600">
-                {(review.reviewer?.firstName || '?').charAt(0)}
-                {(review.reviewer?.lastName || '').charAt(0)}
-              </Text>}
-          </View>
 
-          <View className="flex-1">
-            <Text className="text-base font-bold text-gray-900">
-              {review.reviewer.firstName} {review.reviewer.lastName}
-            </Text>
-            <Text className="text-xs text-gray-500">
-              {formatDate(review.createdAt)}
-            </Text>
-          </View>
-        </View>
+  const loadMore = () => { if (!loading && hasMore) fetchReviews(page + 1, true); };
 
-        <View className="flex-row items-center gap-1">
-          {renderStars(review.rating, 18)}
-          <Text className="text-sm font-bold text-gray-900 ml-1">
-            {review.rating.toFixed(1)}
-          </Text>
-        </View>
-      </View>
+  // Build bar data sorted 5→1
+  const barData: { star: number; count: number }[] = [5, 4, 3, 2, 1].map(star => ({
+    star,
+    count: stats?.byRating?.find((r: any) => r._id === star)?.count ?? 0,
+  }));
+  const totalReviews = stats?.total || 0;
 
-      {}
-      {review.title && <Text className="text-base font-bold text-gray-900 mb-2">
-          {review.title}
-        </Text>}
-
-      {}
-      <Text className="text-gray-700 mb-3">{review.comment}</Text>
-
-      {}
-      {review.detailedRatings && <View className="bg-gray-50 rounded-xl p-3 mb-3">
-          <Text className="text-xs font-bold text-gray-700 mb-2">
-            Detailed Ratings:
-          </Text>
-          <View className="gap-2">
-            {review.detailedRatings.quality && <View className="flex-row items-center justify-between">
-                <Text className="text-xs text-gray-600">Quality</Text>
-                {renderStars(review.detailedRatings.quality, 14)}
-              </View>}
-            {review.detailedRatings.punctuality && <View className="flex-row items-center justify-between">
-                <Text className="text-xs text-gray-600">Punctuality</Text>
-                {renderStars(review.detailedRatings.punctuality, 14)}
-              </View>}
-            {review.detailedRatings.communication && <View className="flex-row items-center justify-between">
-                <Text className="text-xs text-gray-600">Communication</Text>
-                {renderStars(review.detailedRatings.communication, 14)}
-              </View>}
-            {review.detailedRatings.value && <View className="flex-row items-center justify-between">
-                <Text className="text-xs text-gray-600">Value</Text>
-                {renderStars(review.detailedRatings.value, 14)}
-              </View>}
-          </View>
-        </View>}
-
-      {}
-      {review.response && <View className="bg-blue-50 border-l-4 border-blue-500 rounded-lg p-3 mb-3">
-          <View className="flex-row items-center mb-2">
-            <Ionicons name="chatbubble-ellipses" size={16} color="#2563eb" />
-            <Text className="text-xs font-bold text-blue-900 ml-2">
-              Vendor Response
-            </Text>
-          </View>
-          <Text className="text-sm text-blue-800">{review.response.comment}</Text>
-          <Text className="text-xs text-blue-600 mt-2">
-            {formatDate(review.response.respondedAt)}
-          </Text>
-        </View>}
-
-      {}
-      <View className="flex-row items-center justify-between pt-3 border-t border-gray-100">
-        <View className="flex-row items-center gap-4">
-          <View className="flex-row items-center">
-            <Ionicons name="thumbs-up-outline" size={16} color="#6b7280" />
-            <Text className="text-xs text-gray-600 ml-1">
-              {review.helpfulCount}
-            </Text>
-          </View>
-
-          <View className="flex-row items-center">
-            <Ionicons name="thumbs-down-outline" size={16} color="#6b7280" />
-            <Text className="text-xs text-gray-600 ml-1">
-              {review.notHelpfulCount}
-            </Text>
-          </View>
-        </View>
-
-        <Text className="text-xs text-gray-400">
-          {review.helpfulCount + review.notHelpfulCount} votes
-        </Text>
-      </View>
-    </View>;
-  const renderEmptyState = () => <View className="flex-1 items-center justify-center py-20">
-      <View className="w-24 h-24 rounded-full bg-gray-100 items-center justify-center mb-4">
-        <Ionicons name="star-outline" size={48} color="#d1d5db" />
-      </View>
-      <Text className="text-lg font-bold text-gray-900 mb-2">No Reviews Yet</Text>
-      <Text className="text-gray-600 text-center px-8">
-        {selectedRating ? `No ${selectedRating}-star reviews found` : 'Be the first to leave a review!'}
-      </Text>
-    </View>;
   if (loading && page === 1) {
-    return <SafeAreaView className="flex-1 bg-gray-50">
-        <View className="flex-1 items-center justify-center">
-          <ActivityIndicator size="large" color="#eb278d" />
-          <Text className="text-gray-400 text-sm mt-4">Loading reviews...</Text>
-        </View>
-      </SafeAreaView>;
+    return (
+      <View style={{ flex: 1, backgroundColor: PINK_S, alignItems: 'center', justifyContent: 'center', paddingTop: insets.top }}>
+        <StatusBar barStyle="dark-content" backgroundColor={WHITE} />
+        <ActivityIndicator size="large" color={PINK} />
+        <Text style={{ fontSize: 13, color: TEXT2, marginTop: 12 }}>Loading reviews…</Text>
+      </View>
+    );
   }
-  return <SafeAreaView className="flex-1 bg-gray-50">
-      {}
-      <View className="bg-white px-5 py-4 border-b border-gray-100">
-        <View className="flex-row items-center justify-between mb-4">
-          <TouchableOpacity onPress={() => navigation.goBack()} className="w-10 h-10 rounded-full bg-gray-100 items-center justify-center">
-            <Ionicons name="arrow-back" size={24} color="#374151" />
+
+  return (
+    <View style={{ flex: 1, backgroundColor: PINK_S }}>
+      <StatusBar barStyle="dark-content" backgroundColor={WHITE} />
+
+      {/* Header */}
+      <View style={{ backgroundColor: WHITE, paddingTop: insets.top }}>
+        <View style={s.header}>
+          <TouchableOpacity onPress={() => navigation.goBack()} activeOpacity={0.8} style={s.backBtn}>
+            <Ionicons name="chevron-back" size={22} color={PINK} />
           </TouchableOpacity>
-
-          <Text className="text-lg font-bold text-gray-900">Reviews</Text>
-
-          <View className="w-10" />
+          <Text style={s.headerTitle}>Reviews</Text>
+          <View style={{ width: 38 }} />
         </View>
 
-        {}
-        {stats && <View className="bg-pink-50 rounded-2xl p-4 mb-4">
-            <View className="flex-row items-center justify-between mb-3">
-              <View className="items-center">
-                <Text className="text-4xl font-bold text-pink-600">
-                  {stats.averageRating?.toFixed(1) || '0.0'}
-                </Text>
-                <View className="flex-row mt-1">
-                  {renderStars(Math.round(stats.averageRating || 0), 16)}
-                </View>
-                <Text className="text-sm text-gray-600 mt-1">
-                  {stats.total} reviews
-                </Text>
-              </View>
-
-              <View className="flex-1 ml-6">
-                {stats.byRating?.map((item: any) => <View key={item._id} className="flex-row items-center gap-2 mb-1">
-                    <Text className="text-xs text-gray-600 w-8">{item._id}★</Text>
-                    <View className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
-                      <View className="h-full bg-yellow-400" style={{
-                  width: `${item.count / stats.total * 100}%`
-                }} />
-                    </View>
-                    <Text className="text-xs text-gray-600 w-8 text-right">
-                      {item.count}
-                    </Text>
-                  </View>)}
-              </View>
+        {/* Rating summary */}
+        {stats && (
+          <View style={s.statCard}>
+            {/* Left: big score */}
+            <View style={s.statLeft}>
+              <Text style={s.bigScore}>{(stats.averageRating || 0).toFixed(1)}</Text>
+              <Stars rating={stats.averageRating || 0} size={18} />
+              <Text style={s.reviewCount}>Reviews ({totalReviews})</Text>
             </View>
-          </View>}
 
-        {}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} className="flex-row gap-2">
-          <TouchableOpacity onPress={() => setSelectedRating(null)} className={`px-4 py-2 rounded-full ${selectedRating === null ? 'bg-pink-600' : 'bg-gray-100'}`} activeOpacity={0.7}>
-            <Text className={`font-semibold ${selectedRating === null ? 'text-white' : 'text-gray-700'}`}>
-              All
-            </Text>
+            {/* Divider */}
+            <View style={s.statDivider} />
+
+            {/* Right: bars 5→1 */}
+            <View style={s.barsCol}>
+              {barData.map(({ star, count }) => {
+                const pct = totalReviews > 0 ? count / totalReviews : 0;
+                return (
+                  <View key={star} style={s.barRow}>
+                    <Text style={s.barLabel}>{star}</Text>
+                    <View style={s.barTrack}>
+                      <View style={[s.barFill, { width: `${Math.max(pct * 100, pct > 0 ? 4 : 0)}%` as any }]} />
+                    </View>
+                  </View>
+                );
+              })}
+            </View>
+          </View>
+        )}
+
+        {/* Filter chips */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={{ paddingHorizontal: 16, paddingVertical: 12, gap: 8 }}
+        >
+          <TouchableOpacity
+            onPress={() => setSelectedRating(null)}
+            activeOpacity={0.7}
+            style={[s.chip, selectedRating === null && s.chipActive]}
+          >
+            <Text style={[s.chipText, selectedRating === null && s.chipTextActive]}>All</Text>
           </TouchableOpacity>
-
-          {[5, 4, 3, 2, 1].map(rating => <TouchableOpacity key={rating} onPress={() => setSelectedRating(rating)} className={`px-4 py-2 rounded-full flex-row items-center gap-1 ${selectedRating === rating ? 'bg-pink-600' : 'bg-gray-100'}`} activeOpacity={0.7}>
-              <Ionicons name="star" size={14} color={selectedRating === rating ? '#fff' : '#fbbf24'} />
-              <Text className={`font-semibold ${selectedRating === rating ? 'text-white' : 'text-gray-700'}`}>
-                {rating}
+          {[1, 2, 3, 4, 5].map(r => (
+            <TouchableOpacity
+              key={r}
+              onPress={() => setSelectedRating(r)}
+              activeOpacity={0.7}
+              style={[s.chip, selectedRating === r && s.chipActive]}
+            >
+              <Ionicons name="star" size={13} color={selectedRating === r ? WHITE : GOLD} />
+              <Text style={[s.chipText, selectedRating === r && s.chipTextActive]}>
+                {r} {r === 1 ? 'Star' : 'Stars'}
               </Text>
-            </TouchableOpacity>)}
+            </TouchableOpacity>
+          ))}
         </ScrollView>
       </View>
 
-      {}
-      <ScrollView className="flex-1" showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#eb278d" colors={['#eb278d']} />} onScroll={({
-      nativeEvent
-    }) => {
-      const {
-        layoutMeasurement,
-        contentOffset,
-        contentSize
-      } = nativeEvent;
-      const isCloseToBottom = layoutMeasurement.height + contentOffset.y >= contentSize.height - 20;
-      if (isCloseToBottom) {
-        loadMore();
-      }
-    }} scrollEventThrottle={400}>
-        <View className="px-5 py-4">
-          {reviews.length > 0 ? <>
-              {reviews.map(review => renderReviewCard(review))}
-
-              {loading && page > 1 && <View className="py-4">
-                  <ActivityIndicator size="small" color="#eb278d" />
-                </View>}
-
-              {!hasMore && reviews.length > 10 && <Text className="text-center text-gray-400 text-sm py-4">
-                  No more reviews
-                </Text>}
-            </> : renderEmptyState()}
-        </View>
+      {/* Review list */}
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 14, paddingBottom: 32 + insets.bottom }}
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={PINK} colors={[PINK]} />}
+        onScroll={({ nativeEvent: { layoutMeasurement, contentOffset, contentSize } }) => {
+          if (layoutMeasurement.height + contentOffset.y >= contentSize.height - 40) loadMore();
+        }}
+        scrollEventThrottle={400}
+      >
+        {reviews.length === 0 ? (
+          <View style={s.empty}>
+            <View style={s.emptyIcon}>
+              <Ionicons name="star-outline" size={40} color={TEXT3} />
+            </View>
+            <Text style={s.emptyTitle}>No Reviews Yet</Text>
+            <Text style={s.emptySub}>
+              {selectedRating ? `No ${selectedRating}-star reviews found` : 'Be the first to leave a review!'}
+            </Text>
+          </View>
+        ) : (
+          <>
+            {reviews.map(review => <ReviewCard key={review._id} review={review} />)}
+            {loading && page > 1 && <ActivityIndicator size="small" color={PINK} style={{ marginVertical: 16 }} />}
+          </>
+        )}
       </ScrollView>
-    </SafeAreaView>;
+    </View>
+  );
 };
+
+const ReviewCard = ({ review }: { review: Review }) => {
+  const initials = `${review.reviewer?.firstName?.charAt(0) ?? ''}${review.reviewer?.lastName?.charAt(0) ?? ''}`;
+
+  return (
+    <View style={s.card}>
+      {/* Top row: avatar + name/date + stars */}
+      <View style={s.cardTop}>
+        {review.reviewer.avatar ? (
+          <Image source={{ uri: review.reviewer.avatar }} style={s.avatar} />
+        ) : (
+          <View style={[s.avatar, { backgroundColor: PINK_S, alignItems: 'center', justifyContent: 'center' }]}>
+            <Text style={{ fontSize: 16, fontWeight: '700', color: PINK }}>{initials}</Text>
+          </View>
+        )}
+        <View style={{ flex: 1 }}>
+          <Text style={s.reviewerName}>{review.reviewer.firstName} {review.reviewer.lastName}</Text>
+          <Text style={s.reviewDate}>{fmtDate(review.createdAt)}</Text>
+        </View>
+        <Stars rating={review.rating} size={16} />
+      </View>
+
+      {/* Title */}
+      {review.title ? <Text style={s.reviewTitle}>{review.title}</Text> : null}
+
+      {/* Comment */}
+      <Text style={s.reviewComment}>{review.comment}</Text>
+
+      {/* Vendor response */}
+      {review.response && (
+        <View style={s.responseBox}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+            <Ionicons name="chatbubble-ellipses" size={14} color={PINK} />
+            <Text style={s.responseLabel}>Vendor Response</Text>
+          </View>
+          <Text style={s.responseText}>{review.response.comment}</Text>
+          <Text style={s.responseDate}>{fmtDate(review.response.respondedAt)}</Text>
+        </View>
+      )}
+
+      {/* Footer: verified badge + helpful counts */}
+      <View style={s.cardFooter}>
+        <View style={s.verifiedBadge}>
+          <Ionicons name="checkmark-circle" size={13} color={PINK} />
+          <Text style={s.verifiedText}>Verified Booking</Text>
+        </View>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+          <View style={s.voteItem}>
+            <Ionicons name="thumbs-up" size={15} color={TEXT3} />
+            <Text style={s.voteCount}>{review.helpfulCount}</Text>
+          </View>
+          <View style={s.voteItem}>
+            <Ionicons name="thumbs-down" size={15} color={TEXT3} />
+            <Text style={s.voteCount}>{review.notHelpfulCount}</Text>
+          </View>
+        </View>
+      </View>
+    </View>
+  );
+};
+
+const s = StyleSheet.create({
+  header: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 16, paddingVertical: 12,
+    borderBottomWidth: 1, borderBottomColor: BORDER,
+  },
+  backBtn: {
+    width: 38, height: 38, borderRadius: 19,
+    backgroundColor: PINK_S, alignItems: 'center', justifyContent: 'center',
+  },
+  headerTitle: { fontSize: 18, fontWeight: '700', color: TEXT1 },
+
+  statCard: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: WHITE, margin: 16, marginBottom: 0,
+    borderRadius: 18, padding: 16,
+    borderWidth: 1, borderColor: BORDER,
+    ...Platform.select({ android: { elevation: 2 }, ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8 } }),
+  },
+  statLeft: { alignItems: 'center', width: 90 },
+  bigScore: { fontSize: 40, fontWeight: '800', color: TEXT1, lineHeight: 44 },
+  reviewCount: { fontSize: 12, color: TEXT2, marginTop: 4 },
+  statDivider: { width: 1, height: 80, backgroundColor: BORDER, marginHorizontal: 16 },
+  barsCol: { flex: 1, gap: 7 },
+  barRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  barLabel: { fontSize: 12, color: TEXT2, width: 10, textAlign: 'center' },
+  barTrack: { flex: 1, height: 8, backgroundColor: BORDER, borderRadius: 4, overflow: 'hidden' },
+  barFill: { height: '100%', backgroundColor: PINK, borderRadius: 4 },
+
+  chip: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    paddingHorizontal: 14, paddingVertical: 8,
+    borderRadius: 20, backgroundColor: WHITE,
+    borderWidth: 1.5, borderColor: BORDER,
+  },
+  chipActive: { backgroundColor: PINK, borderColor: PINK },
+  chipText: { fontSize: 13, fontWeight: '600', color: TEXT2 },
+  chipTextActive: { color: WHITE },
+
+  card: {
+    backgroundColor: WHITE, borderRadius: 18, padding: 16, marginBottom: 12,
+    borderWidth: 1, borderColor: BORDER,
+    ...Platform.select({ android: { elevation: 2 }, ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8 } }),
+  },
+  cardTop: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 },
+  avatar: { width: 48, height: 48, borderRadius: 24 },
+  reviewerName: { fontSize: 15, fontWeight: '700', color: TEXT1, marginBottom: 2 },
+  reviewDate: { fontSize: 12, color: TEXT2 },
+  reviewTitle: { fontSize: 15, fontWeight: '700', color: TEXT1, marginBottom: 8 },
+  reviewComment: { fontSize: 14, color: TEXT1, lineHeight: 22, marginBottom: 12 },
+
+  responseBox: {
+    backgroundColor: PINK_S, borderRadius: 12, padding: 12, marginBottom: 12,
+    borderLeftWidth: 3, borderLeftColor: PINK,
+  },
+  responseLabel: { fontSize: 12, fontWeight: '700', color: PINK },
+  responseText: { fontSize: 13, color: TEXT1, lineHeight: 18 },
+  responseDate: { fontSize: 11, color: TEXT2, marginTop: 6 },
+
+  cardFooter: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingTop: 12, borderTopWidth: 1, borderTopColor: BORDER,
+  },
+  verifiedBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    backgroundColor: PINK_S, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20,
+  },
+  verifiedText: { fontSize: 12, fontWeight: '600', color: PINK },
+  voteItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  voteCount: { fontSize: 13, color: TEXT2, fontWeight: '500' },
+
+  empty: { alignItems: 'center', paddingTop: 64 },
+  emptyIcon: { width: 80, height: 80, borderRadius: 40, backgroundColor: BORDER, alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
+  emptyTitle: { fontSize: 17, fontWeight: '700', color: TEXT1, marginBottom: 6 },
+  emptySub: { fontSize: 13, color: TEXT3, textAlign: 'center', paddingHorizontal: 32 },
+});
+
 export default ReviewsScreen;

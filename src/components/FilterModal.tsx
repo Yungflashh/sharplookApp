@@ -1,6 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { Modal, View, Text, TouchableOpacity, TextInput, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
+import {
+  Modal,
+  View,
+  Text,
+  TouchableOpacity,
+  ScrollView,
+  StyleSheet,
+  Dimensions,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+
+const { width: SW } = Dimensions.get('window');
+const HINT = '#9CA3AF';
+
 export interface FilterOptions {
   searchName: string;
   category: string;
@@ -11,243 +23,557 @@ export interface FilterOptions {
   status: 'all' | 'active' | 'inactive';
   sortBy: 'name' | 'price' | 'duration' | 'rating';
   sortOrder: 'asc' | 'desc';
+  distance?: '5km' | '10km' | '20km' | 'any';
+  pricePreset?: 'budget' | 'mid' | 'premium' | 'luxury' | '';
+  minRating?: number;
+  availability?: 'today' | 'tomorrow' | 'next_week' | 'any';
+  vendorType?: 'all' | 'home_service' | 'in_shop' | 'both';
 }
+
 interface FilterModalProps {
   visible: boolean;
   filters: FilterOptions;
-  categories: Array<{
-    _id: string;
-    name: string;
-  }>;
+  categories: Array<{ _id: string; name: string }>;
   onClose: () => void;
   onApply: (filters: FilterOptions) => void;
   onReset: () => void;
 }
+
+const DISTANCE_OPTIONS: Array<{ value: '5km' | '10km' | '20km' | 'any'; label: string }> = [
+  { value: '5km', label: 'Nearby (5km)' },
+  { value: '10km', label: 'Within (10km)' },
+  { value: '20km', label: 'Within (20km)' },
+  { value: 'any', label: 'Any' },
+];
+
+const PRICE_PRESETS: Array<{
+  value: 'budget' | 'mid' | 'premium' | 'luxury';
+  range: string;
+  label: string;
+}> = [
+  { value: 'budget', range: '₦10,000 – ₦30,000', label: 'Budget Friendly' },
+  { value: 'mid', range: '₦30,000 – ₦50,000', label: 'Mid Range' },
+  { value: 'premium', range: '₦50,000 – ₦70,000', label: 'Premium' },
+  { value: 'luxury', range: '₦80k+', label: 'Luxury' },
+];
+
+const RATING_OPTIONS = [1, 2, 3, 4, 5];
+
+const AVAILABILITY_OPTIONS: Array<{
+  value: 'today' | 'tomorrow' | 'next_week' | 'any';
+  label: string;
+}> = [
+  { value: 'today', label: 'Today' },
+  { value: 'tomorrow', label: 'Tomorrow' },
+  { value: 'next_week', label: 'Next Week' },
+];
+
+const VENDOR_TYPE_OPTIONS: Array<{
+  value: 'all' | 'home_service' | 'in_shop' | 'both';
+  label: string;
+  icon: string;
+}> = [
+  { value: 'all', label: 'All', icon: 'apps-outline' },
+  { value: 'home_service', label: 'Home Service', icon: 'home-outline' },
+  { value: 'in_shop', label: 'In-Shop', icon: 'storefront-outline' },
+  { value: 'both', label: 'Both', icon: 'layers-outline' },
+];
+
 const FilterModal: React.FC<FilterModalProps> = ({
   visible,
   filters,
   categories,
   onClose,
   onApply,
-  onReset
+  onReset,
 }) => {
-  const [localFilters, setLocalFilters] = useState<FilterOptions>(filters);
-  useEffect(() => {
-    setLocalFilters(filters);
-  }, [filters, visible]);
-  const handleApply = () => {
-    const { _showCategoryDropdown, ...cleanFilters } = localFilters as any;
-    onApply(cleanFilters);
-    onClose();
-  };
-  const handleReset = () => {
-    onReset();
-    onClose();
-  };
-  return <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} className="flex-1 bg-white">
-        {}
-        <View className="flex-row items-center justify-between px-5 py-4 border-b border-gray-200">
-          <TouchableOpacity onPress={onClose} className="p-1">
-            <Ionicons name="close" size={28} color="#333" />
-          </TouchableOpacity>
-          <Text className="text-lg font-semibold text-gray-900">Filter Services</Text>
-          <View className="w-9" />
-        </View>
+  const [distance, setDistance] = useState<'5km' | '10km' | '20km' | 'any'>(
+    filters.distance || 'any'
+  );
+  const [pricePreset, setPricePreset] = useState<'budget' | 'mid' | 'premium' | 'luxury' | ''>(
+    filters.pricePreset || ''
+  );
+  const [minRating, setMinRating] = useState<number>(filters.minRating || 0);
+  const [availability, setAvailability] = useState<'today' | 'tomorrow' | 'next_week' | 'any'>(
+    filters.availability || 'any'
+  );
+  const [vendorType, setVendorType] = useState<'all' | 'home_service' | 'in_shop' | 'both'>(
+    filters.vendorType || 'all'
+  );
 
-        <ScrollView className="flex-1 px-5" showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-          {}
-          <View className="mb-6 mt-5">
-            <Text className="text-sm font-semibold text-gray-900 mb-2">Search by Name</Text>
-            <View className="flex-row items-center border border-gray-300 rounded-xl px-4 bg-gray-50">
-              <Ionicons name="search" size={20} color="#999" />
-              <TextInput className="flex-1 py-3.5 px-3 text-base text-gray-900" placeholder="Enter service name..." placeholderTextColor="#999" value={localFilters.searchName} onChangeText={text => setLocalFilters({
-              ...localFilters,
-              searchName: text
-            })} />
+  useEffect(() => {
+    if (visible) {
+      setDistance(filters.distance || 'any');
+      setPricePreset(filters.pricePreset || '');
+      setMinRating(filters.minRating || 0);
+      setAvailability(filters.availability || 'any');
+      setVendorType(filters.vendorType || 'all');
+    }
+  }, [filters, visible]);
+
+  const handleApply = () => {
+    // Map pricePreset to minPrice/maxPrice
+    let minPrice = filters.minPrice;
+    let maxPrice = filters.maxPrice;
+    if (pricePreset === 'budget') { minPrice = '10000'; maxPrice = '30000'; }
+    else if (pricePreset === 'mid') { minPrice = '30000'; maxPrice = '50000'; }
+    else if (pricePreset === 'premium') { minPrice = '50000'; maxPrice = '70000'; }
+    else if (pricePreset === 'luxury') { minPrice = '80000'; maxPrice = ''; }
+
+    const mapped: FilterOptions = {
+      ...filters,
+      minPrice,
+      maxPrice,
+      distance,
+      pricePreset,
+      minRating,
+      availability,
+      vendorType,
+    };
+    onApply(mapped);
+  };
+
+  const handleReset = () => {
+    setDistance('any');
+    setPricePreset('');
+    setMinRating(0);
+    setAvailability('any');
+    setVendorType('all');
+    onReset();
+  };
+
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      onRequestClose={onClose}
+    >
+      <View style={styles.overlay}>
+        <View style={styles.card}>
+          {/* Drag handle */}
+          <View style={styles.dragHandle} />
+
+          {/* Header */}
+          <View style={styles.headerRow}>
+            <View>
+              <Text style={styles.headerTitle}>Filter</Text>
+              <Text style={styles.headerSubtitle}>Refine your search</Text>
             </View>
+            <TouchableOpacity style={styles.closeBtn} onPress={onClose} activeOpacity={0.8}>
+              <Ionicons name="close" size={22} color="#374151" />
+            </TouchableOpacity>
           </View>
 
-          {}
-          <View className="mb-6">
-            <Text className="text-sm font-semibold text-gray-900 mb-2">Category</Text>
-            <TouchableOpacity
-              className="flex-row items-center justify-between px-4 py-3 mt-1 bg-gray-50 rounded-xl border border-gray-300"
-              activeOpacity={0.7}
-              onPress={() => setLocalFilters({ ...localFilters, _showCategoryDropdown: !localFilters._showCategoryDropdown } as any)}
-            >
-              <Text className={`text-sm font-medium ${localFilters.category ? 'text-gray-900' : 'text-gray-500'}`}>
-                {localFilters.category
-                  ? categories.find(c => c._id === localFilters.category)?.name || 'All Categories'
-                  : 'All Categories'}
-              </Text>
-              <Ionicons name={(localFilters as any)._showCategoryDropdown ? 'chevron-up' : 'chevron-down'} size={18} color="#6b7280" />
-            </TouchableOpacity>
-            {(localFilters as any)._showCategoryDropdown && (
-              <View className="mt-2 bg-white rounded-xl border border-gray-200" style={{ maxHeight: 200 }}>
-                <ScrollView showsVerticalScrollIndicator={false} nestedScrollEnabled>
+          <ScrollView
+            style={styles.scrollArea}
+            contentContainerStyle={styles.scrollContent}
+            showsVerticalScrollIndicator={false}
+          >
+            {/* Location/Distance */}
+            <Text style={styles.sectionLabel}>{'📍  Location/Distance'}</Text>
+            <View style={styles.chipRow}>
+              {DISTANCE_OPTIONS.map(opt => {
+                const selected = distance === opt.value;
+                return (
                   <TouchableOpacity
-                    className={`px-4 py-3 border-b border-gray-100 ${localFilters.category === '' ? 'bg-pink-50' : ''}`}
-                    onPress={() => setLocalFilters({ ...localFilters, category: '', _showCategoryDropdown: false } as any)}
+                    key={opt.value}
+                    onPress={() => setDistance(opt.value)}
+                    activeOpacity={0.8}
+                    style={[
+                      styles.distanceChip,
+                      selected ? styles.distanceChipSelected : styles.distanceChipUnselected,
+                    ]}
                   >
-                    <Text className={`text-sm font-medium ${localFilters.category === '' ? 'text-pink-600' : 'text-gray-700'}`}>
-                      All Categories
+                    <Text
+                      style={[
+                        styles.distanceChipText,
+                        selected ? styles.distanceChipTextSelected : styles.distanceChipTextUnselected,
+                      ]}
+                    >
+                      {opt.label}
                     </Text>
                   </TouchableOpacity>
-                  {categories.map(cat => (
-                    <TouchableOpacity
-                      key={cat._id}
-                      className={`px-4 py-3 border-b border-gray-100 ${localFilters.category === cat._id ? 'bg-pink-50' : ''}`}
-                      onPress={() => setLocalFilters({ ...localFilters, category: cat._id, _showCategoryDropdown: false } as any)}
+                );
+              })}
+            </View>
+
+            {/* Price Range */}
+            <Text style={[styles.sectionLabel, { marginTop: 24 }]}>{'🏷️  Price Range'}</Text>
+            <View style={styles.priceGrid}>
+              {PRICE_PRESETS.map(opt => {
+                const selected = pricePreset === opt.value;
+                return (
+                  <TouchableOpacity
+                    key={opt.value}
+                    onPress={() => setPricePreset(selected ? '' : opt.value)}
+                    activeOpacity={0.8}
+                    style={[
+                      styles.priceChip,
+                      selected ? styles.priceChipSelected : styles.priceChipUnselected,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.priceRangeText,
+                        selected && { color: '#E91E63' },
+                      ]}
                     >
-                      <Text className={`text-sm font-medium ${localFilters.category === cat._id ? 'text-pink-600' : 'text-gray-700'}`}>
-                        {cat.name}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
-              </View>
-            )}
-          </View>
-
-          {}
-          <View className="mb-6">
-            <Text className="text-sm font-semibold text-gray-900 mb-2">Price Range (₦)</Text>
-            <View className="flex-row gap-3">
-              <View className="flex-1 flex-row items-center border border-gray-300 rounded-xl px-4 bg-gray-50">
-                <TextInput className="flex-1 py-3.5 text-base text-gray-900" placeholder="Min" placeholderTextColor="#999" value={localFilters.minPrice} onChangeText={text => setLocalFilters({
-                ...localFilters,
-                minPrice: text.replace(/[^0-9]/g, '')
-              })} keyboardType="numeric" />
-              </View>
-              <Text className="text-gray-500 self-center">-</Text>
-              <View className="flex-1 flex-row items-center border border-gray-300 rounded-xl px-4 bg-gray-50">
-                <TextInput className="flex-1 py-3.5 text-base text-gray-900" placeholder="Max" placeholderTextColor="#999" value={localFilters.maxPrice} onChangeText={text => setLocalFilters({
-                ...localFilters,
-                maxPrice: text.replace(/[^0-9]/g, '')
-              })} keyboardType="numeric" />
-              </View>
+                      {opt.range}
+                    </Text>
+                    <Text style={[styles.priceLabelText, selected && { color: '#E91E63' }]}>
+                      {opt.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
             </View>
-          </View>
 
-          {}
-          <View className="mb-6">
-            <Text className="text-sm font-semibold text-gray-900 mb-2">Duration (minutes)</Text>
-            <View className="flex-row gap-3">
-              <View className="flex-1 flex-row items-center border border-gray-300 rounded-xl px-4 bg-gray-50">
-                <TextInput className="flex-1 py-3.5 text-base text-gray-900" placeholder="Min" placeholderTextColor="#999" value={localFilters.minDuration} onChangeText={text => setLocalFilters({
-                ...localFilters,
-                minDuration: text.replace(/[^0-9]/g, '')
-              })} keyboardType="numeric" />
-              </View>
-              <Text className="text-gray-500 self-center">-</Text>
-              <View className="flex-1 flex-row items-center border border-gray-300 rounded-xl px-4 bg-gray-50">
-                <TextInput className="flex-1 py-3.5 text-base text-gray-900" placeholder="Max" placeholderTextColor="#999" value={localFilters.maxDuration} onChangeText={text => setLocalFilters({
-                ...localFilters,
-                maxDuration: text.replace(/[^0-9]/g, '')
-              })} keyboardType="numeric" />
-              </View>
+            {/* Rating */}
+            <Text style={[styles.sectionLabel, { marginTop: 24 }]}>{'⭐  Rating'}</Text>
+            <View style={styles.chipRow}>
+              {RATING_OPTIONS.map(r => {
+                const selected = minRating === r;
+                return (
+                  <TouchableOpacity
+                    key={r}
+                    onPress={() => setMinRating(selected ? 0 : r)}
+                    activeOpacity={0.8}
+                    style={[
+                      styles.ratingChip,
+                      selected ? styles.ratingChipSelected : styles.ratingChipUnselected,
+                    ]}
+                  >
+                    <View style={styles.starsRow}>
+                      {Array.from({ length: r }).map((_, i) => (
+                        <Ionicons
+                          key={i}
+                          name="star"
+                          size={10}
+                          color={selected ? '#fff' : '#F59E0B'}
+                        />
+                      ))}
+                    </View>
+                    <Text
+                      style={[
+                        styles.ratingChipText,
+                        selected ? styles.ratingChipTextSelected : styles.ratingChipTextUnselected,
+                      ]}
+                    >
+                      {r < 5 ? `${r}+` : '5 only'}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
             </View>
-          </View>
 
-          {}
-          <View className="mb-6">
-            <Text className="text-sm font-semibold text-gray-900 mb-2">Status</Text>
-            <View className="flex-row gap-2">
-              {[{
-              value: 'all',
-              label: 'All'
-            }, {
-              value: 'active',
-              label: 'Active'
-            }, {
-              value: 'inactive',
-              label: 'Inactive'
-            }].map(status => <TouchableOpacity key={status.value} className={`flex-1 py-3 rounded-xl items-center ${localFilters.status === status.value ? '' : 'bg-gray-100 border border-gray-300'}`} style={localFilters.status === status.value ? {
-              backgroundColor: '#eb278d'
-            } : {}} onPress={() => setLocalFilters({
-              ...localFilters,
-              status: status.value as 'all' | 'active' | 'inactive'
-            })}>
-                  <Text className={`text-sm font-semibold ${localFilters.status === status.value ? 'text-white' : 'text-gray-700'}`}>
-                    {status.label}
-                  </Text>
-                </TouchableOpacity>)}
+            {/* Availability */}
+            <Text style={[styles.sectionLabel, { marginTop: 24 }]}>{'📅  Availability'}</Text>
+            <View style={styles.chipRow}>
+              {AVAILABILITY_OPTIONS.map(opt => {
+                const selected = availability === opt.value;
+                return (
+                  <TouchableOpacity
+                    key={opt.value}
+                    onPress={() => setAvailability(selected ? 'any' : opt.value)}
+                    activeOpacity={0.8}
+                    style={[
+                      styles.availChip,
+                      selected ? styles.availChipSelected : styles.availChipUnselected,
+                    ]}
+                  >
+                    {selected && (
+                      <Ionicons name="checkmark" size={14} color="#fff" style={{ marginRight: 4 }} />
+                    )}
+                    <Text
+                      style={[
+                        styles.availChipText,
+                        selected ? styles.availChipTextSelected : styles.availChipTextUnselected,
+                      ]}
+                    >
+                      {opt.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
             </View>
-          </View>
 
-          {}
-          <View className="mb-6">
-            <Text className="text-sm font-semibold text-gray-900 mb-2">Sort By</Text>
-            <View className="flex-row flex-wrap gap-2">
-              {[{
-              value: 'name',
-              label: 'Name'
-            }, {
-              value: 'price',
-              label: 'Price'
-            }, {
-              value: 'duration',
-              label: 'Duration'
-            }, {
-              value: 'rating',
-              label: 'Rating'
-            }].map(sort => <TouchableOpacity key={sort.value} className={`px-4 py-2.5 rounded-xl ${localFilters.sortBy === sort.value ? '' : 'bg-gray-100 border border-gray-300'}`} style={localFilters.sortBy === sort.value ? {
-              backgroundColor: '#eb278d'
-            } : {}} onPress={() => setLocalFilters({
-              ...localFilters,
-              sortBy: sort.value as 'name' | 'price' | 'duration' | 'rating'
-            })}>
-                  <Text className={`text-sm font-medium ${localFilters.sortBy === sort.value ? 'text-white' : 'text-gray-700'}`}>
-                    {sort.label}
-                  </Text>
-                </TouchableOpacity>)}
+            {/* Service Type */}
+            <Text style={[styles.sectionLabel, { marginTop: 24 }]}>{'🏠  Service Type'}</Text>
+            <View style={styles.chipRow}>
+              {VENDOR_TYPE_OPTIONS.map(opt => {
+                const selected = vendorType === opt.value;
+                return (
+                  <TouchableOpacity
+                    key={opt.value}
+                    onPress={() => setVendorType(opt.value)}
+                    activeOpacity={0.8}
+                    style={[
+                      styles.serviceTypeChip,
+                      selected ? styles.serviceTypeChipSelected : styles.serviceTypeChipUnselected,
+                    ]}
+                  >
+                    <Ionicons
+                      name={opt.icon as any}
+                      size={14}
+                      color={selected ? '#fff' : '#374151'}
+                      style={{ marginRight: 5 }}
+                    />
+                    <Text
+                      style={[
+                        styles.serviceTypeText,
+                        selected ? styles.serviceTypeTextSelected : styles.serviceTypeTextUnselected,
+                      ]}
+                    >
+                      {opt.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
             </View>
+
+            <View style={{ height: 8 }} />
+          </ScrollView>
+
+          {/* Bottom actions */}
+          <View style={styles.bottomActions}>
+            <TouchableOpacity style={styles.applyBtn} onPress={handleApply} activeOpacity={0.85}>
+              <Text style={styles.applyBtnText}>Apply Filters</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={handleReset} activeOpacity={0.8} style={styles.resetBtn}>
+              <Text style={styles.resetBtnText}>Reset</Text>
+            </TouchableOpacity>
           </View>
-
-          {}
-          <View className="mb-8">
-            <Text className="text-sm font-semibold text-gray-900 mb-2">Sort Order</Text>
-            <View className="flex-row gap-2">
-              <TouchableOpacity className={`flex-1 py-3 rounded-xl items-center flex-row justify-center ${localFilters.sortOrder === 'asc' ? '' : 'bg-gray-100 border border-gray-300'}`} style={localFilters.sortOrder === 'asc' ? {
-              backgroundColor: '#eb278d'
-            } : {}} onPress={() => setLocalFilters({
-              ...localFilters,
-              sortOrder: 'asc'
-            })}>
-                <Ionicons name="arrow-up" size={18} color={localFilters.sortOrder === 'asc' ? '#FFFFFF' : '#374151'} />
-                <Text className={`text-sm font-semibold ml-1 ${localFilters.sortOrder === 'asc' ? 'text-white' : 'text-gray-700'}`}>
-                  Ascending
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity className={`flex-1 py-3 rounded-xl items-center flex-row justify-center ${localFilters.sortOrder === 'desc' ? '' : 'bg-gray-100 border border-gray-300'}`} style={localFilters.sortOrder === 'desc' ? {
-              backgroundColor: '#eb278d'
-            } : {}} onPress={() => setLocalFilters({
-              ...localFilters,
-              sortOrder: 'desc'
-            })}>
-                <Ionicons name="arrow-down" size={18} color={localFilters.sortOrder === 'desc' ? '#FFFFFF' : '#374151'} />
-                <Text className={`text-sm font-semibold ml-1 ${localFilters.sortOrder === 'desc' ? 'text-white' : 'text-gray-700'}`}>
-                  Descending
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </ScrollView>
-
-        {}
-        <View className="flex-row p-5 gap-3 border-t border-gray-200">
-          <TouchableOpacity className="flex-1 bg-gray-100 py-3.5 rounded-xl items-center border border-gray-300" onPress={handleReset}>
-            <Text className="text-gray-700 text-base font-semibold">Reset</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity className="flex-1 py-3.5 rounded-xl items-center" style={{
-          backgroundColor: '#eb278d'
-        }} onPress={handleApply}>
-            <Text className="text-white text-base font-semibold">Apply Filters</Text>
-          </TouchableOpacity>
         </View>
-      </KeyboardAvoidingView>
-    </Modal>;
+      </View>
+    </Modal>
+  );
 };
+
+const styles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'flex-end',
+  },
+  card: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    maxHeight: '88%',
+  },
+  dragHandle: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#D1D5DB',
+    alignSelf: 'center',
+    marginTop: 12,
+    marginBottom: 8,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: '900',
+    color: '#1A1A1A',
+  },
+  headerSubtitle: {
+    fontSize: 13,
+    color: HINT,
+    marginTop: 2,
+  },
+  closeBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#F5F5F7',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  scrollArea: {
+    flexGrow: 0,
+  },
+  scrollContent: {
+    paddingHorizontal: 20,
+    paddingTop: 4,
+    paddingBottom: 8,
+  },
+  sectionLabel: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#1A1A1A',
+    marginBottom: 12,
+  },
+  // Distance chips
+  chipRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  distanceChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 50,
+    borderWidth: 1.5,
+    marginRight: 0,
+  },
+  distanceChipSelected: {
+    backgroundColor: '#FCE4EC',
+    borderColor: '#E91E63',
+  },
+  distanceChipUnselected: {
+    backgroundColor: '#F5F5F7',
+    borderColor: '#E5E7EB',
+  },
+  distanceChipText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  distanceChipTextSelected: {
+    color: '#E91E63',
+  },
+  distanceChipTextUnselected: {
+    color: '#374151',
+  },
+  // Price grid
+  priceGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  priceChip: {
+    width: (SW - 60) / 2,
+    padding: 14,
+    borderRadius: 14,
+    borderWidth: 1.5,
+  },
+  priceChipSelected: {
+    borderColor: '#E91E63',
+    backgroundColor: '#FCE4EC',
+  },
+  priceChipUnselected: {
+    borderColor: '#E5E7EB',
+    backgroundColor: '#F9FAFB',
+  },
+  priceRangeText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#1A1A1A',
+  },
+  priceLabelText: {
+    fontSize: 11,
+    color: HINT,
+    marginTop: 3,
+  },
+  // Rating chips
+  ratingChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 50,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  ratingChipSelected: {
+    backgroundColor: '#E91E63',
+  },
+  ratingChipUnselected: {
+    backgroundColor: '#F5F5F7',
+  },
+  starsRow: {
+    flexDirection: 'row',
+    marginBottom: 2,
+  },
+  ratingChipText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  ratingChipTextSelected: {
+    color: '#fff',
+  },
+  ratingChipTextUnselected: {
+    color: '#374151',
+  },
+  // Availability chips
+  availChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 50,
+  },
+  availChipSelected: {
+    backgroundColor: '#E91E63',
+  },
+  availChipUnselected: {
+    backgroundColor: '#F5F5F7',
+  },
+  availChipText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  availChipTextSelected: {
+    color: '#fff',
+  },
+  availChipTextUnselected: {
+    color: '#374151',
+  },
+  // Service type chips
+  serviceTypeChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 50,
+    borderWidth: 1.5,
+  },
+  serviceTypeChipSelected: {
+    backgroundColor: '#E91E63',
+    borderColor: '#E91E63',
+  },
+  serviceTypeChipUnselected: {
+    backgroundColor: '#F5F5F7',
+    borderColor: '#E5E7EB',
+  },
+  serviceTypeText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  serviceTypeTextSelected: { color: '#fff' },
+  serviceTypeTextUnselected: { color: '#374151' },
+  // Bottom actions
+  bottomActions: {
+    paddingHorizontal: 20,
+    paddingBottom: 32,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#F3F4F6',
+  },
+  applyBtn: {
+    backgroundColor: '#E91E63',
+    borderRadius: 14,
+    paddingVertical: 16,
+    alignItems: 'center',
+  },
+  applyBtnText: {
+    color: '#fff',
+    fontWeight: '800',
+    fontSize: 15,
+  },
+  resetBtn: {
+    alignItems: 'center',
+    paddingVertical: 12,
+  },
+  resetBtnText: {
+    color: '#E91E63',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+});
+
 export default FilterModal;
