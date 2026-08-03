@@ -1,8 +1,9 @@
 import axios, { AxiosInstance, AxiosError, InternalAxiosRequestConfig } from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
-const API_BASE_URL = 'https://sharplook-backend-production.onrender.com/api/v1';
-// const API_BASE_URL = 'http://10.195.125.66:5500/api/v1';
+const API_BASE_URL = __DEV__
+  ? 'http://10.132.192.66:5500/api/v1'
+  : 'https://sharplook-backend-production.onrender.com/api/v1';
 const api: AxiosInstance = axios.create({
   baseURL: API_BASE_URL,
   timeout: 60000,
@@ -117,9 +118,11 @@ export const authAPI = {
   email: string;
   phone: string;
   password: string;
+  confirmPassword?: string;
+  hearAboutUs?: string;
   isVendor?: boolean;
   referredBy?: string;
-  location?: {  
+  location?: {
     type: 'Point';
     coordinates: [number, number];
     address: string;
@@ -131,6 +134,10 @@ export const authAPI = {
   const response = await api.post('/auth/register', userData);
   return response.data;
 },
+  resendVerification: async (email: string) => {
+    const response = await api.post('/auth/resend-verification', { email });
+    return response.data;
+  },
   logout: async () => {
     const response = await api.post('/auth/logout');
     return response.data;
@@ -156,6 +163,10 @@ export const authAPI = {
   },
   resendVerification: async (email: string) => {
     const response = await api.post('/auth/resend-verification', { email });
+    return response.data;
+  },
+  changePassword: async (currentPassword: string, newPassword: string) => {
+    const response = await api.post('/auth/change-password', { currentPassword, newPassword });
     return response.data;
   },
   verifyPhone: async (code: string) => {
@@ -345,11 +356,13 @@ export const referralAPI = {
 
 export const vendorAPI = {
   setupProfile: async (setupData: {
-    businessName: string;
+    businessName?: string;
     businessDescription: string;
     categories: string[];
     primaryCategory?: string;
+    businessType?: 'solo_practitioner' | 'small_business' | 'salon_spa' | 'studio';
     vendorType: 'home_service' | 'in_shop' | 'both';
+    yearsOfExperience?: number;
     serviceRadius?: number;
     location: {
       type: 'Point';
@@ -484,6 +497,19 @@ export const vendorAPI = {
     return response.data;
   },
 
+  uploadCoverImage: async (imageUri: string) => {
+    const formData = new FormData();
+    const filename = imageUri.split('/').pop() || 'cover.jpg';
+    const match = /\.(\w+)$/.exec(filename);
+    const type = match ? `image/${match[1]}` : 'image/jpeg';
+    formData.append('image', { uri: imageUri, name: filename, type } as any);
+    const response = await api.post('/vendors/cover-image', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 30000,
+    });
+    return response.data;
+  },
+
   
   checkMyProfileCompletion: async () => {
     const response = await api.get('/vendors/profile/completion');
@@ -545,7 +571,8 @@ export const vendorAPI = {
   getAllVendors: async (params?: {
     category?: string;
     location?: string;
-    minRating?: number;
+    rating?: number;
+    vendorType?: string;
     page?: number;
     limit?: number;
   }) => {
@@ -1178,11 +1205,11 @@ export const paymentAPI = {
 export const walletAPI = {
   
   getBalance: async () => {
-    const response = await api.get('/wallet/balance');
+    const response = await api.get('/sharppay/balance');
     return response.data;
   },
 
-  
+
   getTransactions: async (params?: {
     type?: string;
     status?: string;
@@ -1191,13 +1218,13 @@ export const walletAPI = {
     page?: number;
     limit?: number;
   }) => {
-    const response = await api.get('/wallet/transactions', { params });
+    const response = await api.get('/sharppay/transactions', { params });
     return response.data;
   },
 
-  
+
   getStats: async () => {
-    const response = await api.get('/wallet/stats');
+    const response = await api.get('/sharppay/stats');
     return response.data;
   },
 
@@ -1250,13 +1277,13 @@ export const walletAPI = {
     accountName: string;
     pin: string;
   }) => {
-    const response = await api.post('/payments/wallet/withdraw', withdrawalData);
+    const response = await api.post('/sharppay/withdraw', withdrawalData);
     return response.data;
   },
 
   
   getMyWithdrawals: async (page: number = 1, limit: number = 10) => {
-    const response = await api.get('/payment/withdrawals/my-withdrawals', {
+    const response = await api.get('/sharppay/withdrawals/my-withdrawals', {
       params: { page, limit }
     });
     return response.data;
@@ -1264,7 +1291,7 @@ export const walletAPI = {
 
   
   getWithdrawalById: async (withdrawalId: string) => {
-    const response = await api.get(`/payment/withdrawals/${withdrawalId}`);
+    const response = await api.get(`/sharppay/withdrawals/${withdrawalId}`);
     return response.data;
   },
 
@@ -1304,8 +1331,18 @@ export const walletAPI = {
 
 
 
+export const couponAPI = {
+  validate: async (code: string, orderAmount: number) => {
+    const response = await api.post('/coupons/validate', { code, orderAmount });
+    return response.data;
+  },
+  seed: async () => {
+    const response = await api.get('/coupons/admin/seed');
+    return response.data;
+  },
+};
+
 export const analyticsAPI = {
-  
   getVendorAnalytics: async (params?: {
     startDate?: string;
     endDate?: string;
@@ -1314,9 +1351,13 @@ export const analyticsAPI = {
     return response.data;
   },
 
-  
   getVendorQuickStats: async () => {
     const response = await api.get('/vendorAnalytics/vendor/quick-stats');
+    return response.data;
+  },
+
+  getDashboard: async (period: 'today' | 'week' | 'month') => {
+    const response = await api.get('/vendorAnalytics/vendor/dashboard', { params: { period } });
     return response.data;
   },
 };
@@ -1479,112 +1520,42 @@ export const servicesAPI = {
     description: string;
     category: string;
     basePrice: number;
-    priceType: 'fixed' | 'variable';
-    currency: string;
-    duration: number;
-    serviceArea: {
-      type: string;
-      coordinates: number[];
-      radius: number;
+    priceType?: 'fixed' | 'hourly' | 'negotiable';
+    duration?: number;
+    availability?: {
+      monday?: boolean; tuesday?: boolean; wednesday?: boolean;
+      thursday?: boolean; friday?: boolean; saturday?: boolean; sunday?: boolean;
     };
+    tags?: string[];
   }, images?: any[]) => {
-    console.log('🔵 [START] createService called');
-    console.log('📦 Service Data:', serviceData);
-    console.log('🖼️ Images array:', images);
-    console.log('🖼️ Images length:', images?.length);
     try {
       const token = await AsyncStorage.getItem('accessToken');
-      console.log('🔑 Token retrieved:', token ? 'Yes' : 'No');
-      if (!images || images.length === 0) {
-        console.log('📤 No images - using JSON request');
-        const response = await api.post('/services', serviceData);
-        console.log('✅ JSON response:', response.data);
-        return response.data;
-      }
-      console.log('🖼️ Images detected - using FormData');
-      console.log('🔍 Creating FormData instance...');
       const formData = new FormData();
-      console.log('✅ FormData created');
-      console.log('📝 Appending name:', serviceData.name);
       formData.append('name', serviceData.name);
-      console.log('📝 Appending description:', serviceData.description);
       formData.append('description', serviceData.description);
-      console.log('📝 Appending category:', serviceData.category);
       formData.append('category', serviceData.category);
-      console.log('📝 Appending basePrice:', serviceData.basePrice);
       formData.append('basePrice', String(serviceData.basePrice));
-      console.log('📝 Appending priceType:', serviceData.priceType);
-      formData.append('priceType', serviceData.priceType);
-      console.log('📝 Appending currency:', serviceData.currency);
-      formData.append('currency', serviceData.currency);
-      console.log('📝 Appending duration:', serviceData.duration);
-      formData.append('duration', String(serviceData.duration));
-      console.log('📝 Appending serviceArea:', serviceData.serviceArea);
-      formData.append('serviceArea', JSON.stringify(serviceData.serviceArea));
-      console.log('✅ All text fields appended');
-      console.log('🖼️ Starting image append loop...');
-      console.log('🖼️ Images to process:', images.length);
+      if (serviceData.priceType) formData.append('priceType', serviceData.priceType);
+      if (serviceData.duration) formData.append('duration', String(serviceData.duration));
+      if (serviceData.availability) formData.append('availability', JSON.stringify(serviceData.availability));
+      if (serviceData.tags?.length) formData.append('tags', JSON.stringify(serviceData.tags));
       if (images && images.length > 0) {
         for (let i = 0; i < images.length; i++) {
-          console.log(`\n📸 Processing image ${i + 1}/${images.length}`);
           const image = images[i];
-          console.log('📸 Image object:', image);
-          console.log('📸 Image URI:', image.uri);
-          console.log('📸 Image type:', image.type);
-          console.log('📸 Image name:', image.name);
           if (image.uri && !image.uri.startsWith('http')) {
-            console.log(`📸 Appending image ${i + 1} to FormData...`);
-            try {
-              formData.append('images', {
-                uri: image.uri,
-                type: image.type || 'image/jpeg',
-                name: image.name || `image_${i}.jpg`
-              } as any);
-              console.log(`✅ Image ${i + 1} appended successfully`);
-            } catch (appendError) {
-              console.error(`❌ Error appending image ${i + 1}:`, appendError);
-              throw appendError;
-            }
-          } else {
-            console.log(`⏭️ Skipping image ${i + 1} (existing URL)`);
+            formData.append('images', { uri: image.uri, type: image.type || 'image/jpeg', name: image.name || `service_${i}.jpg` } as any);
           }
         }
       }
-      console.log('✅ All images processed');
-      console.log('🌐 Preparing fetch request...');
-      console.log('🌐 URL:', `${API_BASE_URL}/services`);
-      console.log('🌐 Method: POST');
-      console.log('🌐 Headers:', {
-        'Authorization': token ? 'Bearer ***' : 'None',
-        'Content-Type': 'multipart/form-data'
-      });
-      console.log('🚀 Sending fetch request...');
       const response = await fetch(`${API_BASE_URL}/services`, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'multipart/form-data'
-        },
-        body: formData
+        headers: { 'Authorization': `Bearer ${token}` },
+        body: formData,
       });
-      console.log('📥 Response received');
-      console.log('📥 Response status:', response.status);
-      console.log('📥 Response ok:', response.ok);
       const result = await response.json();
-      console.log('📥 Response data:', result);
-      if (!response.ok) {
-        console.error('❌ Response not OK:', result);
-        throw new Error(result.message || 'Failed to create service');
-      }
-      console.log('✅ Service created successfully');
+      if (!response.ok) throw new Error(result.message || 'Failed to create service');
       return result;
     } catch (error) {
-      console.error('❌❌❌ ERROR CAUGHT ❌❌❌');
-      console.error('Error type:', typeof error);
-      console.error('Error name:', (error as any)?.name);
-      console.error('Error message:', (error as any)?.message);
-      console.error('Error stack:', (error as any)?.stack);
-      console.error('Full error object:', error);
       throw error;
     }
   },
@@ -2095,6 +2066,11 @@ export const orderAPI = {
   
   verifyOrderPayment: async (orderId: string, reference: string) => {
     const response = await api.get(`/payments/orders/${orderId}/verify/${reference}`);
+    return response.data;
+  },
+
+  verifyOrderByReference: async (reference: string) => {
+    const response = await api.post('/payments/orders/verify-by-reference', { reference });
     return response.data;
   },
 
@@ -2619,9 +2595,8 @@ export const handleAPIError = (error: any): APIError => {
       status,
       data
     } = axiosError.response;
-    // Validation field errors live at data.errors or data.error.errors (express-validator array)
-    // Never use data.error.error — that's the raw Error instance and may contain stack traces
-    const rawErrors = data?.errors ?? data?.error?.errors;
+    // Validation field errors: prod → data.errors, intermediate → data.error.errors, dev → data.error.error.errors
+    const rawErrors = data?.errors ?? data?.error?.errors ?? data?.error?.error?.errors;
     if (Array.isArray(rawErrors) && rawErrors.length > 0) {
       const fieldErrors: Record<string, string> = {};
       rawErrors.forEach((err: any) => {
@@ -2643,7 +2618,7 @@ export const handleAPIError = (error: any): APIError => {
       };
     }
     // For all other errors use the backend's human-readable message
-    const backendMessage = data?.error?.message || data?.message;
+    const backendMessage = data?.message || data?.error?.message || data?.error?.error?.message;
     let message: string;
     switch (status) {
       case 401:
@@ -2687,6 +2662,29 @@ export const handleAPIError = (error: any): APIError => {
 export const appAPI = {
   checkVersion: async () => {
     const response = await api.get('/app/version');
+    return response.data;
+  },
+};
+
+export const savedAPI = {
+  getSavedIds: async () => {
+    const response = await api.get('/users/saved/ids');
+    return response.data;
+  },
+  getVendors: async (params?: { page?: number; limit?: number }) => {
+    const response = await api.get('/users/saved/vendors', { params });
+    return response.data;
+  },
+  getProducts: async (params?: { page?: number; limit?: number }) => {
+    const response = await api.get('/users/saved/products', { params });
+    return response.data;
+  },
+  toggleVendor: async (vendorId: string) => {
+    const response = await api.post(`/users/saved/vendors/${vendorId}`);
+    return response.data;
+  },
+  toggleProduct: async (productId: string) => {
+    const response = await api.post(`/users/saved/products/${productId}`);
     return response.data;
   },
 };
