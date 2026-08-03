@@ -2,7 +2,7 @@
   "expo": {
     "name": "LookReal",
     "slug": "LookReal",
-    "version": "2.2",
+    "version": "2.3",
     "scheme": "lookreal",
     "web": {
       "favicon": "./assets/favicon.png"
@@ -83,7 +83,7 @@
       "softwareKeyboardLayoutMode": "pan",
       "package": "com.inuud.sharplook",
       "googleServicesFile": "./google-services.json",
-      "versionCode": 49,
+      "versionCode": 50,
       "intentFilters": [
         {
           "action": "VIEW",
