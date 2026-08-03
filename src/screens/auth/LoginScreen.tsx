@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   Dimensions,
   Platform,
+  KeyboardAvoidingView,
   StatusBar,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -98,6 +99,7 @@ const LoginScreen = () => {
     <SafeAreaView style={s.safe} edges={['top', 'bottom']}>
       <StatusBar barStyle="dark-content" backgroundColor={BG} />
 
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <ScrollView
         contentContainerStyle={s.scrollContent}
         keyboardShouldPersistTaps="handled"
@@ -225,6 +227,7 @@ const LoginScreen = () => {
           </TouchableOpacity>
         </View>
       </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 };

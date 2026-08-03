@@ -9,6 +9,8 @@ import {
   ActivityIndicator,
   Dimensions,
   StatusBar,
+  Platform,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -150,6 +152,7 @@ const ResetPasswordScreen = ({ route, navigation }: Props) => {
     <SafeAreaView style={s.safe} edges={['top', 'bottom']}>
       <StatusBar barStyle="dark-content" backgroundColor={BG} />
 
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <ScrollView
         contentContainerStyle={s.scroll}
         keyboardShouldPersistTaps="handled"
@@ -320,6 +323,7 @@ const ResetPasswordScreen = ({ route, navigation }: Props) => {
           </View>
         )}
       </ScrollView>
+      </KeyboardAvoidingView>
 
       <View style={s.footer}>
         <TouchableOpacity

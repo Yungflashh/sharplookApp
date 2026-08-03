@@ -13,6 +13,7 @@ import {
   FlatList,
   Dimensions,
   Platform,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -269,6 +270,7 @@ const VendorProfileSetup = ({ route, navigation, onSetupComplete }: Props) => {
     <SafeAreaView style={ss.safe} edges={['top', 'bottom']}>
       <StatusBar barStyle="dark-content" backgroundColor={BG} />
 
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <ScrollView
         contentContainerStyle={ss.scroll}
         keyboardShouldPersistTaps="handled"
@@ -520,6 +522,7 @@ const VendorProfileSetup = ({ route, navigation, onSetupComplete }: Props) => {
 
         <Text style={ss.footerNote}>You can update these details anytime from your profile settings.</Text>
       </ScrollView>
+      </KeyboardAvoidingView>
 
       {/* Business Type Sheet */}
       <Modal visible={showBizTypeSheet} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setShowBizTypeSheet(false)}>

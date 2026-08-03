@@ -2,7 +2,7 @@ import axios, { AxiosInstance, AxiosError, InternalAxiosRequestConfig } from 'ax
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 const API_BASE_URL = __DEV__
-  ? 'http://10.132.192.66:5500/api/v1'
+  ? 'http://10.145.56.66:5500/api/v1'
   : 'https://sharplook-backend-production.onrender.com/api/v1';
 const api: AxiosInstance = axios.create({
   baseURL: API_BASE_URL,

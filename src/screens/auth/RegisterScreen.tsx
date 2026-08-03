@@ -12,6 +12,8 @@ import {
   ActivityIndicator,
   Modal,
   FlatList,
+  Platform,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -168,6 +170,7 @@ const RegisterScreen = ({ navigation }: Props) => {
     <SafeAreaView style={ss.safe} edges={['top', 'bottom']}>
       <StatusBar barStyle="dark-content" backgroundColor="#fff" />
 
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <ScrollView
         contentContainerStyle={ss.scroll}
         keyboardShouldPersistTaps="handled"
@@ -377,6 +380,7 @@ const RegisterScreen = ({ navigation }: Props) => {
           </TouchableOpacity>
         </View>
       </ScrollView>
+      </KeyboardAvoidingView>
 
       {/* Country picker */}
       <Modal visible={showCountryPicker} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setShowCountryPicker(false)}>

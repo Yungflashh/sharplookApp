@@ -80,6 +80,7 @@
       },
       "navigationBarColor": "#ffffff",
       "navigationBarStyle": "dark-content",
+      "softwareKeyboardLayoutMode": "pan",
       "package": "com.inuud.sharplook",
       "googleServicesFile": "./google-services.json",
       "versionCode": 49,

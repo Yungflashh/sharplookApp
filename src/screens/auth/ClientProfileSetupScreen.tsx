@@ -11,6 +11,7 @@ import {
   Dimensions,
   StatusBar,
   Platform,
+  KeyboardAvoidingView,
   TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -146,6 +147,7 @@ const ClientProfileSetupScreen = ({ navigation }: Props) => {
     <SafeAreaView style={s.safe} edges={['top', 'bottom']}>
       <StatusBar barStyle="dark-content" backgroundColor={BG} />
 
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <ScrollView
         style={s.scroll}
         contentContainerStyle={s.scrollContent}
@@ -302,6 +304,7 @@ const ClientProfileSetupScreen = ({ navigation }: Props) => {
           </View>
         </View>
       </ScrollView>
+      </KeyboardAvoidingView>
 
       {/* Bottom actions */}
       <View style={s.footer}>

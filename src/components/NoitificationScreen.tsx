@@ -221,10 +221,10 @@ const NotificationsScreen: React.FC<{ userRole?: 'client' | 'vendor' }> = ({ use
         {/* Content */}
         <View style={s.cardBody}>
           <View style={s.cardTop}>
-            <Text style={s.cardTitle} numberOfLines={1}>{n.title}</Text>
+            <Text style={s.cardTitle}>{n.title}</Text>
             {!n.isRead && <View style={s.unreadDot} />}
           </View>
-          <Text style={s.cardMsg} numberOfLines={2}>{n.message}</Text>
+          <Text style={s.cardMsg}>{n.message}</Text>
           <Text style={s.cardTime}>{formatTime(n.createdAt)}</Text>
         </View>
       </TouchableOpacity>
