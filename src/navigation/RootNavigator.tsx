@@ -180,6 +180,7 @@ const RootNavigator = () => {
 
   const initializeApp = async () => {
     const splashStart = Date.now();
+    const MIN_SPLASH_MS = 5000;
     try {
       // ── CRITICAL PATH: resolve auth as fast as possible ──────────────────
       // checkAuthStatus reads from AsyncStorage — no network needed, very fast
@@ -211,9 +212,13 @@ const RootNavigator = () => {
       console.error('❌ Error initializing app:', error);
       setIsAuthenticated(false);
     } finally {
-      // Clear loading screen immediately — user sees the app now
-      setIsLoading(false);
-      console.log('✅ App initialization complete');
+      // Hold splash for at least MIN_SPLASH_MS so the branding has time to breathe
+      const elapsed = Date.now() - splashStart;
+      const remaining = Math.max(0, MIN_SPLASH_MS - elapsed);
+      setTimeout(() => {
+        setIsLoading(false);
+        console.log('✅ App initialization complete');
+      }, remaining);
     }
 
     // ── BACKGROUND TASKS: run after app is visible ────────────────────────

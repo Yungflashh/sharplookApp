@@ -40,6 +40,7 @@ interface TransactionStats {
 type TxCfg = { icon: string; color: string; bg: string };
 const getTxConfig = (type: string): TxCfg => {
   const t = type.toLowerCase();
+  if (t.includes('promo_bonus') || t === 'promo_bonus')          return { icon: 'gift-outline',              color: '#DB2777', bg: '#FEE2F0' };
   if (t.includes('refund'))                                       return { icon: 'refresh-outline',          color: '#3B82F6', bg: '#EFF6FF' };
   if (t.includes('earning') || t.includes('credit'))             return { icon: 'arrow-down-outline',        color: '#059669', bg: '#ECFDF5' };
   if (t.includes('deposit') || t.includes('fund'))               return { icon: 'wallet-outline',            color: '#059669', bg: '#ECFDF5' };
@@ -50,6 +51,7 @@ const getTxConfig = (type: string): TxCfg => {
   if (t.includes('order'))                                        return { icon: 'bag-handle-outline',        color: '#D97706', bg: '#FFFBEB' };
   return { icon: 'swap-horizontal-outline', color: TEXT2, bg: BORDER };
 };
+
 
 const STATUS_CFG: Record<string, { color: string; bg: string }> = {
   completed:  { color: '#059669', bg: '#ECFDF5' },
@@ -77,8 +79,11 @@ const fmtDate = (d: string) => {
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined });
 };
 
-const formatType = (t: string) =>
-  t.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
+const formatType = (t: string) => {
+  const lower = t.toLowerCase();
+  if (lower === 'promo_bonus') return 'Promo Bonus 🎁';
+  return t.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
+};
 
 const groupByDate = (txns: Transaction[]): { label: string; items: Transaction[] }[] => {
   const now = new Date();

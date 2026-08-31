@@ -401,8 +401,9 @@ const VendorDashboardScreen: React.FC = () => {
                 : b.clientName ?? 'Client';
               const sName = b.service?.name ?? b.serviceName ?? 'Service';
               const time  = b.scheduledTime ?? b.time ?? '—';
-              const price = b.totalPrice ?? b.price ?? 0;
+              const price = b.vendorAmount ?? b.totalPrice ?? b.price ?? 0;
               const av    = b.client?.avatar ?? null;
+              const isPromo = !!b.promoApplied;
 
               return (
                 <TouchableOpacity
@@ -430,6 +431,12 @@ const VendorDashboardScreen: React.FC = () => {
                       <Text style={[s.stTxt, { color: st.fg }]}>{st.label}</Text>
                     </View>
                     <Text style={s.schedPrice}>{money(price)}</Text>
+                    {isPromo && (
+                      <View style={s.promoTag}>
+                        <Ionicons name="gift" size={9} color="#B5315F" />
+                        <Text style={s.promoTagTxt}>Promo · +₦{Number(b.promoBonusAmount ?? 0).toLocaleString()}</Text>
+                      </View>
+                    )}
                   </View>
                 </TouchableOpacity>
               );
@@ -616,6 +623,16 @@ const s = StyleSheet.create({
   stBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10 },
   stTxt: { fontSize: 11, fontWeight: '700' },
   schedPrice: { fontSize: 13, fontWeight: '800', color: T1 },
+  promoTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: '#FCE7F3',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
+  },
+  promoTagTxt: { fontSize: 9, fontWeight: '700', color: '#B5315F' },
   emptyWrap: { backgroundColor: CARD, borderRadius: 18, paddingVertical: 32, alignItems: 'center', gap: 10 },
   emptyTxt: { fontSize: 13, color: T3, fontWeight: '500' },
 

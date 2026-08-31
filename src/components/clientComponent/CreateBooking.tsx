@@ -25,7 +25,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as Location from 'expo-location';
 import { LinearGradient } from 'expo-linear-gradient';
 import { RootStackParamList } from '@/types/navigation.types';
-import { bookingAPI, handleAPIError, sharpPayAPI, walletAPI, couponAPI } from '@/api/api';
+import { bookingAPI, handleAPIError, sharpPayAPI, walletAPI, couponAPI, promoAPI } from '@/api/api';
 import LocationPickerModal, { LocationResult } from '@/components/LocationPickerModal';
 
 const { width: SW } = Dimensions.get('window');
@@ -133,6 +133,21 @@ const CreateBookingScreen: React.FC = () => {
     code: string; discountAmount: number; finalAmount: number;
   } | null>(null);
 
+  // Promo (auto-applied when eligible; does not stack with coupon)
+  const [activePromo, setActivePromo] = useState<{
+    id: string;
+    name: string;
+    discountAmount: number;
+    minServicePrice: number;
+    slotsRemaining: number;
+    userEligible: boolean;
+  } | null>(null);
+  const [promoSoldOutModal, setPromoSoldOutModal] = useState<{
+    visible: boolean;
+    message: string;
+    fullPrice: number;
+  }>({ visible: false, message: '', fullPrice: 0 });
+
   // Add to balance sheet
   const [showAddBalance, setShowAddBalance] = useState(false);
   const [addAmount, setAddAmount] = useState('');
@@ -154,7 +169,7 @@ const CreateBookingScreen: React.FC = () => {
     }, [step])
   );
 
-  useEffect(() => { fetchWalletBalance(); tryGetDistance(); }, []);
+  useEffect(() => { fetchWalletBalance(); tryGetDistance(); fetchActivePromo(); }, []);
   // Re-fetch balance when screen regains focus (e.g. returning from WalletPayment)
   useFocusEffect(useCallback(() => { fetchWalletBalance(); }, []));
   useEffect(() => { setTotalAmount(servicePrice + distanceCharge); }, [servicePrice, distanceCharge]);
@@ -185,6 +200,26 @@ const CreateBookingScreen: React.FC = () => {
       if (res.success) setWalletBalance(res.data.balance || 0);
     } catch {}
     finally { setWalletLoading(false); }
+  };
+
+  const fetchActivePromo = async () => {
+    try {
+      const res = await promoAPI.getCurrent();
+      if (res?.success && res.data?.active) {
+        setActivePromo({
+          id: res.data.active.id,
+          name: res.data.active.name,
+          discountAmount: res.data.active.discountAmount || 0,
+          minServicePrice: res.data.active.minServicePrice || 0,
+          slotsRemaining: res.data.active.slotsRemaining || 0,
+          userEligible: !!res.data.userEligible,
+        });
+      } else {
+        setActivePromo(null);
+      }
+    } catch {
+      setActivePromo(null);
+    }
   };
 
   const fetchPricePreview = async () => {
@@ -363,15 +398,29 @@ const CreateBookingScreen: React.FC = () => {
     else if (step === 3) setStep(4);
   };
 
-  const handlePay = async () => {
-    const payableAmount = appliedCoupon ? appliedCoupon.finalAmount : totalAmount;
+  // Promo applies when server marked user eligible, slots remain, price qualifies,
+  // and no coupon is stacked. Coupon takes priority if user manually entered one.
+  const promoApplicable =
+    !appliedCoupon &&
+    !!activePromo &&
+    activePromo.userEligible &&
+    activePromo.slotsRemaining > 0 &&
+    servicePrice >= activePromo.minServicePrice;
+
+  const promoDiscount = promoApplicable && activePromo ? activePromo.discountAmount : 0;
+
+  const payableAmount = Math.max(
+    0,
+    (appliedCoupon ? appliedCoupon.finalAmount : totalAmount) - promoDiscount
+  );
+
+  const submitBooking = async (opts: { expectPromo: boolean }) => {
     if (paymentMethod === 'wallet' && walletBalance < payableAmount) {
       setShowAddBalance(true);
       return;
     }
     try {
       setLoading(true);
-      const payableAmount = appliedCoupon ? appliedCoupon.finalAmount : totalAmount;
 
       const bookingData: any = {
         service: service._id,
@@ -380,6 +429,7 @@ const CreateBookingScreen: React.FC = () => {
         serviceType: locationType,
         paymentMethod,
         ...(appliedCoupon ? { couponCode: appliedCoupon.code } : {}),
+        ...(opts.expectPromo ? { expectPromo: true } : {}),
       };
       if (clientNotes.trim()) bookingData.clientNotes = clientNotes.trim();
       if (locationType === 'home' && isHomeAvailable && clientLocation) {
@@ -392,7 +442,7 @@ const CreateBookingScreen: React.FC = () => {
       }
       const res = await bookingAPI.createBooking(bookingData);
       if (res.success) {
-        const actual = res.data.booking?.totalAmount || totalAmount;
+        const actual = res.data.booking?.totalAmount || payableAmount;
         if (paymentMethod === 'card' && res.data?.authorizationUrl) {
           navigation.replace('Payment', {
             bookingId: res.data.booking?._id,
@@ -403,14 +453,40 @@ const CreateBookingScreen: React.FC = () => {
         } else if (paymentMethod === 'card') {
           toast.error('Payment Error', 'Failed to initialize card payment. Try again.');
         } else {
-          toast.success('Booking Confirmed!', `Payment of ₦${actual.toLocaleString()} was successful!`);
+          const promoWon = res.data.booking?.promoApplied;
+          toast.success(
+            promoWon ? 'Promo Applied 🎉' : 'Booking Confirmed!',
+            `Payment of ₦${actual.toLocaleString()} was successful!`
+          );
           navigation.navigate('BookingDetail', { bookingId: res.data.booking._id });
         }
       }
     } catch (error: any) {
+      const code = error.response?.data?.error?.code || error.response?.data?.code;
+      const message = error.response?.data?.error?.message || error.response?.data?.message;
+
+      if (code === 'PROMO_SLOT_UNAVAILABLE') {
+        // Race lost — offer the client the choice to proceed at full price
+        const fullPrice = appliedCoupon ? appliedCoupon.finalAmount : totalAmount;
+        setActivePromo(prev => (prev ? { ...prev, userEligible: false, slotsRemaining: 0 } : prev));
+        setPromoSoldOutModal({
+          visible: true,
+          message: message || 'Sorry, the promo just sold out.',
+          fullPrice,
+        });
+        return;
+      }
+
       const apiError = handleAPIError(error);
-      toast.error('Booking Error', error.response?.data?.error?.message || apiError.message || 'Failed to create booking');
+      toast.error('Booking Error', message || apiError.message || 'Failed to create booking');
     } finally { setLoading(false); }
+  };
+
+  const handlePay = () => submitBooking({ expectPromo: promoApplicable });
+
+  const handleRetryFullPrice = () => {
+    setPromoSoldOutModal({ visible: false, message: '', fullPrice: 0 });
+    submitBooking({ expectPromo: false });
   };
 
   const durationLabel = () => {
@@ -810,7 +886,7 @@ const CreateBookingScreen: React.FC = () => {
                 {walletLoading
                   ? <ActivityIndicator size="small" color={PINK} style={{ marginTop: 6 }} />
                   : <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8, gap: 10 }}>
-                      <Text style={[ss.walletBal, walletBalance < (appliedCoupon?.finalAmount ?? totalAmount) && { color: '#EF4444' }]}>
+                      <Text style={[ss.walletBal, walletBalance < payableAmount && { color: '#EF4444' }]}>
                         ₦{walletBalance.toLocaleString()}
                       </Text>
                       <TouchableOpacity onPress={() => setShowAddBalance(true)} activeOpacity={0.8} style={ss.addBalBtn}>
@@ -840,6 +916,21 @@ const CreateBookingScreen: React.FC = () => {
                 {paymentMethod === 'card' && <View style={ss.radioDot} />}
               </View>
             </TouchableOpacity>
+
+            {/* Promo banner (auto-applied) */}
+            {promoApplicable && activePromo && (
+              <View style={ss.promoBanner}>
+                <View style={ss.promoIcon}>
+                  <Ionicons name="gift" size={20} color="#fff" />
+                </View>
+                <View style={{ flex: 1, marginLeft: 12 }}>
+                  <Text style={ss.promoTitle}>Promo Applied — you save ₦{activePromo.discountAmount.toLocaleString()}!</Text>
+                  <Text style={ss.promoSub}>
+                    {activePromo.name} · Only {activePromo.slotsRemaining} slot{activePromo.slotsRemaining === 1 ? '' : 's'} left
+                  </Text>
+                </View>
+              </View>
+            )}
 
             {/* Coupon code */}
             <View style={[ss.card, { marginTop: 14 }]}>
@@ -893,10 +984,18 @@ const CreateBookingScreen: React.FC = () => {
                   </Text>
                 </View>
               )}
+              {promoApplicable && activePromo && (
+                <View style={ss.confRow}>
+                  <Text style={[ss.confLabel, { color: PINK }]}>Promo ({activePromo.name})</Text>
+                  <Text style={{ fontSize: 13, fontWeight: '600', color: PINK }}>
+                    -₦{activePromo.discountAmount.toLocaleString()}
+                  </Text>
+                </View>
+              )}
               <View style={[ss.confRow, { borderBottomWidth: 0, borderTopWidth: 1, borderTopColor: '#F3F4F6', paddingTop: 10 }]}>
                 <Text style={[ss.confLabel, { fontWeight: '700', color: '#111827' }]}>Amount Due</Text>
                 <Text style={{ fontSize: 16, fontWeight: '800', color: PINK }}>
-                  ₦{(appliedCoupon ? appliedCoupon.finalAmount : totalAmount).toLocaleString()}
+                  ₦{payableAmount.toLocaleString()}
                 </Text>
               </View>
               <View style={[ss.confRow, { borderBottomWidth: 0 }]}>
@@ -937,7 +1036,7 @@ const CreateBookingScreen: React.FC = () => {
                   <Text style={ss.continueTxt}>
                     {step === 4
                       ? paymentMethod === 'wallet'
-                        ? `Pay ₦${(appliedCoupon?.finalAmount ?? totalAmount).toLocaleString()}`
+                        ? `Pay ₦${payableAmount.toLocaleString()}`
                         : 'Pay with Card'
                       : 'Continue'}
                   </Text>
@@ -980,7 +1079,7 @@ const CreateBookingScreen: React.FC = () => {
             <Text style={{ color: '#EF4444', fontWeight: '700' }}>₦{walletBalance.toLocaleString()}</Text>
             {'. '}You need{' '}
             <Text style={{ color: PINK, fontWeight: '700' }}>
-              ₦{((appliedCoupon?.finalAmount ?? totalAmount) - walletBalance).toLocaleString()}
+              ₦{(payableAmount - walletBalance).toLocaleString()}
             </Text>
             {' '}more.
           </Text>
@@ -1018,6 +1117,53 @@ const CreateBookingScreen: React.FC = () => {
           </TouchableOpacity>
         </View>
           </KeyboardAvoidingView>
+        </View>
+      </Modal>
+
+      {/* ── Promo sold-out modal ── */}
+      <Modal
+        visible={promoSoldOutModal.visible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setPromoSoldOutModal({ visible: false, message: '', fullPrice: 0 })}
+      >
+        <View style={ss.soldOutBackdrop}>
+          <View style={ss.soldOutCard}>
+            <View style={ss.soldOutIcon}>
+              <Ionicons name="hourglass" size={28} color={PINK} />
+            </View>
+            <Text style={ss.soldOutTitle}>Promo sold out</Text>
+            <Text style={ss.soldOutMsg}>{promoSoldOutModal.message}</Text>
+            <View style={ss.soldOutPriceRow}>
+              <Text style={ss.soldOutPriceLbl}>Full price</Text>
+              <Text style={ss.soldOutPriceVal}>₦{promoSoldOutModal.fullPrice.toLocaleString()}</Text>
+            </View>
+            <TouchableOpacity
+              activeOpacity={0.85}
+              onPress={handleRetryFullPrice}
+              disabled={loading}
+              style={{ marginTop: 16, borderRadius: 14, overflow: 'hidden' }}
+            >
+              <LinearGradient
+                colors={loading ? ['#D1D5DB', '#9CA3AF'] : ['#E91E63', '#C2185B']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={ss.soldOutRetryBtn}
+              >
+                {loading
+                  ? <ActivityIndicator color="#fff" />
+                  : <Text style={ss.soldOutRetryTxt}>Proceed at full price</Text>
+                }
+              </LinearGradient>
+            </TouchableOpacity>
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={() => setPromoSoldOutModal({ visible: false, message: '', fullPrice: 0 })}
+              style={ss.soldOutCancelBtn}
+            >
+              <Text style={ss.soldOutCancelTxt}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </Modal>
     </View>
@@ -1331,6 +1477,77 @@ const ss = StyleSheet.create({
   },
   continueBtn: { height: 54, alignItems: 'center', justifyContent: 'center', borderRadius: 16 },
   continueTxt: { color: '#fff', fontSize: 16, fontWeight: '700' },
+
+  // Promo banner
+  promoBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 14,
+    padding: 14,
+    borderRadius: 16,
+    backgroundColor: '#FEE2F0',
+    borderWidth: 1,
+    borderColor: '#F9A8D4',
+  },
+  promoIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#E91E63',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  promoTitle: { fontSize: 14, fontWeight: '800', color: '#831843' },
+  promoSub: { fontSize: 12, color: '#9F1239', marginTop: 2 },
+
+  // Promo sold-out modal
+  soldOutBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  soldOutCard: {
+    width: '100%',
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    padding: 24,
+    alignItems: 'center',
+  },
+  soldOutIcon: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: '#FEE2F0',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  soldOutTitle: { fontSize: 18, fontWeight: '800', color: '#1A1A1A', marginBottom: 8 },
+  soldOutMsg: { fontSize: 14, color: '#6B7280', textAlign: 'center', lineHeight: 20 },
+  soldOutPriceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    alignSelf: 'stretch',
+    marginTop: 16,
+    padding: 14,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 12,
+  },
+  soldOutPriceLbl: { fontSize: 13, color: '#6B7280', fontWeight: '600' },
+  soldOutPriceVal: { fontSize: 18, color: '#E91E63', fontWeight: '800' },
+  soldOutRetryBtn: {
+    height: 50,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 14,
+    paddingHorizontal: 32,
+  },
+  soldOutRetryTxt: { color: '#fff', fontSize: 15, fontWeight: '700' },
+  soldOutCancelBtn: { paddingVertical: 12, marginTop: 4 },
+  soldOutCancelTxt: { fontSize: 14, color: '#6B7280', fontWeight: '600' },
 });
 
 export default CreateBookingScreen;

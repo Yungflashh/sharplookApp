@@ -2,7 +2,7 @@ import { io, Socket } from 'socket.io-client';
 import { getStoredToken } from '@/utils/authHelper';
 
 const SOCKET_URL = __DEV__
-  ? 'http://10.145.56.66:5500'
+  ? 'http://10.34.152.66:5500'
   : 'https://sharplook-backend-production.onrender.com';
 
 class SocketService {

@@ -2,7 +2,7 @@
   "expo": {
     "name": "LookReal",
     "slug": "LookReal",
-    "version": "2.3",
+    "version": "3.0",
     "scheme": "lookreal",
     "web": {
       "favicon": "./assets/favicon.png"
@@ -52,7 +52,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.techtrove.sharplook",
-      "buildNumber": "23",
+      "buildNumber": "26",
       "associatedDomains": [
         "applinks:lookreal.beauty"
       ],
@@ -83,7 +83,7 @@
       "softwareKeyboardLayoutMode": "pan",
       "package": "com.inuud.sharplook",
       "googleServicesFile": "./google-services.json",
-      "versionCode": 50,
+      "versionCode": 60,
       "intentFilters": [
         {
           "action": "VIEW",

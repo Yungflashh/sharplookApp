@@ -93,6 +93,10 @@ interface BookingDetail {
   distanceCharge: number;
   distanceKm?: number;
   totalAmount: number;
+  vendorAmount?: number;
+  promoApplied?: boolean;
+  promoDiscount?: number;
+  promoBonusAmount?: number;
   status: string;
   paymentStatus: 'pending' | 'escrowed' | 'released' | 'refunded' | 'partially_refunded';
   paymentReference?: string;
@@ -1359,7 +1363,7 @@ const BookingDetailScreen: React.FC = () => {
 
           {/* ── Price Breakdown Card ──────────────────────────────────────── */}
           <View style={styles.card}>
-            <Text style={styles.cardTitle}>Price Breakdown</Text>
+            <Text style={styles.cardTitle}>{isVendor ? 'Earnings Breakdown' : 'Price Breakdown'}</Text>
             <View style={{ gap: 10 }}>
               <View style={styles.priceRow}>
                 <Text style={styles.priceLabel}>Service fee</Text>
@@ -1371,6 +1375,13 @@ const BookingDetailScreen: React.FC = () => {
                   <Text style={styles.priceValue}>{formatPrice(booking.distanceCharge)}</Text>
                 </View>
               )}
+              {/* Client-only: promo discount line */}
+              {!isVendor && booking.promoApplied && !!booking.promoDiscount && (
+                <View style={styles.priceRow}>
+                  <Text style={[styles.priceLabel, { color: '#B5315F' }]}>Promo discount</Text>
+                  <Text style={[styles.priceValue, { color: '#B5315F' }]}>-{formatPrice(booking.promoDiscount)}</Text>
+                </View>
+              )}
               {!!booking.cancellationPenalty && booking.cancellationPenalty > 0 && (
                 <View style={styles.priceRow}>
                   <Text style={[styles.priceLabel, { color: '#DC2626' }]}>Cancellation penalty</Text>
@@ -1379,9 +1390,20 @@ const BookingDetailScreen: React.FC = () => {
               )}
               <View style={styles.priceDivider} />
               <View style={styles.priceRow}>
-                <Text style={styles.priceTotalLabel}>Total</Text>
-                <Text style={styles.priceTotalValue}>{formatPrice(booking.totalAmount)}</Text>
+                <Text style={styles.priceTotalLabel}>{isVendor ? 'You earn' : 'Total'}</Text>
+                <Text style={styles.priceTotalValue}>
+                  {formatPrice(isVendor ? (booking.vendorAmount ?? (booking.servicePrice + booking.distanceCharge)) : booking.totalAmount)}
+                </Text>
               </View>
+              {/* Vendor-only: promo bonus badge */}
+              {isVendor && booking.promoApplied && (
+                <View style={styles.promoBonusBadge}>
+                  <Ionicons name="gift" size={14} color="#B5315F" />
+                  <Text style={styles.promoBonusText}>
+                    Promo booking · +{formatPrice(booking.promoBonusAmount ?? 0)} bonus on completion
+                  </Text>
+                </View>
+              )}
               {/* Payment ref pill */}
               {booking.paymentReference && (
                 <View style={styles.paymentRefRow}>
@@ -1611,6 +1633,22 @@ const styles = StyleSheet.create({
   priceDivider: { height: 1, backgroundColor: '#F2F2F7' },
   priceTotalLabel: { fontSize: 16, fontWeight: '700', color: '#1C1C1E' },
   priceTotalValue: { fontSize: 20, fontWeight: '800', color: PRIMARY, letterSpacing: -0.5 },
+  promoBonusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#FCE7F3',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 10,
+    marginTop: 4,
+  },
+  promoBonusText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#B5315F',
+    flex: 1,
+  },
   paymentRefRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 },
   paymentRefText: { fontSize: 12, color: '#6C6C70', fontWeight: '500' },
 

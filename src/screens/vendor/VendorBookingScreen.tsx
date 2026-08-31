@@ -38,6 +38,9 @@ interface VendorBooking {
   scheduledDate: string;
   scheduledTime?: string;
   totalAmount: number;
+  vendorAmount?: number;
+  promoApplied?: boolean;
+  promoBonusAmount?: number;
   status: string;
   paymentStatus: string;
   createdAt: string;
@@ -310,7 +313,13 @@ const VendorBookingsScreen: React.FC = () => {
                   <View style={[ss.badge, { backgroundColor: cfg.bg }]}>
                     <Text style={[ss.badgeTxt, { color: cfg.color }]}>{cfg.label}</Text>
                   </View>
-                  <Text style={ss.cardPrice}>₦{booking.totalAmount.toLocaleString()}</Text>
+                  <Text style={ss.cardPrice}>₦{(booking.vendorAmount ?? booking.totalAmount).toLocaleString()}</Text>
+                  {booking.promoApplied && (
+                    <View style={ss.promoTag}>
+                      <Ionicons name="gift" size={10} color="#B5315F" />
+                      <Text style={ss.promoTagTxt}>Promo · +₦{(booking.promoBonusAmount ?? 0).toLocaleString()} bonus</Text>
+                    </View>
+                  )}
                 </View>
               </TouchableOpacity>
             );
@@ -472,6 +481,20 @@ const ss = StyleSheet.create({
     fontSize: 13,
     fontWeight: '800',
     color: TEXT1,
+  },
+  promoTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#FCE7F3',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
+  },
+  promoTagTxt: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: '#B5315F',
   },
 
   empty: {
