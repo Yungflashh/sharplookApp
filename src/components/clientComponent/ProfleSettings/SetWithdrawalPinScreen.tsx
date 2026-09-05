@@ -83,6 +83,11 @@ const SetWithdrawalPinScreen: React.FC = () => {
       navigation.goBack();
     } catch (error) {
       const apiError = handleAPIError(error);
+      if (apiError.code === 'PIN_ALREADY_SET') {
+        toast.info('PIN Exists', 'You already have a withdrawal PIN. Redirecting to change PIN.');
+        (navigation as any).replace('ChangeWithdrawalPin');
+        return;
+      }
       toast.error('Error', apiError.message);
     } finally {
       setLoading(false);

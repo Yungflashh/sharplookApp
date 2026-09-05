@@ -205,10 +205,15 @@ const WithdrawalModal: React.FC<WithdrawalModalProps> = ({
     } catch (error) {
       const apiError = handleAPIError(error);
       const msg = apiError.message || '';
-      if (msg.toLowerCase().includes('withdrawal pin') || msg.toLowerCase().includes('set up your')) {
+      // Only redirect to Set PIN when the backend explicitly says there is no PIN.
+      // Wrong-PIN and other errors must stay in the modal so the user can retry.
+      if (apiError.code === 'PIN_NOT_SET') {
         toast.info('PIN Required', 'Please set up your withdrawal PIN first');
         handleClose();
         navigation.navigate('SetWithdrawalPin' as never);
+      } else if (apiError.code === 'PIN_INVALID') {
+        setPin('');
+        toast.error('Incorrect PIN', 'The PIN you entered is incorrect. Please try again.');
       } else {
         toast.error('Withdrawal Failed', msg);
       }

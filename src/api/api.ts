@@ -2576,6 +2576,7 @@ export const notificationAPI = {
 export interface APIError {
   message: string;
   status: number;
+  code?: string;
   data?: any;
   fieldErrors?: Record<string, string>;
   isNetworkError?: boolean;
@@ -2619,6 +2620,7 @@ export const handleAPIError = (error: any): APIError => {
       return {
         message: humanMessage,
         status,
+        code: data?.error?.code || data?.code,
         data,
         fieldErrors: Object.keys(fieldErrors).length > 0 ? fieldErrors : undefined,
         isValidationError: true
@@ -2626,6 +2628,7 @@ export const handleAPIError = (error: any): APIError => {
     }
     // For all other errors use the backend's human-readable message
     const backendMessage = data?.message || data?.error?.message || data?.error?.error?.message;
+    const backendCode = data?.error?.code || data?.code;
     let message: string;
     switch (status) {
       case 401:
@@ -2658,6 +2661,7 @@ export const handleAPIError = (error: any): APIError => {
     return {
       message,
       status,
+      code: backendCode,
       data
     };
   }
