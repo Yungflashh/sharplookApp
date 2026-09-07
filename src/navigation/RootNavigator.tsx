@@ -140,9 +140,21 @@ const RootNavigator = () => {
     return () => sub.remove();
   }, []);
 
-  // Set up push notification listeners
+  // Set up push notification listeners + register FCM token in background
+  // (login itself no longer waits on FCM — we register it here after auth flips true)
   useEffect(() => {
     if (!isAuthenticated) return;
+
+    initializeFCM().then(async (token) => {
+      if (token) {
+        const deviceInfo = getDeviceInfo();
+        await notificationAPI.registerDeviceToken({
+          token,
+          deviceType: deviceInfo.deviceType,
+          deviceName: deviceInfo.deviceName,
+        }).catch(() => {});
+      }
+    }).catch(() => {});
 
     const unsubForeground = onForegroundNotification();
     const unsubTap = onNotificationTap((notification) => {

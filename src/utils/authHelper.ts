@@ -50,19 +50,18 @@ export const loginUser = async (email: string, password: string): Promise<AuthRe
       deviceType = deviceInfo.deviceType;
       deviceName = deviceInfo.deviceName;
 
-      // Use cached FCM token to avoid a slow Expo network round-trip on every login
+      // Only use cached FCM token — NEVER await a fresh fetch here.
+      // Notifications.getExpoPushTokenAsync has no timeout and can hang forever
+      // on flaky networks, which would spin the login loader indefinitely.
       fcmToken = await AsyncStorage.getItem('cachedFcmToken');
       if (!fcmToken) {
-        console.log('📱 No cached FCM token — fetching from Expo...');
-        fcmToken = await getFCMToken();
-        if (fcmToken) {
-          await AsyncStorage.setItem('cachedFcmToken', fcmToken);
-          console.log('✅ FCM token fetched and cached');
-        } else {
-          console.log('⚠️ No FCM token available (push notifications may not work)');
-        }
-      } else {
-        console.log('✅ Using cached FCM token');
+        // Fire-and-forget: fetch in background so the NEXT login has it cached,
+        // and RootNavigator will register it with the backend after login.
+        getFCMToken().then((token) => {
+          if (token) {
+            AsyncStorage.setItem('cachedFcmToken', token).catch(() => {});
+          }
+        }).catch(() => {});
       }
     } catch (fcmError) {
       // Don't fail login if FCM fails
