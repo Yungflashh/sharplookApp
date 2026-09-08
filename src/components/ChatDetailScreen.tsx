@@ -102,6 +102,17 @@ const ChatDetailScreen: React.FC = () => {
   const [isOtherUserOnline, setIsOtherUserOnline] = useState(false);
   const [otherUserActivity, setOtherUserActivity] = useState<UserActivity>('offline');
   const [inputHeight, setInputHeight]             = useState(44);
+  const [keyboardOpen, setKeyboardOpen]           = useState(false);
+
+  // Android pan mode aligns the TextInput's bottom exactly with the keyboard top,
+  // leaving no gap. Track keyboard visibility so we can add a small breathing
+  // space below the input row while it's open.
+  useEffect(() => {
+    if (Platform.OS !== 'android') return;
+    const show = Keyboard.addListener('keyboardDidShow', () => setKeyboardOpen(true));
+    const hide = Keyboard.addListener('keyboardDidHide', () => setKeyboardOpen(false));
+    return () => { show.remove(); hide.remove(); };
+  }, []);
 
   // Audio
   const [playingAudioId, setPlayingAudioId]       = useState<string | null>(null);
@@ -653,8 +664,8 @@ const ChatDetailScreen: React.FC = () => {
 
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={0}
       >
         {/* ── HEADER ─────────────────────────────────────────────────────── */}
         <LinearGradient
@@ -960,7 +971,11 @@ const ChatDetailScreen: React.FC = () => {
                   fontSize: 15,
                   color: BRAND.textPrimary,
                   maxHeight: 110,
-                  paddingVertical: 0,
+                  paddingTop: 0,
+                  // Extra bottom padding on Android while the keyboard is open forces
+                  // pan-mode to lift the layout further, creating a visible gap
+                  // between the text baseline and the keyboard top.
+                  paddingBottom: Platform.OS === 'android' && keyboardOpen ? 12 : 0,
                   textAlignVertical: 'center',
                 }}
                 multiline

@@ -2,7 +2,7 @@ import axios, { AxiosInstance, AxiosError, InternalAxiosRequestConfig } from 'ax
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 const API_BASE_URL = __DEV__
-  ? 'http://10.34.152.66:5500/api/v1'
+  ? 'http://192.168.100.35:5500/api/v1'
   : 'https://sharplook-backend-production.onrender.com/api/v1';
 const api: AxiosInstance = axios.create({
   baseURL: API_BASE_URL,
@@ -2449,12 +2449,13 @@ export const offerAPI = {
     });
     return response.data;
   },
-  acceptResponse: async (offerId: string, responseId: string, paymentMethod: 'wallet' | 'card') => {
-  const response = await api.post(`/offers/${offerId}/responses/${responseId}/accept`, {
-    paymentMethod  // ✅ Add this line
-  });
-  return response.data;
-},
+  acceptResponse: async (offerId: string, responseId: string, paymentMethod: 'wallet' | 'card', expectPromo: boolean = false) => {
+    const response = await api.post(`/offers/${offerId}/responses/${responseId}/accept`, {
+      paymentMethod,
+      expectPromo,
+    });
+    return response.data;
+  },
   closeOffer: async (offerId: string) => {
     const response = await api.post(`/offers/${offerId}/close`);
     return response.data;

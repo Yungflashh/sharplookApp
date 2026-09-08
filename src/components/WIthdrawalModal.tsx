@@ -7,7 +7,7 @@ import {
   TextInput,
   ActivityIndicator,
   ScrollView,
-  KeyboardAvoidingView,
+  Keyboard,
   StyleSheet,
   Platform,
 } from 'react-native';
@@ -15,6 +15,7 @@ import { toast } from '@/components/ui/Toast';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { walletAPI, handleAPIError } from '@/api/api';
 
 interface WithdrawalModalProps {
@@ -28,6 +29,23 @@ interface Bank {
   name: string;
   code: string;
 }
+
+// ── Design tokens (aligned with OfferDetail / CreateBooking) ──────────────────
+const PINK      = '#E04079';
+const PINK_DK   = '#B5315F';
+const PINK_SOFT = '#FEE2F0';
+const PINK_BG   = '#FFF5F9';
+
+const INK       = '#0F172A';
+const INK_2     = '#475569';
+const INK_3     = '#94A3B8';
+const SURFACE   = '#FFFFFF';
+const SURFACE_2 = '#F8FAFC';
+const BORDER    = '#E2E8F0';
+const BORDER_L  = '#F1F5F9';
+
+const SUCCESS    = '#10B981';
+const SUCCESS_BG = '#ECFDF5';
 
 const FALLBACK_NIGERIAN_BANKS: Bank[] = [
   { name: '🧪 Test Bank (For Testing Only)', code: '001' },
@@ -73,41 +91,51 @@ const getBankInitials = (name: string) => {
 const getBankColors = (name: string) =>
   BANK_PALETTE[name.charCodeAt(0) % BANK_PALETTE.length];
 
-// ─── Step Indicator ───────────────────────────────────────────────────────────
+// ── Step Indicator ────────────────────────────────────────────────────────────
 const StepIndicator: React.FC<{ step: 1 | 2 }> = ({ step }) => (
   <View style={si.row}>
-    <View style={[si.dot, si.dotActive]}>
-      {step > 1
-        ? <Ionicons name="checkmark" size={12} color="#fff" />
-        : <Text style={si.dotText}>1</Text>}
+    <View style={si.cell}>
+      <View style={[si.dot, si.dotActive]}>
+        {step > 1
+          ? <Ionicons name="checkmark" size={13} color="#fff" />
+          : <Text style={si.dotText}>1</Text>}
+      </View>
+      <Text style={[si.label, si.labelActive]}>Bank Details</Text>
     </View>
-    <View style={[si.line, step === 2 && si.lineActive]} />
-    <View style={[si.dot, step === 2 && si.dotActive, step === 1 && si.dotInactive]}>
-      <Text style={[si.dotText, step === 1 && si.dotTextInactive]}>2</Text>
+    <View style={si.lineWrap}>
+      <View style={[si.line, step === 2 && si.lineActive]} />
     </View>
-    <View style={si.labelRow}>
-      <Text style={[si.label, si.labelLeft]}>Bank Details</Text>
-      <Text style={[si.label, si.labelRight]}>Confirm PIN</Text>
+    <View style={si.cell}>
+      <View style={[si.dot, step === 2 ? si.dotActive : si.dotInactive]}>
+        <Text style={[si.dotText, step === 1 && si.dotTextInactive]}>2</Text>
+      </View>
+      <Text style={[si.label, step === 2 && si.labelActive]}>Enter PIN</Text>
     </View>
   </View>
 );
 
 const si = StyleSheet.create({
-  row: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 22, paddingBottom: 20, paddingTop: 4, position: 'relative' },
-  dot: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', zIndex: 1 },
-  dotActive: { backgroundColor: '#E04079' },
-  dotInactive: { backgroundColor: '#E5E5EA' },
+  row: {
+    flexDirection: 'row', alignItems: 'flex-start',
+    paddingHorizontal: 30, paddingBottom: 20, paddingTop: 4,
+  },
+  cell: { alignItems: 'center', width: 90 },
+  dot: {
+    width: 26, height: 26, borderRadius: 13,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  dotActive: { backgroundColor: PINK },
+  dotInactive: { backgroundColor: BORDER },
   dotText: { fontSize: 12, fontWeight: '700', color: '#fff' },
-  dotTextInactive: { color: '#8E8E93' },
-  line: { flex: 1, height: 2, backgroundColor: '#E5E5EA', marginHorizontal: 6 },
-  lineActive: { backgroundColor: '#E04079' },
-  labelRow: { position: 'absolute', bottom: 2, left: 14, right: 14, flexDirection: 'row', justifyContent: 'space-between' },
-  label: { fontSize: 10, fontWeight: '600', color: '#8E8E93' },
-  labelLeft: { marginLeft: 2 },
-  labelRight: { marginRight: 2 },
+  dotTextInactive: { color: INK_3 },
+  lineWrap: { flex: 1, justifyContent: 'flex-start', paddingTop: 12, paddingHorizontal: 4 },
+  line: { height: 2, backgroundColor: BORDER, borderRadius: 1 },
+  lineActive: { backgroundColor: PINK },
+  label: { fontSize: 11, fontWeight: '600', color: INK_3, marginTop: 8 },
+  labelActive: { color: INK, fontWeight: '700' },
 });
 
-// ─── Main Component ───────────────────────────────────────────────────────────
+// ── Main Component ────────────────────────────────────────────────────────────
 
 const WithdrawalModal: React.FC<WithdrawalModalProps> = ({
   visible, onClose, onSuccess, currentBalance,
@@ -127,6 +155,20 @@ const WithdrawalModal: React.FC<WithdrawalModalProps> = ({
   const [loadingBanks, setLoadingBanks] = useState(false);
   const [showBankPicker, setShowBankPicker] = useState(false);
   const [bankSearchQuery, setBankSearchQuery] = useState('');
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const insets = useSafeAreaInsets();
+
+  // Manual keyboard tracking: KAV inside a translucent Android modal adds
+  // residual padding for the nav-bar insets even with the keyboard closed,
+  // creating a bottom gap. Track height ourselves and add it as padding on
+  // the overlay only while the keyboard is open.
+  useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const show = Keyboard.addListener(showEvent, (e) => setKeyboardHeight(e.endCoordinates.height));
+    const hide = Keyboard.addListener(hideEvent, () => setKeyboardHeight(0));
+    return () => { show.remove(); hide.remove(); };
+  }, []);
 
   useEffect(() => { if (visible) fetchBanks(); }, [visible]);
 
@@ -205,8 +247,6 @@ const WithdrawalModal: React.FC<WithdrawalModalProps> = ({
     } catch (error) {
       const apiError = handleAPIError(error);
       const msg = apiError.message || '';
-      // Only redirect to Set PIN when the backend explicitly says there is no PIN.
-      // Wrong-PIN and other errors must stay in the modal so the user can retry.
       if (apiError.code === 'PIN_NOT_SET') {
         toast.info('PIN Required', 'Please set up your withdrawal PIN first');
         handleClose();
@@ -237,38 +277,38 @@ const WithdrawalModal: React.FC<WithdrawalModalProps> = ({
   const canConfirm = pin.length === 4 && !loading;
 
   return (
-    <>
-      {/* ── Main Modal ─────────────────────────────────────────────────── */}
-      <Modal visible={visible} transparent animationType="slide" onRequestClose={handleClose}>
-        <View style={styles.overlay}>
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          keyboardVerticalOffset={0}
-        >
-          <View style={styles.sheet}>
-
-            {/* Handle */}
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      onRequestClose={handleClose}
+      statusBarTranslucent
+      navigationBarTranslucent
+    >
+      <View style={[styles.overlay, keyboardHeight > 0 && { paddingBottom: keyboardHeight }]}>
+        <View style={styles.kav}>
+          <View style={[styles.sheet, { paddingBottom: keyboardHeight > 0 ? 0 : insets.bottom }]}>
+            {/* Grabber */}
             <View style={styles.handleWrap}><View style={styles.handle} /></View>
 
             {/* Header */}
             <View style={styles.header}>
               <View style={styles.headerLeft}>
                 {step === 2 && (
-                  <TouchableOpacity onPress={() => setStep(1)} style={styles.backBtn} activeOpacity={0.7}>
-                    <Ionicons name="chevron-back" size={20} color="#3A3A3C" />
+                  <TouchableOpacity onPress={() => setStep(1)} style={styles.iconBtn} activeOpacity={0.7}>
+                    <Ionicons name="chevron-back" size={20} color={INK} />
                   </TouchableOpacity>
                 )}
                 <View>
-                  <Text style={styles.headerTitle}>Withdraw Funds</Text>
-                  <Text style={styles.headerSub}>Step {step} of 2</Text>
+                  <Text style={styles.headerTitle}>Withdraw</Text>
+                  <Text style={styles.headerSub}>{step === 1 ? 'Bank account details' : 'Confirm with your PIN'}</Text>
                 </View>
               </View>
-              <TouchableOpacity onPress={handleClose} style={styles.closeBtn} activeOpacity={0.7}>
-                <Ionicons name="close" size={18} color="#3A3A3C" />
+              <TouchableOpacity onPress={handleClose} style={styles.iconBtn} activeOpacity={0.7}>
+                <Ionicons name="close" size={20} color={INK} />
               </TouchableOpacity>
             </View>
 
-            {/* Step Indicator */}
             <StepIndicator step={step} />
 
             <ScrollView
@@ -278,72 +318,77 @@ const WithdrawalModal: React.FC<WithdrawalModalProps> = ({
             >
               {step === 1 ? (
                 <>
-                  {/* Balance Card */}
-                  <LinearGradient colors={['#E04079', '#C0315E']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.balanceCard}>
-                    <Text style={styles.balanceLabel}>Available Balance</Text>
+                  {/* Balance card */}
+                  <LinearGradient
+                    colors={[PINK, PINK_DK]}
+                    start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+                    style={styles.balanceCard}
+                  >
+                    <View style={styles.balanceHeader}>
+                      <View style={styles.balanceIcon}>
+                        <Ionicons name="wallet" size={16} color="#fff" />
+                      </View>
+                      <Text style={styles.balanceLabel}>Available balance</Text>
+                    </View>
                     <Text style={styles.balanceAmount}>{formatCurrency(currentBalance)}</Text>
-                    <View style={styles.balanceDecor} />
+                    <View style={styles.balanceBlob} />
+                    <View style={styles.balanceBlobSmall} />
                   </LinearGradient>
 
                   {/* Amount */}
-                  <Text style={styles.sectionLabel}>Amount to Withdraw</Text>
-                  <View style={styles.inputWrap}>
-                    <View style={styles.inputPrefix}>
-                      <Text style={styles.inputPrefixText}>₦</Text>
-                    </View>
+                  <Text style={styles.sectionLabel}>Amount</Text>
+                  <View style={styles.amountWrap}>
+                    <Text style={styles.amountPrefix}>₦</Text>
                     <TextInput
                       value={amount}
                       onChangeText={setAmount}
-                      placeholder="0.00"
+                      placeholder="0"
                       keyboardType="numeric"
-                      style={styles.input}
-                      placeholderTextColor="#C7C7CC"
+                      style={styles.amountInput}
+                      placeholderTextColor={INK_3}
                     />
                     {amount.length > 0 && (
-                      <TouchableOpacity onPress={() => setAmount('')} style={styles.inputClear} activeOpacity={0.7}>
-                        <Ionicons name="close-circle" size={18} color="#C7C7CC" />
+                      <TouchableOpacity onPress={() => setAmount('')} activeOpacity={0.7} style={styles.amountClear}>
+                        <Ionicons name="close-circle" size={20} color={INK_3} />
                       </TouchableOpacity>
                     )}
                   </View>
-                  <Text style={styles.inputHint}>Minimum ₦1,000 · Transfer fee ₦100</Text>
+                  <Text style={styles.hint}>Minimum ₦1,000 · Transfer fee ₦100</Text>
 
-                  {/* Fee Breakdown */}
+                  {/* Fee breakdown */}
                   {amount && parseFloat(amount) >= 1000 && (
-                    <View style={styles.feeCard}>
-                      <View style={styles.feeRow}>
-                        <Text style={styles.feeLabel}>Withdrawal amount</Text>
-                        <Text style={styles.feeValue}>{formatCurrency(parseFloat(amount))}</Text>
+                    <View style={styles.breakdown}>
+                      <View style={styles.breakdownRow}>
+                        <Text style={styles.breakdownLbl}>Withdrawal</Text>
+                        <Text style={styles.breakdownVal}>{formatCurrency(parseFloat(amount))}</Text>
                       </View>
-                      <View style={styles.feeRow}>
-                        <Text style={styles.feeLabel}>Transfer fee</Text>
-                        <Text style={[styles.feeValue, { color: '#DC2626' }]}>-₦100</Text>
+                      <View style={styles.breakdownRow}>
+                        <Text style={styles.breakdownLbl}>Transfer fee</Text>
+                        <Text style={[styles.breakdownVal, { color: INK_2 }]}>−₦100</Text>
                       </View>
-                      <View style={styles.feeDivider} />
-                      <View style={styles.feeRow}>
-                        <Text style={styles.feeTotalLabel}>You'll receive</Text>
-                        <Text style={styles.feeTotalValue}>{formatCurrency(getNetAmount())}</Text>
+                      <View style={styles.breakdownDiv} />
+                      <View style={styles.breakdownRow}>
+                        <Text style={styles.breakdownTotalLbl}>You'll receive</Text>
+                        <Text style={styles.breakdownTotalVal}>{formatCurrency(getNetAmount())}</Text>
                       </View>
                     </View>
                   )}
 
-                  {/* Bank Selector — inline picker (avoids nested Modal iOS bug) */}
+                  {/* Bank */}
                   <Text style={styles.sectionLabel}>Bank</Text>
                   <TouchableOpacity
-                    onPress={() => {
-                      setShowBankPicker(p => !p);
-                      setBankSearchQuery('');
-                    }}
+                    onPress={() => { setShowBankPicker(p => !p); setBankSearchQuery(''); }}
                     disabled={loadingBanks}
-                    style={[styles.bankSelector, showBankPicker && styles.bankSelectorOpen]}
+                    style={[styles.selector, showBankPicker && styles.selectorOpen]}
                     activeOpacity={0.75}
                   >
                     {loadingBanks ? (
-                      <View style={styles.bankSelectorInner}>
-                        <ActivityIndicator size="small" color="#E04079" />
-                        <Text style={styles.bankSelectorPlaceholder}>Loading banks…</Text>
+                      <View style={styles.selectorInner}>
+                        <ActivityIndicator size="small" color={PINK} />
+                        <Text style={styles.selectorPlaceholder}>Loading banks…</Text>
                       </View>
                     ) : (
-                      <View style={styles.bankSelectorInner}>
+                      <View style={styles.selectorInner}>
                         {bankName ? (
                           <>
                             <View style={[styles.bankInitialCircle, { backgroundColor: getBankColors(bankName).bg }]}>
@@ -351,73 +396,69 @@ const WithdrawalModal: React.FC<WithdrawalModalProps> = ({
                                 {getBankInitials(bankName)}
                               </Text>
                             </View>
-                            <Text style={styles.bankSelectorValue}>{bankName}</Text>
+                            <Text style={styles.selectorValue} numberOfLines={1}>{bankName}</Text>
                           </>
                         ) : (
-                          <Text style={styles.bankSelectorPlaceholder}>Choose your bank…</Text>
+                          <Text style={styles.selectorPlaceholder}>Choose a bank</Text>
                         )}
                       </View>
                     )}
                     <Ionicons
                       name={showBankPicker ? 'chevron-up' : 'chevron-down'}
                       size={18}
-                      color={showBankPicker ? '#E04079' : '#8E8E93'}
+                      color={showBankPicker ? PINK : INK_3}
                     />
                   </TouchableOpacity>
 
-                  {/* Inline Bank Dropdown */}
                   {showBankPicker && (
-                    <View style={styles.bankDropdown}>
-                      {/* Search */}
-                      <View style={styles.bankDropdownSearch}>
-                        <Ionicons name="search-outline" size={16} color="#8E8E93" />
+                    <View style={styles.dropdown}>
+                      <View style={styles.dropdownSearch}>
+                        <Ionicons name="search-outline" size={16} color={INK_3} />
                         <TextInput
                           value={bankSearchQuery}
                           onChangeText={setBankSearchQuery}
-                          placeholder="Search banks…"
-                          style={styles.bankDropdownSearchInput}
-                          placeholderTextColor="#C7C7CC"
+                          placeholder="Search banks"
+                          style={styles.dropdownSearchInput}
+                          placeholderTextColor={INK_3}
                           autoFocus
                         />
                         {bankSearchQuery.length > 0 && (
                           <TouchableOpacity onPress={() => setBankSearchQuery('')} activeOpacity={0.7}>
-                            <Ionicons name="close-circle" size={16} color="#C7C7CC" />
+                            <Ionicons name="close-circle" size={16} color={INK_3} />
                           </TouchableOpacity>
                         )}
                       </View>
-
-                      {/* Bank list — fixed height scroll */}
                       <ScrollView
-                        style={styles.bankDropdownList}
+                        style={styles.dropdownList}
                         showsVerticalScrollIndicator={false}
                         keyboardShouldPersistTaps="handled"
                         nestedScrollEnabled
                       >
                         {filteredBanks.length === 0 ? (
-                          <View style={styles.bankDropdownEmpty}>
-                            <Ionicons name="search-outline" size={32} color="#D1D5DB" />
-                            <Text style={styles.bankDropdownEmptyText}>No banks found</Text>
+                          <View style={styles.dropdownEmpty}>
+                            <Ionicons name="search-outline" size={30} color={BORDER} />
+                            <Text style={styles.dropdownEmptyTxt}>No banks match your search</Text>
                           </View>
                         ) : (
                           filteredBanks.map((item, index) => {
-                            const colors = getBankColors(item.name);
+                            const c = getBankColors(item.name);
                             const active = bankCode === item.code;
                             return (
                               <TouchableOpacity
                                 key={`${item.code}-${index}`}
                                 onPress={() => handleBankSelect(item)}
-                                style={[styles.bankDropdownItem, active && styles.bankDropdownItemActive]}
+                                style={[styles.bankItem, active && styles.bankItemActive]}
                                 activeOpacity={0.7}
                               >
-                                <View style={[styles.bankItemIcon, { backgroundColor: colors.bg }]}>
-                                  <Text style={[styles.bankItemInitial, { color: colors.text }]}>
+                                <View style={[styles.bankItemIcon, { backgroundColor: c.bg }]}>
+                                  <Text style={[styles.bankItemInitial, { color: c.text }]}>
                                     {getBankInitials(item.name)}
                                   </Text>
                                 </View>
-                                <Text style={[styles.bankItemName, active && styles.bankItemNameActive]}>
+                                <Text style={[styles.bankItemName, active && styles.bankItemNameActive]} numberOfLines={1}>
                                   {item.name}
                                 </Text>
-                                {active && <Ionicons name="checkmark-circle" size={18} color="#E04079" />}
+                                {active && <Ionicons name="checkmark-circle" size={18} color={PINK} />}
                               </TouchableOpacity>
                             );
                           })
@@ -429,9 +470,9 @@ const WithdrawalModal: React.FC<WithdrawalModalProps> = ({
                   {/* Account Number */}
                   <Text style={styles.sectionLabel}>Account Number</Text>
                   <View style={[
-                    styles.accountInputWrap,
-                    verifyingAccount && { borderColor: '#E04079' },
-                    accountVerified && { borderColor: '#16A34A' },
+                    styles.input,
+                    verifyingAccount && { borderColor: PINK },
+                    accountVerified && { borderColor: SUCCESS, backgroundColor: SUCCESS_BG },
                   ]}>
                     <TextInput
                       value={accountNumber}
@@ -440,29 +481,26 @@ const WithdrawalModal: React.FC<WithdrawalModalProps> = ({
                       keyboardType="numeric"
                       maxLength={10}
                       editable={!!bankCode}
-                      style={[styles.accountInput, !bankCode && { color: '#C7C7CC' }]}
-                      placeholderTextColor="#C7C7CC"
+                      style={[styles.inputText, !bankCode && { color: INK_3 }]}
+                      placeholderTextColor={INK_3}
                     />
-                    {verifyingAccount && <ActivityIndicator size="small" color="#E04079" style={{ marginRight: 14 }} />}
+                    {verifyingAccount && <ActivityIndicator size="small" color={PINK} style={{ marginRight: 4 }} />}
                     {accountVerified && !verifyingAccount && (
-                      <Ionicons name="checkmark-circle" size={22} color="#16A34A" style={{ marginRight: 14 }} />
+                      <Ionicons name="checkmark-circle" size={22} color={SUCCESS} style={{ marginRight: 4 }} />
                     )}
                   </View>
-                  {verifyingAccount && (
-                    <Text style={styles.verifyingText}>Verifying account…</Text>
-                  )}
+                  {verifyingAccount && <Text style={styles.verifyingTxt}>Verifying account…</Text>}
 
                   {/* Account Name */}
                   {accountName && accountVerified && (
-                    <View style={styles.accountNameCard}>
-                      <View style={styles.accountNameIcon}>
-                        <Ionicons name="person-circle" size={22} color="#16A34A" />
+                    <View style={styles.accountCard}>
+                      <View style={styles.accountAvatar}>
+                        <Ionicons name="person" size={16} color={SUCCESS} />
                       </View>
                       <View style={{ flex: 1 }}>
-                        <Text style={styles.accountNameMeta}>Account Holder</Text>
-                        <Text style={styles.accountNameValue}>{accountName}</Text>
+                        <Text style={styles.accountMeta}>Account holder</Text>
+                        <Text style={styles.accountName}>{accountName}</Text>
                       </View>
-                      <Ionicons name="checkmark-circle" size={18} color="#16A34A" />
                     </View>
                   )}
 
@@ -471,78 +509,88 @@ const WithdrawalModal: React.FC<WithdrawalModalProps> = ({
                     onPress={() => validateStep1() && setStep(2)}
                     disabled={!canContinue}
                     activeOpacity={0.85}
-                    style={{ borderRadius: 16, overflow: 'hidden', marginTop: 4 }}
+                    style={[styles.ctaWrap, { marginTop: 6 }]}
                   >
                     <LinearGradient
-                      colors={canContinue ? ['#E04079', '#C0315E'] : ['#D1D5DB', '#D1D5DB']}
+                      colors={canContinue ? [PINK, PINK_DK] : [BORDER, BORDER]}
                       start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-                      style={styles.ctaBtn}
+                      style={styles.cta}
                     >
-                      <View style={styles.ctaBtnInner}>
-                        <Text style={styles.ctaBtnText}>Continue</Text>
-                        <Ionicons name="arrow-forward-circle" size={20} color="#fff" />
-                      </View>
+                      <Text style={[styles.ctaTxt, !canContinue && { color: INK_3 }]}>Continue</Text>
+                      {canContinue && <Ionicons name="arrow-forward" size={18} color="#fff" />}
                     </LinearGradient>
                   </TouchableOpacity>
                 </>
               ) : (
                 <>
-                  {/* Summary Card */}
-                  <LinearGradient colors={['#1C1C1E', '#3A3A3C']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.summaryCard}>
-                    <Text style={styles.summaryMeta}>Withdrawing to</Text>
+                  {/* Summary card — pink, matches step 1 balance card */}
+                  <LinearGradient
+                    colors={[PINK, PINK_DK]}
+                    start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+                    style={styles.summary}
+                  >
+                    <Text style={styles.summaryMeta}>You're sending</Text>
                     <Text style={styles.summaryAmount}>{formatCurrency(parseFloat(amount))}</Text>
-                    <View style={styles.summaryDivider} />
-                    <View style={styles.summaryBankRow}>
-                      <View style={[styles.summaryBankIcon, { backgroundColor: getBankColors(bankName).bg }]}>
-                        <Text style={[styles.summaryBankInitial, { color: getBankColors(bankName).text }]}>
-                          {getBankInitials(bankName)}
-                        </Text>
+                    <View style={styles.summaryDiv} />
+                    <View style={styles.summaryRow}>
+                      <View style={[styles.summaryBankIcon, { backgroundColor: 'rgba(255,255,255,0.18)' }]}>
+                        <Text style={styles.summaryBankInitial}>{getBankInitials(bankName)}</Text>
                       </View>
-                      <View>
-                        <Text style={styles.summaryBankName}>{bankName}</Text>
-                        <Text style={styles.summaryAccountInfo}>{accountNumber} · {accountName}</Text>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.summaryBankName} numberOfLines={1}>{bankName}</Text>
+                        <Text style={styles.summaryAccountInfo} numberOfLines={1}>{accountNumber} · {accountName}</Text>
                       </View>
                     </View>
+                    <View style={styles.balanceBlob} />
+                    <View style={styles.balanceBlobSmall} />
                   </LinearGradient>
 
-                  {/* PIN */}
-                  <Text style={styles.sectionLabel}>Withdrawal PIN</Text>
-                  <TextInput
-                    value={pin}
-                    onChangeText={t => setPin(t.replace(/[^0-9]/g, ''))}
-                    placeholder="••••"
-                    keyboardType="numeric"
-                    maxLength={4}
-                    secureTextEntry
-                    style={styles.pinInput}
-                    placeholderTextColor="#C7C7CC"
-                  />
+                  {/* Net you'll receive */}
+                  <View style={styles.netRow}>
+                    <Text style={styles.netLbl}>You'll receive</Text>
+                    <Text style={styles.netVal}>{formatCurrency(getNetAmount())}</Text>
+                  </View>
 
-                  {/* PIN dots visual */}
-                  <View style={styles.pinDotsRow}>
-                    {[0, 1, 2, 3].map(i => (
-                      <View key={i} style={[styles.pinDot, i < pin.length && styles.pinDotFilled]} />
-                    ))}
+                  {/* PIN section */}
+                  <Text style={[styles.sectionLabel, { marginTop: 4 }]}>Withdrawal PIN</Text>
+
+                  <View style={{ position: 'relative' }}>
+                    {/* Hidden functional input (autofocuses; keyboard drives the visible boxes) */}
+                    <TextInput
+                      value={pin}
+                      onChangeText={t => setPin(t.replace(/[^0-9]/g, '').slice(0, 4))}
+                      keyboardType="numeric"
+                      maxLength={4}
+                      style={styles.pinHidden}
+                      autoFocus
+                      caretHidden
+                    />
+                    {/* Visible boxes */}
+                    <View style={styles.pinBoxes} pointerEvents="none">
+                      {[0, 1, 2, 3].map(i => {
+                        const filled = i < pin.length;
+                        return (
+                          <View
+                            key={i}
+                            style={[styles.pinBox, filled && styles.pinBoxFilled]}
+                          >
+                            {filled ? <View style={styles.pinBoxDot} /> : null}
+                          </View>
+                        );
+                      })}
+                    </View>
                   </View>
                   <Text style={styles.pinHint}>Enter your 4-digit security PIN</Text>
 
-                  {/* Security Note */}
-                  <View style={styles.securityCard}>
-                    <View style={styles.securityIconWrap}>
-                      <Ionicons name="shield-checkmark" size={18} color="#3B82F6" />
+                  {/* Security note (pink, on-brand) */}
+                  <View style={styles.security}>
+                    <View style={styles.securityIcon}>
+                      <Ionicons name="shield-checkmark" size={16} color={PINK} />
                     </View>
                     <View style={{ flex: 1 }}>
-                      <Text style={styles.securityTitle}>Secure Transfer</Text>
-                      <Text style={styles.securityBody}>
-                        Processed within 24 hours to your verified account.
-                      </Text>
+                      <Text style={styles.securityTitle}>Secure transfer</Text>
+                      <Text style={styles.securityBody}>Processed within 24 hours to your verified account.</Text>
                     </View>
-                  </View>
-
-                  {/* Net receive reminder */}
-                  <View style={styles.netCard}>
-                    <Text style={styles.netLabel}>You'll receive</Text>
-                    <Text style={styles.netValue}>{formatCurrency(getNetAmount())}</Text>
                   </View>
 
                   {/* Confirm */}
@@ -550,20 +598,20 @@ const WithdrawalModal: React.FC<WithdrawalModalProps> = ({
                     onPress={handleWithdrawal}
                     disabled={!canConfirm}
                     activeOpacity={0.85}
-                    style={{ borderRadius: 16, overflow: 'hidden' }}
+                    style={styles.ctaWrap}
                   >
                     <LinearGradient
-                      colors={canConfirm ? ['#E04079', '#C0315E'] : ['#D1D5DB', '#D1D5DB']}
+                      colors={canConfirm ? [PINK, PINK_DK] : [BORDER, BORDER]}
                       start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-                      style={styles.ctaBtn}
+                      style={styles.cta}
                     >
                       {loading ? (
                         <ActivityIndicator color="#fff" size="small" />
                       ) : (
-                        <View style={styles.ctaBtnInner}>
-                          <Ionicons name="checkmark-circle" size={20} color="#fff" />
-                          <Text style={styles.ctaBtnText}>Confirm Withdrawal</Text>
-                        </View>
+                        <>
+                          <Ionicons name="lock-closed" size={16} color={canConfirm ? '#fff' : INK_3} />
+                          <Text style={[styles.ctaTxt, !canConfirm && { color: INK_3 }]}>Confirm withdrawal</Text>
+                        </>
                       )}
                     </LinearGradient>
                   </TouchableOpacity>
@@ -571,175 +619,204 @@ const WithdrawalModal: React.FC<WithdrawalModalProps> = ({
               )}
             </ScrollView>
           </View>
-        </KeyboardAvoidingView>
         </View>
-      </Modal>
-
-    </>
+      </View>
+    </Modal>
   );
 };
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
+// ── Styles ────────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
+  overlay: { flex: 1, backgroundColor: 'rgba(15,23,42,0.55)', justifyContent: 'flex-end' },
+  kav: { width: '100%' },
   sheet: {
-    backgroundColor: '#fff', borderTopLeftRadius: 28, borderTopRightRadius: 28, maxHeight: '93%',
-    shadowColor: '#000', shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.1, shadowRadius: 20, elevation: 20,
+    width: '100%',
+    backgroundColor: SURFACE, borderTopLeftRadius: 28, borderTopRightRadius: 28, maxHeight: '94%',
+    shadowColor: '#000', shadowOffset: { width: 0, height: -6 }, shadowOpacity: 0.12, shadowRadius: 24, elevation: 24,
   },
 
-  handleWrap: { alignItems: 'center', paddingTop: 12, paddingBottom: 4 },
-  handle: { width: 36, height: 4, borderRadius: 2, backgroundColor: '#E5E5EA' },
+  handleWrap: { alignItems: 'center', paddingTop: 10, paddingBottom: 6 },
+  handle: { width: 40, height: 4, borderRadius: 2, backgroundColor: BORDER },
 
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 22, paddingTop: 10, paddingBottom: 16,
-    borderBottomWidth: 1, borderBottomColor: '#F2F2F7',
+    paddingHorizontal: 22, paddingTop: 8, paddingBottom: 14,
   },
-  headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  backBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#F2F2F7', alignItems: 'center', justifyContent: 'center' },
-  headerTitle: { fontSize: 20, fontWeight: '700', color: '#1C1C1E', letterSpacing: -0.5 },
-  headerSub: { fontSize: 12, color: '#8E8E93', marginTop: 1 },
-  closeBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#F2F2F7', alignItems: 'center', justifyContent: 'center' },
+  headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 },
+  iconBtn: {
+    width: 36, height: 36, borderRadius: 12, backgroundColor: SURFACE_2,
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1, borderColor: BORDER_L,
+  },
+  headerTitle: { fontSize: 20, fontWeight: '800', color: INK, letterSpacing: -0.4 },
+  headerSub: { fontSize: 12, color: INK_2, marginTop: 2, fontWeight: '500' },
 
-  scroll: { paddingHorizontal: 22, paddingTop: 4, paddingBottom: Platform.OS === 'ios' ? 36 : 24 },
+  scroll: { paddingHorizontal: 22, paddingTop: 4, paddingBottom: 20 },
 
-  // Balance Card
+  // Balance card
   balanceCard: {
-    borderRadius: 20, paddingHorizontal: 22, paddingVertical: 22, marginBottom: 24, overflow: 'hidden',
+    borderRadius: 20, paddingHorizontal: 20, paddingVertical: 20, marginBottom: 22, overflow: 'hidden',
   },
-  balanceLabel: { fontSize: 13, color: 'rgba(255,255,255,0.75)', fontWeight: '500', marginBottom: 4 },
+  balanceHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 },
+  balanceIcon: {
+    width: 26, height: 26, borderRadius: 8,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  balanceLabel: { fontSize: 12, color: 'rgba(255,255,255,0.85)', fontWeight: '600' },
   balanceAmount: { fontSize: 32, fontWeight: '800', color: '#fff', letterSpacing: -1 },
-  balanceDecor: { position: 'absolute', right: -20, top: -20, width: 100, height: 100, borderRadius: 50, backgroundColor: 'rgba(255,255,255,0.08)' },
+  balanceBlob: {
+    position: 'absolute', right: -28, top: -28,
+    width: 120, height: 120, borderRadius: 60, backgroundColor: 'rgba(255,255,255,0.08)',
+  },
+  balanceBlobSmall: {
+    position: 'absolute', right: 40, top: 20,
+    width: 30, height: 30, borderRadius: 15, backgroundColor: 'rgba(255,255,255,0.10)',
+  },
 
-  sectionLabel: { fontSize: 13, fontWeight: '700', color: '#3A3A3C', letterSpacing: 0.2, marginBottom: 10, textTransform: 'uppercase' },
+  // Section
+  sectionLabel: { fontSize: 13, fontWeight: '700', color: INK, marginBottom: 10 },
+  hint: { fontSize: 12, color: INK_2, marginTop: 6, marginBottom: 18, fontWeight: '500' },
 
-  // Amount Input
-  inputWrap: {
+  // Amount input
+  amountWrap: {
     flexDirection: 'row', alignItems: 'center',
-    backgroundColor: '#F2F2F7', borderRadius: 14, borderWidth: 1.5, borderColor: '#E5E5EA',
-    overflow: 'hidden', marginBottom: 8,
+    backgroundColor: SURFACE, borderRadius: 14, borderWidth: 1.5, borderColor: BORDER,
+    paddingHorizontal: 16, paddingVertical: 4,
   },
-  inputPrefix: { paddingHorizontal: 16, paddingVertical: 14, backgroundColor: '#E9E9EE' },
-  inputPrefixText: { fontSize: 18, fontWeight: '700', color: '#6C6C70' },
-  input: { flex: 1, paddingHorizontal: 14, paddingVertical: 14, fontSize: 20, fontWeight: '700', color: '#1C1C1E' },
-  inputClear: { paddingHorizontal: 12 },
-  inputHint: { fontSize: 12, color: '#8E8E93', marginBottom: 20, fontWeight: '500' },
+  amountPrefix: { fontSize: 22, fontWeight: '700', color: INK_2, marginRight: 6 },
+  amountInput: { flex: 1, paddingVertical: 12, fontSize: 22, fontWeight: '800', color: INK, letterSpacing: -0.5 },
+  amountClear: { padding: 4 },
 
-  // Fee Breakdown
-  feeCard: {
-    backgroundColor: '#F9FAFB', borderRadius: 14, padding: 16, marginBottom: 24,
-    borderWidth: 1, borderColor: '#E5E5EA',
+  // Fee breakdown
+  breakdown: {
+    backgroundColor: PINK_BG, borderRadius: 14, padding: 16, marginBottom: 22,
+    borderWidth: 1, borderColor: PINK_SOFT,
   },
-  feeRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 },
-  feeLabel: { fontSize: 14, color: '#6C6C70', fontWeight: '500' },
-  feeValue: { fontSize: 14, fontWeight: '600', color: '#1C1C1E' },
-  feeDivider: { height: 1, backgroundColor: '#E5E5EA', marginBottom: 10 },
-  feeTotalLabel: { fontSize: 15, fontWeight: '700', color: '#1C1C1E' },
-  feeTotalValue: { fontSize: 18, fontWeight: '800', color: '#E04079', letterSpacing: -0.5 },
+  breakdownRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
+  breakdownLbl: { fontSize: 13, color: INK_2, fontWeight: '500' },
+  breakdownVal: { fontSize: 14, fontWeight: '700', color: INK },
+  breakdownDiv: { height: 1, backgroundColor: PINK_SOFT, marginBottom: 10 },
+  breakdownTotalLbl: { fontSize: 14, fontWeight: '700', color: INK },
+  breakdownTotalVal: { fontSize: 18, fontWeight: '800', color: PINK, letterSpacing: -0.4 },
 
-  // Bank Selector
-  bankSelector: {
+  // Selector (bank)
+  selector: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    backgroundColor: '#F2F2F7', borderRadius: 14, paddingHorizontal: 14, paddingVertical: 14,
-    borderWidth: 1.5, borderColor: '#E5E5EA', marginBottom: 2,
+    backgroundColor: SURFACE, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 12,
+    borderWidth: 1.5, borderColor: BORDER, minHeight: 56,
   },
-  bankSelectorOpen: { borderColor: '#E04079', borderBottomLeftRadius: 0, borderBottomRightRadius: 0, borderBottomWidth: 0 },
-  bankSelectorInner: { flexDirection: 'row', alignItems: 'center', flex: 1, gap: 10 },
-  bankSelectorValue: { fontSize: 15, fontWeight: '600', color: '#1C1C1E' },
-  bankSelectorPlaceholder: { fontSize: 15, color: '#C7C7CC' },
-  bankInitialCircle: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
+  selectorOpen: { borderColor: PINK, borderBottomLeftRadius: 0, borderBottomRightRadius: 0, borderBottomWidth: 0 },
+  selectorInner: { flexDirection: 'row', alignItems: 'center', flex: 1, gap: 10 },
+  selectorValue: { fontSize: 15, fontWeight: '600', color: INK, flex: 1 },
+  selectorPlaceholder: { fontSize: 15, color: INK_3, fontWeight: '500' },
+  bankInitialCircle: { width: 34, height: 34, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   bankInitialText: { fontSize: 12, fontWeight: '800' },
 
-  // Inline Bank Dropdown
-  bankDropdown: {
-    borderWidth: 1.5, borderTopWidth: 0, borderColor: '#E04079',
+  // Dropdown
+  dropdown: {
+    borderWidth: 1.5, borderTopWidth: 0, borderColor: PINK,
     borderBottomLeftRadius: 14, borderBottomRightRadius: 14,
-    backgroundColor: '#fff', marginBottom: 20, overflow: 'hidden',
+    backgroundColor: SURFACE, marginBottom: 22, overflow: 'hidden',
   },
-  bankDropdownSearch: {
+  dropdownSearch: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
     paddingHorizontal: 14, paddingVertical: 10,
-    backgroundColor: '#F9F9F9', borderBottomWidth: 1, borderBottomColor: '#F2F2F7',
+    backgroundColor: SURFACE_2, borderBottomWidth: 1, borderBottomColor: BORDER_L,
   },
-  bankDropdownSearchInput: { flex: 1, fontSize: 14, color: '#1C1C1E', fontWeight: '500', paddingVertical: 2 },
-  bankDropdownList: { maxHeight: 220 },
-  bankDropdownItem: {
+  dropdownSearchInput: { flex: 1, fontSize: 14, color: INK, fontWeight: '500', paddingVertical: 2 },
+  dropdownList: { maxHeight: 240 },
+  dropdownEmpty: { paddingVertical: 30, alignItems: 'center', gap: 8 },
+  dropdownEmptyTxt: { fontSize: 13, color: INK_3, fontWeight: '500' },
+  bankItem: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
     paddingHorizontal: 14, paddingVertical: 12,
-    borderBottomWidth: 1, borderBottomColor: '#F2F2F7',
+    borderBottomWidth: 1, borderBottomColor: BORDER_L,
   },
-  bankDropdownItemActive: { backgroundColor: '#FFF0F7' },
-  bankDropdownEmpty: { paddingVertical: 28, alignItems: 'center', gap: 8 },
-  bankDropdownEmptyText: { fontSize: 14, color: '#8E8E93', fontWeight: '500' },
+  bankItemActive: { backgroundColor: PINK_BG },
+  bankItemIcon: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  bankItemInitial: { fontSize: 13, fontWeight: '800' },
+  bankItemName: { flex: 1, fontSize: 14, fontWeight: '500', color: INK },
+  bankItemNameActive: { color: PINK, fontWeight: '700' },
 
-  // Account Input
-  accountInputWrap: {
+  // Generic input (account number)
+  input: {
     flexDirection: 'row', alignItems: 'center',
-    backgroundColor: '#F2F2F7', borderRadius: 14, borderWidth: 1.5, borderColor: '#E5E5EA', marginBottom: 8,
+    backgroundColor: SURFACE, borderRadius: 14, borderWidth: 1.5, borderColor: BORDER,
+    paddingHorizontal: 14, minHeight: 56,
   },
-  accountInput: { flex: 1, paddingHorizontal: 14, paddingVertical: 14, fontSize: 16, fontWeight: '600', color: '#1C1C1E' },
-  verifyingText: { fontSize: 12, color: '#E04079', fontWeight: '600', marginBottom: 12 },
+  inputText: { flex: 1, paddingVertical: 12, fontSize: 16, fontWeight: '600', color: INK, letterSpacing: 0.5 },
+  verifyingTxt: { fontSize: 12, color: PINK, fontWeight: '600', marginTop: 6, marginBottom: 12 },
 
-  // Account Name
-  accountNameCard: {
+  // Account holder card
+  accountCard: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
-    backgroundColor: '#F0FDF4', borderRadius: 14, padding: 14, marginBottom: 20,
+    backgroundColor: SUCCESS_BG, borderRadius: 14, padding: 12, marginTop: 12, marginBottom: 22,
     borderWidth: 1, borderColor: '#BBF7D0',
   },
-  accountNameIcon: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#DCFCE7', alignItems: 'center', justifyContent: 'center' },
-  accountNameMeta: { fontSize: 11, color: '#16A34A', fontWeight: '600', marginBottom: 2, textTransform: 'uppercase', letterSpacing: 0.3 },
-  accountNameValue: { fontSize: 15, fontWeight: '700', color: '#14532D' },
+  accountAvatar: {
+    width: 36, height: 36, borderRadius: 12, backgroundColor: '#D1FAE5',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  accountMeta: { fontSize: 11, color: '#059669', fontWeight: '700', marginBottom: 2, letterSpacing: 0.3, textTransform: 'uppercase' },
+  accountName: { fontSize: 15, fontWeight: '700', color: '#065F46' },
 
-  // CTA
-  ctaBtn: { paddingVertical: 16, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
-  ctaBtnInner: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  ctaBtnText: { fontSize: 16, fontWeight: '700', color: '#fff', letterSpacing: -0.2 },
+  // Summary (Step 2) — same pink family as balance card
+  summary: { borderRadius: 20, paddingHorizontal: 20, paddingVertical: 20, marginBottom: 18, overflow: 'hidden' },
+  summaryMeta: { fontSize: 12, color: 'rgba(255,255,255,0.75)', fontWeight: '600', marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.4 },
+  summaryAmount: { fontSize: 34, fontWeight: '800', color: '#fff', letterSpacing: -1, marginBottom: 14 },
+  summaryDiv: { height: 1, backgroundColor: 'rgba(255,255,255,0.18)', marginBottom: 14 },
+  summaryRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  summaryBankIcon: { width: 38, height: 38, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
+  summaryBankInitial: { fontSize: 13, fontWeight: '800', color: '#fff' },
+  summaryBankName: { fontSize: 14, fontWeight: '700', color: '#fff' },
+  summaryAccountInfo: { fontSize: 12, color: 'rgba(255,255,255,0.75)', marginTop: 2 },
 
-  // Summary Card (Step 2)
-  summaryCard: { borderRadius: 20, padding: 22, marginBottom: 24, overflow: 'hidden' },
-  summaryMeta: { fontSize: 12, color: 'rgba(255,255,255,0.6)', fontWeight: '600', marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.3 },
-  summaryAmount: { fontSize: 36, fontWeight: '800', color: '#fff', letterSpacing: -1, marginBottom: 16 },
-  summaryDivider: { height: 1, backgroundColor: 'rgba(255,255,255,0.15)', marginBottom: 16 },
-  summaryBankRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  summaryBankIcon: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-  summaryBankInitial: { fontSize: 12, fontWeight: '800' },
-  summaryBankName: { fontSize: 14, fontWeight: '700', color: '#fff', marginBottom: 2 },
-  summaryAccountInfo: { fontSize: 12, color: 'rgba(255,255,255,0.65)' },
+  // Net row
+  netRow: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    backgroundColor: PINK_BG, borderRadius: 14, paddingHorizontal: 16, paddingVertical: 14, marginBottom: 20,
+    borderWidth: 1, borderColor: PINK_SOFT,
+  },
+  netLbl: { fontSize: 13, fontWeight: '700', color: INK_2 },
+  netVal: { fontSize: 18, fontWeight: '800', color: PINK, letterSpacing: -0.4 },
 
   // PIN
-  pinInput: {
-    backgroundColor: '#F2F2F7', borderRadius: 14, borderWidth: 1.5, borderColor: '#E5E5EA',
-    paddingVertical: 16, fontSize: 28, fontWeight: '800', color: '#1C1C1E',
-    textAlign: 'center', letterSpacing: 16, marginBottom: 12,
+  pinHidden: {
+    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+    opacity: 0, fontSize: 1, color: 'transparent',
   },
-  pinDotsRow: { flexDirection: 'row', justifyContent: 'center', gap: 12, marginBottom: 8 },
-  pinDot: { width: 12, height: 12, borderRadius: 6, backgroundColor: '#E5E5EA' },
-  pinDotFilled: { backgroundColor: '#E04079' },
-  pinHint: { fontSize: 12, color: '#8E8E93', textAlign: 'center', marginBottom: 20, fontWeight: '500' },
+  pinBoxes: { flexDirection: 'row', justifyContent: 'space-between', gap: 12 },
+  pinBox: {
+    flex: 1, height: 60, borderRadius: 14,
+    backgroundColor: SURFACE_2, borderWidth: 1.5, borderColor: BORDER,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  pinBoxFilled: { backgroundColor: PINK_BG, borderColor: PINK },
+  pinBoxDot: { width: 14, height: 14, borderRadius: 7, backgroundColor: PINK },
+  pinHint: { fontSize: 12, color: INK_2, textAlign: 'center', marginTop: 12, marginBottom: 18, fontWeight: '500' },
 
   // Security
-  securityCard: {
+  security: {
     flexDirection: 'row', alignItems: 'flex-start', gap: 12,
-    backgroundColor: '#EFF6FF', borderRadius: 14, padding: 14, marginBottom: 16,
+    backgroundColor: PINK_BG, borderRadius: 14, padding: 14, marginBottom: 18,
+    borderWidth: 1, borderColor: PINK_SOFT,
   },
-  securityIconWrap: { width: 32, height: 32, borderRadius: 10, backgroundColor: '#DBEAFE', alignItems: 'center', justifyContent: 'center' },
-  securityTitle: { fontSize: 13, fontWeight: '700', color: '#1D4ED8', marginBottom: 2 },
-  securityBody: { fontSize: 12, color: '#3B82F6', lineHeight: 17 },
-
-  // Net Card
-  netCard: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    backgroundColor: '#F9FAFB', borderRadius: 14, paddingHorizontal: 16, paddingVertical: 14, marginBottom: 20,
-    borderWidth: 1, borderColor: '#E5E5EA',
+  securityIcon: {
+    width: 32, height: 32, borderRadius: 10, backgroundColor: PINK_SOFT,
+    alignItems: 'center', justifyContent: 'center',
   },
-  netLabel: { fontSize: 14, fontWeight: '600', color: '#6C6C70' },
-  netValue: { fontSize: 18, fontWeight: '800', color: '#E04079', letterSpacing: -0.5 },
+  securityTitle: { fontSize: 13, fontWeight: '800', color: INK, marginBottom: 2 },
+  securityBody: { fontSize: 12, color: INK_2, lineHeight: 17 },
 
-  bankItemIcon: { width: 38, height: 38, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-  bankItemInitial: { fontSize: 13, fontWeight: '800' },
-  bankItemName: { flex: 1, fontSize: 14, fontWeight: '500', color: '#1C1C1E' },
-  bankItemNameActive: { color: '#E04079', fontWeight: '700' },
+  // CTA
+  ctaWrap: { borderRadius: 16, overflow: 'hidden' },
+  cta: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    paddingVertical: 16,
+  },
+  ctaTxt: { fontSize: 16, fontWeight: '800', color: '#fff', letterSpacing: -0.2 },
 });
 
 export default WithdrawalModal;

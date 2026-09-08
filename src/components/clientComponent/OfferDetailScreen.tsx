@@ -9,7 +9,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation, useRoute } from '@react-navigation/native';
-import { offerAPI, handleAPIError } from '@/api/api';
+import { offerAPI, promoAPI, handleAPIError } from '@/api/api';
 
 const BG     = '#FFF5F9';
 const CARD   = '#FFFFFF';
@@ -95,7 +95,23 @@ const OfferDetailScreen: React.FC = () => {
   const [counterPrice,      setCounterPrice]      = useState('');
   const [confirmModal, setConfirmModal] = useState({ visible: false, title: '', message: '', onConfirm: () => {} });
 
-  useEffect(() => { fetchOffer(); }, []);
+  const [activePromo, setActivePromo] = useState<{
+    id: string;
+    name: string;
+    discountAmount: number;
+    minServicePrice: number;
+    slotsRemaining: number;
+    userEligible: boolean;
+  } | null>(null);
+  const [promoSoldOutModal, setPromoSoldOutModal] = useState<{
+    visible: boolean;
+    message: string;
+    fullPrice: number;
+    responseId: string | null;
+    paymentMethod: 'wallet' | 'card' | null;
+  }>({ visible: false, message: '', fullPrice: 0, responseId: null, paymentMethod: null });
+
+  useEffect(() => { fetchOffer(); fetchActivePromo(); }, []);
 
   const fetchOffer = async () => {
     try {
@@ -110,32 +126,106 @@ const OfferDetailScreen: React.FC = () => {
     }
   };
 
+  const fetchActivePromo = async () => {
+    try {
+      const res = await promoAPI.getCurrent();
+      if (res?.success && res.data?.active) {
+        setActivePromo({
+          id: res.data.active.id,
+          name: res.data.active.name,
+          discountAmount: res.data.active.discountAmount || 0,
+          minServicePrice: res.data.active.minServicePrice || 0,
+          slotsRemaining: res.data.active.slotsRemaining || 0,
+          userEligible: !!res.data.userEligible,
+        });
+      } else {
+        setActivePromo(null);
+      }
+    } catch {
+      setActivePromo(null);
+    }
+  };
+
+  // Per-response promo eligibility: needs an active promo, remaining slots,
+  // user eligibility, and the response's price to meet the campaign minimum.
+  const isPromoApplicable = (price: number): boolean =>
+    !!activePromo &&
+    activePromo.userEligible &&
+    activePromo.slotsRemaining > 0 &&
+    price >= activePromo.minServicePrice;
+
   const handleAcceptResponse = (responseId: string) => {
     setSelectedForAccept(responseId);
     setShowPaymentModal(true);
   };
 
-  const processAccept = async (paymentMethod: 'wallet' | 'card') => {
-    if (!selectedForAccept) return;
-    setShowPaymentModal(false);
+  const runAccept = async (
+    responseId: string,
+    paymentMethod: 'wallet' | 'card',
+    expectPromo: boolean
+  ) => {
     setSubmitting(true);
     try {
-      const res = await offerAPI.acceptResponse(offerId, selectedForAccept, paymentMethod);
+      const res = await offerAPI.acceptResponse(offerId, responseId, paymentMethod, expectPromo);
       if (res.success) {
         const { booking } = res.data;
         if (paymentMethod === 'card' && booking.authorizationUrl) {
-          navigation.navigate('Payment', { bookingId: booking._id, amount: booking.totalAmount, authorizationUrl: booking.authorizationUrl, reference: booking.paymentReference });
+          navigation.navigate('Payment', {
+            bookingId: booking._id,
+            amount: booking.totalAmount,
+            authorizationUrl: booking.authorizationUrl,
+            reference: booking.paymentReference,
+          });
         } else {
-          toast.success('Success', 'Response accepted! Booking created.');
+          const promoWon = booking?.promoApplied;
+          toast.success(
+            promoWon ? 'Promo Applied 🎉' : 'Success',
+            'Response accepted! Booking created.'
+          );
           navigation.navigate('BookingDetail', { bookingId: booking._id });
         }
       }
-    } catch (error) {
-      toast.error('Error', handleAPIError(error).message);
+    } catch (error: any) {
+      const code = error.response?.data?.error?.code || error.response?.data?.code;
+      const message = error.response?.data?.error?.message || error.response?.data?.message;
+
+      if (code === 'PROMO_SLOT_UNAVAILABLE') {
+        // Race lost — give the user a chance to proceed at full price
+        const resp = offer?.responses.find(r => r._id === responseId);
+        const fullPrice = resp ? (resp.counterOffer || resp.proposedPrice) : 0;
+        setActivePromo(prev => (prev ? { ...prev, userEligible: false, slotsRemaining: 0 } : prev));
+        setPromoSoldOutModal({
+          visible: true,
+          message: message || 'Sorry, the promo just sold out.',
+          fullPrice,
+          responseId,
+          paymentMethod,
+        });
+        return;
+      }
+
+      toast.error('Error', message || handleAPIError(error).message);
     } finally {
       setSubmitting(false);
-      setSelectedForAccept(null);
     }
+  };
+
+  const processAccept = async (paymentMethod: 'wallet' | 'card') => {
+    if (!selectedForAccept) return;
+    setShowPaymentModal(false);
+    const resp = offer?.responses.find(r => r._id === selectedForAccept);
+    const price = resp ? (resp.counterOffer || resp.proposedPrice) : 0;
+    const expectPromo = isPromoApplicable(price);
+    const responseId = selectedForAccept;
+    setSelectedForAccept(null);
+    await runAccept(responseId, paymentMethod, expectPromo);
+  };
+
+  const handleRetryFullPrice = async () => {
+    const { responseId, paymentMethod } = promoSoldOutModal;
+    setPromoSoldOutModal({ visible: false, message: '', fullPrice: 0, responseId: null, paymentMethod: null });
+    if (!responseId || !paymentMethod) return;
+    await runAccept(responseId, paymentMethod, false);
   };
 
   const handleCounterOffer = (responseId: string, currentPrice: number) => {
@@ -270,7 +360,13 @@ const OfferDetailScreen: React.FC = () => {
               <Text style={s.emptyResponsesTxt}>No responses yet — vendors will reply soon</Text>
             </View>
           ) : (
-            offer.responses.map(resp => (
+            offer.responses.map(resp => {
+              const respPrice = resp.counterOffer || resp.proposedPrice;
+              const promoOn = isPromoApplicable(respPrice);
+              const discounted = promoOn && activePromo
+                ? Math.max(0, respPrice - activePromo.discountAmount)
+                : respPrice;
+              return (
               <View key={resp._id} style={[s.respCard, resp.isAccepted && s.respCardAccepted]}>
                 {/* Vendor row */}
                 <View style={s.vendorRow}>
@@ -313,6 +409,27 @@ const OfferDetailScreen: React.FC = () => {
                   </View>
                 )}
 
+                {/* Promo banner + discounted total (only for open offers we can still accept) */}
+                {promoOn && activePromo && offer.status === 'open' && !resp.isAccepted && (
+                  <>
+                    <View style={s.promoBanner}>
+                      <View style={s.promoIcon}>
+                        <Ionicons name="gift" size={16} color="#fff" />
+                      </View>
+                      <View style={{ flex: 1, marginLeft: 10 }}>
+                        <Text style={s.promoTitle}>Promo — save ₦{activePromo.discountAmount.toLocaleString()}</Text>
+                        <Text style={s.promoSub}>
+                          {activePromo.name} · {activePromo.slotsRemaining} slot{activePromo.slotsRemaining === 1 ? '' : 's'} left
+                        </Text>
+                      </View>
+                    </View>
+                    <View style={[s.priceRow, { marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: BORDER }]}>
+                      <Text style={[s.priceLabel, { fontWeight: '700', color: TEXT1 }]}>You pay</Text>
+                      <Text style={[s.priceVal, { fontSize: 16 }]}>₦{discounted.toLocaleString()}</Text>
+                    </View>
+                  </>
+                )}
+
                 {/* Message */}
                 {resp.message ? (
                   <Text style={s.respMessage}>"{resp.message}"</Text>
@@ -325,7 +442,7 @@ const OfferDetailScreen: React.FC = () => {
                   <View style={s.respActions}>
                     <TouchableOpacity style={s.flex} onPress={() => handleAcceptResponse(resp._id)} disabled={submitting} activeOpacity={0.85}>
                       <LinearGradient colors={[PINK, PRI_DK]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={s.acceptBtn}>
-                        {submitting ? <ActivityIndicator color="#fff" size="small" /> : <Text style={s.acceptBtnTxt}>Accept</Text>}
+                        {submitting ? <ActivityIndicator color="#fff" size="small" /> : <Text style={s.acceptBtnTxt}>Accept{promoOn ? ` · ₦${discounted.toLocaleString()}` : ''}</Text>}
                       </LinearGradient>
                     </TouchableOpacity>
                     <TouchableOpacity style={[s.flex, s.counterBtn]} onPress={() => handleCounterOffer(resp._id, resp.proposedPrice)} disabled={submitting} activeOpacity={0.7}>
@@ -334,7 +451,8 @@ const OfferDetailScreen: React.FC = () => {
                   </View>
                 )}
               </View>
-            ))
+              );
+            })
           )}
         </View>
       </ScrollView>
@@ -420,6 +538,52 @@ const OfferDetailScreen: React.FC = () => {
         onConfirm={() => { confirmModal.onConfirm(); setConfirmModal(p => ({ ...p, visible: false })); }}
         onCancel={() => setConfirmModal(p => ({ ...p, visible: false }))}
       />
+
+      {/* ── Promo sold-out modal ── */}
+      <Modal
+        visible={promoSoldOutModal.visible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setPromoSoldOutModal({ visible: false, message: '', fullPrice: 0, responseId: null, paymentMethod: null })}
+      >
+        <View style={s.soldOutBackdrop}>
+          <View style={s.soldOutCard}>
+            <View style={s.soldOutIcon}>
+              <Ionicons name="hourglass" size={28} color={PINK} />
+            </View>
+            <Text style={s.soldOutTitle}>Promo sold out</Text>
+            <Text style={s.soldOutMsg}>{promoSoldOutModal.message}</Text>
+            <View style={s.soldOutPriceRow}>
+              <Text style={s.soldOutPriceLbl}>Full price</Text>
+              <Text style={s.soldOutPriceVal}>₦{promoSoldOutModal.fullPrice.toLocaleString()}</Text>
+            </View>
+            <TouchableOpacity
+              activeOpacity={0.85}
+              onPress={handleRetryFullPrice}
+              disabled={submitting}
+              style={{ marginTop: 16, borderRadius: 14, overflow: 'hidden', alignSelf: 'stretch' }}
+            >
+              <LinearGradient
+                colors={submitting ? ['#D1D5DB', '#9CA3AF'] : [PINK, PRI_DK]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={s.soldOutRetryBtn}
+              >
+                {submitting
+                  ? <ActivityIndicator color="#fff" />
+                  : <Text style={s.soldOutRetryTxt}>Proceed at full price</Text>}
+              </LinearGradient>
+            </TouchableOpacity>
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={() => setPromoSoldOutModal({ visible: false, message: '', fullPrice: 0, responseId: null, paymentMethod: null })}
+              style={s.soldOutCancelBtn}
+            >
+              <Text style={s.soldOutCancelTxt}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -529,6 +693,36 @@ const s = StyleSheet.create({
 
   escrowNote: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 14 },
   escrowNoteTxt: { fontSize: 12, color: TEXT2, fontWeight: '500' },
+
+  // Promo
+  promoBanner: {
+    flexDirection: 'row', alignItems: 'center',
+    marginTop: 10, padding: 10, borderRadius: 12,
+    backgroundColor: '#FEE2F0', borderWidth: 1, borderColor: '#F9A8D4',
+  },
+  promoIcon: {
+    width: 28, height: 28, borderRadius: 14, backgroundColor: PINK,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  promoTitle: { fontSize: 12, fontWeight: '800', color: '#831843' },
+  promoSub: { fontSize: 11, color: '#9F1239', marginTop: 1 },
+
+  // Promo sold-out modal
+  soldOutBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center', padding: 24 },
+  soldOutCard: { width: '100%', backgroundColor: '#fff', borderRadius: 20, padding: 24, alignItems: 'center' },
+  soldOutIcon: { width: 60, height: 60, borderRadius: 30, backgroundColor: '#FEE2F0', alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
+  soldOutTitle: { fontSize: 18, fontWeight: '800', color: TEXT1, marginBottom: 8 },
+  soldOutMsg: { fontSize: 14, color: TEXT2, textAlign: 'center', lineHeight: 20 },
+  soldOutPriceRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    alignSelf: 'stretch', marginTop: 16, padding: 14, backgroundColor: '#F9FAFB', borderRadius: 12,
+  },
+  soldOutPriceLbl: { fontSize: 13, color: TEXT2, fontWeight: '600' },
+  soldOutPriceVal: { fontSize: 18, color: PINK, fontWeight: '800' },
+  soldOutRetryBtn: { height: 50, alignItems: 'center', justifyContent: 'center', borderRadius: 14, paddingHorizontal: 32 },
+  soldOutRetryTxt: { color: '#fff', fontSize: 15, fontWeight: '700' },
+  soldOutCancelBtn: { paddingVertical: 12, marginTop: 4 },
+  soldOutCancelTxt: { fontSize: 14, color: TEXT2, fontWeight: '600' },
 });
 
 export default OfferDetailScreen;

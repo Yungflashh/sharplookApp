@@ -83,6 +83,8 @@ const LocationPickerModal = ({ visible, onClose, onConfirm, initialLocation }: P
         longitudeDelta: 0.01,
       };
       setRegion(r);
+      // Small delay so MapView is mounted before we tell it to move.
+      setTimeout(() => mapRef.current?.animateToRegion(r, 0), 60);
       setManualAddress(initialLocation.address);
       setResolvedCity(initialLocation.city);
       setResolvedState(initialLocation.state);
@@ -185,7 +187,11 @@ const LocationPickerModal = ({ visible, onClose, onConfirm, initialLocation }: P
           <MapView
             ref={mapRef}
             style={StyleSheet.absoluteFillObject}
-            region={region}
+            // NOTE: use `initialRegion`, NOT `region`. On Android, feeding a
+            // controlled `region` prop back into MapView while the user is
+            // dragging snaps the map back on every render — the pin appears
+            // stuck. Use `animateToRegion()` via `mapRef` for programmatic moves.
+            initialRegion={region}
             onRegionChange={handleRegionChange}
             onRegionChangeComplete={handleRegionChangeComplete}
             showsUserLocation
