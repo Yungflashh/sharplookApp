@@ -61,18 +61,21 @@ const LocationPickerModal = ({ visible, onClose, onConfirm, initialLocation }: P
   const [geocoding, setGeocoding] = useState(false);
   const [locating, setLocating] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
-  const [hasMoved, setHasMoved] = useState(false);
   const [showHint, setShowHint] = useState(false);
 
+  const currentRegionRef = useRef<Region>(DEFAULT_REGION);
   const geocodeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const dragResetTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hintOpacity = useRef(new Animated.Value(0)).current;
 
-  // canConfirm = pin moved OR user typed an address manually
-  const canConfirm = (hasMoved || manualAddress.trim().length > 0) && !isDragging && !geocoding;
+  // Confirm only requires an address (typed or reverse-geocoded) + not mid-lookup.
+  // We deliberately don't gate on `isDragging` — on Android that flag can get
+  // stuck when `animateToRegion` fires `onRegionChange` without a matching
+  // `onRegionChangeComplete`, which used to make the button permanently disabled.
+  const canConfirm = manualAddress.trim().length > 0 && !geocoding;
 
   useEffect(() => {
     if (!visible) return;
-    setHasMoved(!!initialLocation);
     setShowHint(!initialLocation);
 
     if (initialLocation) {
@@ -83,6 +86,7 @@ const LocationPickerModal = ({ visible, onClose, onConfirm, initialLocation }: P
         longitudeDelta: 0.01,
       };
       setRegion(r);
+      currentRegionRef.current = r;
       // Small delay so MapView is mounted before we tell it to move.
       setTimeout(() => mapRef.current?.animateToRegion(r, 0), 60);
       setManualAddress(initialLocation.address);
@@ -117,6 +121,7 @@ const LocationPickerModal = ({ visible, onClose, onConfirm, initialLocation }: P
       const { latitude, longitude } = pos.coords;
       const newRegion: Region = { latitude, longitude, latitudeDelta: 0.01, longitudeDelta: 0.01 };
       setRegion(newRegion);
+      currentRegionRef.current = newRegion;
       mapRef.current?.animateToRegion(newRegion, 600);
       reverseGeocode(latitude, longitude);
     } catch {}
@@ -142,23 +147,44 @@ const LocationPickerModal = ({ visible, onClose, onConfirm, initialLocation }: P
     finally { setGeocoding(false); }
   }, []);
 
-  const handleRegionChange = () => {
+  // Only mark as dragging for real user gestures. `details.isGesture` on
+  // react-native-maps >=1.x tells us whether this change came from a finger
+  // or from `animateToRegion` — filter animations out so the pin visual
+  // doesn't get stuck lifted.
+  const handleRegionChange = useCallback((_r: Region, details?: { isGesture?: boolean }) => {
+    if (!details?.isGesture) return;
     setIsDragging(true);
     if (geocodeTimer.current) clearTimeout(geocodeTimer.current);
-  };
+    if (dragResetTimer.current) clearTimeout(dragResetTimer.current);
+    // Safety net: some Android builds swallow onRegionChangeComplete.
+    dragResetTimer.current = setTimeout(() => setIsDragging(false), 2000);
+  }, []);
 
-  const handleRegionChangeComplete = (r: Region) => {
+  // Fires on Android for user pan gestures — belt-and-braces fallback if the
+  // details.isGesture flag is missing on some devices.
+  const handlePanDrag = useCallback(() => {
+    if (geocodeTimer.current) clearTimeout(geocodeTimer.current);
+    if (dragResetTimer.current) clearTimeout(dragResetTimer.current);
+    setIsDragging(true);
+    dragResetTimer.current = setTimeout(() => setIsDragging(false), 2000);
+  }, []);
+
+  const handleRegionChangeComplete = useCallback((r: Region) => {
     setRegion(r);
+    currentRegionRef.current = r;
     setIsDragging(false);
-    setHasMoved(true);
+    if (dragResetTimer.current) clearTimeout(dragResetTimer.current);
     if (geocodeTimer.current) clearTimeout(geocodeTimer.current);
     geocodeTimer.current = setTimeout(() => reverseGeocode(r.latitude, r.longitude), 600);
-  };
+  }, [reverseGeocode]);
 
   const handleConfirm = () => {
     Keyboard.dismiss();
+    // Use the ref (updated on every regionChangeComplete + programmatic move)
+    // so we send the true current pin position, not stale React state.
+    const r = currentRegionRef.current;
     onConfirm({
-      coordinates: [region.longitude, region.latitude],
+      coordinates: [r.longitude, r.latitude],
       address: manualAddress.trim(),
       city: resolvedCity,
       state: resolvedState,
@@ -191,13 +217,18 @@ const LocationPickerModal = ({ visible, onClose, onConfirm, initialLocation }: P
             // controlled `region` prop back into MapView while the user is
             // dragging snaps the map back on every render — the pin appears
             // stuck. Use `animateToRegion()` via `mapRef` for programmatic moves.
-            initialRegion={region}
+            initialRegion={DEFAULT_REGION}
             onRegionChange={handleRegionChange}
             onRegionChangeComplete={handleRegionChangeComplete}
+            onPanDrag={handlePanDrag}
             showsUserLocation
             showsMyLocationButton={false}
             showsCompass={false}
             toolbarEnabled={false}
+            scrollEnabled
+            zoomEnabled
+            rotateEnabled
+            pitchEnabled
             mapType="standard"
           />
 
@@ -217,12 +248,18 @@ const LocationPickerModal = ({ visible, onClose, onConfirm, initialLocation }: P
             </Animated.View>
           )}
 
-          {/* Top bar — floats over map */}
-          <View style={[s.topBar, { paddingTop: insets.top + 8 }]}>
+          {/* Top bar — floats over map. `box-none` = container itself lets touches
+              pass through to the map, but the buttons inside still receive taps.
+              Without this the transparent bar's bounding box was stealing every
+              drag started in the top ~90px of the map. */}
+          <View
+            pointerEvents="box-none"
+            style={[s.topBar, { paddingTop: insets.top + 8 }]}
+          >
             <TouchableOpacity style={s.iconBtn} onPress={onClose} activeOpacity={0.8}>
               <Ionicons name="close" size={20} color={TEXT} />
             </TouchableOpacity>
-            <View style={s.topLabel}>
+            <View pointerEvents="none" style={s.topLabel}>
               <Text style={s.topLabelTxt}>Drag the map to pin your location</Text>
             </View>
             <TouchableOpacity style={s.iconBtn} onPress={goToGPS} activeOpacity={0.8} disabled={locating}>
@@ -280,12 +317,16 @@ const LocationPickerModal = ({ visible, onClose, onConfirm, initialLocation }: P
             )}
           </View>
 
-          {/* Nudge — only when pin not moved AND no manual address */}
+          {/* Nudge — shown while we still need input from the user */}
           {!canConfirm && (
             <View style={s.nudgeRow}>
               <Ionicons name="information-circle-outline" size={15} color={P} />
               <Text style={s.nudgeTxt}>
-                Drag the map to pin your location, or type your address above
+                {locating
+                  ? 'Finding your current location…'
+                  : geocoding
+                  ? 'Getting the address for that pin…'
+                  : 'Drag the map to pin your location, or type your address above'}
               </Text>
             </View>
           )}
@@ -295,14 +336,15 @@ const LocationPickerModal = ({ visible, onClose, onConfirm, initialLocation }: P
             style={[s.confirmBtn, !canConfirm && s.confirmBtnDim]}
             onPress={canConfirm ? handleConfirm : () => setShowHint(true)}
             activeOpacity={0.85}
+            disabled={!canConfirm}
           >
             <Ionicons
-              name={canConfirm ? 'checkmark-circle' : 'hand-left-outline'}
+              name={locating || geocoding ? 'sync' : 'checkmark-circle'}
               size={20}
               color="#fff"
             />
             <Text style={s.confirmTxt}>
-              {canConfirm ? 'Confirm Location' : 'Move the pin first'}
+              {locating || geocoding ? 'Locating…' : 'Confirm Location'}
             </Text>
           </TouchableOpacity>
         </ScrollView>
